@@ -26,12 +26,12 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] Warlocks can't cast spells with slots, says no spell slots available
 
 ### Combat
-- [] can't delete or edit attacks once created
-- [] weapon attacks don't have relevant properties, msteries, and weapon abilities (magical weapon stuff) displayed
-- [] Spells are not integrated into combat (no spell attacks, spell save DCs, spell effects, etc)
+- [x] can't delete or edit attacks once created
+- [x] weapon attacks don't have relevant properties, msteries, and weapon abilities (magical weapon stuff) displayed
+- [x] Spells are not integrated into combat (no spell attacks, spell save DCs, spell effects, etc)
 
 ### Character Builder
-- [] Selecting items not working correctly and not adding items specifically in character builder
+- [] Selecting items not working correctly and not adding items specifically in character builder. Need to mimic logic from inventory.
 - [] 20204 classes don't have starting equipment options displayed at the choice, e.g efa articificer gives them to you but does not show them in the builder
 - [] Character age, height, and weight inputs should only accept numbers
 - [] Background tool proficiencies override existing proficiencies instead of adding to them

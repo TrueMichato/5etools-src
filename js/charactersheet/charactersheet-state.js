@@ -1155,12 +1155,16 @@ class CharacterSheetState {
 			...s,
 			id: s.id || `${s.name}|${s.source}`,
 		}));
-		const cantrips = this._data.spellcasting.cantripsKnown.map(c => ({
-			...c,
-			id: c.id || `${c.name}|${c.source}`,
-			level: 0,
-			prepared: true, // Cantrips are always prepared
-		}));
+		const cantrips = this._data.spellcasting.cantripsKnown.map(c => {
+			// Ensure cantrips always have a valid ID
+			const id = c.id || `${c.name}|${c.source}`;
+			return {
+				...c,
+				id: id,
+				level: 0,
+				prepared: true, // Cantrips are always prepared
+			};
+		});
 		return [...cantrips, ...spells];
 	}
 	getSpellsKnown () { return [...this._data.spellcasting.spellsKnown]; }
@@ -1186,6 +1190,10 @@ class CharacterSheetState {
 				ritual: spell.ritual || false,
 				concentration: spell.concentration || false,
 				prepared: prepared !== undefined ? prepared : spell.prepared,
+				castingTime: spell.castingTime || "",
+				range: spell.range || "",
+				duration: spell.duration || "",
+				components: spell.components || "",
 			});
 		}
 	}
@@ -1200,6 +1208,11 @@ class CharacterSheetState {
 				name: spell.name,
 				source: spell.source,
 				school: spell.school,
+				castingTime: spell.castingTime || "",
+				range: spell.range || "",
+				duration: spell.duration || "",
+				concentration: spell.concentration || false,
+				components: spell.components || "",
 			});
 		}
 	}
@@ -1379,8 +1392,8 @@ class CharacterSheetState {
 
 	addAttack (attack) {
 		this._data.attacks.push({
-			id: CryptUtil.uid(),
 			...attack,
+			id: attack.id || CryptUtil.uid(),
 		});
 	}
 
