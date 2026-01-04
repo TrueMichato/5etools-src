@@ -8,17 +8,27 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] Magic weapons/armors have issues - attack rolls not calculated correctly, bonuses not applied
 - [x] General magical item bonuses (to attack rolls, damage rolls, AC, saving throws, ability checks, spell attack rolls, spell save DCs, etc) are not applied
 - [x] Items with charges (like wands) do not track charges or allow expending them
-- [] Items that require attunement do not enforce attunement limits (3 items max, class limited attunements, etc)
-- [] Items that require attunement do not apply their effects when attuned
-- [] Equipped and attuned items not displayed on the right side in the inventory (there is place for display but nothing shows up)
-- [] Weapon properties and masteries are not displayed
+- [x] Items that require attunement do not enforce attunement limits (3 items max, class limited attunements, etc)
+- [x] Items that require attunement do not apply their effects when attuned
+- [x] Equipped and attuned items not displayed on the right side in the inventory (there is place for display but nothing shows up)
+- [x] Weapon properties and masteries are not displayed
 - [x] Items with no rarity shouldn't display "none" as rarity, they should just not display rarity.
 - [x] Equip and Attune buttons are not intuitive, maybe better icons or add text next to them
 
 ### Spells
-- [] add spells button isn't working
-- [] spell save DC isn't calculated and spellcasting ability isn't displayed
-- [] number of spell slots isn't calculated and isn't displayed
+- [x] add spells button isn't working
+- [x] spell save DC isn't calculated and spellcasting ability isn't displayed
+- [x] number of spell slots isn't calculated and isn't displayed
+- [x] Warlocks with Pact Magic don't have their spell slots calculated/displayed correctly
+- [x] Warlock can't pick leveled spells
+- [x] Amount of spells known isn't calculated/displayed/enforced
+- [x] Amount of prepared spells isn't calculated/displayed/enforced
+- [x] Warlocks can't cast spells with slots, says no spell slots available
+
+### Combat
+- [] can't delete or edit attacks once created
+- [] weapon attacks don't have relevant properties, msteries, and weapon abilities (magical weapon stuff) displayed
+- [] Spells are not integrated into combat (no spell attacks, spell save DCs, spell effects, etc)
 
 ### Character Builder
 - [] Selecting items not working correctly and not adding items specifically in character builder
@@ -36,10 +46,13 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [] Active features aren't displayed correctly, and should include only important features and not all of them
 - [] Jump distance isn't displayed
 - [] Senses aren't Displayed
+- [] Passive stats that aren't perception are not calculated or displayed (e.g passive investigation, passive insight, etc)
+- [] proficiency or expertise in skills not displayed in a clear way
+- [] exhaustion level not displayed or tracked, exhaustion is just a regular condition currently
 
 
 ### Level Up
-- [] when a choice feature (like metamagic) comes up during level up, there is no way to select the options
+- [] when a choice feature (like metamagic, invocations, maneuvers) comes up during level up, there is no way to select the options
 - [] when reaching an ASI level, the feature ASI is added to the sheet regardless of the choice that was made. It makes sense as it is actually the level 4 feature, but it is confusing.
 
 ### General

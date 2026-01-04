@@ -831,6 +831,143 @@ class CharacterSheetState {
 		return this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellAttack || 0) + itemBonus;
 	}
 
+	/**
+	 * Get spellcasting info for the character - whether they use spells known or prepared
+	 * Reads progression directly from class data when available
+	 * @returns {{type: string, max: number, cantripsKnown: number}} or null if no spellcasting
+	 */
+	getSpellcastingInfo () {
+		const classes = this._data.classes || [];
+		if (!classes.length) return null;
+
+		const primaryClass = classes[0];
+		const className = primaryClass.name;
+		const level = primaryClass.level || 1;
+		const levelIndex = Math.min(level, 20) - 1;
+		const classData = primaryClass._classData; // Full class data if available
+
+		// Try to get progression from class data first (supports 2024 and homebrew)
+		if (classData) {
+			const cantripsKnown = classData.cantripProgression?.[levelIndex] || 0;
+
+			// 2024 rules use preparedSpellsProgression for all casters
+			if (classData.preparedSpellsProgression) {
+				return {
+					type: "prepared",
+					max: classData.preparedSpellsProgression[levelIndex] || 0,
+					cantripsKnown,
+				};
+			}
+
+			// 2014 rules use spellsKnownProgression for some casters
+			if (classData.spellsKnownProgression) {
+				return {
+					type: "known",
+					max: classData.spellsKnownProgression[levelIndex] || 0,
+					cantripsKnown,
+				};
+			}
+
+			// Check for prepared caster without explicit progression (2014 Cleric, Druid, etc.)
+			if (classData.casterProgression && classData.spellcastingAbility) {
+				// These use level + ability mod formula
+				const ability = classData.spellcastingAbility;
+				const abilityMod = this.getAbilityMod(ability);
+				let preparedCount;
+
+				if (classData.casterProgression === "1/2") {
+					// Half casters: half level + mod
+					preparedCount = Math.max(1, Math.floor(level / 2) + abilityMod);
+				} else {
+					// Full casters: level + mod
+					preparedCount = Math.max(1, level + abilityMod);
+				}
+
+				return {
+					type: "prepared",
+					max: preparedCount,
+					cantripsKnown,
+				};
+			}
+		}
+
+		// Fallback: hardcoded tables for when class data isn't available
+		// Spells Known tables (2014 rules)
+		const spellsKnownTables = {
+			"Bard": [4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 15, 16, 18, 19, 19, 20, 22, 22, 22],
+			"Sorcerer": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 13, 13, 14, 14, 15, 15, 15, 15],
+			"Warlock": [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15],
+			"Ranger": [0, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11],
+		};
+
+		// Cantrips known
+		const cantripsKnownTables = {
+			"Bard": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+			"Cleric": [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+			"Druid": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+			"Sorcerer": [4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+			"Warlock": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+			"Wizard": [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+		};
+
+		// Prepared casters (2014 rules)
+		const preparedCasters = ["Cleric", "Druid", "Paladin", "Wizard", "Artificer"];
+
+		// Get cantrips known
+		let cantripsKnown = cantripsKnownTables[className]?.[levelIndex] || 0;
+
+		// Check if spells known class
+		if (spellsKnownTables[className]) {
+			return {
+				type: "known",
+				max: spellsKnownTables[className][levelIndex],
+				cantripsKnown,
+			};
+		}
+
+		// Check if prepared caster
+		if (preparedCasters.includes(className)) {
+			const abilityMap = {
+				"Cleric": "wis",
+				"Druid": "wis",
+				"Paladin": "cha",
+				"Wizard": "int",
+				"Artificer": "int",
+			};
+
+			const ability = abilityMap[className];
+			const abilityMod = this.getAbilityMod(ability);
+
+			let preparedCount;
+			if (className === "Paladin") {
+				preparedCount = Math.max(1, Math.floor(level / 2) + abilityMod);
+			} else if (className === "Artificer") {
+				preparedCount = Math.max(1, Math.ceil(level / 2) + abilityMod);
+			} else {
+				preparedCount = Math.max(1, level + abilityMod);
+			}
+
+			return {
+				type: "prepared",
+				max: preparedCount,
+				cantripsKnown,
+			};
+		}
+
+		// Check for third-caster subclasses
+		const subclassName = primaryClass.subclass?.name;
+		if (subclassName === "Eldritch Knight" || subclassName === "Arcane Trickster") {
+			const ekAtSpellsKnown = [0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13];
+			return {
+				type: "known",
+				max: ekAtSpellsKnown[levelIndex],
+				cantripsKnown: level >= 3 ? (level >= 10 ? 3 : 2) : 0,
+			};
+		}
+
+		return null;
+	}
+
 	getSpellSlots () { return MiscUtil.copyFast(this._data.spellcasting.spellSlots); }
 
 	getSpellSlotsCurrent (level) {
@@ -843,8 +980,152 @@ class CharacterSheetState {
 		return slot ? slot.max : 0;
 	}
 
+	getPactSlots () {
+		return this._data.spellcasting.pactSlots || {current: 0, max: 0, level: 0};
+	}
+
+	setPactSlotsCurrent (current) {
+		if (this._data.spellcasting.pactSlots) {
+			this._data.spellcasting.pactSlots.current = Math.max(0, Math.min(current, this._data.spellcasting.pactSlots.max));
+		}
+	}
+
+	usePactSlot () {
+		const pact = this._data.spellcasting.pactSlots;
+		if (pact && pact.current > 0) {
+			pact.current--;
+			return true;
+		}
+		return false;
+	}
+
 	setSpellSlots (level, max, current = max) {
 		this._data.spellcasting.spellSlots[level] = {current, max};
+	}
+
+	/**
+	 * Calculate spell slots based on class(es) and level using standard 5e spell slot progression
+	 * Handles full casters, half casters, third casters, and multiclassing
+	 */
+	calculateSpellSlots () {
+		const classes = this._data.classes || [];
+		if (!classes.length) return;
+
+		// Full casters
+		const fullCasters = ["Bard", "Cleric", "Druid", "Sorcerer", "Wizard"];
+		// Half casters (round down)
+		const halfCasters = ["Paladin", "Ranger", "Artificer"];
+		// Warlock is special - has pact slots instead
+
+		// Calculate total caster level (for multiclassing)
+		let casterLevel = 0;
+		let isWarlock = false;
+		let warlockLevel = 0;
+
+		for (const cls of classes) {
+			const className = cls.name;
+			const level = cls.level || 1;
+
+			if (className === "Warlock") {
+				isWarlock = true;
+				warlockLevel = level;
+			} else if (fullCasters.includes(className)) {
+				casterLevel += level;
+			} else if (halfCasters.includes(className)) {
+				// Half casters need level 2 to start contributing
+				casterLevel += Math.floor(level / 2);
+			} else {
+				// Check for third-caster subclasses (Eldritch Knight, Arcane Trickster)
+				const subclassName = cls.subclass?.name;
+				if (subclassName === "Eldritch Knight" || subclassName === "Arcane Trickster") {
+					casterLevel += Math.floor(level / 3);
+				}
+			}
+		}
+
+		// Standard spell slot progression table (by caster level)
+		const slotTable = {
+			1:  [2, 0, 0, 0, 0, 0, 0, 0, 0],
+			2:  [3, 0, 0, 0, 0, 0, 0, 0, 0],
+			3:  [4, 2, 0, 0, 0, 0, 0, 0, 0],
+			4:  [4, 3, 0, 0, 0, 0, 0, 0, 0],
+			5:  [4, 3, 2, 0, 0, 0, 0, 0, 0],
+			6:  [4, 3, 3, 0, 0, 0, 0, 0, 0],
+			7:  [4, 3, 3, 1, 0, 0, 0, 0, 0],
+			8:  [4, 3, 3, 2, 0, 0, 0, 0, 0],
+			9:  [4, 3, 3, 3, 1, 0, 0, 0, 0],
+			10: [4, 3, 3, 3, 2, 0, 0, 0, 0],
+			11: [4, 3, 3, 3, 2, 1, 0, 0, 0],
+			12: [4, 3, 3, 3, 2, 1, 0, 0, 0],
+			13: [4, 3, 3, 3, 2, 1, 1, 0, 0],
+			14: [4, 3, 3, 3, 2, 1, 1, 0, 0],
+			15: [4, 3, 3, 3, 2, 1, 1, 1, 0],
+			16: [4, 3, 3, 3, 2, 1, 1, 1, 0],
+			17: [4, 3, 3, 3, 2, 1, 1, 1, 1],
+			18: [4, 3, 3, 3, 3, 1, 1, 1, 1],
+			19: [4, 3, 3, 3, 3, 2, 1, 1, 1],
+			20: [4, 3, 3, 3, 3, 2, 2, 1, 1],
+		};
+
+		// Set slots based on caster level
+		if (casterLevel > 0) {
+			const slots = slotTable[Math.min(casterLevel, 20)] || [0, 0, 0, 0, 0, 0, 0, 0, 0];
+			for (let level = 1; level <= 9; level++) {
+				const max = slots[level - 1];
+				// Preserve current usage if already set with same max
+				const existing = this._data.spellcasting.spellSlots[level];
+				if (existing && existing.max === max) {
+					// Keep current value
+				} else {
+					this._data.spellcasting.spellSlots[level] = {current: max, max: max};
+				}
+			}
+		}
+
+		// Handle Warlock pact slots separately (they use different progression)
+		// Warlock pact slots are in addition to regular spell slots for multiclass
+		if (isWarlock && warlockLevel > 0) {
+			// Pact Magic slot progression table
+			// [number of slots, slot level]
+			const pactSlotTable = {
+				1:  [1, 1],
+				2:  [2, 1],
+				3:  [2, 2],
+				4:  [2, 2],
+				5:  [2, 3],
+				6:  [2, 3],
+				7:  [2, 4],
+				8:  [2, 4],
+				9:  [2, 5],
+				10: [2, 5],
+				11: [3, 5],
+				12: [3, 5],
+				13: [3, 5],
+				14: [3, 5],
+				15: [3, 5],
+				16: [3, 5],
+				17: [4, 5],
+				18: [4, 5],
+				19: [4, 5],
+				20: [4, 5],
+			};
+
+			const [pactSlots, pactLevel] = pactSlotTable[Math.min(warlockLevel, 20)] || [0, 0];
+			const existing = this._data.spellcasting.pactSlots;
+			
+			if (existing && existing.max === pactSlots && existing.level === pactLevel) {
+				// Keep current value
+			} else {
+				this._data.spellcasting.pactSlots = {
+					current: pactSlots,
+					max: pactSlots,
+					level: pactLevel,
+				};
+			}
+		} else {
+			// Reset pact slots if not a warlock
+			this._data.spellcasting.pactSlots = {current: 0, max: 0, level: 0};
+		}
 	}
 
 	setSpellSlotCurrent (level, current) {
@@ -1031,6 +1312,33 @@ class CharacterSheetState {
 
 	getAttunedCount () {
 		return this._data.inventory.filter(i => i.attuned).length;
+	}
+
+	/**
+	 * Get maximum number of items a character can attune to.
+	 * Base is 3, but Artificer gets more:
+	 * - Level 10 (Magic Item Adept): 4 items
+	 * - Level 14 (Magic Item Savant): 5 items
+	 * - Level 18 (Soul of Artifice): 6 items
+	 * @returns {number} Maximum attunement slots
+	 */
+	getMaxAttunement () {
+		let max = 3; // Default max attunement
+
+		// Check for Artificer class levels
+		const artificerClass = this._data.classes?.find(c => c.name?.toLowerCase() === "artificer");
+		if (artificerClass) {
+			const level = artificerClass.level || 0;
+			if (level >= 18) {
+				max = 6; // Soul of Artifice
+			} else if (level >= 14) {
+				max = 5; // Magic Item Savant
+			} else if (level >= 10) {
+				max = 4; // Magic Item Adept
+			}
+		}
+
+		return max;
 	}
 
 	getTotalWeight () {

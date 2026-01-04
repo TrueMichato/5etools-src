@@ -523,19 +523,24 @@
 	display: flex;
 	justify-content: center;
 	gap: 0.25rem;
+	margin-top: 0.25rem;
 }
 
 .charsheet__spell-slot-pip {
+	display: inline-block;
 	width: 16px;
 	height: 16px;
-	border: 2px solid var(--rgb-link);
+	min-width: 16px;
+	min-height: 16px;
+	border: 2px solid #337ab7;
 	border-radius: 50%;
 	cursor: pointer;
 	transition: all 0.15s ease;
+	background: transparent;
 }
 
 .charsheet__spell-slot-pip--used {
-	background: var(--rgb-link);
+	background: #337ab7;
 }
 
 .charsheet__spell-slot-pip:hover {
@@ -1401,4 +1406,34 @@
 	.charsheet__builder-step {
 		flex: 0 0 calc(33.33% - 0.5rem);
 	}
+}
+
+/* Equipment Summary (sidebar) */
+.charsheet__equipment-summary-item {
+	display: flex;
+	flex-direction: column;
+	padding: 0.25rem 0.5rem;
+	border-bottom: 1px solid var(--rgb-border-grey);
+	font-size: 0.9rem;
+}
+
+.charsheet__equipment-summary-item:last-child {
+	border-bottom: none;
+}
+
+.charsheet__equipment-summary-main {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.charsheet__equipment-icon {
+	flex-shrink: 0;
+}
+
+.charsheet__equipment-name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }

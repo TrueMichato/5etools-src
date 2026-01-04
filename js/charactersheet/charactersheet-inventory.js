@@ -271,6 +271,7 @@ class CharacterSheetInventory {
 			weaponCategory: item.weaponCategory,
 			damage: item.dmg1 ? `${item.dmg1} ${Parser.dmgTypeToFull(item.dmgType)}` : null,
 			properties: item.property || [],
+			mastery: item.mastery || [],
 			range: item.range ? `${item.range}` : null,
 			bonusWeapon: this._parseBonus(item.bonusWeapon),
 			bonusWeaponAttack: this._parseBonus(item.bonusWeaponAttack),
@@ -370,6 +371,7 @@ class CharacterSheetInventory {
 
 		this._state.setItemEquipped(itemId, newEquipped);
 		this._renderItemList();
+		this._renderEquippedItems();
 		this._updateArmorClass();
 		this._page.saveCharacter();
 	}
@@ -379,15 +381,17 @@ class CharacterSheetInventory {
 		const item = items.find(i => i.id === itemId);
 		if (!item || !item.requiresAttunement) return;
 
-		// Check attunement limit (usually 3)
+		// Check attunement limit (base 3, can be higher for Artificers)
 		const currentAttuned = this._state.getAttunedCount();
-		if (!item.attuned && currentAttuned >= 3) {
-			JqueryUtil.doToast({type: "warning", content: "Cannot attune to more than 3 items!"});
+		const maxAttuned = this._state.getMaxAttunement();
+		if (!item.attuned && currentAttuned >= maxAttuned) {
+			JqueryUtil.doToast({type: "warning", content: `Cannot attune to more than ${maxAttuned} items!`});
 			return;
 		}
 
 		this._state.setItemAttuned(itemId, !item.attuned);
 		this._renderItemList();
+		this._renderAttunedItems();
 		// Update AC and item bonuses - attunement state affects which bonuses are applied
 		this._updateArmorClass();
 		this._page.saveCharacter();
@@ -468,6 +472,9 @@ class CharacterSheetInventory {
 			html += `<p><strong>Damage:</strong> ${item.dmg1 || "—"} ${item.dmgType ? Parser.dmgTypeToFull(item.dmgType) : ""}</p>`;
 			if (item.property?.length) {
 				html += `<p><strong>Properties:</strong> ${item.property.map(p => Parser.itemPropertyToFull(p)).join(", ")}</p>`;
+			}
+			if (item.mastery?.length) {
+				html += `<p><strong>Mastery:</strong> ${item.mastery.map(m => m.split("|")[0].toTitleCase()).join(", ")}</p>`;
 			}
 			if (item.range) {
 				html += `<p><strong>Range:</strong> ${item.range}</p>`;
@@ -738,6 +745,15 @@ class CharacterSheetInventory {
 		};
 		const rechargeTooltip = item.recharge ? rechargeDescriptions[item.recharge] || `Recharges: ${item.recharge}` : "";
 
+		// Format properties and mastery for display (check both 'properties' and 'property' for backwards compatibility)
+		const itemProperties = item.properties || item.property || [];
+		const propertiesStr = itemProperties.length 
+			? itemProperties.map(p => this._formatProperty(p)).join(", ") 
+			: "";
+		const masteryStr = item.mastery?.length 
+			? item.mastery.map(m => this._formatMastery(m)).join(", ") 
+			: "";
+
 		return $(`
 			<div class="charsheet__item ${item.equipped ? "equipped" : ""}" data-item-id="${item.id}">
 				<div class="charsheet__item-main">
@@ -755,6 +771,8 @@ class CharacterSheetInventory {
 				<div class="charsheet__item-details">
 					${item.damage ? `<span class="ve-small">Dmg: ${item.damage}</span>` : ""}
 					${item.ac ? `<span class="ve-small">AC: ${item.ac}</span>` : ""}
+					${propertiesStr ? `<span class="ve-small ve-muted" title="Properties">${propertiesStr}</span>` : ""}
+					${masteryStr ? `<span class="ve-small text-info" title="Mastery">⚔ ${masteryStr}</span>` : ""}
 					${hasCharges ? `<span class="ve-small charsheet__item-charges" title="${rechargeTooltip}">Charges: <strong>${item.chargesCurrent ?? item.charges}</strong>/${item.charges}</span>` : ""}
 				</div>
 				<div class="charsheet__item-actions">
@@ -790,6 +808,53 @@ class CharacterSheetInventory {
 		`);
 	}
 
+	/**
+	 * Format a weapon property code to display name
+	 * @param {string} prop - Property code like "F" or "2H|XPHB"
+	 * @returns {string} Formatted property name
+	 */
+	_formatProperty (prop) {
+		// Use Parser if available, otherwise do basic formatting
+		if (typeof Parser !== "undefined" && Parser.itemPropertyToFull) {
+			try {
+				return Parser.itemPropertyToFull(prop);
+			} catch (e) {
+				// Fall back to basic formatting
+			}
+		}
+		
+		// Basic property code mapping
+		const propMap = {
+			"A": "Ammunition",
+			"AF": "Ammunition (Firearm)",
+			"F": "Finesse",
+			"H": "Heavy",
+			"L": "Light",
+			"LD": "Loading",
+			"R": "Reach",
+			"RLD": "Reload",
+			"S": "Special",
+			"T": "Thrown",
+			"2H": "Two-Handed",
+			"V": "Versatile",
+		};
+		
+		// Extract property code (before |)
+		const code = prop.split("|")[0].toUpperCase();
+		return propMap[code] || prop;
+	}
+
+	/**
+	 * Format a weapon mastery code to display name
+	 * @param {string} mastery - Mastery code like "Sap|XPHB"
+	 * @returns {string} Formatted mastery name
+	 */
+	_formatMastery (mastery) {
+		// Extract mastery name (before |source)
+		const name = mastery.split("|")[0];
+		return name.toTitleCase();
+	}
+
 	_getItemTypeTagFromStoredType (type) {
 		const tags = {
 			weapon: "Weapon",
@@ -823,8 +888,122 @@ class CharacterSheetInventory {
 		this._renderItemList();
 		this._renderCurrency();
 		this._updateEncumbrance();
+		this._renderEquippedItems();
+		this._renderAttunedItems();
 		// Sync armor state from equipped items (important on character load)
 		this._syncArmorState();
+	}
+
+	/**
+	 * Render equipped items in the sidebar
+	 */
+	_renderEquippedItems () {
+		const $container = $("#charsheet-equipped-list");
+		if (!$container.length) return;
+
+		$container.empty();
+
+		const items = this._state.getItems();
+		const equippedItems = items.filter(i => i.equipped);
+
+		if (!equippedItems.length) {
+			$container.append(`<div class="ve-muted ve-text-center py-2">No items equipped</div>`);
+			return;
+		}
+
+		equippedItems.forEach(item => {
+			const $item = this._renderEquipmentSummaryRow(item, "equipped");
+			$container.append($item);
+		});
+	}
+
+	/**
+	 * Render attuned items in the sidebar
+	 */
+	_renderAttunedItems () {
+		const $container = $("#charsheet-attuned-list");
+		if (!$container.length) return;
+
+		$container.empty();
+
+		const items = this._state.getItems();
+		const attunedItems = items.filter(i => i.attuned);
+		const currentAttuned = attunedItems.length;
+		const maxAttuned = this._state.getMaxAttunement();
+
+		if (!attunedItems.length) {
+			$container.append(`<div class="ve-muted ve-text-center py-2">No attuned items (${currentAttuned}/${maxAttuned})</div>`);
+			return;
+		}
+
+		// Show attunement count header
+		$container.append(`<div class="ve-small ve-muted mb-1">Attunement Slots: ${currentAttuned}/${maxAttuned}</div>`);
+
+		attunedItems.forEach(item => {
+			const $item = this._renderEquipmentSummaryRow(item, "attuned");
+			$container.append($item);
+		});
+	}
+
+	/**
+	 * Render a compact summary row for equipped/attuned item display
+	 */
+	_renderEquipmentSummaryRow (item, type) {
+		// Get item name with hover link if available
+		let itemNameHtml = item.name;
+		if (item.source && item.source !== "Custom" && this._page?.getHoverLink) {
+			try {
+				itemNameHtml = this._page.getHoverLink(
+					UrlUtil.PG_ITEMS,
+					item.name,
+					item.source,
+				);
+			} catch (e) {
+				// Fall back to plain text
+			}
+		}
+
+		// Build bonus info
+		const bonusParts = [];
+		if (item.bonusAc) bonusParts.push(`AC +${item.bonusAc}`);
+		if (item.bonusWeapon || item.bonusWeaponAttack) bonusParts.push(`Atk +${item.bonusWeapon || item.bonusWeaponAttack}`);
+		if (item.bonusSavingThrow) bonusParts.push(`Saves +${item.bonusSavingThrow}`);
+		if (item.bonusSpellAttack) bonusParts.push(`Spell Atk +${item.bonusSpellAttack}`);
+		if (item.bonusSpellSaveDc) bonusParts.push(`Spell DC +${item.bonusSpellSaveDc}`);
+		const bonusStr = bonusParts.length ? `<span class="ve-small ve-muted">(${bonusParts.join(", ")})</span>` : "";
+
+		// Format properties and mastery (check both fields for backwards compatibility)
+		const itemProperties = item.properties || item.property || [];
+		const propertiesStr = itemProperties.length 
+			? itemProperties.map(p => this._formatProperty(p)).join(", ") 
+			: "";
+		const masteryStr = item.mastery?.length 
+			? item.mastery.map(m => this._formatMastery(m)).join(", ") 
+			: "";
+
+		// Build row with item type icon
+		const typeIcon = item.weapon ? "⚔️" : item.armor ? "🛡️" : item.shield ? "🛡️" : "✨";
+
+		// Build details line for weapons
+		let detailsHtml = "";
+		if (item.weapon && (item.damage || propertiesStr || masteryStr)) {
+			const detailParts = [];
+			if (item.damage) detailParts.push(item.damage);
+			if (propertiesStr) detailParts.push(propertiesStr);
+			if (masteryStr) detailParts.push(`<span class="text-info">⚔ ${masteryStr}</span>`);
+			detailsHtml = `<div class="ve-small ve-muted">${detailParts.join(" | ")}</div>`;
+		}
+
+		return $(`
+			<div class="charsheet__equipment-summary-item" data-item-id="${item.id}">
+				<div class="charsheet__equipment-summary-main">
+					<span class="charsheet__equipment-icon">${typeIcon}</span>
+					<span class="charsheet__equipment-name">${itemNameHtml}</span>
+					${bonusStr}
+				</div>
+				${detailsHtml}
+			</div>
+		`);
 	}
 
 	/**

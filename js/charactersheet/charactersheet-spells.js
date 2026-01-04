@@ -32,7 +32,7 @@ class CharacterSheetSpells {
 		});
 
 		// Add spell button
-		$(document).on("click", "#charsheet-add-spell", () => this._showSpellPicker());
+		$(document).on("click", "#charsheet-btn-add-spell, #charsheet-add-spell", () => this._showSpellPicker());
 
 		// Spell filter
 		$(document).on("input", "#charsheet-spell-search", (e) => {
@@ -140,6 +140,22 @@ class CharacterSheetSpells {
 
 		const className = classInfo.name;
 		const subclassName = classInfo.subclass?.name;
+
+		// Warlock has special progression - pact magic up to 5th, plus Mystic Arcanum
+		if (className === "Warlock") {
+			// Mystic Arcanum grants access to higher level spells
+			if (characterLevel >= 17) return 9;
+			if (characterLevel >= 15) return 8;
+			if (characterLevel >= 13) return 7;
+			if (characterLevel >= 11) return 6;
+			// Pact Magic maxes at 5th level spells at level 9
+			if (characterLevel >= 9) return 5;
+			if (characterLevel >= 7) return 4;
+			if (characterLevel >= 5) return 3;
+			if (characterLevel >= 3) return 2;
+			if (characterLevel >= 1) return 1;
+			return 0;
+		}
 
 		let casterLevel = characterLevel;
 
@@ -261,6 +277,8 @@ class CharacterSheetSpells {
 	}
 
 	_addSpell (spell) {
+		console.log("[CharSheet Spells] Adding spell:", spell.name, spell.level);
+		
 		this._state.addSpell({
 			name: spell.name,
 			source: spell.source,
@@ -275,6 +293,8 @@ class CharacterSheetSpells {
 			duration: this._getDuration(spell),
 		});
 
+		console.log("[CharSheet Spells] After add, total spells:", this._state.getSpells().length);
+		
 		this._renderSpellList();
 		this._page.saveCharacter();
 	}
@@ -330,7 +350,17 @@ class CharacterSheetSpells {
 			return;
 		}
 
-		// Find available slot
+		// Check pact slots first (they recharge on short rest, so use them preferentially)
+		const pactSlots = this._state.getPactSlots();
+		if (pactSlots && pactSlots.current > 0 && spell.level <= pactSlots.level) {
+			this._state.setPactSlotsCurrent(pactSlots.current - 1);
+			this._showCastResult(spell, pactSlots.level, true);
+			this.renderSlots();
+			this._page.saveCharacter();
+			return;
+		}
+
+		// Find available regular slot
 		let slotLevel = spell.level;
 		while (slotLevel <= 9) {
 			const current = this._state.getSpellSlotsCurrent(slotLevel);
@@ -347,8 +377,9 @@ class CharacterSheetSpells {
 		JqueryUtil.doToast({type: "warning", content: "No spell slots available!"});
 	}
 
-	_showCastResult (spell, slotLevel = null) {
+	_showCastResult (spell, slotLevel = null, isPactSlot = false) {
 		const upcast = slotLevel && slotLevel > spell.level ? ` (at level ${slotLevel})` : "";
+		const slotType = isPactSlot ? " [Pact Slot]" : "";
 
 		// Check for spell attack or save DC
 		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
@@ -374,7 +405,7 @@ class CharacterSheetSpells {
 
 		JqueryUtil.doToast({
 			type: "success",
-			content: `Cast ${spell.name}${upcast}${attackInfo}`,
+			content: `Cast ${spell.name}${upcast}${slotType}${attackInfo}`,
 		});
 	}
 
@@ -392,6 +423,7 @@ class CharacterSheetSpells {
 		// Use state method to persist the change
 		this._state.setSpellPrepared(spellId, !spell.prepared);
 		this._renderSpellList();
+		this._renderSpellcastingStats(); // Update prepared count
 		this._page.saveCharacter();
 	}
 
@@ -424,29 +456,72 @@ class CharacterSheetSpells {
 	// #region Rendering
 	renderSlots () {
 		const $container = $("#charsheet-spell-slots");
+		console.log("[CharSheet Spells] renderSlots: container found?", $container.length > 0);
 		if (!$container.length) return;
 
 		$container.empty();
 
+		// Debug: Log all slot maxes
+		const allSlots = {};
+		for (let i = 1; i <= 9; i++) allSlots[i] = this._state.getSpellSlotsMax(i);
+		console.log("[CharSheet Spells] renderSlots: slot maxes by level:", allSlots);
+
+		let slotsRendered = 0;
 		for (let level = 1; level <= 9; level++) {
 			const max = this._state.getSpellSlotsMax(level);
 			if (max <= 0) continue;
 
+			slotsRendered++;
 			const current = this._state.getSpellSlotsCurrent(level);
 			const used = max - current;
 
+			// Build pips HTML with inline styles for debugging
+			let pipsHtml = "";
+			for (let i = 0; i < max; i++) {
+				const isUsed = i < used;
+				pipsHtml += `<span class="charsheet__spell-slot-pip ${isUsed ? "charsheet__spell-slot-pip--used" : ""}" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #337ab7; border-radius: 50%; margin: 2px; ${isUsed ? "background: #337ab7;" : "background: transparent;"}"></span>`;
+			}
+
 			const $row = $(`
-				<div class="charsheet__spell-slot-row" data-spell-level="${level}">
-					<span class="charsheet__spell-slot-level">Level ${level}</span>
-					<div class="charsheet__slot-pips">
-						${Array(max).fill(0).map((_, i) => `<span class="charsheet__slot-pip ${i < used ? "used" : ""}"></span>`).join("")}
+				<div class="charsheet__spell-slot-level" data-spell-level="${level}">
+					<div class="charsheet__spell-slot-level-label">Level ${level}</div>
+					<div class="charsheet__spell-slot-pips" style="display: flex; gap: 4px; margin-top: 4px;">
+						${pipsHtml}
 					</div>
 				</div>
 			`);
 
+			console.log("[CharSheet Spells] renderSlots: Level", level, "max:", max, "current:", current, "used:", used, "pipsHtml length:", pipsHtml.length);
+
 			$container.append($row);
 		}
 
+		// Render Warlock Pact Slots
+		const pactSlots = this._state.getPactSlots();
+		if (pactSlots && pactSlots.max > 0) {
+			slotsRendered++;
+			const pactUsed = pactSlots.max - pactSlots.current;
+
+			let pactPipsHtml = "";
+			for (let i = 0; i < pactSlots.max; i++) {
+				const isUsed = i < pactUsed;
+				pactPipsHtml += `<span class="charsheet__spell-slot-pip charsheet__spell-slot-pip--pact ${isUsed ? "charsheet__spell-slot-pip--used" : ""}" data-pact-slot="true" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #9b59b6; border-radius: 50%; margin: 2px; ${isUsed ? "background: #9b59b6;" : "background: transparent;"}"></span>`;
+			}
+
+			const $pactRow = $(`
+				<div class="charsheet__spell-slot-level charsheet__spell-slot-level--pact" data-spell-level="pact" style="border-color: #9b59b6;">
+					<div class="charsheet__spell-slot-level-label" style="color: #9b59b6;">Pact (Lvl ${pactSlots.level})</div>
+					<div class="charsheet__spell-slot-pips" style="display: flex; gap: 4px; margin-top: 4px;">
+						${pactPipsHtml}
+					</div>
+				</div>
+			`);
+
+			$container.append($pactRow);
+		}
+
+		console.log("[CharSheet Spells] renderSlots: rendered", slotsRendered, "levels of slots");
+		
 		// Show if no slots
 		if (!$container.children().length) {
 			$container.append(`<p class="ve-muted">No spell slots available</p>`);
@@ -454,12 +529,14 @@ class CharacterSheetSpells {
 	}
 
 	_renderSpellList () {
-		const $container = $("#charsheet-spell-list");
+		const $container = $("#charsheet-spell-lists");
+		console.log("[CharSheet Spells] _renderSpellList: container found?", $container.length > 0);
 		if (!$container.length) return;
 
 		$container.empty();
 
 		const spells = this._state.getSpells();
+		console.log("[CharSheet Spells] _renderSpellList: spells count", spells.length, spells);
 
 		// Apply filters
 		let filtered = spells;
@@ -548,17 +625,17 @@ class CharacterSheetSpells {
 				<div class="charsheet__spell-item-actions">
 					${!isCantrip ? `
 						<button class="ve-btn ve-btn-xs ${isPrepared ? "ve-btn-primary" : "ve-btn-default"} charsheet__spell-prepared" title="Toggle Prepared">
-							<span class="glyphicon glyphicon-book"></span>
+							<span class="glyphicon glyphicon-book mr-1"></span>${isPrepared ? "Prepared" : "Prepare"}
 						</button>
 					` : ""}
 					<button class="ve-btn ve-btn-xs ve-btn-success charsheet__spell-cast" title="Cast Spell">
-						<span class="glyphicon glyphicon-flash"></span>
+						<span class="glyphicon glyphicon-flash mr-1"></span>Cast
 					</button>
 					<button class="ve-btn ve-btn-xs ve-btn-default charsheet__spell-info" title="Spell Info">
-						<span class="glyphicon glyphicon-info-sign"></span>
+						<span class="glyphicon glyphicon-info-sign mr-1"></span>Info
 					</button>
 					<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__spell-remove" title="Remove Spell">
-						<span class="glyphicon glyphicon-trash"></span>
+						<span class="glyphicon glyphicon-trash mr-1"></span>Remove
 					</button>
 				</div>
 			</div>
@@ -566,19 +643,107 @@ class CharacterSheetSpells {
 	}
 
 	render () {
+		// Calculate spell slots based on class/level before rendering
+		this._state.calculateSpellSlots();
+		
 		this.renderSlots();
 		this._renderSpellList();
+		this._renderSpellcastingStats();
+		
+		console.log("[CharSheet Spells] Rendered. Spells:", this._state.getSpells().length, "Slots:", this._state.getSpellSlotsMax(1));
+	}
 
-		// Render spellcasting stats
-		const ability = this._state.getSpellcastingAbility();
-		if (ability) {
-			const mod = this._state.getAbilityMod(ability);
-			const prof = this._state.getProficiencyBonus();
-			const attackBonus = mod + prof;
-			const saveDC = 8 + mod + prof;
+	_renderSpellcastingStats () {
+		// Get spellcasting ability from class
+		const classes = this._state.getClasses();
+		if (!classes.length) {
+			$("#charsheet-spell-ability").text("—");
+			$("#charsheet-spell-dc").text("—");
+			$("#charsheet-spell-attack").text("—");
+			return;
+		}
 
-			$("#charsheet-spell-attack").text(`+${attackBonus}`);
-			$("#charsheet-save-dc").text(saveDC);
+		// Get spellcasting ability - first spellcasting class
+		const spellcastingAbilityMap = {
+			"Bard": "cha",
+			"Cleric": "wis",
+			"Druid": "wis",
+			"Paladin": "cha",
+			"Ranger": "wis",
+			"Sorcerer": "cha",
+			"Warlock": "cha",
+			"Wizard": "int",
+			"Artificer": "int",
+		};
+
+		let ability = null;
+		for (const cls of classes) {
+			if (spellcastingAbilityMap[cls.name]) {
+				ability = spellcastingAbilityMap[cls.name];
+				break;
+			}
+		}
+
+		if (!ability) {
+			$("#charsheet-spell-ability").text("—");
+			$("#charsheet-spell-dc").text("—");
+			$("#charsheet-spell-attack").text("—");
+			return;
+		}
+
+		const mod = this._state.getAbilityMod(ability);
+		const prof = this._state.getProficiencyBonus();
+		
+		// Get item bonuses for spell attack and DC
+		const itemBonuses = this._state.getItemBonuses?.() || {};
+		const spellAttackBonus = itemBonuses.spellAttack || 0;
+		const spellDcBonus = itemBonuses.spellSaveDc || 0;
+		
+		const attackBonus = mod + prof + spellAttackBonus;
+		const saveDC = 8 + mod + prof + spellDcBonus;
+		const abilityFull = {
+			"str": "Strength",
+			"dex": "Dexterity",
+			"con": "Constitution",
+			"int": "Intelligence",
+			"wis": "Wisdom",
+			"cha": "Charisma",
+		}[ability] || ability.toUpperCase();
+
+		$("#charsheet-spell-ability").text(abilityFull);
+		$("#charsheet-spell-dc").text(saveDC);
+		$("#charsheet-spell-attack").text(`+${attackBonus}`);
+
+		// Display spells known or prepared count
+		const spellcastingInfo = this._state.getSpellcastingInfo();
+		const $knownContainer = $("#charsheet-spells-known-container");
+		const $preparedContainer = $("#charsheet-spells-prepared-container");
+
+		// Hide both by default
+		$knownContainer.hide();
+		$preparedContainer.hide();
+
+		if (spellcastingInfo) {
+			const spells = this._state.getSpells();
+			const leveledSpells = spells.filter(s => s.level > 0);
+			const cantrips = spells.filter(s => s.level === 0);
+			const preparedSpells = leveledSpells.filter(s => s.prepared);
+
+			if (spellcastingInfo.type === "known") {
+				// Spells known caster (Bard, Sorcerer, Warlock, Ranger)
+				$knownContainer.show();
+				const currentKnown = leveledSpells.length;
+				const maxKnown = spellcastingInfo.max;
+				const knownColor = currentKnown > maxKnown ? "color: #c9302c;" : "";
+				$("#charsheet-spells-known").html(`<span style="${knownColor}">${currentKnown}/${maxKnown}</span>`);
+			} else if (spellcastingInfo.type === "prepared") {
+				// Prepared caster (Cleric, Druid, Paladin, Wizard)
+				$preparedContainer.show();
+				const currentPrepared = preparedSpells.length;
+				const maxPrepared = spellcastingInfo.max;
+				const preparedColor = currentPrepared > maxPrepared ? "color: #c9302c;" : "";
+				$("#charsheet-spells-prepared").html(`<span style="${preparedColor}">${currentPrepared}/${maxPrepared}</span>`);
+			}
 		}
 	}
 	// #endregion
