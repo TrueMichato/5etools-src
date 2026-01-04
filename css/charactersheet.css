@@ -382,6 +382,109 @@
 	padding: 0.25rem 0.5rem;
 }
 
+/* Spells Tab - Spell Items */
+.charsheet__spell-item {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 0.5rem;
+	border-bottom: 1px solid var(--rgb-border-grey);
+}
+
+.charsheet__spell-item:last-child {
+	border-bottom: none;
+}
+
+.charsheet__spell-item.prepared {
+	background: rgba(0, 123, 255, 0.05);
+}
+
+.charsheet__spell-item-main {
+	flex: 1;
+	min-width: 0;
+}
+
+.charsheet__spell-item-header {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+}
+
+.charsheet__spell-item-name {
+	font-weight: 500;
+}
+
+.charsheet__spell-item-meta {
+	display: inline-flex;
+	gap: 0.25rem;
+}
+
+.charsheet__spell-item-details {
+	margin-top: 0.15rem;
+	font-size: 0.8rem;
+	line-height: 1.3;
+}
+
+.charsheet__spell-item-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	flex-shrink: 0;
+}
+
+/* Combat Spells */
+.charsheet__combat-spell-stats {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.charsheet__combat-spell-group {
+	border-left: 2px solid var(--rgb-border-grey);
+	padding-left: 0.5rem;
+}
+
+.charsheet__combat-spell-level {
+	font-weight: 600;
+	margin-bottom: 0.25rem;
+}
+
+.charsheet__combat-spell-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 0.25rem 0;
+}
+
+.charsheet__combat-spell-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.charsheet__combat-spell-header {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+}
+
+.charsheet__combat-spell-name {
+	display: inline;
+}
+
+.charsheet__combat-spell-details {
+	font-size: 0.75rem;
+	line-height: 1.2;
+}
+
+.charsheet__combat-spell-meta {
+	display: flex;
+	gap: 0.25rem;
+}
+
 /* Conditions */
 .charsheet__condition-badge {
 	display: inline-flex;

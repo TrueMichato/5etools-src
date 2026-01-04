@@ -296,6 +296,10 @@ class CharacterSheetSpells {
 		console.log("[CharSheet Spells] After add, total spells:", this._state.getSpells().length);
 		
 		this._renderSpellList();
+		// Update combat spells tab (cantrips are auto-prepared)
+		if (this._page._combat) {
+			this._page._combat.renderCombatSpells();
+		}
 		this._page.saveCharacter();
 	}
 
@@ -384,6 +388,7 @@ class CharacterSheetSpells {
 		// Check for spell attack or save DC
 		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
 		let attackInfo = "";
+		let damageInfo = "";
 
 		if (spellData) {
 			const spellcastingMod = this._state.getAbilityMod(this._state.getSpellcastingAbility() || "int");
@@ -399,19 +404,156 @@ class CharacterSheetSpells {
 			// Check for save DC
 			if (spellData.savingThrow) {
 				const saveDC = 8 + spellcastingMod + profBonus;
-				attackInfo = `<br>Save DC: <strong>${saveDC}</strong> (${spellData.savingThrow.join("/")} save)`;
+				attackInfo += `<br>Save DC: <strong>${saveDC}</strong> (${spellData.savingThrow.join("/")} save)`;
+			}
+
+			// Roll damage if spell has damage
+			damageInfo = this._rollSpellDamage(spellData, slotLevel, spell.level);
+
+			// Roll healing if spell heals
+			if (!damageInfo) {
+				damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level);
 			}
 		}
 
 		JqueryUtil.doToast({
 			type: "success",
-			content: `Cast ${spell.name}${upcast}${slotType}${attackInfo}`,
+			content: $(`<div>Cast ${spell.name}${upcast}${slotType}${attackInfo}${damageInfo}</div>`),
 		});
+	}
+
+	_rollSpellDamage (spellData, slotLevel, baseLevel) {
+		// Check for cantrip scaling
+		if (spellData.scalingLevelDice) {
+			return this._rollCantripDamage(spellData);
+		}
+
+		// Look for damage dice in spell entries
+		const damageTypes = spellData.damageInflict || [];
+		const entries = JSON.stringify(spellData.entries || []);
+
+		// Find damage dice patterns like {@damage 8d6}
+		const damageMatch = entries.match(/\{@damage\s+([^}]+)\}/);
+		if (!damageMatch) return "";
+
+		let baseDice = damageMatch[1];
+
+		// Handle upcast damage
+		if (slotLevel && slotLevel > baseLevel && spellData.entriesHigherLevel) {
+			const higherStr = JSON.stringify(spellData.entriesHigherLevel);
+			// Look for scaledamage pattern: {@scaledamage 8d6|3-9|1d6}
+			const scaleMatch = higherStr.match(/\{@scaledamage\s+[^|]+\|[^|]+\|([^}]+)\}/);
+			if (scaleMatch) {
+				const extraDice = scaleMatch[1];
+				const levelsAbove = slotLevel - baseLevel;
+				// Parse the extra dice and multiply by levels above
+				const diceMatch = extraDice.match(/(\d+)d(\d+)/);
+				if (diceMatch) {
+					const numDice = parseInt(diceMatch[1]) * levelsAbove;
+					const diceSize = diceMatch[2];
+					// Add extra dice to base
+					const baseMatch = baseDice.match(/(\d+)d(\d+)/);
+					if (baseMatch && baseMatch[2] === diceSize) {
+						baseDice = `${parseInt(baseMatch[1]) + numDice}d${diceSize}`;
+					}
+				}
+			}
+		}
+
+		// Roll the damage
+		try {
+			const total = Renderer.dice.parseRandomise2(baseDice);
+			const damageType = damageTypes[0] || "damage";
+			return `<br>Damage: <strong>${total}</strong> ${damageType} (${baseDice})`;
+		} catch (e) {
+			return "";
+		}
+	}
+
+	_rollCantripDamage (spellData) {
+		const characterLevel = this._state.getTotalLevel();
+		const scaling = Array.isArray(spellData.scalingLevelDice)
+			? spellData.scalingLevelDice[0]
+			: spellData.scalingLevelDice;
+
+		if (!scaling?.scaling) return "";
+
+		// Find the appropriate dice for character level
+		let dice = "1d8"; // fallback
+		const levels = Object.keys(scaling.scaling).map(Number).sort((a, b) => a - b);
+		for (const lvl of levels) {
+			if (characterLevel >= lvl) {
+				dice = scaling.scaling[lvl];
+			}
+		}
+
+		try {
+			const total = Renderer.dice.parseRandomise2(dice);
+			const damageTypes = spellData.damageInflict || [];
+			const damageType = damageTypes[0] || "damage";
+			return `<br>Damage: <strong>${total}</strong> ${damageType} (${dice})`;
+		} catch (e) {
+			return "";
+		}
+	}
+
+	_rollSpellHealing (spellData, slotLevel, baseLevel) {
+		const entries = JSON.stringify(spellData.entries || []);
+		const entriesLower = entries.toLowerCase();
+
+		// Only match actual healing spells - look for "regain" or "restore" with "hit points"
+		// This avoids false positives like Sleep which mentions "hit points" but isn't healing
+		const isHealing = (entriesLower.includes("regain") && entriesLower.includes("hit point"))
+			|| (entriesLower.includes("restore") && entriesLower.includes("hit point"))
+			|| entriesLower.includes("healing")
+			|| spellData.miscTags?.includes("HL"); // HL = Healing tag
+
+		if (!isHealing) {
+			return "";
+		}
+
+		// Find dice pattern
+		const healMatch = entries.match(/\{@dice\s+([^}]+)\}/) || entries.match(/\{@damage\s+([^}]+)\}/);
+		if (!healMatch) return "";
+
+		let baseDice = healMatch[1];
+		const spellcastingMod = this._state.getAbilityMod(this._state.getSpellcastingAbility() || "int");
+
+		// Handle upcast healing
+		if (slotLevel && slotLevel > baseLevel && spellData.entriesHigherLevel) {
+			const higherStr = JSON.stringify(spellData.entriesHigherLevel);
+			const scaleMatch = higherStr.match(/\{@scaledice\s+[^|]+\|[^|]+\|([^}|]+)/);
+			if (scaleMatch) {
+				const extraDice = scaleMatch[1];
+				const levelsAbove = slotLevel - baseLevel;
+				const diceMatch = extraDice.match(/(\d+)d(\d+)/);
+				if (diceMatch) {
+					const numDice = parseInt(diceMatch[1]) * levelsAbove;
+					const diceSize = diceMatch[2];
+					const baseMatch = baseDice.match(/(\d+)d(\d+)/);
+					if (baseMatch && baseMatch[2] === diceSize) {
+						baseDice = `${parseInt(baseMatch[1]) + numDice}d${diceSize}`;
+					}
+				}
+			}
+		}
+
+		try {
+			const diceTotal = Renderer.dice.parseRandomise2(baseDice);
+			const total = diceTotal + spellcastingMod;
+			return `<br>Healing: <strong>${total}</strong> HP (${baseDice} + ${spellcastingMod})`;
+		} catch (e) {
+			return "";
+		}
 	}
 
 	_removeSpell (spellId) {
 		this._state.removeSpell(spellId);
 		this._renderSpellList();
+		// Update combat spells tab
+		if (this._page._combat) {
+			this._page._combat.renderCombatSpells();
+		}
 		this._page.saveCharacter();
 	}
 
@@ -424,6 +566,10 @@ class CharacterSheetSpells {
 		this._state.setSpellPrepared(spellId, !spell.prepared);
 		this._renderSpellList();
 		this._renderSpellcastingStats(); // Update prepared count
+		// Update combat spells tab
+		if (this._page._combat) {
+			this._page._combat.renderCombatSpells();
+		}
 		this._page.saveCharacter();
 	}
 
@@ -594,9 +740,11 @@ class CharacterSheetSpells {
 	}
 
 	_renderSpellItem (spell) {
-		const schoolAbbr = spell.school ? Parser.spSchoolAbvToFull(spell.school).slice(0, 3) : "";
+		const schoolFull = spell.school ? Parser.spSchoolAbvToFull(spell.school) : "";
 		const isPrepared = spell.prepared;
 		const isCantrip = spell.level === 0;
+		// Ensure spell has a valid ID
+		const spellId = spell.id || `${spell.name}|${spell.source}`;
 
 		// Create hover link for spell name
 		let spellLink = spell.name;
@@ -612,15 +760,26 @@ class CharacterSheetSpells {
 			// Fall back to plain name
 		}
 
+		// Build spell details line
+		const detailParts = [];
+		if (spell.castingTime) detailParts.push(spell.castingTime);
+		if (spell.range) detailParts.push(spell.range);
+		if (spell.duration) detailParts.push(spell.duration);
+		if (spell.components) detailParts.push(spell.components);
+		const detailsLine = detailParts.join(" · ");
+
 		return $(`
-			<div class="charsheet__spell-item ${isPrepared ? "prepared" : ""}" data-spell-id="${spell.id}">
+			<div class="charsheet__spell-item ${isPrepared ? "prepared" : ""}" data-spell-id="${spellId}">
 				<div class="charsheet__spell-item-main">
-					<span class="charsheet__spell-item-name">${spellLink}</span>
-					<span class="charsheet__spell-item-meta">
-						${schoolAbbr ? `<span class="badge badge-secondary">${schoolAbbr}</span>` : ""}
-						${spell.concentration ? `<span class="badge badge-info">C</span>` : ""}
-						${spell.ritual ? `<span class="badge badge-success">R</span>` : ""}
-					</span>
+					<div class="charsheet__spell-item-header">
+						<span class="charsheet__spell-item-name">${spellLink}</span>
+						<span class="charsheet__spell-item-meta">
+							${schoolFull ? `<span class="badge badge-secondary">${schoolFull}</span>` : ""}
+							${spell.concentration ? `<span class="badge badge-info" title="Concentration">C</span>` : ""}
+							${spell.ritual ? `<span class="badge badge-success" title="Ritual">R</span>` : ""}
+						</span>
+					</div>
+					${detailsLine ? `<div class="charsheet__spell-item-details ve-muted ve-small">${detailsLine}</div>` : ""}
 				</div>
 				<div class="charsheet__spell-item-actions">
 					${!isCantrip ? `
