@@ -32,10 +32,13 @@ class CharacterSheetPage {
 		this._races = [];
 		this._classes = [];
 		this._subclasses = [];
+		this._classFeatures = [];
+		this._subclassFeatures = [];
 		this._backgrounds = [];
 		this._spellsData = [];
 		this._itemsData = [];
 		this._featsData = [];
+		this._optionalFeaturesData = [];
 	}
 
 	async pInit () {
@@ -108,23 +111,28 @@ class CharacterSheetPage {
 
 	async _pLoadData () {
 		// Load all necessary data in parallel
-		const [races, classes, backgrounds, spells, items, feats] = await Promise.all([
+		// Note: Using loadRawJSON for classes to get classFeature and subclassFeature arrays
+		const [races, classes, backgrounds, spells, items, feats, optFeatures] = await Promise.all([
 			DataUtil.race.loadJSON(),
-			DataUtil.class.loadJSON(),
+			DataUtil.class.loadRawJSON(),
 			DataUtil.loadJSON("data/backgrounds.json"),
 			DataUtil.spell.pLoadAll(),
 			Renderer.item.pBuildList(),
 			DataUtil.loadJSON("data/feats.json"),
+			DataUtil.loadJSON("data/optionalfeatures.json"),
 		]);
 
 		this._races = races.race || [];
 		this._classes = classes.class || [];
 		this._subclasses = classes.subclass || [];
+		this._classFeatures = classes.classFeature || [];
+		this._subclassFeatures = classes.subclassFeature || [];
 		this._backgrounds = backgrounds.background || [];
 		this._spellsData = spells;
 		// Filter out item groups which are not actual items
 		this._itemsData = (items || []).filter(it => !it._isItemGroup);
 		this._featsData = feats.feat || [];
+		this._optionalFeaturesData = optFeatures.optionalfeature || [];
 
 		// Attach subclasses to their parent classes for easier access
 		this._classes.forEach(cls => {
@@ -1328,10 +1336,13 @@ class CharacterSheetPage {
 	getRaces () { return this._races; }
 	getClasses () { return this._classes; }
 	getSubclasses () { return this._subclasses; }
+	getClassFeatures () { return this._classFeatures; }
+	getSubclassFeatures () { return this._subclassFeatures; }
 	getBackgrounds () { return this._backgrounds; }
 	getSpells () { return this._spellsData; }
 	getItems () { return this._itemsData; }
 	getFeats () { return this._featsData; }
+	getOptionalFeatures () { return this._optionalFeaturesData; }
 	getState () { return this._state; }
 
 	async saveCharacter () {

@@ -38,9 +38,9 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] Background tool proficiencies override existing proficiencies instead of adding to them
 
 ### Features
-- [] class features not being added correctly from the builder, e.g warlock's eldritch invocations
-- [] feature display should be drop down and link, currently class features are only links.
-- [] race features are all called the race name instead of their actual names, e.g darkvision is called "Dwarf" for dwarves
+- [x] class features not being added correctly from the builder, e.g warlock's eldritch invocations
+- [x] feature display should be drop down and link, currently class features are only links.
+- [x] race features are all called the race name instead of their actual names, e.g darkvision is called "Dwarf" for dwarves
 
 ### Overview
 - [] attacks and spells should also appear at the overview page for quick access
