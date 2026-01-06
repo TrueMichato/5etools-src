@@ -122,6 +122,13 @@ class CharacterSheetRest {
 					this._state.heal(totalHealing);
 				}
 				this._restoreResources("short");
+
+				// Restore Warlock pact slots on short rest
+				const pactSlots = this._state.getPactSlots();
+				if (pactSlots && pactSlots.max > 0) {
+					this._state.setPactSlotsCurrent(pactSlots.max);
+				}
+
 				this._page.saveCharacter();
 				this._page.renderCharacter();
 				doClose(true);
@@ -199,6 +206,12 @@ class CharacterSheetRest {
 					if (max > 0) {
 						this._state.setSpellSlots(level, max, max);
 					}
+				}
+
+				// Restore Warlock pact slots on long rest as well
+				const pactSlots = this._state.getPactSlots();
+				if (pactSlots && pactSlots.max > 0) {
+					this._state.setPactSlotsCurrent(pactSlots.max);
 				}
 
 				// Restore long-rest and short-rest resources

@@ -24,6 +24,7 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] Amount of spells known isn't calculated/displayed/enforced
 - [x] Amount of prepared spells isn't calculated/displayed/enforced
 - [x] Warlocks can't cast spells with slots, says no spell slots available
+- [x] warlock spell slots not recharging on short rest or long rest
 
 ### Combat
 - [x] can't delete or edit attacks once created
@@ -31,10 +32,10 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] Spells are not integrated into combat (no spell attacks, spell save DCs, spell effects, etc)
 
 ### Character Builder
-- [] Selecting items not working correctly and not adding items specifically in character builder. Need to mimic logic from inventory.
-- [] 20204 classes don't have starting equipment options displayed at the choice, e.g efa articificer gives them to you but does not show them in the builder
-- [] Character age, height, and weight inputs should only accept numbers
-- [] Background tool proficiencies override existing proficiencies instead of adding to them
+- [] Selecting items not working correctly and not needed since items can be added later in inventory.
+- [x] 2024 classes don't have starting equipment options displayed at the choice, e.g efa articificer gives them to you but does not show them in the builder
+- [x] Character age, height, and weight inputs should only accept numbers
+- [x] Background tool proficiencies override existing proficiencies instead of adding to them
 
 ### Features
 - [] class features not being added correctly from the builder, e.g warlock's eldritch invocations
