@@ -798,7 +798,9 @@ class CharacterSheetState {
 	}
 
 	addToolProficiency (tool) {
-		if (!this._data.toolProficiencies.includes(tool)) {
+		// Case-insensitive check to avoid duplicates from different sources
+		const toolLower = tool.toLowerCase();
+		if (!this._data.toolProficiencies.some(t => t.toLowerCase() === toolLower)) {
 			this._data.toolProficiencies.push(tool);
 		}
 	}

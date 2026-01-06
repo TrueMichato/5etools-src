@@ -208,11 +208,61 @@ class CharacterSheetBuilder {
 	_applyEquipmentChoices () {
 		if (!this._selectedClass?.startingEquipment) return;
 
+		const startingEquip = this._selectedClass.startingEquipment;
+		const defaultData = startingEquip.defaultData || [];
+
+		// Check if this is 2024 format (uppercase keys like A, B, C)
+		const is2024Format = defaultData.length > 0 && defaultData[0] && 
+			Object.keys(defaultData[0]).some(k => /^[A-Z]$/.test(k));
+
+		if (is2024Format) {
+			this._apply2024EquipmentChoices(startingEquip);
+		} else {
+			this._applyClassicEquipmentChoices(startingEquip);
+		}
+	}
+
+	_apply2024EquipmentChoices (startingEquip) {
+		const defaultData = startingEquip.defaultData || [];
+		if (!defaultData.length) return;
+
+		const choiceData = defaultData[0];
+		const selectedKey = this._equipmentChoices["2024"] || Object.keys(choiceData).filter(k => /^[A-Z]$/.test(k))[0];
+		const items = choiceData[selectedKey] || [];
+
+		const allItems = this._page.getItems();
+
+		items.forEach(itemEntry => {
+			if (itemEntry.item) {
+				// Item with optional quantity
+				const [name, source] = itemEntry.item.split("|");
+				const item = allItems.find(i =>
+					i.name.toLowerCase() === name.toLowerCase() &&
+					(!source || i.source?.toLowerCase() === source.toLowerCase()),
+				);
+				if (item) {
+					this._state.addItem(item, itemEntry.quantity || 1);
+				}
+			} else if (itemEntry.value) {
+				// Gold value in copper pieces
+				const gp = Math.floor(itemEntry.value / 100);
+				this._state.setCurrency("gp", (this._state.getCurrency("gp") || 0) + gp);
+			} else if (itemEntry.special) {
+				// Special items like "Spellbook" - try to find in items list
+				const item = allItems.find(i => i.name.toLowerCase() === itemEntry.special.toLowerCase());
+				if (item) {
+					this._state.addItem(item, 1);
+				}
+			}
+		});
+	}
+
+	_applyClassicEquipmentChoices (startingEquip) {
 		// If using gold alternative, add gold instead
-		if (this._useGoldAlternative && this._selectedClass.startingEquipment.goldAlternative) {
+		if (this._useGoldAlternative && startingEquip.goldAlternative) {
 			// Parse gold amount from string like "{@dice 5d4 × 10|5d4 × 10|Starting Gold}"
 			// For simplicity, use average value
-			const goldMatch = this._selectedClass.startingEquipment.goldAlternative.match(/(\d+)d(\d+)\s*[×x*]\s*(\d+)/i);
+			const goldMatch = startingEquip.goldAlternative.match(/(\d+)d(\d+)\s*[×x*]\s*(\d+)/i);
 			if (goldMatch) {
 				const numDice = parseInt(goldMatch[1]);
 				const dieFaces = parseInt(goldMatch[2]);
@@ -224,7 +274,7 @@ class CharacterSheetBuilder {
 			return;
 		}
 
-		const defaultData = this._selectedClass.startingEquipment.defaultData || [];
+		const defaultData = startingEquip.defaultData || [];
 
 		defaultData.forEach((choiceSet, idx) => {
 			const selectedKey = this._equipmentChoices?.[idx] || Object.keys(choiceSet).filter(k => k !== "_")[0] || "_";
@@ -392,7 +442,9 @@ class CharacterSheetBuilder {
 		if (this._selectedClass.startingProficiencies?.tools) {
 			this._selectedClass.startingProficiencies.tools.forEach(tool => {
 				if (typeof tool === "string") {
-					this._state.addToolProficiency(tool);
+					// Extract tool name from {@item} tags if present and normalize
+					const toolName = tool.replace(/{@item\s+([^|}]+)[^}]*}/gi, "$1").toTitleCase();
+					this._state.addToolProficiency(toolName);
 				}
 			});
 		}
@@ -1689,13 +1741,96 @@ class CharacterSheetBuilder {
 			return;
 		}
 
-		if (!this._selectedClass.startingEquipment?.default) {
+		const startingEquip = this._selectedClass.startingEquipment;
+		if (!startingEquip) {
 			$container.append("<p class='ve-muted'>No starting equipment defined</p>");
 			return;
 		}
 
-		const equipmentEntries = this._selectedClass.startingEquipment.default;
-		const defaultData = this._selectedClass.startingEquipment.defaultData || [];
+		// Check if this is 2024 format (has uppercase keys like A, B, C in defaultData)
+		const defaultData = startingEquip.defaultData || [];
+		const is2024Format = defaultData.length > 0 && defaultData[0] && 
+			Object.keys(defaultData[0]).some(k => /^[A-Z]$/.test(k));
+
+		if (is2024Format) {
+			// 2024 XPHB format - package choices (A, B, C)
+			this._render2024EquipmentChoices($container, startingEquip);
+		} else if (startingEquip.default) {
+			// Classic format - per-row choices (a, b)
+			this._renderClassicEquipmentChoices($container, startingEquip);
+		} else {
+			$container.append("<p class='ve-muted'>No starting equipment options available</p>");
+		}
+	}
+
+	_render2024EquipmentChoices ($container, startingEquip) {
+		// 2024 format has complete equipment packages as options A, B, C, etc.
+		const defaultData = startingEquip.defaultData || [];
+		if (!defaultData.length) return;
+
+		const choiceData = defaultData[0]; // All choices are in the first defaultData entry
+		const choiceKeys = Object.keys(choiceData).filter(k => /^[A-Z]$/.test(k)).sort();
+
+		if (!choiceKeys.length) {
+			$container.append("<p class='ve-muted'>No equipment options found</p>");
+			return;
+		}
+
+		// Display human-readable description if available
+		if (startingEquip.entries?.length) {
+			const $desc = $(`<div class="mb-3 ve-muted">${Renderer.get().render({entries: startingEquip.entries})}</div>`);
+			$container.append($desc);
+		}
+
+		const $choiceGroup = $(`<div class="charsheet__builder-equipment-choice"></div>`);
+
+		// Initialize default choice if not set
+		if (!this._equipmentChoices["2024"]) {
+			this._equipmentChoices["2024"] = choiceKeys[0];
+		}
+
+		choiceKeys.forEach((key) => {
+			const items = choiceData[key] || [];
+			const isSelected = this._equipmentChoices["2024"] === key;
+
+			// Build label showing what's in this package
+			const labelParts = items.map(item => {
+				if (item.item) {
+					const [name] = item.item.split("|");
+					return item.quantity > 1 ? `${item.quantity}× ${name}` : name;
+				} else if (item.value) {
+					// Gold value in copper pieces
+					const gp = Math.floor(item.value / 100);
+					return `${gp} GP`;
+				} else if (item.special) {
+					return item.special;
+				}
+				return "";
+			}).filter(Boolean);
+
+			const $option = $(`
+				<label class="charsheet__builder-equipment-option ve-flex-v-center mb-2 p-2" style="border: 1px solid var(--rgb-border-grey); border-radius: 4px; cursor: pointer;">
+					<input type="radio" name="equipment-choice-2024" value="${key}" ${isSelected ? "checked" : ""} class="mr-2">
+					<div>
+						<strong>Option ${key}:</strong>
+						<div class="ve-small ve-muted">${labelParts.join(", ")}</div>
+					</div>
+				</label>
+			`);
+
+			$option.find("input").on("change", () => {
+				this._equipmentChoices["2024"] = key;
+			});
+
+			$choiceGroup.append($option);
+		});
+
+		$container.append($choiceGroup);
+	}
+
+	_renderClassicEquipmentChoices ($container, startingEquip) {
+		const equipmentEntries = startingEquip.default;
+		const defaultData = startingEquip.defaultData || [];
 
 		equipmentEntries.forEach((entry, idx) => {
 			const $row = $(`<div class="charsheet__builder-equipment-row mb-2"></div>`);
@@ -1870,15 +2005,15 @@ class CharacterSheetBuilder {
 						<div class="ve-flex mb-2">
 							<div class="ve-flex-col mr-2" style="flex: 1;">
 								<label class="ve-muted ve-small">Age</label>
-								<input type="text" class="form-control form-control--minimal" id="builder-age" value="${this._state.getAppearance("age")}">
+								<input type="number" min="0" class="form-control form-control--minimal" id="builder-age" value="${this._state.getAppearance("age")}" placeholder="Years">
 							</div>
 							<div class="ve-flex-col mr-2" style="flex: 1;">
-								<label class="ve-muted ve-small">Height</label>
-								<input type="text" class="form-control form-control--minimal" id="builder-height" value="${this._state.getAppearance("height")}">
+								<label class="ve-muted ve-small">Height (ft)</label>
+								<input type="number" min="0" step="0.1" class="form-control form-control--minimal" id="builder-height" value="${this._state.getAppearance("height")}" placeholder="Feet">
 							</div>
 							<div class="ve-flex-col" style="flex: 1;">
-								<label class="ve-muted ve-small">Weight</label>
-								<input type="text" class="form-control form-control--minimal" id="builder-weight" value="${this._state.getAppearance("weight")}">
+								<label class="ve-muted ve-small">Weight (lbs)</label>
+								<input type="number" min="0" class="form-control form-control--minimal" id="builder-weight" value="${this._state.getAppearance("weight")}" placeholder="Pounds">
 							</div>
 						</div>
 						<div class="ve-flex">
