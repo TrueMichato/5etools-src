@@ -462,10 +462,33 @@ class CharacterSheetBuilder {
 		}
 
 		// Add level 1 class features
-		// classFeatures is an array of arrays - index 0 = level 1 features, index 1 = level 2 features, etc.
+		// classFeatures can be:
+		// 1. An array of arrays - index 0 = level 1 features, index 1 = level 2 features, etc.
+		// 2. An array of strings/objects directly for level 1 features
 		if (this._selectedClass.classFeatures && this._selectedClass.classFeatures.length > 0) {
 			// Get features at index 0 (level 1)
-			const level1Features = this._selectedClass.classFeatures[0] || [];
+			let level1Features = this._selectedClass.classFeatures[0];
+			
+			// If the first element is not an array, the classFeatures array itself contains the features
+			// (happens with some class formats where classFeatures is flat)
+			if (level1Features && !Array.isArray(level1Features)) {
+				// Check if this is a string/object feature entry rather than an array of features
+				// In this case, filter for level 1 features from the flat array
+				level1Features = this._selectedClass.classFeatures.filter(f => {
+					if (typeof f === "string") {
+						const parts = f.split("|");
+						return parts[3] === "1" || parts.length < 4; // Level 1 or no level specified
+					} else if (typeof f === "object" && f.classFeature) {
+						const parts = f.classFeature.split("|");
+						return parts[3] === "1" || parts.length < 4;
+					} else if (typeof f === "object" && f.level !== undefined) {
+						return f.level === 1;
+					}
+					return true; // Include if we can't determine level
+				});
+			}
+			
+			level1Features = level1Features || [];
 			console.log("[CharSheet Builder] Level 1 features (from index 0):", level1Features);
 
 			// Check if we have a subclass selected - if so, we'll filter out features with gainSubclassFeature
@@ -1940,12 +1963,9 @@ class CharacterSheetBuilder {
 					</div>
 				</div>
 				
-				<div class="charsheet__section mt-3">
-					<h5>Additional Items</h5>
-					<button class="ve-btn ve-btn-default ve-btn-sm" id="builder-add-item">
-						<span class="glyphicon glyphicon-plus"></span> Add Item from List
-					</button>
-					<div id="builder-additional-items" class="mt-2"></div>
+				<div class="charsheet__section mt-3 ve-muted ve-small">
+					<span class="glyphicon glyphicon-info-sign"></span>
+					Additional items can be added from the Inventory tab after character creation.
 				</div>
 			</div>
 		`);
@@ -1954,9 +1974,6 @@ class CharacterSheetBuilder {
 
 		// Render class equipment with choices
 		this._renderClassEquipmentChoices($("#builder-class-equipment"));
-
-		// Add item button handler
-		$("#builder-add-item").on("click", () => this._showItemPicker());
 	}
 
 	_renderClassEquipmentChoices ($container) {
@@ -2173,25 +2190,6 @@ class CharacterSheetBuilder {
 		return Renderer.get().render({entries: this._selectedBackground.startingEquipment});
 	}
 
-	async _showItemPicker () {
-		const items = this._page.getItems();
-
-		// Simple item picker modal
-		const selectedItem = await InputUiUtil.pGetUserEnum({
-			title: "Add Item",
-			values: items.slice(0, 100).map(i => i.name), // Limit for performance
-			fnDisplay: v => v,
-			isAllowNull: true,
-		});
-
-		if (selectedItem) {
-			const item = items.find(i => i.name === selectedItem);
-			if (item) {
-				this._state.addItem(item, 1);
-				JqueryUtil.doToast({type: "success", content: `Added ${item.name} to inventory`});
-			}
-		}
-	}
 	// #endregion
 
 	// #region Step 6: Details

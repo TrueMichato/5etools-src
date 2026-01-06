@@ -32,7 +32,7 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] Spells are not integrated into combat (no spell attacks, spell save DCs, spell effects, etc)
 
 ### Character Builder
-- [] Selecting items not working correctly and not needed since items can be added later in inventory.
+- [x] Selecting items not working correctly and not needed since items can be added later in inventory.
 - [x] 2024 classes don't have starting equipment options displayed at the choice, e.g efa articificer gives them to you but does not show them in the builder
 - [x] Character age, height, and weight inputs should only accept numbers
 - [x] Background tool proficiencies override existing proficiencies instead of adding to them
@@ -50,6 +50,7 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [] Passive stats that aren't perception are not calculated or displayed (e.g passive investigation, passive insight, etc)
 - [] proficiency or expertise in skills not displayed in a clear way
 - [] exhaustion level not displayed or tracked, exhaustion is just a regular condition currently
+- [] active features not correct or clear, display only some random features and race featuers have only race name
 
 
 ### Level Up
