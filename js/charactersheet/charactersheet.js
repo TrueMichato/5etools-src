@@ -252,6 +252,10 @@ class CharacterSheetPage {
 		// Conditions
 		$("#charsheet-btn-add-condition").on("click", () => this._onAddCondition());
 
+		// Exhaustion
+		$("#charsheet-btn-exhaustion-add").on("click", () => this._addExhaustion());
+		$("#charsheet-btn-exhaustion-remove").on("click", () => this._removeExhaustion());
+
 		// Currency
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
 			$(`#charsheet-ipt-${currency}`).on("change", (e) => {
@@ -479,8 +483,10 @@ class CharacterSheetPage {
 		this._renderNotes();
 		this._renderAppearance();
 		this._renderConditions();
+		this._renderExhaustion();
 		this._renderResources();
 		this._renderAttacks();
+		this._renderQuickSpells();
 		this._renderAbilitiesDetailed();
 
 		// Sub-modules
@@ -567,9 +573,14 @@ class CharacterSheetPage {
 			$(`#charsheet-ability-${abl}-mod`).text(mod >= 0 ? `+${mod}` : mod);
 		});
 
-		// Passive perception
+		// Passive scores (10 + skill modifier)
 		const passivePerception = 10 + this._state.getSkillMod("perception");
+		const passiveInvestigation = 10 + this._state.getSkillMod("investigation");
+		const passiveInsight = 10 + this._state.getSkillMod("insight");
+
 		$("#charsheet-disp-passive-perception").text(passivePerception);
+		$("#charsheet-disp-passive-investigation").text(passiveInvestigation);
+		$("#charsheet-disp-passive-insight").text(passiveInsight);
 	}
 
 	_renderSavingThrows () {
@@ -598,6 +609,24 @@ class CharacterSheetPage {
 		const $container = $("#charsheet-skills");
 		$container.empty();
 
+		// Add legend for proficiency indicators
+		$container.append(`
+			<div class="charsheet__skills-legend">
+				<div class="charsheet__legend-item">
+					<span class="charsheet__legend-dot charsheet__legend-dot--half"></span>
+					<span>Half</span>
+				</div>
+				<div class="charsheet__legend-item">
+					<span class="charsheet__legend-dot charsheet__legend-dot--proficient"></span>
+					<span>Prof</span>
+				</div>
+				<div class="charsheet__legend-item">
+					<span class="charsheet__legend-dot charsheet__legend-dot--expertise"></span>
+					<span>Expert</span>
+				</div>
+			</div>
+		`);
+
 		const skills = [
 			{name: "Acrobatics", ability: "dex"},
 			{name: "Animal Handling", ability: "wis"},
@@ -619,6 +648,11 @@ class CharacterSheetPage {
 			{name: "Survival", ability: "wis"},
 		];
 
+		// Check for Jack of All Trades (half proficiency for non-proficient skills)
+		const hasJackOfAllTrades = this._state.getFeatures().some(f => 
+			f.name?.toLowerCase().includes("jack of all trades")
+		);
+
 		skills.forEach(skill => {
 			const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
 			const profLevel = this._state.getSkillProficiency(skillKey);
@@ -626,12 +660,21 @@ class CharacterSheetPage {
 			const modStr = mod >= 0 ? `+${mod}` : mod;
 
 			let profClass = "";
-			if (profLevel === 2) profClass = "charsheet__prof-indicator--expertise";
-			else if (profLevel === 1) profClass = "charsheet__prof-indicator--proficient";
+			let profTitle = "Not proficient";
+			if (profLevel === 2) {
+				profClass = "charsheet__prof-indicator--expertise";
+				profTitle = "Expertise (2x proficiency bonus)";
+			} else if (profLevel === 1) {
+				profClass = "charsheet__prof-indicator--proficient";
+				profTitle = "Proficient";
+			} else if (hasJackOfAllTrades) {
+				profClass = "charsheet__prof-indicator--half";
+				profTitle = "Half proficiency (Jack of All Trades)";
+			}
 
 			const $row = $(`
 				<div class="charsheet__skill-row" data-skill="${skillKey}" title="Click to roll ${skill.name}">
-					<span class="charsheet__prof-indicator ${profClass}"></span>
+					<span class="charsheet__prof-indicator ${profClass}" title="${profTitle}"></span>
 					<span class="charsheet__skill-name">${skill.name}</span>
 					<span class="charsheet__skill-ability">(${skill.ability.toUpperCase()})</span>
 					<span class="charsheet__skill-mod">${modStr}</span>
@@ -652,7 +695,111 @@ class CharacterSheetPage {
 	_renderCombatStats () {
 		$("#charsheet-disp-ac").text(this._state.getAc());
 		$("#charsheet-disp-initiative").text(this._formatMod(this._state.getInitiative()));
-		$("#charsheet-disp-speed").text(this._state.getSpeed());
+
+		// Calculate speed with exhaustion penalty
+		const exhaustion = this._state.getExhaustion();
+		const rules = this._state.getExhaustionRules();
+		let speedDisplay = this._state.getSpeed();
+		
+		if (exhaustion > 0 && exhaustion < 6) {
+			if (rules === "2024") {
+				// 2024: -5 ft per level of exhaustion
+				const speedPenalty = exhaustion * 5;
+				const baseWalkSpeed = this._state.getWalkSpeed();
+				const reducedSpeed = Math.max(0, baseWalkSpeed - speedPenalty);
+				speedDisplay = speedDisplay.replace(/^\d+ ft\./, `${reducedSpeed} ft.`);
+				if (speedPenalty > 0) {
+					speedDisplay += ` (-${speedPenalty})`;
+				}
+			} else if (rules === "2014") {
+				// 2014: Speed halved at level 2, reduced to 0 at level 5
+				if (exhaustion >= 5) {
+					speedDisplay = "0 ft.";
+				} else if (exhaustion >= 2) {
+					const baseWalkSpeed = this._state.getWalkSpeed();
+					const halvedSpeed = Math.floor(baseWalkSpeed / 2);
+					speedDisplay = speedDisplay.replace(/^\d+ ft\./, `${halvedSpeed} ft.`);
+					speedDisplay += " (halved)";
+				}
+			}
+		}
+		
+		$("#charsheet-disp-speed").text(speedDisplay);
+
+		// Jump distances based on Strength score
+		const strScore = this._state.getAbilityScore("str");
+		const longJump = strScore; // Long jump = Strength score in feet (with 10ft running start)
+		const highJump = 3 + this._state.getAbilityMod("str"); // High jump = 3 + Str mod in feet (with 10ft running start)
+
+		$("#charsheet-disp-jump-long").text(`${longJump} ft.`);
+		$("#charsheet-disp-jump-high").text(`${Math.max(0, highJump)} ft.`);
+
+		// Carrying capacity
+		const carryCapacity = strScore * 15;
+		const pushDragLift = strScore * 30; // 2x carrying capacity
+		const items = this._state.getItems();
+		const currentWeight = items.reduce((sum, item) => sum + (item.weight || 0) * item.quantity, 0);
+
+		$("#charsheet-disp-weight").text(currentWeight.toFixed(1));
+		$("#charsheet-disp-carry").text(carryCapacity);
+		$("#charsheet-disp-push").text(pushDragLift);
+
+		// Render senses
+		this._renderSenses();
+	}
+
+	_renderSenses () {
+		const $section = $("#charsheet-senses-section");
+		const $container = $("#charsheet-senses");
+
+		// Get senses from features (like Darkvision)
+		const features = this._state.getFeatures();
+		const race = this._state.getRace();
+
+		const senses = [];
+
+		// Check for Darkvision in race
+		if (race?.darkvision) {
+			senses.push({name: "Darkvision", range: `${race.darkvision} ft.`});
+		}
+
+		// Check for senses in features
+		features.forEach(f => {
+			const nameLower = f.name.toLowerCase();
+			if (nameLower.includes("darkvision")) {
+				// Extract range from description if possible
+				const match = f.description?.match(/(\d+)\s*(?:feet|ft)/i);
+				if (match && !senses.some(s => s.name === "Darkvision")) {
+					senses.push({name: "Darkvision", range: `${match[1]} ft.`});
+				}
+			} else if (nameLower.includes("blindsight")) {
+				const match = f.description?.match(/(\d+)\s*(?:feet|ft)/i);
+				senses.push({name: "Blindsight", range: match ? `${match[1]} ft.` : ""});
+			} else if (nameLower.includes("tremorsense")) {
+				const match = f.description?.match(/(\d+)\s*(?:feet|ft)/i);
+				senses.push({name: "Tremorsense", range: match ? `${match[1]} ft.` : ""});
+			} else if (nameLower.includes("truesight")) {
+				const match = f.description?.match(/(\d+)\s*(?:feet|ft)/i);
+				senses.push({name: "Truesight", range: match ? `${match[1]} ft.` : ""});
+			}
+		});
+
+		if (senses.length === 0) {
+			$section.hide();
+			return;
+		}
+
+		$section.show();
+		$container.empty();
+
+		senses.forEach(sense => {
+			$container.append(`
+				<div class="charsheet__sense-item">
+					<span class="charsheet__sense-name">${sense.name}</span>
+					<span class="charsheet__sense-range">${sense.range}</span>
+				</div>
+			`);
+		});
 	}
 
 	_renderHitDice () {
@@ -756,6 +903,86 @@ class CharacterSheetPage {
 
 			$container.append($badge);
 		});
+	}
+
+	_renderExhaustion () {
+		const exhaustion = this._state.getExhaustion();
+		const rules = this._state.getExhaustionRules();
+		const $number = $("#charsheet-exhaustion-display .charsheet__exhaustion-number");
+		const $effect = $("#charsheet-exhaustion-effect");
+		const $rulesToggle = $("#charsheet-exhaustion-rules");
+
+		$number.text(exhaustion);
+
+		// Update color based on level
+		$number.removeClass("exhaustion-0 exhaustion-1 exhaustion-2 exhaustion-3 exhaustion-4 exhaustion-5 exhaustion-6");
+		$number.addClass(`exhaustion-${exhaustion}`);
+
+		// 2024 rules: -2 per level to d20 Tests, -5 ft speed per level
+		const effects2024 = [
+			"No exhaustion",
+			"-2 to d20 Tests, -5 ft. speed",
+			"-4 to d20 Tests, -10 ft. speed",
+			"-6 to d20 Tests, -15 ft. speed",
+			"-8 to d20 Tests, -20 ft. speed",
+			"-10 to d20 Tests, -25 ft. speed",
+			"Death",
+		];
+
+		// 2014 rules: cumulative effects
+		const effects2014 = [
+			"No exhaustion",
+			"Disadvantage on ability checks",
+			"Speed halved",
+			"Disadvantage on attack rolls and saves",
+			"HP maximum halved",
+			"Speed reduced to 0",
+			"Death",
+		];
+
+		const effects = rules === "2024" ? effects2024 : effects2014;
+		$effect.html(effects[exhaustion]);
+
+		// Render rules toggle if container exists
+		if ($rulesToggle.length && !$rulesToggle.data("initialized")) {
+			$rulesToggle.data("initialized", true);
+			$rulesToggle.html(`
+				<select id="charsheet-exhaustion-rules-select" class="ve-form-control ve-form-control--sm">
+					<option value="2024" ${rules === "2024" ? "selected" : ""}>2024 Rules</option>
+					<option value="2014" ${rules === "2014" ? "selected" : ""}>2014 Rules</option>
+				</select>
+			`);
+			$rulesToggle.find("select").on("change", (e) => {
+				this._state.setExhaustionRules(e.target.value);
+				this._saveCurrentCharacter();
+				this._renderExhaustion();
+				this._renderCombatStats(); // Re-render to update speed
+			});
+		} else if ($rulesToggle.length) {
+			$rulesToggle.find("select").val(rules);
+		}
+	}
+
+	_addExhaustion () {
+		const current = this._state.getExhaustion();
+		if (current >= 6) {
+			JqueryUtil.doToast({type: "warning", content: "Maximum exhaustion (6) reached!"});
+			return;
+		}
+		this._state.addExhaustion();
+		this._saveCurrentCharacter();
+		this._renderExhaustion();
+	}
+
+	_removeExhaustion () {
+		const current = this._state.getExhaustion();
+		if (current <= 0) {
+			JqueryUtil.doToast({type: "info", content: "No exhaustion to remove."});
+			return;
+		}
+		this._state.removeExhaustion();
+		this._saveCurrentCharacter();
+		this._renderExhaustion();
 	}
 
 	_renderAbilitiesDetailed () {
@@ -934,20 +1161,98 @@ class CharacterSheetPage {
 		const $container = $("#charsheet-attacks");
 		$container.empty();
 
-		const attacks = this._state.getAttacks();
+		// Get configured attacks
+		let attacks = [...this._state.getAttacks()];
+
+		// Also add attacks from equipped weapons if not already configured
+		const items = this._state.getItems();
+		const equippedWeapons = items.filter(i => i.weapon && i.equipped);
+
+		equippedWeapons.forEach(weapon => {
+			// Check if we already have an attack for this weapon
+			const existingAttack = attacks.find(a => a.name === weapon.name);
+			if (!existingAttack) {
+				// Auto-generate attack from weapon
+				const isRanged = weapon.properties?.some(p => p === "A" || p === "T" || p.startsWith("A|") || p.startsWith("T|"));
+				const hasFinesse = weapon.properties?.some(p => p === "F" || p.startsWith("F|"));
+				const abilityMod = isRanged ? "dex" : (hasFinesse ? "dex" : "str");
+
+				// Calculate magic bonuses
+				const attackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
+				const damageBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
+
+				const autoAttack = {
+					id: `auto_${weapon.id}`,
+					name: weapon.name,
+					source: weapon.source, // For hoverable link
+					isMelee: !isRanged,
+					abilityMod,
+					attackBonus: attackBonus,
+					damage: weapon.damage || "1d6",
+					damageType: weapon.damageType || "slashing",
+					damageBonus: damageBonus,
+					range: weapon.range || (isRanged ? "80/320 ft." : "5 ft."),
+					properties: weapon.properties || [],
+					mastery: weapon.mastery || [],
+				};
+				attacks.push(autoAttack);
+			}
+		});
+
 		if (!attacks.length) {
-			$container.html(`<div class="ve-muted ve-text-center py-2">No attacks configured. Add weapons from Inventory.</div>`);
+			$container.html(`<div class="ve-muted ve-text-center py-2">No attacks. Equip weapons from Inventory.</div>`);
 			return;
 		}
 
-		attacks.forEach(attack => {
+		// Limit to 5 attacks for overview
+		const displayAttacks = attacks.slice(0, 5);
+
+		displayAttacks.forEach(attack => {
+			const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
+			const profBonus = this._state.getProficiencyBonus();
+			const totalAttackBonus = abilityMod + profBonus + (attack.attackBonus || 0);
+			const totalDamageBonus = abilityMod + (attack.damageBonus || 0);
+			const damageStr = totalDamageBonus >= 0 
+				? `${attack.damage}+${totalDamageBonus}`
+				: `${attack.damage}${totalDamageBonus}`;
+
+			// Format range
+			const rangeStr = attack.range || (attack.isMelee ? "5 ft." : "");
+
+			// Format properties (abbreviated)
+			const propAbbrs = [];
+			if (attack.properties?.length) {
+				attack.properties.forEach(p => {
+					const abbr = typeof p === "string" ? p.split("|")[0] : p;
+					if (abbr && abbr.length <= 2) propAbbrs.push(abbr);
+				});
+			}
+			const propsStr = propAbbrs.length ? `[${propAbbrs.join(", ")}]` : "";
+
+			// Create hoverable weapon name
+			let attackNameHtml = attack.name;
+			if (attack.source) {
+				try {
+					const hash = UrlUtil.encodeForHash([attack.name, attack.source].join(HASH_LIST_SEP));
+					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_ITEMS, source: attack.source, hash: hash});
+					attackNameHtml = `<a href="${UrlUtil.PG_ITEMS}#${hash}" ${hoverAttrs}>${attack.name}</a>`;
+				} catch (e) {
+					// Fall back to plain name
+				}
+			}
+
 			const $row = $(`
 				<div class="charsheet__attack-row">
-					<span class="charsheet__attack-name">${attack.name}</span>
-					<span class="charsheet__attack-bonus">${this._formatMod(attack.attackBonus)}</span>
-					<span class="charsheet__attack-damage">${attack.damage}</span>
+					<div class="charsheet__attack-info">
+						<span class="charsheet__attack-name">${attackNameHtml}</span>
+						<span class="charsheet__attack-range ve-small ve-muted">${rangeStr} ${propsStr}</span>
+					</div>
+					<div class="charsheet__attack-stats">
+						<span class="charsheet__attack-bonus" title="Attack Bonus">${this._formatMod(totalAttackBonus)}</span>
+						<span class="charsheet__attack-damage" title="Damage">${damageStr} ${attack.damageType || ""}</span>
+					</div>
 					<button class="ve-btn ve-btn-primary ve-btn-xs charsheet__attack-btn" title="Roll Attack">
-						<span class="glyphicon glyphicon-screenshot"></span>
+						<span class="glyphicon glyphicon-screenshot"></span> Roll
 					</button>
 				</div>
 			`);
@@ -955,6 +1260,141 @@ class CharacterSheetPage {
 			$row.find("button").on("click", () => this._rollAttack(attack));
 			$container.append($row);
 		});
+
+		if (attacks.length > 5) {
+			$container.append(`<div class="ve-muted ve-small text-center">+${attacks.length - 5} more in Combat tab</div>`);
+		}
+	}
+
+	_renderQuickSpells () {
+		const $container = $("#charsheet-quick-spells");
+		if (!$container.length) return;
+		
+		$container.empty();
+
+		const spells = this._state.getSpells();
+		if (!spells.length) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No spells. Add from Spells tab.</div>`);
+			return;
+		}
+
+		// Get cantrips and prepared/known spells
+		const cantrips = spells.filter(s => s.level === 0);
+		const preparedSpells = spells.filter(s => s.level > 0 && s.prepared);
+
+		// Show cantrips first (max 3), then prepared spells (max 4)
+		const displayCantrips = cantrips.slice(0, 3);
+		const displayPrepared = preparedSpells.slice(0, 4);
+
+		// Show spell stats and slots summary
+		const spellcastingAbility = this._state.getSpellcastingAbility();
+		if (spellcastingAbility) {
+			const spellMod = this._state.getAbilityMod(spellcastingAbility);
+			const profBonus = this._state.getProficiencyBonus();
+			const saveDC = 8 + spellMod + profBonus;
+			const attackBonus = spellMod + profBonus;
+			$container.append(`
+				<div class="charsheet__spell-stats ve-flex ve-flex-wrap mb-2">
+					<span class="ve-small mr-3"><strong>Save DC:</strong> ${saveDC}</span>
+					<span class="ve-small mr-3"><strong>Attack:</strong> ${this._formatMod(attackBonus)}</span>
+					<span class="ve-small"><strong>Ability:</strong> ${spellcastingAbility.toUpperCase()}</span>
+				</div>
+			`);
+		}
+
+		// Show spell slots
+		const $slotsRow = $(`<div class="charsheet__spell-slots-row mb-2"><span class="charsheet__spell-slots-label">Spell Slots:</span></div>`);
+		let hasSlots = false;
+		for (let level = 1; level <= 9; level++) {
+			const max = this._state.getSpellSlotsMax(level);
+			if (max > 0) {
+				hasSlots = true;
+				const current = this._state.getSpellSlotsCurrent(level);
+				$slotsRow.append(`
+					<div class="charsheet__spell-slot-box" title="Level ${level} spell slots">
+						<span class="charsheet__spell-slot-level">${level}</span>
+						<span class="charsheet__spell-slot-count ${current === 0 ? 've-muted' : ''}">${current}/${max}</span>
+					</div>
+				`);
+			}
+		}
+		// Also show pact slots if any
+		const pactSlots = this._state.getPactSlots();
+		if (pactSlots?.max > 0) {
+			hasSlots = true;
+			$slotsRow.append(`
+				<div class="charsheet__spell-slot-box charsheet__spell-slot-box--pact" title="Pact Magic slots (level ${pactSlots.level})">
+					<span class="charsheet__spell-slot-level">P${pactSlots.level}</span>
+					<span class="charsheet__spell-slot-count ${pactSlots.current === 0 ? 've-muted' : ''}">${pactSlots.current}/${pactSlots.max}</span>
+				</div>
+			`);
+		}
+		if (hasSlots) {
+			$container.append($slotsRow);
+		}
+
+		// Helper to create hoverable spell name
+		const getSpellLink = (spell) => {
+			const source = spell.source || Parser.SRC_XPHB;
+			const hash = UrlUtil.encodeForHash([spell.name, source].join(HASH_LIST_SEP));
+			try {
+				const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_SPELLS, source: source, hash: hash});
+				return `<a href="${UrlUtil.PG_SPELLS}#${hash}" ${hoverAttrs}>${spell.name}</a>`;
+			} catch (e) {
+				return spell.name;
+			}
+		};
+
+		if (displayCantrips.length) {
+			$container.append(`<div class="ve-small ve-muted mb-1"><strong>Cantrips</strong></div>`);
+			displayCantrips.forEach(spell => {
+				const castTime = spell.castingTime || "1 action";
+				const $spell = $(`
+					<div class="charsheet__quick-spell">
+						<div class="charsheet__quick-spell-info">
+							<span class="charsheet__quick-spell-name">${getSpellLink(spell)}</span>
+							<span class="ve-small ve-muted">${castTime}</span>
+						</div>
+						<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__quick-spell-btn" title="Cast ${spell.name}">
+							<span class="glyphicon glyphicon-flash"></span> Cast
+						</button>
+					</div>
+				`);
+				$spell.find("button").on("click", () => {
+					if (this._spells) this._spells._castSpell(spell.id);
+				});
+				$container.append($spell);
+			});
+		}
+
+		if (displayPrepared.length) {
+			$container.append(`<div class="ve-small ve-muted mb-1 mt-2"><strong>Prepared Spells</strong></div>`);
+			displayPrepared.forEach(spell => {
+				const levelText = spell.level === 1 ? "1st" : spell.level === 2 ? "2nd" : spell.level === 3 ? "3rd" : `${spell.level}th`;
+				const castTime = spell.castingTime || "1 action";
+				const $spell = $(`
+					<div class="charsheet__quick-spell">
+						<div class="charsheet__quick-spell-info">
+							<span class="charsheet__quick-spell-name">${getSpellLink(spell)}</span>
+							<span class="ve-small ve-muted">${levelText} · ${castTime}</span>
+						</div>
+						<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__quick-spell-btn" title="Cast ${spell.name}">
+							<span class="glyphicon glyphicon-flash"></span> Cast
+						</button>
+					</div>
+				`);
+				$spell.find("button").on("click", () => {
+					if (this._spells) this._spells._castSpell(spell.id);
+				});
+				$container.append($spell);
+			});
+		}
+
+		const totalCantrips = cantrips.length;
+		const totalPrepared = preparedSpells.length;
+		if (totalCantrips > 3 || totalPrepared > 4) {
+			$container.append(`<div class="ve-muted ve-small text-center mt-2">More spells in Spells tab</div>`);
+		}
 	}
 	// #endregion
 
@@ -1108,6 +1548,7 @@ class CharacterSheetPage {
 	}
 
 	async _onLongRest () {
+		const exhaustionBefore = this._state.getExhaustion();
 		const confirm = await InputUiUtil.pGetUserBoolean({
 			title: "Long Rest",
 			htmlDescription: `
@@ -1117,6 +1558,7 @@ class CharacterSheetPage {
 					<li>Recover half your hit dice (minimum 1)</li>
 					<li>Recover all spell slots</li>
 					<li>Recover all class features</li>
+					${exhaustionBefore > 0 ? "<li>Reduce exhaustion by 1 level</li>" : ""}
 				</ul>
 				<p>Proceed with long rest?</p>
 			`,
@@ -1130,7 +1572,12 @@ class CharacterSheetPage {
 		this._saveCurrentCharacter();
 		this._renderCharacter();
 
-		JqueryUtil.doToast({type: "success", content: "Long rest completed! All resources recovered."});
+		const exhaustionAfter = this._state.getExhaustion();
+		let message = "Long rest completed! All resources recovered.";
+		if (exhaustionBefore > exhaustionAfter) {
+			message += ` Exhaustion reduced to ${exhaustionAfter}.`;
+		}
+		JqueryUtil.doToast({type: "success", content: message});
 	}
 
 	_toggleInspiration () {
@@ -1170,65 +1617,91 @@ class CharacterSheetPage {
 	// #endregion
 
 	// #region Dice Rolling
+	/**
+	 * Get exhaustion penalty for d20 rolls
+	 * 2024 rules: -2 per exhaustion level to d20 Tests (ability checks, attack rolls, saving throws)
+	 * 2014 rules: Handled separately (disadvantage, etc.)
+	 * @returns {number} Penalty to subtract from d20 tests
+	 */
+	_getExhaustionPenalty () {
+		const exhaustion = this._state.getExhaustion();
+		const rules = this._state.getSettings().exhaustionRules || "2024";
+		if (rules === "2024") {
+			return exhaustion * 2; // -2 per level in 2024 rules
+		}
+		// 2014 rules don't have a flat penalty to rolls
+		return 0;
+	}
+
 	_rollAbilityCheck (ability) {
 		const mod = this._state.getAbilityMod(ability);
+		const exhaustionPenalty = this._getExhaustionPenalty();
 		const roll = RollerUtil.roll(20);
-		const total = roll + mod;
+		const total = roll + mod - exhaustionPenalty;
 
+		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
 			`${Parser.attAbvToFull(ability)} Check`,
 			total,
-			`1d20 (${roll}) + ${mod}`,
+			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
 		);
 	}
 
 	_rollSavingThrow (ability) {
 		const mod = this._state.getSaveMod(ability);
+		const exhaustionPenalty = this._getExhaustionPenalty();
 		const roll = RollerUtil.roll(20);
-		const total = roll + mod;
+		const total = roll + mod - exhaustionPenalty;
 
+		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
 			`${Parser.attAbvToFull(ability)} Save`,
 			total,
-			`1d20 (${roll}) + ${mod}`,
+			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
 		);
 	}
 
 	_rollSkillCheck (skillKey, skillName) {
 		const mod = this._state.getSkillMod(skillKey);
+		const exhaustionPenalty = this._getExhaustionPenalty();
 		const roll = RollerUtil.roll(20);
-		const total = roll + mod;
+		const total = roll + mod - exhaustionPenalty;
 
+		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
 			`${skillName} Check`,
 			total,
-			`1d20 (${roll}) + ${mod}`,
+			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
 		);
 	}
 
 	_rollInitiative () {
 		const mod = this._state.getInitiative();
+		const exhaustionPenalty = this._getExhaustionPenalty();
 		const roll = RollerUtil.roll(20);
-		const total = roll + mod;
+		const total = roll + mod - exhaustionPenalty;
 
+		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
 			"Initiative",
 			total,
-			`1d20 (${roll}) + ${mod}`,
+			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
 		);
 	}
 
 	_rollAttack (attack) {
+		const exhaustionPenalty = this._getExhaustionPenalty();
 		const attackRoll = RollerUtil.roll(20);
-		const attackTotal = attackRoll + attack.attackBonus;
+		const attackTotal = attackRoll + attack.attackBonus - exhaustionPenalty;
 
 		// Parse and roll damage
 		const damageResult = Renderer.dice.parseRandomise2(attack.damage);
 
+		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
 			attack.name,
 			attackTotal,
-			`Attack: 1d20 (${attackRoll}) + ${attack.attackBonus} = ${attackTotal}
+			`Attack: 1d20 (${attackRoll}) + ${attack.attackBonus}${exhaustionStr} = ${attackTotal}
 			 Damage: ${attack.damage} = ${damageResult}`,
 		);
 	}

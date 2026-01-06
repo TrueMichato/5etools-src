@@ -498,16 +498,19 @@ class CharacterSheetFeatures {
 			return;
 		}
 
-		// Helper to create feature link
+		// Helper to create feature link - always display feature name
 		const getFeatureHtml = (feature) => {
 			let featureNameHtml = feature.name;
 			if (this._page?.getHoverLink) {
 				try {
-					// Species/Race features link to races page
+					// Species/Race features link to races page - but SHOW THE FEATURE NAME
 					if (feature.featureType === "Species" || feature.featureType === "Race" || feature.featureType === "Subrace") {
 						const race = this._state.getRace();
 						if (race) {
-							featureNameHtml = this._page.getHoverLink(UrlUtil.PG_RACES, race.name, race.source || Parser.SRC_XPHB);
+							// Create link that shows feature name but hovers/links to race
+							const raceHash = UrlUtil.encodeForHash([race.name, race.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
+							const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_RACES, source: race.source || Parser.SRC_XPHB, hash: raceHash});
+							featureNameHtml = `<a href="${UrlUtil.PG_RACES}#${raceHash}" ${hoverAttrs}>${feature.name}</a>`;
 						}
 					// Class/Subclass features
 					} else if (feature.source && feature.className) {
@@ -529,11 +532,13 @@ class CharacterSheetFeatures {
 							feature.source,
 							hash,
 						);
-					// Background features
+					// Background features - show feature name but link to background
 					} else if (feature.featureType === "Background") {
 						const background = this._state.getBackground();
 						if (background) {
-							featureNameHtml = this._page.getHoverLink(UrlUtil.PG_BACKGROUNDS, background.name, background.source || Parser.SRC_XPHB);
+							const bgHash = UrlUtil.encodeForHash([background.name, background.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
+							const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BACKGROUNDS, source: background.source || Parser.SRC_XPHB, hash: bgHash});
+							featureNameHtml = `<a href="${UrlUtil.PG_BACKGROUNDS}#${bgHash}" ${hoverAttrs}>${feature.name}</a>`;
 						}
 					}
 				} catch (e) {
@@ -543,21 +548,97 @@ class CharacterSheetFeatures {
 			return featureNameHtml;
 		};
 
-		// Show a summary of important/active features
-		const importantFeatures = features.filter(f => f.uses || f.important).slice(0, 35);
-		if (!importantFeatures.length) {
-			// Show first few features instead
-			features.slice(0, 5).forEach(feature => {
-				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
-			});
-			if (features.length > 35) {
-				$container.append(`<div class="ve-muted ve-small">...and ${features.length - 35} more</div>`);
+		// Define important features - features with limited uses, or key combat/exploration features
+		const importantKeywords = [
+			"darkvision", "resistance", "advantage", "immunity", "bonus action",
+			"reaction", "rage", "sneak attack", "divine sense", "lay on hands",
+			"channel divinity", "wild shape", "action surge", "second wind",
+			"bardic inspiration", "cunning action", "uncanny dodge", "evasion",
+			"metamagic", "sorcery points", "ki", "smite", "spellcasting",
+			"fighting style", "extra attack", "eldritch invocation",
+		];
+
+		const isImportantFeature = (feature) => {
+			// Features with limited uses are important
+			if (feature.uses && feature.uses.max > 0) return true;
+			// Explicitly marked important
+			if (feature.important) return true;
+			// Key features by name
+			const nameLower = feature.name.toLowerCase();
+			return importantKeywords.some(keyword => nameLower.includes(keyword));
+		};
+
+		// Get important features grouped by type
+		const importantFeatures = features.filter(isImportantFeature);
+
+		// Group by feature type
+		const byType = {
+			"Class": [],
+			"Species": [],
+			"Subrace": [],
+			"Background": [],
+			"Other": [],
+		};
+
+		importantFeatures.forEach(f => {
+			const type = f.featureType || "Other";
+			if (byType[type]) {
+				byType[type].push(f);
+			} else {
+				byType.Other.push(f);
 			}
-		} else {
-			importantFeatures.forEach(feature => {
-				const usesStr = feature.uses ? ` (${feature.uses.current}/${feature.uses.max})` : "";
+		});
+
+		let hasContent = false;
+
+		// Render Class features first (most relevant for gameplay)
+		if (byType.Class.length) {
+			hasContent = true;
+			$container.append(`<div class="ve-small ve-muted mb-1"><strong>Class</strong></div>`);
+			byType.Class.slice(0, 5).forEach(feature => {
+				const usesStr = feature.uses ? ` <span class="ve-muted">(${feature.uses.current}/${feature.uses.max})</span>` : "";
 				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}${usesStr}</div>`);
 			});
+			if (byType.Class.length > 5) {
+				$container.append(`<div class="ve-muted ve-small">+${byType.Class.length - 5} more class features</div>`);
+			}
+		}
+
+		// Then Species/Race features
+		const speciesFeatures = [...byType.Species, ...byType.Subrace];
+		if (speciesFeatures.length) {
+			hasContent = true;
+			$container.append(`<div class="ve-small ve-muted mb-1 ${byType.Class.length ? "mt-2" : ""}"><strong>Species</strong></div>`);
+			speciesFeatures.slice(0, 3).forEach(feature => {
+				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
+			});
+			if (speciesFeatures.length > 3) {
+				$container.append(`<div class="ve-muted ve-small">+${speciesFeatures.length - 3} more species features</div>`);
+			}
+		}
+
+		// Background features
+		if (byType.Background.length) {
+			hasContent = true;
+			$container.append(`<div class="ve-small ve-muted mb-1 mt-2"><strong>Background</strong></div>`);
+			byType.Background.slice(0, 2).forEach(feature => {
+				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
+			});
+		}
+
+		// Fallback if no important features found
+		if (!hasContent) {
+			// Show a representative sample from each type
+			const classFeatures = features.filter(f => f.featureType === "Class").slice(0, 3);
+			const raceFeatures = features.filter(f => f.featureType === "Species" || f.featureType === "Subrace").slice(0, 2);
+
+			[...classFeatures, ...raceFeatures].forEach(feature => {
+				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
+			});
+
+			if (features.length > 5) {
+				$container.append(`<div class="ve-muted ve-small text-center">View all ${features.length} features in Features tab</div>`);
+			}
 		}
 	}
 
