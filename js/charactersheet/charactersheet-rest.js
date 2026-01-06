@@ -150,6 +150,7 @@ class CharacterSheetRest {
 		const hitDice = this._state.getHitDice();
 		const totalMaxHd = hitDice.reduce((sum, hd) => sum + hd.max, 0);
 		const totalCurrentHd = hitDice.reduce((sum, hd) => sum + hd.current, 0);
+		const currentExhaustion = this._state.getExhaustion();
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "Long Rest",
@@ -157,7 +158,7 @@ class CharacterSheetRest {
 		});
 
 		const $cbResetTempHp = $(`<input type="checkbox" checked class="mr-2">`);
-		const $cbClearExhaustion = $(`<input type="checkbox" checked class="mr-2">`);
+		const $cbClearExhaustion = $(`<input type="checkbox" ${currentExhaustion > 0 ? "checked" : "disabled"} class="mr-2">`);
 
 		$$`<div>
 			<p>A long rest restores all hit points and recovers half your total hit dice (minimum 1).</p>
@@ -169,6 +170,7 @@ class CharacterSheetRest {
 					<li>Hit Dice: ${totalCurrentHd}/${totalMaxHd} → <strong>${Math.min(totalMaxHd, totalCurrentHd + Math.max(1, Math.floor(totalMaxHd / 2)))}/${totalMaxHd}</strong></li>
 					<li>Spell Slots: All recovered</li>
 					<li>Class Resources: All recovered</li>
+					${currentExhaustion > 0 ? `<li>Exhaustion: ${currentExhaustion} → <strong>${currentExhaustion - 1}</strong></li>` : ""}
 				</ul>
 			</div>
 			
@@ -178,9 +180,9 @@ class CharacterSheetRest {
 					${$cbResetTempHp}
 					Reset temporary HP to 0
 				</label>
-				<label class="ve-flex-v-center mt-1">
+				<label class="ve-flex-v-center mt-1 ${currentExhaustion === 0 ? "ve-muted" : ""}">
 					${$cbClearExhaustion}
-					Clear exhaustion (1 level)
+					Reduce exhaustion by 1 level ${currentExhaustion === 0 ? "(none)" : `(${currentExhaustion} → ${currentExhaustion - 1})`}
 				</label>
 			</div>
 		</div>`.appendTo($modalInner);
@@ -217,21 +219,11 @@ class CharacterSheetRest {
 				// Restore long-rest and short-rest resources
 				this._restoreResources("long");
 
-				// Clear one level of exhaustion
+				// Clear one level of exhaustion using the dedicated exhaustion tracker
 				if ($cbClearExhaustion.is(":checked")) {
-					const conditions = this._state.getConditions();
-					const exhaustionIdx = conditions.findIndex(c => c.toLowerCase().includes("exhaustion"));
-					if (exhaustionIdx >= 0) {
-						const match = conditions[exhaustionIdx].match(/exhaustion\s*(\d+)?/i);
-						if (match) {
-							const level = parseInt(match[1]) || 1;
-							if (level <= 1) {
-								conditions.splice(exhaustionIdx, 1);
-							} else {
-								conditions[exhaustionIdx] = `Exhaustion ${level - 1}`;
-							}
-							this._state.setConditions(conditions);
-						}
+					const currentExhaustion = this._state.getExhaustion();
+					if (currentExhaustion > 0) {
+						this._state.setExhaustion(currentExhaustion - 1);
 					}
 				}
 

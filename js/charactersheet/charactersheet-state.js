@@ -113,6 +113,9 @@ class CharacterSheetState {
 			// Conditions
 			conditions: [],
 
+			// Exhaustion level (0-6, with 6 being death in 2014 rules, or -1d6 penalty in 2024)
+			exhaustion: 0,
+
 			// Resources (class features, racial abilities, etc.)
 			resources: [], // [{id, name, current, max, recharge: "short"|"long"|"dawn"}]
 
@@ -153,6 +156,11 @@ class CharacterSheetState {
 				damageBonus: 0,
 				spellDc: 0,
 				spellAttack: 0,
+			},
+
+			// Sheet settings/options
+			settings: {
+				exhaustionRules: "2024", // "2024" or "2014"
 			},
 		};
 	}
@@ -1478,6 +1486,42 @@ class CharacterSheetState {
 	}
 	// #endregion
 
+	// #region Exhaustion
+	getExhaustion () { return this._data.exhaustion || 0; }
+
+	setExhaustion (level) {
+		this._data.exhaustion = Math.max(0, Math.min(6, level));
+	}
+
+	addExhaustion (amount = 1) {
+		this._data.exhaustion = Math.min(6, (this._data.exhaustion || 0) + amount);
+	}
+
+	removeExhaustion (amount = 1) {
+		this._data.exhaustion = Math.max(0, (this._data.exhaustion || 0) - amount);
+	}
+	// #endregion
+
+	// #region Settings
+	getSettings () {
+		return this._data.settings || {exhaustionRules: "2024"};
+	}
+
+	setSetting (key, value) {
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024"};
+		this._data.settings[key] = value;
+	}
+
+	getExhaustionRules () {
+		return this._data.settings?.exhaustionRules || "2024";
+	}
+
+	setExhaustionRules (rules) {
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024"};
+		this._data.settings.exhaustionRules = rules;
+	}
+	// #endregion
+
 	// #region Resources
 	getResources () { return [...this._data.resources]; }
 
@@ -1625,6 +1669,11 @@ class CharacterSheetState {
 		// Recover all resources
 		this.recoverResources("long");
 		this.recoverResources("dawn");
+
+		// Reduce exhaustion by 1 level (if any) - applies to both 2014 and 2024 rules
+		if (this._data.exhaustion > 0) {
+			this._data.exhaustion = Math.max(0, this._data.exhaustion - 1);
+		}
 	}
 	// #endregion
 

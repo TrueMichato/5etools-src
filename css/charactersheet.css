@@ -177,22 +177,68 @@
 }
 
 .charsheet__prof-indicator {
-	width: 10px;
-	height: 10px;
-	border: 1px solid var(--rgb-border-grey);
+	width: 12px;
+	height: 12px;
+	border: 2px solid var(--rgb-border-grey);
 	border-radius: 50%;
 	margin-right: 0.5rem;
 	flex-shrink: 0;
+	position: relative;
 }
 
 .charsheet__prof-indicator--proficient {
-	background: var(--rgb-green);
-	border-color: var(--rgb-green);
+	background: #28a745;
+	border-color: #28a745;
 }
 
 .charsheet__prof-indicator--expertise {
-	background: var(--rgb-link);
-	border-color: var(--rgb-link);
+	background: linear-gradient(135deg, gold 0%, gold 50%, #28a745 50%, #28a745 100%);
+	border-color: gold;
+	box-shadow: 0 0 3px rgba(255, 215, 0, 0.5);
+}
+
+.charsheet__prof-indicator--half {
+	background: transparent;
+	border-color: #28a745;
+	border-style: dashed;
+}
+
+/* Skill proficiency legend */
+.charsheet__skills-legend {
+	display: flex;
+	gap: 0.75rem;
+	margin-bottom: 0.5rem;
+	font-size: 0.7rem;
+	color: var(--rgb-text-muted);
+}
+
+.charsheet__legend-item {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.charsheet__legend-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 2px solid var(--rgb-border-grey);
+}
+
+.charsheet__legend-dot--half {
+	background: transparent;
+	border-color: #28a745;
+	border-style: dashed;
+}
+
+.charsheet__legend-dot--proficient {
+	background: #28a745;
+	border-color: #28a745;
+}
+
+.charsheet__legend-dot--expertise {
+	background: linear-gradient(135deg, gold 0%, gold 50%, #28a745 50%, #28a745 100%);
+	border-color: gold;
 }
 
 .charsheet__save-name,
@@ -293,6 +339,105 @@
 	color: var(--rgb-text-muted);
 }
 
+/* Jump Distance */
+.charsheet__jump-row {
+	gap: 1rem;
+	padding-top: 0.5rem;
+	border-top: 1px solid var(--rgb-border-grey);
+}
+
+.charsheet__jump-stat {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	font-size: 0.85rem;
+}
+
+.charsheet__jump-value {
+	font-weight: 600;
+}
+
+.charsheet__jump-label {
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	color: var(--rgb-text-muted);
+}
+
+/* Carrying Capacity */
+.charsheet__carry-row {
+	gap: 1rem;
+	padding-top: 0.5rem;
+	border-top: 1px solid var(--rgb-border-grey);
+}
+
+.charsheet__carry-stat {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	font-size: 0.85rem;
+}
+
+.charsheet__carry-value {
+	font-weight: 600;
+}
+
+.charsheet__carry-label {
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	color: var(--rgb-text-muted);
+}
+
+/* Passive Scores */
+.charsheet__passives-row {
+	gap: 0.5rem;
+}
+
+.charsheet__passive-stat {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.25rem 0.5rem;
+	background: var(--rgb-bg);
+	border-radius: 4px;
+	font-size: 0.85rem;
+}
+
+.charsheet__passive-value {
+	font-weight: 600;
+	min-width: 1.5rem;
+	text-align: center;
+}
+
+.charsheet__passive-label {
+	color: var(--rgb-text-muted);
+	font-size: 0.75rem;
+}
+
+/* Senses */
+.charsheet__senses-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.charsheet__sense-item {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.25rem 0.5rem;
+	background: var(--rgb-bg);
+	border-radius: 4px;
+	font-size: 0.85rem;
+}
+
+.charsheet__sense-name {
+	font-weight: 500;
+}
+
+.charsheet__sense-range {
+	color: var(--rgb-text-muted);
+}
+
 /* Hit Dice & Death Saves */
 .charsheet__hitdice-box,
 .charsheet__deathsaves-box {
@@ -349,7 +494,7 @@
 
 /* Attacks */
 .charsheet__attacks-list {
-	max-height: 200px;
+	max-height: 250px;
 	overflow-y: auto;
 }
 
@@ -361,25 +506,123 @@
 	border: 1px solid var(--rgb-border-grey);
 	border-radius: 4px;
 	margin-bottom: 0.5rem;
+	gap: 0.5rem;
+}
+
+.charsheet__attack-info {
+	flex: 1;
+	min-width: 0;
 }
 
 .charsheet__attack-name {
-	flex: 1;
 	font-weight: 600;
+	display: block;
+}
+
+.charsheet__attack-range {
+	display: block;
+}
+
+.charsheet__attack-stats {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	min-width: 80px;
 }
 
 .charsheet__attack-bonus {
-	margin-right: 0.5rem;
-	color: var(--rgb-text-muted);
+	font-weight: 600;
+	color: #337ab7;
 }
 
 .charsheet__attack-damage {
-	margin-right: 0.5rem;
 	font-family: monospace;
+	font-size: 0.85em;
 }
 
 .charsheet__attack-btn {
 	padding: 0.25rem 0.5rem;
+	white-space: nowrap;
+}
+
+/* Quick Spells (Overview) */
+.charsheet__quick-spells-list {
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.charsheet__spell-stats {
+	padding: 0.5rem;
+	background: rgba(0, 123, 255, 0.05);
+	border-radius: 4px;
+}
+
+.charsheet__spell-slots-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	align-items: center;
+}
+
+.charsheet__spell-slots-label {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--rgb-text-muted);
+	margin-right: 0.25rem;
+}
+
+.charsheet__spell-slot-box {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 0.25rem 0.5rem;
+	background: var(--rgb-bg);
+	border: 1px solid var(--rgb-border-grey);
+	border-radius: 4px;
+	min-width: 40px;
+}
+
+.charsheet__spell-slot-box--pact {
+	border-color: #9b59b6;
+	background: rgba(155, 89, 182, 0.1);
+}
+
+.charsheet__spell-slot-level {
+	font-size: 0.7rem;
+	font-weight: 600;
+	color: var(--rgb-text-muted);
+}
+
+.charsheet__spell-slot-count {
+	font-weight: 600;
+	font-size: 0.85rem;
+}
+
+.charsheet__quick-spell {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.35rem 0.5rem;
+	background: var(--rgb-bg);
+	border: 1px solid var(--rgb-border-grey);
+	border-radius: 4px;
+	margin-bottom: 0.25rem;
+	gap: 0.5rem;
+}
+
+.charsheet__quick-spell-info {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.charsheet__quick-spell-name {
+	font-weight: 500;
+}
+
+.charsheet__quick-spell-btn {
+	white-space: nowrap;
 }
 
 /* Spells Tab - Spell Items */
@@ -506,6 +749,70 @@
 
 .charsheet__condition-remove:hover {
 	opacity: 1;
+}
+
+/* Exhaustion Tracker */
+.charsheet__exhaustion-tracker {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.charsheet__exhaustion-level {
+	display: flex;
+	align-items: baseline;
+}
+
+.charsheet__exhaustion-number {
+	font-size: 1.5rem;
+	font-weight: 700;
+	min-width: 1.5rem;
+	text-align: center;
+}
+
+.charsheet__exhaustion-number.exhaustion-0 {
+	color: #28a745;
+}
+
+.charsheet__exhaustion-number.exhaustion-1,
+.charsheet__exhaustion-number.exhaustion-2 {
+	color: #ffc107;
+}
+
+.charsheet__exhaustion-number.exhaustion-3,
+.charsheet__exhaustion-number.exhaustion-4 {
+	color: #fd7e14;
+}
+
+.charsheet__exhaustion-number.exhaustion-5,
+.charsheet__exhaustion-number.exhaustion-6 {
+	color: #dc3545;
+}
+
+.charsheet__exhaustion-label {
+	color: var(--rgb-text-muted);
+	font-size: 0.9rem;
+}
+
+.charsheet__exhaustion-controls {
+	display: flex;
+	gap: 0.25rem;
+}
+
+.charsheet__exhaustion-effect {
+	flex: 1;
+	min-width: 150px;
+}
+
+.charsheet__exhaustion-rules {
+	flex-basis: 100%;
+}
+
+.charsheet__exhaustion-rules select {
+	width: auto;
+	padding: 0.15rem 0.5rem;
+	font-size: 0.75rem;
 }
 
 /* Resources */
@@ -835,7 +1142,7 @@
 
 .charsheet__carrying-fill {
 	height: 100%;
-	background: var(--rgb-green);
+	background: #28a745;
 	transition: width 0.3s ease, background 0.3s ease;
 }
 
@@ -991,7 +1298,7 @@
 }
 
 .charsheet__builder-step.completed .charsheet__builder-step-num {
-	background: var(--rgb-green);
+	background: #28a745;
 	color: white;
 }
 
@@ -1158,7 +1465,7 @@
 }
 
 .charsheet__builder-ability-racial {
-	color: var(--rgb-green);
+	color: #28a745;
 	font-size: 0.85rem;
 }
 
@@ -1489,7 +1796,7 @@
 }
 
 .charsheet__rest-item-value--positive {
-	color: var(--rgb-green);
+	color: #28a745;
 }
 
 /* Print Styles */

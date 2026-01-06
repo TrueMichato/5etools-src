@@ -360,6 +360,7 @@ class CharacterSheetSpells {
 			this._state.setPactSlotsCurrent(pactSlots.current - 1);
 			this._showCastResult(spell, pactSlots.level, true);
 			this.renderSlots();
+			this._page._renderQuickSpells(); // Update overview spell slots
 			this._page.saveCharacter();
 			return;
 		}
@@ -372,6 +373,7 @@ class CharacterSheetSpells {
 				this._state.setSpellSlots(slotLevel, this._state.getSpellSlotsMax(slotLevel), current - 1);
 				this._showCastResult(spell, slotLevel);
 				this.renderSlots();
+				this._page._renderQuickSpells(); // Update overview spell slots
 				this._page.saveCharacter();
 				return;
 			}

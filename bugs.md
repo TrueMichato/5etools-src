@@ -43,14 +43,22 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] race features are all called the race name instead of their actual names, e.g darkvision is called "Dwarf" for dwarves
 
 ### Overview
-- [] attacks and spells should also appear at the overview page for quick access
-- [] Active features aren't displayed correctly, and should include only important features and not all of them
-- [] Jump distance isn't displayed
-- [] Senses aren't Displayed
-- [] Passive stats that aren't perception are not calculated or displayed (e.g passive investigation, passive insight, etc)
-- [] proficiency or expertise in skills not displayed in a clear way
-- [] exhaustion level not displayed or tracked, exhaustion is just a regular condition currently
-- [] active features not correct or clear, display only some random features and race featuers have only race name
+- [x] attacks and spells should also appear at the overview page for quick access (enhanced with Combat stats, spell stats, range, properties)
+- [x] Active features aren't displayed correctly, and should include only important features and not all of them (fixed: now shows important features grouped by type with proper names)
+- [x] Jump distance isn't displayed (added Long Jump and High Jump based on Strength)
+- [x] Senses aren't Displayed (added Senses section showing Darkvision, etc.)
+- [x] Passive stats that aren't perception are not calculated or displayed (added Passive Investigation and Passive Insight)
+- [x] proficiency or expertise in skills not displayed in a clear way (improved visual indicators with half/prof/expert legend)
+- [x] exhaustion level not displayed or tracked (added dedicated exhaustion tracker with +/- controls and effect display)
+- [x] exhaustion affects dice rolls (2024 rules: -2 per level to all d20 tests, 2014 rules also supported)
+- [x] exhaustion affects speed (2024: -5 ft per level, 2014: halved at level 2, 0 at level 5)
+- [x] exhaustion removed on long rest (1 level per long rest)
+- [x] support for both 2024 and 2014 exhaustion rules (toggle in exhaustion section)
+- [x] active features not correct or clear, display only some random features and race features have only race name (fixed in Active Features section)
+- [x] spell slots not displayed in overview (added compact spell slot display with "Spell Slots:" label)
+- [x] spell casting time not shown in overview (added casting time to quick spells)
+- [x] weapons/spells in overview not hoverable (added hover links for items and spells)
+- [x] carry weight only in inventory (added Carry and Push/Drag/Lift to overview)
 
 
 ### Level Up
