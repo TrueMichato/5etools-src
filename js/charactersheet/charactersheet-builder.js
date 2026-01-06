@@ -19,6 +19,7 @@ class CharacterSheetBuilder {
 		this._pointBuyRemaining = 27;
 		this._selectedSkills = []; // For class skill proficiency choices
 		this._selectedAbilityBonuses = {}; // For background ASI choices
+		this._selectedOptionalFeatures = {}; // For class optional features like invocations {featureType: [features]}
 
 		this._init();
 	}
@@ -501,6 +502,12 @@ class CharacterSheetBuilder {
 					return;
 				}
 
+				// Look up full feature data to get description
+				const fullFeatureData = this._getClassFeatureData(featureName, this._selectedClass.name, featureSource, 1);
+				const description = fullFeatureData?.entries
+					? Renderer.get().render({entries: fullFeatureData.entries})
+					: "";
+
 				const featureToAdd = {
 					name: featureName,
 					source: featureSource || this._selectedClass.source,
@@ -508,6 +515,7 @@ class CharacterSheetBuilder {
 					className: this._selectedClass.name,
 					classSource: this._selectedClass.source,
 					featureType: "Class",
+					description,
 				};
 				console.log("[CharSheet Builder] Adding feature:", featureToAdd);
 				this._state.addFeature(featureToAdd);
@@ -528,6 +536,11 @@ class CharacterSheetBuilder {
 						if (typeof feature === "object" && feature.level === 1) {
 							const featureName = feature.name || Renderer.findName(feature);
 							if (featureName) {
+								// Render the description from entries
+								const description = feature.entries
+									? Renderer.get().render({entries: feature.entries})
+									: "";
+
 								const featureToAdd = {
 									name: featureName,
 									source: feature.source || this._selectedSubclass.source || this._selectedClass.source,
@@ -539,16 +552,27 @@ class CharacterSheetBuilder {
 									subclassSource: feature.subclassSource || this._selectedSubclass.source,
 									featureType: "Class",
 									isSubclassFeature: true,
-									entries: feature.entries,
+									description,
 								};
 								console.log("[CharSheet Builder] Adding subclass feature:", featureToAdd);
 								this._state.addFeature(featureToAdd);
 							}
 						} else if (typeof feature === "string") {
-							// Fallback for raw string format
+							// Fallback for raw string format - look up description from subclass features data
 							const parts = feature.split("|");
 							const featureLevel = parseInt(parts[parts.length - 1]);
 							if (featureLevel === 1) {
+								const fullFeatureData = this._getSubclassFeatureData(
+									parts[0],
+									this._selectedClass.name,
+									parts[3] || this._selectedSubclass.shortName,
+									parts[4] || this._selectedSubclass.source,
+									1,
+								);
+								const description = fullFeatureData?.entries
+									? Renderer.get().render({entries: fullFeatureData.entries})
+									: "";
+
 								const featureToAdd = {
 									name: parts[0],
 									source: parts[4] || this._selectedSubclass.source || this._selectedClass.source,
@@ -560,6 +584,7 @@ class CharacterSheetBuilder {
 									subclassSource: parts[4] || this._selectedSubclass.source,
 									featureType: "Class",
 									isSubclassFeature: true,
+									description,
 								};
 								console.log("[CharSheet Builder] Adding subclass feature:", featureToAdd);
 								this._state.addFeature(featureToAdd);
@@ -571,6 +596,17 @@ class CharacterSheetBuilder {
 					const parts = levelFeatures.split("|");
 					const featureLevel = parseInt(parts[parts.length - 1]);
 					if (featureLevel === 1) {
+						const fullFeatureData = this._getSubclassFeatureData(
+							parts[0],
+							this._selectedClass.name,
+							parts[3] || this._selectedSubclass.shortName,
+							parts[4] || this._selectedSubclass.source,
+							1,
+						);
+						const description = fullFeatureData?.entries
+							? Renderer.get().render({entries: fullFeatureData.entries})
+							: "";
+
 						const featureToAdd = {
 							name: parts[0],
 							source: parts[4] || this._selectedSubclass.source || this._selectedClass.source,
@@ -582,6 +618,7 @@ class CharacterSheetBuilder {
 							subclassSource: parts[4] || this._selectedSubclass.source,
 							featureType: "Class",
 							isSubclassFeature: true,
+							description,
 						};
 						console.log("[CharSheet Builder] Adding subclass feature:", featureToAdd);
 						this._state.addFeature(featureToAdd);
@@ -592,6 +629,28 @@ class CharacterSheetBuilder {
 
 		// Add class resources (like Rage, Ki, etc.)
 		this._addClassResources(this._selectedClass, 1);
+
+		// Apply selected optional features (invocations, metamagic, etc.)
+		this._applySelectedOptionalFeatures();
+	}
+
+	_applySelectedOptionalFeatures () {
+		if (!this._selectedOptionalFeatures) return;
+
+		Object.entries(this._selectedOptionalFeatures).forEach(([featureKey, features]) => {
+			features.forEach(opt => {
+				this._state.addFeature({
+					name: opt.name,
+					source: opt.source,
+					level: 1,
+					className: this._selectedClass?.name,
+					classSource: this._selectedClass?.source,
+					featureType: "Optional Feature",
+					entries: opt.entries,
+					description: Renderer.get().render({entries: opt.entries || []}),
+				});
+			});
+		});
 	}
 
 	_applyBackgroundFeatures () {
@@ -669,6 +728,67 @@ class CharacterSheetBuilder {
 				});
 			}
 		});
+	}
+
+	/**
+	 * Look up full class feature data to get description/entries
+	 */
+	_getClassFeatureData (featureName, className, source, level) {
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length) {
+			console.log("[CharSheet Builder] No class features available for lookup");
+			return null;
+		}
+
+		// Class features can have different property combinations depending on source
+		const result = classFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.level !== level) return false;
+			// Be more flexible with source matching
+			if (source && f.source && f.source !== source) {
+				// Allow XPHB/PHB/SRD flexibility
+				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source) &&
+					[Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
+				if (!sourcesMatch) return false;
+			}
+			return true;
+		});
+
+		if (!result && featureName) {
+			console.log(`[CharSheet Builder] Could not find class feature: ${featureName} for ${className} level ${level} (source: ${source})`);
+		}
+		return result;
+	}
+
+	/**
+	 * Look up full subclass feature data to get description/entries
+	 */
+	_getSubclassFeatureData (featureName, className, subclassShortName, source, level) {
+		const subclassFeatures = this._page.getSubclassFeatures();
+		if (!subclassFeatures?.length) {
+			console.log("[CharSheet Builder] No subclass features available for lookup");
+			return null;
+		}
+
+		const result = subclassFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.subclassShortName !== subclassShortName) return false;
+			if (f.level !== level) return false;
+			// Be more flexible with source matching
+			if (source && f.source && f.source !== source) {
+				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source) &&
+					[Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
+				if (!sourcesMatch) return false;
+			}
+			return true;
+		});
+
+		if (!result && featureName) {
+			console.log(`[CharSheet Builder] Could not find subclass feature: ${featureName} for ${className}/${subclassShortName} level ${level}`);
+		}
+		return result;
 	}
 
 	_addClassResources (cls, level) {
@@ -972,6 +1092,8 @@ class CharacterSheetBuilder {
 						// Reset equipment choices when changing class
 						this._equipmentChoices = {};
 						this._useGoldAlternative = false;
+						// Reset optional features when changing class
+						this._selectedOptionalFeatures = {};
 						this._renderClassPreview($preview, cls);
 					});
 
@@ -1042,6 +1164,12 @@ class CharacterSheetBuilder {
 			const skillChoices = cls.startingProficiencies.skills;
 			const $skillSection = this._renderClassSkillSelection(cls, skillChoices);
 			$content.append($skillSection);
+		}
+
+		// Optional features selection (invocations, metamagic, etc.)
+		if (cls.optionalfeatureProgression?.length) {
+			const $optFeatSection = this._renderClassOptionalFeatures(cls);
+			$content.append($optFeatSection);
 		}
 
 		// Spellcasting
@@ -1127,6 +1255,104 @@ class CharacterSheetBuilder {
 		});
 
 		return $section;
+	}
+
+	_renderClassOptionalFeatures (cls) {
+		const allOptFeatures = this._page.getOptionalFeatures();
+		const $container = $(`<div class="charsheet__builder-optional-features mt-3"></div>`);
+
+		cls.optionalfeatureProgression.forEach(optFeatProg => {
+			// Get how many of this feature type at level 1
+			let count = 0;
+			if (Array.isArray(optFeatProg.progression)) {
+				count = optFeatProg.progression[0] || 0; // Level 1 is index 0
+			} else if (typeof optFeatProg.progression === "object") {
+				count = optFeatProg.progression["1"] || 0;
+			}
+
+			if (count === 0) return; // No choices at level 1
+
+			const featureTypes = optFeatProg.featureType || [];
+			const name = optFeatProg.name || featureTypes.join(", ");
+
+			// Filter available options by feature type and match class/source requirements
+			const availableOptions = allOptFeatures.filter(opt => {
+				// Check feature type match
+				if (!opt.featureType?.some(ft => featureTypes.includes(ft))) return false;
+
+				// Check prerequisites
+				if (opt.prerequisite) {
+					for (const prereq of opt.prerequisite) {
+						// Level prerequisite
+						if (prereq.level) {
+							const reqLevel = prereq.level.level || prereq.level;
+							if (reqLevel > 1) return false;
+						}
+						// TODO: Could add more prerequisite checks (spells, pact boon, etc.)
+					}
+				}
+
+				return true;
+			});
+
+			// Initialize storage for this feature type if needed
+			const featureKey = featureTypes.join("_");
+			if (!this._selectedOptionalFeatures[featureKey]) {
+				this._selectedOptionalFeatures[featureKey] = [];
+			}
+
+			const $section = $(`
+				<div class="charsheet__builder-opt-feat-section mb-3">
+					<p><strong>${name}:</strong> Choose ${count}</p>
+					<div class="charsheet__builder-opt-feat-list" style="max-height: 200px; overflow-y: auto;"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="opt-feat-count">${this._selectedOptionalFeatures[featureKey].length}</span>/${count}</div>
+				</div>
+			`);
+
+			const $list = $section.find(".charsheet__builder-opt-feat-list");
+
+			availableOptions.sort((a, b) => a.name.localeCompare(b.name)).forEach(opt => {
+				const isSelected = this._selectedOptionalFeatures[featureKey].some(
+					s => s.name === opt.name && s.source === opt.source,
+				);
+				const $item = $(`
+					<label class="charsheet__builder-opt-feat-item d-block mb-1" style="cursor: pointer;">
+						<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
+						<span class="opt-feat-name">${opt.name}</span>
+						<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
+					</label>
+				`);
+
+				// Show description on hover/click
+				$item.find(".opt-feat-name").on("click", (e) => {
+					e.preventDefault();
+					const desc = Renderer.get().render({entries: opt.entries || []});
+					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
+				});
+
+				$item.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (this._selectedOptionalFeatures[featureKey].length < count) {
+							this._selectedOptionalFeatures[featureKey].push(opt);
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} ${name}.`});
+						}
+					} else {
+						this._selectedOptionalFeatures[featureKey] = this._selectedOptionalFeatures[featureKey].filter(
+							s => !(s.name === opt.name && s.source === opt.source),
+						);
+					}
+					$section.find(".opt-feat-count").text(this._selectedOptionalFeatures[featureKey].length);
+				});
+
+				$list.append($item);
+			});
+
+			$container.append($section);
+		});
+
+		return $container;
 	}
 	// #endregion
 

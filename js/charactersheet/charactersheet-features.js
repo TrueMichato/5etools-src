@@ -20,12 +20,97 @@ class CharacterSheetFeatures {
 		this._allFeats = feats;
 	}
 
+	/**
+	 * Look up a class feature's description from loaded data
+	 */
+	_getClassFeatureDescription (feature) {
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length) return null;
+
+		const match = classFeatures.find(f =>
+			f.name === feature.name &&
+			f.className === feature.className &&
+			f.level === feature.level,
+		);
+
+		if (match?.entries) {
+			return Renderer.get().render({entries: match.entries});
+		}
+		return null;
+	}
+
+	/**
+	 * Look up a subclass feature's description from loaded data
+	 */
+	_getSubclassFeatureDescription (feature) {
+		const subclassFeatures = this._page.getSubclassFeatures();
+		if (!subclassFeatures?.length) return null;
+
+		const match = subclassFeatures.find(f =>
+			f.name === feature.name &&
+			f.className === feature.className &&
+			f.subclassShortName === (feature.subclassShortName || feature.subclassName) &&
+			f.level === feature.level,
+		);
+
+		if (match?.entries) {
+			return Renderer.get().render({entries: match.entries});
+		}
+		return null;
+	}
+
+	/**
+	 * Look up a feat's description from loaded data
+	 */
+	_getFeatDescription (feat) {
+		const allFeats = this._allFeats;
+		if (!allFeats?.length) return null;
+
+		const match = allFeats.find(f =>
+			f.name === feat.name &&
+			f.source === feat.source,
+		);
+
+		if (match?.entries) {
+			return Renderer.get().render({type: "entries", entries: match.entries});
+		}
+		return null;
+	}
+
+	/**
+	 * Get the description for a feature, looking it up if not stored
+	 */
+	_getFeatureDescription (feature) {
+		// If description is already stored, use it
+		if (feature.description) return feature.description;
+
+		// Try to look up the description based on feature type
+		if (feature.featureType === "Class" && feature.className) {
+			if (feature.isSubclassFeature || feature.subclassName) {
+				return this._getSubclassFeatureDescription(feature);
+			}
+			return this._getClassFeatureDescription(feature);
+		}
+
+		return null;
+	}
+
 	_initEventListeners () {
 		// Add feat button
 		$(document).on("click", "#charsheet-add-feat", () => this._showFeatPicker());
 
-		// Toggle feature expansion
+		// Toggle feature expansion - only on the chevron toggle button
+		$(document).on("click", ".charsheet__feature-toggle", (e) => {
+			e.stopPropagation();
+			const $feature = $(e.currentTarget).closest(".charsheet__feature");
+			const featureId = $feature.data("feature-id");
+			this._toggleFeatureExpansion(featureId);
+		});
+
+		// Also toggle on header click, but not if clicking a link
 		$(document).on("click", ".charsheet__feature-header", (e) => {
+			// Don't toggle if clicking on a link, button, or actions area
+			if ($(e.target).closest("a, button, .charsheet__feature-actions").length) return;
 			const $feature = $(e.currentTarget).closest(".charsheet__feature");
 			const featureId = $feature.data("feature-id");
 			this._toggleFeatureExpansion(featureId);
@@ -483,49 +568,64 @@ class CharacterSheetFeatures {
 		let featureNameHtml = feature.name;
 		if (this._page?.getHoverLink) {
 			try {
-				// Species/Race features link to races page
-				if (feature.featureType === "Species" || feature.featureType === "Race" || feature.featureType === "Subrace") {
-					// Species traits link to the races page with the race name
-					const race = this._state.getRace();
-					if (race) {
-						featureNameHtml = this._page.getHoverLink(UrlUtil.PG_RACES, race.name, race.source || Parser.SRC_XPHB);
-					}
-				// Class/Subclass features
-				} else if (feature.source && feature.className) {
+				// Class/Subclass features - link to the actual class feature page
+				if (feature.featureType === "Class" && feature.className) {
 					const hashInput = {
 						name: feature.name,
 						className: feature.className,
 						classSource: feature.classSource || feature.source || Parser.SRC_XPHB,
 						level: feature.level || 1,
-						source: feature.source,
+						source: feature.source || Parser.SRC_XPHB,
 					};
-					if (feature.subclassName) {
+					if (feature.subclassName || feature.isSubclassFeature) {
 						hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
-						hashInput.subclassSource = feature.subclassSource || feature.source;
+						hashInput.subclassSource = feature.subclassSource || feature.source || Parser.SRC_XPHB;
 					}
 					const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASS_SUBCLASS_FEATURES](hashInput);
 					featureNameHtml = this._page.getHoverLink(
 						UrlUtil.PG_CLASS_SUBCLASS_FEATURES,
 						feature.name,
-						feature.source,
+						feature.source || Parser.SRC_XPHB,
 						hash,
 					);
-				// Background features
+				// Species/Race features - link to races page with hover
+				} else if (feature.featureType === "Species" || feature.featureType === "Race" || feature.featureType === "Subrace") {
+					const race = this._state.getRace();
+					if (race) {
+						// Use getHoverLink but display the feature name
+						const raceHash = UrlUtil.encodeForHash([race.name, race.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
+						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_RACES, source: race.source || Parser.SRC_XPHB, hash: raceHash});
+						featureNameHtml = `<a href="${UrlUtil.PG_RACES}#${raceHash}" ${hoverAttrs}>${feature.name}</a>`;
+					}
+				// Background features - link to background page with hover
 				} else if (feature.featureType === "Background") {
 					const background = this._state.getBackground();
 					if (background) {
-						featureNameHtml = this._page.getHoverLink(UrlUtil.PG_BACKGROUNDS, background.name, background.source || Parser.SRC_XPHB);
+						const bgHash = UrlUtil.encodeForHash([background.name, background.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
+						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BACKGROUNDS, source: background.source || Parser.SRC_XPHB, hash: bgHash});
+						featureNameHtml = `<a href="${UrlUtil.PG_BACKGROUNDS}#${bgHash}" ${hoverAttrs}>${feature.name}</a>`;
 					}
+				// Optional features (invocations, etc.) - link to optional features page with hover
+				} else if (feature.featureType === "Optional Feature") {
+					featureNameHtml = this._page.getHoverLink(
+						UrlUtil.PG_OPT_FEATURES,
+						feature.name,
+						feature.source || Parser.SRC_XPHB,
+					);
 				}
 			} catch (e) {
+				console.error("[CharSheet Features] Error creating feature link:", e);
 				featureNameHtml = feature.name;
 			}
 		}
 
+		// Get description - look it up if not stored
+		const description = this._getFeatureDescription(feature) || "<em class='ve-muted'>No description available</em>";
+
 		return $(`
 			<div class="charsheet__feature" data-feature-id="${feature.id}">
 				<div class="charsheet__feature-header">
-					<span class="charsheet__feature-toggle glyphicon ${isExpanded ? "glyphicon-chevron-up" : "glyphicon-chevron-down"}"></span>
+					<span class="charsheet__feature-toggle glyphicon ${isExpanded ? "glyphicon-chevron-down" : "glyphicon-chevron-right"}"></span>
 					<span class="charsheet__feature-name">${featureNameHtml}</span>
 					${feature.level ? `<span class="badge badge-secondary">Lvl ${feature.level}</span>` : ""}
 					${hasUses ? `<span class="badge badge-info">${feature.uses.current}/${feature.uses.max}</span>` : ""}
@@ -537,7 +637,7 @@ class CharacterSheetFeatures {
 					</div>
 				</div>
 				<div class="charsheet__feature-body" style="display: ${isExpanded ? "block" : "none"};">
-					${feature.description || "<em class='ve-muted'>No description available</em>"}
+					${description}
 				</div>
 			</div>
 		`);
@@ -557,6 +657,8 @@ class CharacterSheetFeatures {
 		}
 
 		feats.forEach(feat => {
+			const isExpanded = this._expandedFeatures.has(`feat-${feat.id}`);
+
 			// Create hover link for feat name
 			let featNameHtml = feat.name;
 			if (this._page?.getHoverLink && feat.source) {
@@ -567,19 +669,41 @@ class CharacterSheetFeatures {
 				}
 			}
 
+			// Get description - look it up if not stored
+			const description = feat.description || this._getFeatDescription(feat) || "<em class='ve-muted'>No description available</em>";
+
 			const $feat = $(`
-				<div class="charsheet__feat">
-					<div class="charsheet__feat-header">
-						<span class="charsheet__feat-name">${featNameHtml}</span>
-						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__feat-remove" data-feat-id="${feat.id}">
-							<span class="glyphicon glyphicon-trash"></span>
-						</button>
+				<div class="charsheet__feat charsheet__feature">
+					<div class="charsheet__feat-header charsheet__feature-header">
+						<span class="charsheet__feature-toggle glyphicon ${isExpanded ? "glyphicon-chevron-down" : "glyphicon-chevron-right"}"></span>
+						<span class="charsheet__feat-name charsheet__feature-name">${featNameHtml}</span>
+						<div class="charsheet__feature-actions">
+							<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__feat-remove" data-feat-id="${feat.id}">
+								<span class="glyphicon glyphicon-trash"></span>
+							</button>
+						</div>
 					</div>
-					${feat.description ? `<div class="charsheet__feat-description ve-small">${feat.description}</div>` : ""}
+					<div class="charsheet__feat-body charsheet__feature-body" style="display: ${isExpanded ? "block" : "none"};">
+						${description}
+					</div>
 				</div>
 			`);
 
-			$feat.find(".charsheet__feat-remove").on("click", () => {
+			// Toggle expansion
+			$feat.find(".charsheet__feature-toggle").on("click", (e) => {
+				e.stopPropagation();
+				const featKey = `feat-${feat.id}`;
+				const isCurrentlyExpanded = this._expandedFeatures.has(featKey);
+				if (isCurrentlyExpanded) {
+					this._expandedFeatures.delete(featKey);
+				} else {
+					this._expandedFeatures.add(featKey);
+				}
+				this.render();
+			});
+
+			$feat.find(".charsheet__feat-remove").on("click", (e) => {
+				e.stopPropagation();
 				this._state.removeFeat(feat.id);
 				this.render();
 				this._page.saveCharacter();
