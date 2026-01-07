@@ -170,10 +170,13 @@ class CharacterSheetFeatures {
 		$search.appendTo($modalInner);
 		const $list = $(`<div class="feat-picker-list" style="max-height: 400px; overflow-y: auto;"></div>`).appendTo($modalInner);
 
+		// Filter feats by allowed sources
+		const sourceFilteredFeats = this._page.filterByAllowedSources(this._allFeats);
+
 		const renderList = (filter = "") => {
 			$list.empty();
 
-			const filtered = this._allFeats.filter(feat => {
+			const filtered = sourceFilteredFeats.filter(feat => {
 				if (filter && !feat.name.toLowerCase().includes(filter.toLowerCase())) return false;
 				return true;
 			});
@@ -382,6 +385,8 @@ class CharacterSheetFeatures {
 		const features = allFeatures.filter(f => {
 			// Explicitly marked as Class feature
 			if (f.featureType === "Class") return true;
+			// Optional Features (invocations, metamagic, etc.) are displayed with class features
+			if (f.featureType === "Optional Feature") return true;
 			// Has className property (primary indicator of a class feature)
 			if (f.className) return true;
 			// Has classSource property
@@ -417,10 +422,51 @@ class CharacterSheetFeatures {
 			return;
 		}
 
-		features.forEach(feature => {
+		// Separate regular class features from optional features (invocations, metamagic, etc.)
+		const regularFeatures = features.filter(f => f.featureType !== "Optional Feature");
+		const optionalFeatures = features.filter(f => f.featureType === "Optional Feature");
+
+		// Render regular class features
+		regularFeatures.forEach(feature => {
 			const $feature = this._renderFeature(feature);
 			$container.append($feature);
 		});
+
+		// Group and render optional features by type
+		if (optionalFeatures.length > 0) {
+			// Group by optional feature types
+			const optFeatureGroups = {};
+			optionalFeatures.forEach(f => {
+				// Get the group name from optionalFeatureTypes or use a default
+				const groupKey = f.optionalFeatureTypes?.join("_") || "other";
+				const groupName = this._getOptionalFeatureGroupName(f.optionalFeatureTypes);
+				if (!optFeatureGroups[groupKey]) {
+					optFeatureGroups[groupKey] = {name: groupName, features: []};
+				}
+				optFeatureGroups[groupKey].features.push(f);
+			});
+
+			// Render each group
+			Object.values(optFeatureGroups).forEach(group => {
+				const $groupContainer = $(`
+					<div class="charsheet__feature-group mb-3">
+						<div class="charsheet__feature-group-header">
+							<span class="glyphicon glyphicon-list-alt"></span> ${group.name}
+							<span class="badge badge-info">${group.features.length}</span>
+						</div>
+						<div class="charsheet__feature-group-body"></div>
+					</div>
+				`);
+				const $groupBody = $groupContainer.find(".charsheet__feature-group-body");
+				
+				group.features.forEach(feature => {
+					const $feature = this._renderFeature(feature);
+					$groupBody.append($feature);
+				});
+				
+				$container.append($groupContainer);
+			});
+		}
 	}
 
 	_renderRaceFeatures () {
@@ -640,6 +686,42 @@ class CharacterSheetFeatures {
 				$container.append(`<div class="ve-muted ve-small text-center">View all ${features.length} features in Features tab</div>`);
 			}
 		}
+	}
+
+	/**
+	 * Get a human-readable name for optional feature types
+	 */
+	_getOptionalFeatureGroupName (featureTypes) {
+		if (!featureTypes?.length) return "Other Features";
+
+		// Map of feature type codes to human-readable names
+		const typeNames = {
+			"EI": "Eldritch Invocations",
+			"MM": "Metamagic Options",
+			"MV:B": "Battle Master Maneuvers",
+			"MV:C2-UA": "Cavalier Maneuvers",
+			"AS:V1-UA": "Arcane Shot Options",
+			"AS:V2-UA": "Arcane Shot Options",
+			"AS": "Arcane Shot Options",
+			"OTH": "Other Options",
+			"ED": "Elemental Disciplines",
+			"PB": "Pact Boons",
+			"AI": "Artificer Infusions",
+			"FS:F": "Fighter Fighting Styles",
+			"FS:P": "Paladin Fighting Styles",
+			"FS:R": "Ranger Fighting Styles",
+			"FS:B": "Bard Fighting Styles",
+			"RN": "Rune Knight Runes",
+			"AF": "Alchemist Formulas",
+		};
+
+		// Try to find a matching name
+		for (const ft of featureTypes) {
+			if (typeNames[ft]) return typeNames[ft];
+		}
+
+		// Fall back to the raw type names
+		return featureTypes.map(ft => ft.replace(/:/g, " ")).join(", ");
 	}
 
 	_renderFeature (feature) {

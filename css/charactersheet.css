@@ -1247,6 +1247,42 @@
 	display: block;
 }
 
+/* Feature Groups (for optional features like invocations, metamagic) */
+.charsheet__feature-group {
+	border: 1px solid var(--rgb-border-grey);
+	border-radius: 4px;
+	background: var(--rgb-bg);
+	overflow: hidden;
+}
+
+.charsheet__feature-group-header {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.75rem;
+	background: linear-gradient(135deg, var(--rgb-bg-alt) 0%, var(--rgb-bg-alt-grey) 100%);
+	border-bottom: 1px solid var(--rgb-border-grey);
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: var(--rgb-text);
+}
+
+.charsheet__feature-group-header .glyphicon {
+	color: var(--rgb-link);
+}
+
+.charsheet__feature-group-body {
+	padding: 0.5rem;
+}
+
+.charsheet__feature-group-body .charsheet__feature {
+	margin-bottom: 0.25rem;
+}
+
+.charsheet__feature-group-body .charsheet__feature:last-child {
+	margin-bottom: 0;
+}
+
 /* Notes */
 .charsheet__textarea {
 	resize: vertical;
@@ -1774,6 +1810,38 @@
 	border-top: 1px solid var(--rgb-border-grey);
 }
 
+/* Optional Features (invocations, metamagic, maneuvers, etc.) */
+.charsheet__levelup-opt-features {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.charsheet__levelup-opt-gain {
+	border: 1px solid var(--rgb-border-grey);
+	border-radius: 4px;
+	padding: 1rem;
+}
+
+.charsheet__levelup-opt-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.charsheet__levelup-opt-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+	padding: 0.5rem;
+	border-radius: 4px;
+	transition: background 0.2s;
+}
+
+.charsheet__levelup-opt-item:hover {
+	background: var(--rgb-bg-alt);
+}
+
 /* Rest Modal */
 .charsheet__rest-summary {
 	background: var(--rgb-bg-alt);
@@ -1878,4 +1946,62 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+/* Settings Modal */
+.charsheet__settings-sources {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.charsheet__settings-source-group {
+	border-bottom: 1px solid var(--rgb-border-grey);
+	padding-bottom: 0.5rem;
+}
+
+.charsheet__settings-source-group:last-child {
+	border-bottom: none;
+}
+
+.charsheet__settings-source-group-header {
+	color: var(--rgb-text-primary);
+	margin-bottom: 0.25rem;
+}
+
+.charsheet__settings-source-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.125rem 0.5rem;
+	background: var(--rgb-bg-alt);
+	border-radius: 3px;
+	font-size: 0.85rem;
+	cursor: pointer;
+	user-select: none;
+}
+
+.charsheet__settings-source-item:hover {
+	background: var(--rgb-bg-alt-grey);
+}
+
+.charsheet__settings-source-item input[type="checkbox"] {
+	margin: 0;
+}
+
+.charsheet__settings-sources-container::-webkit-scrollbar {
+	width: 8px;
+}
+
+.charsheet__settings-sources-container::-webkit-scrollbar-track {
+	background: var(--rgb-bg-alt);
+	border-radius: 4px;
+}
+
+.charsheet__settings-sources-container::-webkit-scrollbar-thumb {
+	background: var(--rgb-border-grey);
+	border-radius: 4px;
+}
+
+.charsheet__settings-sources-container::-webkit-scrollbar-thumb:hover {
+	background: var(--rgb-text-muted);
 }

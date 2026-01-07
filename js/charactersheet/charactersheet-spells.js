@@ -108,9 +108,10 @@ class CharacterSheetSpells {
 			return;
 		}
 
-		// Get class spell list
+		// Get class spell list, filtered by allowed sources
 		const className = classes[0].name;
-		const classSpells = this._allSpells.filter(spell => {
+		const filteredSpells = this._page.filterByAllowedSources(this._allSpells);
+		const classSpells = filteredSpells.filter(spell => {
 			if (!spell.classes?.fromClassList) return false;
 			return spell.classes.fromClassList.some(c => c.name.toLowerCase() === className.toLowerCase());
 		});
