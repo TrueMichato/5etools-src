@@ -1225,7 +1225,7 @@ class CharacterSheetBuilder {
 			} else if (skillChoice.any) {
 				// "any" means choose from all skills (like Bard)
 				chooseCount = skillChoice.any;
-				availableSkills = allSkills.map(s => s.toLowerCase().replace(/\s+/g, ""));
+				availableSkills = allSkills.map(s => s.name.toLowerCase().replace(/\s+/g, ""));
 			} else {
 				// Fixed skills
 				availableSkills = Object.keys(skillChoice).filter(k => k !== "choose" && k !== "any");
@@ -1234,8 +1234,8 @@ class CharacterSheetBuilder {
 
 		// Match available skills to proper names
 		const formattedSkills = availableSkills.map(skill => {
-			const match = allSkills.find(s => s.toLowerCase().replace(/\s+/g, "") === skill.toLowerCase().replace(/\s+/g, ""));
-			return match || skill;
+			const match = allSkills.find(s => s.name.toLowerCase().replace(/\s+/g, "") === skill.toLowerCase().replace(/\s+/g, ""));
+			return match?.name || skill;
 		});
 
 		const $section = $(`
