@@ -161,6 +161,7 @@ class CharacterSheetState {
 			// Sheet settings/options
 			settings: {
 				exhaustionRules: "2024", // "2024" or "2014"
+				allowedSources: null, // null = all sources, array = only these sources
 			},
 		};
 	}
@@ -1508,7 +1509,7 @@ class CharacterSheetState {
 	}
 
 	setSetting (key, value) {
-		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024"};
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null};
 		this._data.settings[key] = value;
 	}
 
@@ -1517,8 +1518,24 @@ class CharacterSheetState {
 	}
 
 	setExhaustionRules (rules) {
-		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024"};
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null};
 		this._data.settings.exhaustionRules = rules;
+	}
+
+	// Source filtering
+	getAllowedSources () {
+		return this._data.settings?.allowedSources || null; // null means all sources allowed
+	}
+
+	setAllowedSources (sources) {
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null};
+		this._data.settings.allowedSources = sources?.length ? sources : null;
+	}
+
+	isSourceAllowed (source) {
+		const allowed = this.getAllowedSources();
+		if (!allowed) return true; // null/empty = all sources allowed
+		return allowed.includes(source);
 	}
 	// #endregion
 

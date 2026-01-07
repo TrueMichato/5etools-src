@@ -39,6 +39,8 @@ class CharacterSheetPage {
 		this._itemsData = [];
 		this._featsData = [];
 		this._optionalFeaturesData = [];
+		this._skillsData = [];
+		this._conditionsData = [];
 	}
 
 	async pInit () {
@@ -112,7 +114,7 @@ class CharacterSheetPage {
 	async _pLoadData () {
 		// Load all necessary data in parallel
 		// Note: Using loadRawJSON for classes to get classFeature and subclassFeature arrays
-		const [races, classes, backgrounds, spells, items, feats, optFeatures] = await Promise.all([
+		const [races, classes, backgrounds, spells, items, feats, optFeatures, skills, conditionsData] = await Promise.all([
 			DataUtil.race.loadJSON(),
 			DataUtil.class.loadRawJSON(),
 			DataUtil.loadJSON("data/backgrounds.json"),
@@ -120,6 +122,8 @@ class CharacterSheetPage {
 			Renderer.item.pBuildList(),
 			DataUtil.loadJSON("data/feats.json"),
 			DataUtil.loadJSON("data/optionalfeatures.json"),
+			DataUtil.loadJSON("data/skills.json"),
+			DataUtil.loadJSON("data/conditionsdiseases.json"),
 		]);
 
 		this._races = races.race || [];
@@ -133,6 +137,8 @@ class CharacterSheetPage {
 		this._itemsData = (items || []).filter(it => !it._isItemGroup);
 		this._featsData = feats.feat || [];
 		this._optionalFeaturesData = optFeatures.optionalfeature || [];
+		this._skillsData = skills.skill || [];
+		this._conditionsData = conditionsData.condition || [];
 
 		// Attach subclasses to their parent classes for easier access
 		this._classes.forEach(cls => {
@@ -214,6 +220,7 @@ class CharacterSheetPage {
 		$("#charsheet-btn-new").on("click", () => this._onNewCharacter());
 		$("#charsheet-btn-duplicate").on("click", () => this._onDuplicateCharacter());
 		$("#charsheet-btn-delete").on("click", () => this._onDeleteCharacter());
+		$("#charsheet-btn-settings").on("click", () => this._showSettingsModal());
 		// Import/Export/Print handled by CharacterSheetExport module
 		$("#charsheet-btn-levelup").on("click", () => this._levelUp?.showLevelUp());
 		$("#charsheet-btn-multiclass").on("click", () => this._levelUp?.showMulticlass());
@@ -627,26 +634,8 @@ class CharacterSheetPage {
 			</div>
 		`);
 
-		const skills = [
-			{name: "Acrobatics", ability: "dex"},
-			{name: "Animal Handling", ability: "wis"},
-			{name: "Arcana", ability: "int"},
-			{name: "Athletics", ability: "str"},
-			{name: "Deception", ability: "cha"},
-			{name: "History", ability: "int"},
-			{name: "Insight", ability: "wis"},
-			{name: "Intimidation", ability: "cha"},
-			{name: "Investigation", ability: "int"},
-			{name: "Medicine", ability: "wis"},
-			{name: "Nature", ability: "int"},
-			{name: "Perception", ability: "wis"},
-			{name: "Performance", ability: "cha"},
-			{name: "Persuasion", ability: "cha"},
-			{name: "Religion", ability: "int"},
-			{name: "Sleight of Hand", ability: "dex"},
-			{name: "Stealth", ability: "dex"},
-			{name: "Survival", ability: "wis"},
-		];
+		// Get skills from loaded data (dynamic, supports homebrew)
+		const skills = this.getSkillsList();
 
 		// Check for Jack of All Trades (half proficiency for non-proficient skills)
 		const hasJackOfAllTrades = this._state.getFeatures().some(f => 
@@ -1072,26 +1061,8 @@ class CharacterSheetPage {
 			</div>
 		`);
 
-		const skills = [
-			{name: "Acrobatics", ability: "dex"},
-			{name: "Animal Handling", ability: "wis"},
-			{name: "Arcana", ability: "int"},
-			{name: "Athletics", ability: "str"},
-			{name: "Deception", ability: "cha"},
-			{name: "History", ability: "int"},
-			{name: "Insight", ability: "wis"},
-			{name: "Intimidation", ability: "cha"},
-			{name: "Investigation", ability: "int"},
-			{name: "Medicine", ability: "wis"},
-			{name: "Nature", ability: "int"},
-			{name: "Perception", ability: "wis"},
-			{name: "Performance", ability: "cha"},
-			{name: "Persuasion", ability: "cha"},
-			{name: "Religion", ability: "int"},
-			{name: "Sleight of Hand", ability: "dex"},
-			{name: "Stealth", ability: "dex"},
-			{name: "Survival", ability: "wis"},
-		];
+		// Get skills from loaded data (dynamic, supports homebrew)
+		const skills = this.getSkillsList();
 
 		const $skillsGrid = $skillsSection.find(".charsheet__skills-grid");
 		skills.forEach(skill => {
@@ -1587,11 +1558,8 @@ class CharacterSheetPage {
 	}
 
 	async _onAddCondition () {
-		const conditions = [
-			"Blinded", "Charmed", "Deafened", "Exhaustion", "Frightened",
-			"Grappled", "Incapacitated", "Invisible", "Paralyzed", "Petrified",
-			"Poisoned", "Prone", "Restrained", "Stunned", "Unconscious",
-		];
+		// Get conditions from loaded data (dynamic, supports homebrew)
+		const conditions = this.getConditionsList();
 
 		const currentConditions = this._state.getConditions();
 		const availableConditions = conditions.filter(c => !currentConditions.includes(c));
@@ -1804,6 +1772,226 @@ class CharacterSheetPage {
 			hash,
 		);
 	}
+	// #endregion
+
+	// #region Settings Modal
+	async _showSettingsModal () {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "Sheet Settings",
+			isMinHeight0: true,
+			isWidth100: true,
+			cbClose: () => {
+				this._saveCurrentCharacter();
+			},
+		});
+
+		// Get all available sources
+		const allSources = this._getAvailableSources();
+		const currentAllowed = this._state.getAllowedSources();
+
+		// Build source selection UI
+		const $sourceFilter = $(`<div class="charsheet__settings-sources"></div>`);
+
+		// Quick select buttons
+		const $quickButtons = $$`<div class="mb-2">
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-all">All</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-none">None</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-core">Core Only (PHB/DMG/MM)</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-2024">2024 Rules</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-official">Official Only</button>
+		</div>`;
+
+		// Group sources by category
+		const sourceGroups = this._groupSourcesByCategory(allSources);
+
+		// Create checkboxes for each source
+		Object.entries(sourceGroups).forEach(([group, sources]) => {
+			const $group = $(`<div class="charsheet__settings-source-group mb-2">
+				<div class="charsheet__settings-source-group-header ve-bold mb-1">${group}</div>
+			</div>`);
+
+			sources.forEach(src => {
+				const isChecked = !currentAllowed || currentAllowed.includes(src.json);
+				const $checkbox = $(`
+					<label class="charsheet__settings-source-item mr-2 mb-1">
+						<input type="checkbox" value="${src.json}" ${isChecked ? "checked" : ""} class="source-checkbox">
+						<span title="${src.full}">${src.abbr}</span>
+					</label>
+				`);
+				$group.append($checkbox);
+			});
+
+			$sourceFilter.append($group);
+		});
+
+		// Exhaustion rules toggle
+		const currentExhaustionRules = this._state.getExhaustionRules();
+		const $exhaustionToggle = $$`<div class="mt-3">
+			<label class="ve-flex-v-center">
+				<span class="mr-2 ve-bold">Exhaustion Rules:</span>
+				<select class="form-control form-control--minimal input-sm" id="settings-exhaustion-rules" style="width: auto;">
+					<option value="2024" ${currentExhaustionRules === "2024" ? "selected" : ""}>2024 Rules (Stacking -2 to d20 tests)</option>
+					<option value="2014" ${currentExhaustionRules === "2014" ? "selected" : ""}>2014 Rules (Tiered effects)</option>
+				</select>
+			</label>
+		</div>`;
+
+		// Build modal content
+		$$`<div>
+			<h5>Source Filter</h5>
+			<p class="ve-muted ve-small">Select which sources to use when adding races, classes, spells, items, etc. Uncheck sources to exclude them from selection lists.</p>
+			${$quickButtons}
+			<div class="charsheet__settings-sources-container" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 4px;">
+				${$sourceFilter}
+			</div>
+			<hr>
+			<h5>Game Rules</h5>
+			${$exhaustionToggle}
+		</div>`.appendTo($modalInner);
+
+		// Quick select handlers
+		$modalInner.find("#settings-source-all").on("click", () => {
+			$modalInner.find(".source-checkbox").prop("checked", true);
+			this._updateAllowedSources($modalInner);
+		});
+
+		$modalInner.find("#settings-source-none").on("click", () => {
+			$modalInner.find(".source-checkbox").prop("checked", false);
+			this._updateAllowedSources($modalInner);
+		});
+
+		$modalInner.find("#settings-source-core").on("click", () => {
+			$modalInner.find(".source-checkbox").prop("checked", false);
+			const coreSources = [Parser.SRC_PHB, Parser.SRC_DMG, Parser.SRC_MM, Parser.SRC_XPHB, Parser.SRC_XDMG, Parser.SRC_XMM];
+			coreSources.forEach(src => {
+				$modalInner.find(`.source-checkbox[value="${src}"]`).prop("checked", true);
+			});
+			this._updateAllowedSources($modalInner);
+		});
+
+		$modalInner.find("#settings-source-2024").on("click", () => {
+			$modalInner.find(".source-checkbox").prop("checked", false);
+			const sources2024 = [Parser.SRC_XPHB, Parser.SRC_XDMG, Parser.SRC_XMM];
+			sources2024.forEach(src => {
+				$modalInner.find(`.source-checkbox[value="${src}"]`).prop("checked", true);
+			});
+			this._updateAllowedSources($modalInner);
+		});
+
+		$modalInner.find("#settings-source-official").on("click", () => {
+			$modalInner.find(".source-checkbox").each((i, el) => {
+				const src = $(el).val();
+				const isOfficial = !SourceUtil.isNonstandardSource(src) && !BrewUtil2.hasSourceJson(src) && !PrereleaseUtil.hasSourceJson(src);
+				$(el).prop("checked", isOfficial);
+			});
+			this._updateAllowedSources($modalInner);
+		});
+
+		// Source checkbox change handler
+		$modalInner.find(".source-checkbox").on("change", () => {
+			this._updateAllowedSources($modalInner);
+		});
+
+		// Exhaustion rules handler
+		$modalInner.find("#settings-exhaustion-rules").on("change", (e) => {
+			this._state.setExhaustionRules(e.target.value);
+			this._renderExhaustion();
+		});
+	}
+
+	_getAvailableSources () {
+		// Collect sources from all loaded data
+		const sourceSet = new Set();
+
+		// Add sources from loaded races
+		this._races?.forEach(r => sourceSet.add(r.source));
+		// Add sources from loaded classes
+		this._classes?.forEach(c => sourceSet.add(c.source));
+		// Add sources from loaded backgrounds
+		this._backgrounds?.forEach(b => sourceSet.add(b.source));
+		// Add sources from loaded spells
+		this._spellsData?.forEach(s => sourceSet.add(s.source));
+		// Add sources from loaded items
+		this._itemsData?.forEach(i => sourceSet.add(i.source));
+		// Add sources from loaded feats
+		this._featsData?.forEach(f => sourceSet.add(f.source));
+		// Add sources from optional features
+		this._optionalFeaturesData?.forEach(of => sourceSet.add(of.source));
+
+		// Also add all standard sources from Parser
+		Object.keys(Parser.SOURCE_JSON_TO_FULL).forEach(src => sourceSet.add(src));
+
+		// Convert to array with display info
+		return Array.from(sourceSet)
+			.filter(src => src) // Remove nulls/undefined
+			.map(src => ({
+				json: src,
+				abbr: Parser.sourceJsonToAbv(src),
+				full: Parser.sourceJsonToFull(src),
+			}))
+			.sort((a, b) => a.full.localeCompare(b.full));
+	}
+
+	_groupSourcesByCategory (sources) {
+		const groups = {
+			"Core Rulebooks": [],
+			"Supplements": [],
+			"Adventures": [],
+			"Other Official": [],
+			"Homebrew": [],
+		};
+
+		sources.forEach(src => {
+			if (BrewUtil2.hasSourceJson(src.json)) {
+				groups["Homebrew"].push(src);
+			} else if (PrereleaseUtil.hasSourceJson(src.json)) {
+				groups["Other Official"].push(src);
+			} else if (SourceUtil.isNonstandardSource(src.json)) {
+				groups["Other Official"].push(src);
+			} else if ([Parser.SRC_PHB, Parser.SRC_DMG, Parser.SRC_MM, Parser.SRC_XPHB, Parser.SRC_XDMG, Parser.SRC_XMM].includes(src.json)) {
+				groups["Core Rulebooks"].push(src);
+			} else if (src.full?.includes(":") || src.abbr?.length > 5) {
+				// Adventure names usually have colons or longer abbreviations
+				groups["Adventures"].push(src);
+			} else {
+				groups["Supplements"].push(src);
+			}
+		});
+
+		// Remove empty groups
+		Object.keys(groups).forEach(key => {
+			if (!groups[key].length) delete groups[key];
+		});
+
+		return groups;
+	}
+
+	_updateAllowedSources ($modalInner) {
+		const checkedSources = [];
+		$modalInner.find(".source-checkbox:checked").each((i, el) => {
+			checkedSources.push($(el).val());
+		});
+
+		// If all are checked, set to null (all allowed)
+		const allSources = $modalInner.find(".source-checkbox").length;
+		if (checkedSources.length === allSources || checkedSources.length === 0) {
+			this._state.setAllowedSources(null);
+		} else {
+			this._state.setAllowedSources(checkedSources);
+		}
+	}
+
+	/**
+	 * Filter an array of entities by allowed sources
+	 * @param {Array} entities - Array of entities with `source` property
+	 * @returns {Array} Filtered array
+	 */
+	filterByAllowedSources (entities) {
+		const allowed = this._state.getAllowedSources();
+		if (!allowed) return entities; // null = all allowed
+		return entities.filter(e => allowed.includes(e.source));
+	}
+	// #endregion
 
 	// Data getters for sub-modules
 	getRaces () { return this._races; }
@@ -1816,7 +2004,49 @@ class CharacterSheetPage {
 	getItems () { return this._itemsData; }
 	getFeats () { return this._featsData; }
 	getOptionalFeatures () { return this._optionalFeaturesData; }
+	getSkillsData () { return this._skillsData; }
+	getConditionsData () { return this._conditionsData; }
 	getState () { return this._state; }
+
+	/**
+	 * Get unique skills list, preferring 2024 (XPHB) versions
+	 * @returns {Array} Array of {name, ability} objects
+	 */
+	getSkillsList () {
+		// Create map of skills, preferring XPHB sources
+		const skillsMap = new Map();
+		this._skillsData.forEach(skill => {
+			const existing = skillsMap.get(skill.name);
+			// Prefer XPHB (2024) version
+			if (!existing || skill.source === Parser.SRC_XPHB) {
+				skillsMap.set(skill.name, {
+					name: skill.name,
+					ability: skill.ability,
+					source: skill.source,
+				});
+			}
+		});
+		// Sort alphabetically
+		return Array.from(skillsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * Get unique conditions list, preferring 2024 (XPHB) versions
+	 * @returns {Array} Array of condition names
+	 */
+	getConditionsList () {
+		// Create map of conditions, preferring XPHB sources
+		const conditionsMap = new Map();
+		this._conditionsData.forEach(cond => {
+			const existing = conditionsMap.get(cond.name);
+			// Prefer XPHB (2024) version
+			if (!existing || cond.source === Parser.SRC_XPHB) {
+				conditionsMap.set(cond.name, cond.name);
+			}
+		});
+		// Sort alphabetically
+		return Array.from(conditionsMap.values()).sort();
+	}
 
 	async saveCharacter () {
 		await this._saveCurrentCharacter();

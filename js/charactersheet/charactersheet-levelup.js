@@ -109,17 +109,35 @@ class CharacterSheetLevelUp {
 		let selectedSubclass = null;
 		let hpMethod = "average";
 		let currentFeatures = newFeatures; // Track current features
+		let selectedOptionalFeatures = {}; // Track optional feature selections by type
 
 		const $content = $(`<div class="charsheet__levelup-body"></div>`).appendTo($modalInner);
 		let $featuresSection = null; // Reference to features section for updates
+
+		// Filter out ASI-related features if ASI is being handled separately
+		const filterAsiFeatures = (features) => {
+			if (!hasAsi) return features;
+			// Filter out features whose names indicate they are ASI/Feat choices
+			const asiFeatureNames = [
+				"ability score improvement",
+				"ability score increase",
+				"asi",
+				"feat",
+			];
+			return features.filter(f => {
+				const nameLower = f.name.toLowerCase();
+				return !asiFeatureNames.some(asi => nameLower.includes(asi));
+			});
+		};
 
 		// Helper to update features display
 		const updateFeaturesDisplay = () => {
 			if ($featuresSection) {
 				$featuresSection.remove();
 			}
-			if (currentFeatures.length) {
-				$featuresSection = this._renderNewFeatures(currentFeatures);
+			const filteredFeatures = filterAsiFeatures(currentFeatures);
+			if (filteredFeatures.length) {
+				$featuresSection = this._renderNewFeatures(filteredFeatures);
 				// Insert before HP section (or at end if no HP section)
 				const $hpSection = $content.find(".charsheet__levelup-section").last();
 				if ($hpSection.length) {
@@ -154,9 +172,19 @@ class CharacterSheetLevelUp {
 			$content.append($asiSection);
 		}
 
-		// New features (initial render)
-		if (currentFeatures.length) {
-			$featuresSection = this._renderNewFeatures(currentFeatures);
+		// Optional features (metamagic, invocations, maneuvers, etc.)
+		const optionalFeatureGains = this._getOptionalFeatureGains(classData, classEntry.level, newLevel);
+		if (optionalFeatureGains.length) {
+			const $optSection = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features) => {
+				selectedOptionalFeatures[featureType] = features;
+			});
+			$content.append($optSection);
+		}
+
+		// New features (initial render with ASI features filtered)
+		const filteredFeatures = filterAsiFeatures(currentFeatures);
+		if (filteredFeatures.length) {
+			$featuresSection = this._renderNewFeatures(filteredFeatures);
 			$content.append($featuresSection);
 		}
 
@@ -184,6 +212,16 @@ class CharacterSheetLevelUp {
 					}
 				}
 
+				// Validate optional features if applicable
+				for (const gain of optionalFeatureGains) {
+					const featureKey = gain.featureTypes.join("_");
+					const selected = selectedOptionalFeatures[featureKey] || [];
+					if (selected.length < gain.newCount) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${gain.newCount} ${gain.name}.`});
+						return;
+					}
+				}
+
 				// Apply level up
 				await this._applyLevelUp({
 					classEntry,
@@ -191,6 +229,7 @@ class CharacterSheetLevelUp {
 					asiChoices,
 					selectedFeat,
 					selectedSubclass,
+					selectedOptionalFeatures,
 					newFeatures: currentFeatures, // Use updated features if subclass was selected
 					hpMethod,
 					classData,
@@ -338,8 +377,8 @@ class CharacterSheetLevelUp {
 
 		$abilitiesContainer.append($abilitiesGrid);
 
-		// Feats list
-		const feats = this._page.getFeats() || [];
+		// Feats list - filtered by allowed sources
+		const feats = this._page.filterByAllowedSources(this._page.getFeats() || []);
 		const $featSearch = $(`<input type="text" class="form-control mb-2" placeholder="Search feats...">`);
 		const $featList = $(`<div class="charsheet__levelup-feats-list"></div>`);
 
@@ -617,6 +656,212 @@ class CharacterSheetLevelUp {
 		return level === subclassLevel;
 	}
 
+	/**
+	 * Get optional feature gains for a level up (metamagic, invocations, maneuvers, etc.)
+	 * @param {Object} classData - The class data
+	 * @param {number} currentLevel - Current class level
+	 * @param {number} newLevel - New class level
+	 * @returns {Array} Array of {featureTypes, name, newCount} objects for features that gain new options
+	 */
+	_getOptionalFeatureGains (classData, currentLevel, newLevel) {
+		const gains = [];
+		
+		if (!classData.optionalfeatureProgression?.length) return gains;
+
+		classData.optionalfeatureProgression.forEach(optFeatProg => {
+			const featureTypes = optFeatProg.featureType || [];
+			const name = optFeatProg.name || featureTypes.map(ft => ft.replace(/:/g, " ")).join(", ");
+
+			// Get count at current level and new level
+			let countAtCurrent = 0;
+			let countAtNew = 0;
+
+			if (Array.isArray(optFeatProg.progression)) {
+				// Array format: index = level - 1
+				countAtCurrent = optFeatProg.progression[currentLevel - 1] || 0;
+				countAtNew = optFeatProg.progression[newLevel - 1] || 0;
+			} else if (typeof optFeatProg.progression === "object") {
+				// Object format: key is level string
+				countAtCurrent = optFeatProg.progression[String(currentLevel)] || 0;
+				countAtNew = optFeatProg.progression[String(newLevel)] || 0;
+			}
+
+			// Count how many of this feature type the character already has
+			const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
+			const existingOfType = existingOptFeatures.filter(f => 
+				f.optionalFeatureTypes?.some(ft => featureTypes.includes(ft))
+			).length;
+
+			// Calculate how many new options to pick
+			// totalCount is from class progression, existingOfType is what player already has
+			const newOptionsCount = countAtNew - existingOfType;
+			if (newOptionsCount > 0) {
+				gains.push({
+					featureTypes,
+					name,
+					currentCount: existingOfType,
+					totalCount: countAtNew,
+					newCount: newOptionsCount,
+					required: optFeatProg.required || false,
+				});
+			}
+		});
+
+		return gains;
+	}
+
+	/**
+	 * Render optional features selection UI for level up
+	 * @param {Object} classData - The class data
+	 * @param {Array} gains - Array of feature gains from _getOptionalFeatureGains
+	 * @param {Function} onSelect - Callback(featureType, selectedFeatures)
+	 */
+	_renderOptionalFeaturesSelection (classData, gains, onSelect) {
+		// Filter optional features by allowed sources
+		const allOptFeatures = this._page.filterByAllowedSources(this._page.getOptionalFeatures() || []);
+		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
+
+		const $section = $(`
+			<div class="charsheet__levelup-section">
+				<h5 class="charsheet__levelup-section-title">
+					<span class="glyphicon glyphicon-list-alt"></span> Choose Features
+				</h5>
+				<div class="charsheet__levelup-opt-features"></div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__levelup-opt-features");
+
+		gains.forEach(gain => {
+			const featureKey = gain.featureTypes.join("_");
+			const selectedForType = [];
+
+			// Check if a feature is repeatable (can be taken multiple times)
+			const isRepeatable = (opt) => {
+				if (!opt.entries) return false;
+				// Check for "Repeatable" entry in the feature
+				const checkEntries = (entries) => {
+					for (const entry of entries) {
+						if (typeof entry === "string" && entry.toLowerCase().includes("repeatable")) return true;
+						if (entry?.name?.toLowerCase().includes("repeatable")) return true;
+						if (entry?.entries && checkEntries(entry.entries)) return true;
+					}
+					return false;
+				};
+				return checkEntries(opt.entries);
+			};
+
+			// Filter options by feature type and prerequisites (but include already-taken ones)
+			const allMatchingOptions = allOptFeatures.filter(opt => {
+				// Check feature type match
+				if (!opt.featureType?.some(ft => gain.featureTypes.includes(ft))) return false;
+
+				// Check prerequisites
+				if (opt.prerequisite) {
+					for (const prereq of opt.prerequisite) {
+						// Level prerequisite
+						if (prereq.level) {
+							const reqLevel = prereq.level.level || prereq.level;
+							const classes = this._state.getClasses();
+							const totalLevel = this._state.getTotalLevel();
+							// Check if prereq is for specific class or general
+							if (prereq.level.class) {
+								const classMatch = classes.find(c => 
+									c.name.toLowerCase() === prereq.level.class.name.toLowerCase()
+								);
+								if (!classMatch || classMatch.level < reqLevel) return false;
+							} else if (totalLevel < reqLevel) {
+								return false;
+							}
+						}
+						// TODO: Could add more prerequisite checks (spells, pact boon, other features, etc.)
+					}
+				}
+
+				return true;
+			});
+
+			// Mark options as already taken or available
+			const availableOptions = allMatchingOptions.map(opt => {
+				const alreadyHas = existingOptFeatures.some(
+					existing => existing.name === opt.name && existing.source === opt.source,
+				);
+				const repeatable = isRepeatable(opt);
+				return {
+					...opt,
+					_alreadyKnown: alreadyHas,
+					_selectable: !alreadyHas || repeatable,
+				};
+			});
+
+			const $gainSection = $(`
+				<div class="charsheet__levelup-opt-gain mb-3">
+					<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new option${gain.newCount > 1 ? "s" : ""}</p>
+					<div class="charsheet__levelup-opt-list" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
+				</div>
+			`);
+
+			const $list = $gainSection.find(".charsheet__levelup-opt-list");
+
+			const selectableOptions = availableOptions.filter(opt => opt._selectable);
+			if (!selectableOptions.length && !availableOptions.some(opt => opt._alreadyKnown)) {
+				$list.append(`<div class="ve-muted">No options available at this level.</div>`);
+			} else {
+				// Sort: selectable first, then already known
+				availableOptions.sort((a, b) => {
+					if (a._selectable !== b._selectable) return a._selectable ? -1 : 1;
+					return a.name.localeCompare(b.name);
+				}).forEach(opt => {
+					const isDisabled = !opt._selectable;
+					const knownBadge = opt._alreadyKnown ? `<span class="badge badge-secondary ml-1" title="Already known">Known</span>` : "";
+					const repeatableBadge = opt._alreadyKnown && opt._selectable ? `<span class="badge badge-info ml-1" title="Can be taken multiple times">Repeatable</span>` : "";
+					
+					const $item = $(`
+						<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.25rem; border-radius: 4px;${isDisabled ? " opacity: 0.6;" : ""}">
+							<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
+							<strong class="opt-name">${opt.name}</strong>
+							${knownBadge}${repeatableBadge}
+							<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
+						</label>
+					`);
+
+					// Show description on name click
+					$item.find(".opt-name").on("click", (e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						const desc = Renderer.get().render({entries: opt.entries || []});
+						JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
+					});
+
+					$item.find("input").on("change", (e) => {
+						if (e.target.checked) {
+							if (selectedForType.length < gain.newCount) {
+								selectedForType.push(opt);
+								$item.css("background", "var(--rgb-link-opacity-10)");
+							} else {
+								e.target.checked = false;
+								JqueryUtil.doToast({type: "warning", content: `You can only choose ${gain.newCount} ${gain.name}.`});
+							}
+						} else {
+							const idx = selectedForType.findIndex(s => s.name === opt.name && s.source === opt.source);
+							if (idx >= 0) selectedForType.splice(idx, 1);
+							$item.css("background", "");
+						}
+						$gainSection.find(".opt-count").text(selectedForType.length);
+						onSelect(featureKey, [...selectedForType]);
+					});
+
+					$list.append($item);
+				});
+			}
+
+			$container.append($gainSection);
+		});
+
+		return $section;
+	}
+
 	_getClassHitDie (classData) {
 		const hitDieMap = {
 			"Barbarian": 12,
@@ -635,7 +880,7 @@ class CharacterSheetLevelUp {
 		return classData.hd?.faces || hitDieMap[classData.name] || 8;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, newFeatures, hpMethod, classData}) {
 		console.log(`[LevelUp] _applyLevelUp called: selectedSubclass=${selectedSubclass?.name || "null"}`);
 		console.log(`[LevelUp] Initial newFeatures:`, newFeatures?.map(f => f.name));
 
@@ -662,13 +907,52 @@ class CharacterSheetLevelUp {
 			this._state.addFeat(selectedFeat);
 			// Apply feat bonuses if any
 			this._applyFeatBonuses(selectedFeat);
-		} else {
+		} else if (asiChoices) {
 			// Apply ability score increases
+			const increases = [];
 			Parser.ABIL_ABVS.forEach(abl => {
 				if (asiChoices[abl]) {
 					const currentBase = this._state.getAbilityBase(abl);
 					this._state.setAbilityBase(abl, Math.min(20, currentBase + asiChoices[abl]));
+					increases.push(`${Parser.attAbvToFull(abl)} +${asiChoices[abl]}`);
 				}
+			});
+
+			// Add a tracking feature for the ASI choice
+			if (increases.length > 0) {
+				const asiFeature = {
+					name: "Ability Score Improvement",
+					source: classData.source,
+					className: classEntry.name,
+					classSource: classEntry.source,
+					level: newLevel,
+					featureType: "Class",
+					description: `<p><strong>Ability Score Increases:</strong> ${increases.join(", ")}</p>`,
+					isAsiChoice: true, // Mark as ASI choice for special handling
+				};
+				this._state.addFeature(asiFeature);
+			}
+		}
+
+		// Apply selected optional features (invocations, metamagic, maneuvers, etc.)
+		if (selectedOptionalFeatures) {
+			Object.entries(selectedOptionalFeatures).forEach(([featureKey, opts]) => {
+				// featureKey is like "EI" or "MM" - the feature types joined
+				const featureTypes = featureKey.split("_");
+				opts.forEach(opt => {
+					const featureData = {
+						name: opt.name,
+						source: opt.source,
+						className: classEntry.name,
+						classSource: classEntry.source,
+						level: newLevel,
+						featureType: "Optional Feature",
+						optionalFeatureTypes: featureTypes, // Store which type for grouping
+						description: opt.entries ? Renderer.get().render({entries: opt.entries}) : "",
+						entries: opt.entries,
+					};
+					this._state.addFeature(featureData);
+				});
 			});
 		}
 
@@ -694,8 +978,29 @@ class CharacterSheetLevelUp {
 		this._state.setCurrentHp(this._state.getCurrentHp() + hpIncrease);
 
 		// Add new features to character
-		// Double-check: filter out any remaining placeholder features (safety net)
-		const featuresToAdd = newFeatures.filter(f => !f.gainSubclassFeature);
+		// Filter out placeholder features and ASI features (since ASI is handled separately)
+		const asiFeatureNames = [
+			"ability score improvement",
+			"ability score increase",
+			"asi",
+		];
+
+		// Get existing non-subclass feature names to prevent duplicates (like "Metamagic" at level 3 and 10)
+		// Only filter class features, not subclass features (those can have same-named features at different levels)
+		const existingClassFeatureNames = this._state.getFeatures()
+			.filter(f => f.className === classEntry.name && !f.subclassName && !f.isSubclassFeature)
+			.map(f => f.name.toLowerCase());
+
+		const featuresToAdd = newFeatures.filter(f => {
+			if (f.gainSubclassFeature) return false;
+			// Filter out ASI features since we handle them in the UI
+			const nameLower = f.name.toLowerCase();
+			if (asiFeatureNames.some(asi => nameLower.includes(asi))) return false;
+			// Filter out duplicate non-subclass features (e.g., "Metamagic" at level 3 and 10)
+			// But always include subclass features
+			if (!f.isSubclassFeature && !f.subclassName && existingClassFeatureNames.includes(nameLower)) return false;
+			return true;
+		});
 		console.log(`[LevelUp] FINAL features to add:`, featuresToAdd?.map(f => `${f.name} (isSubclass=${f.isSubclassFeature})`));
 		featuresToAdd.forEach(feature => {
 			const featureData = {

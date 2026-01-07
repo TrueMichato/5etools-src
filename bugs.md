@@ -62,9 +62,15 @@ This file is used to track known bugs in the 5etools character sheet code.
 
 
 ### Level Up
-- [] when a choice feature (like metamagic, invocations, maneuvers) comes up during level up, there is no way to select the options
-- [] when reaching an ASI level, the feature ASI is added to the sheet regardless of the choice that was made. It makes sense as it is actually the level 4 feature, but it is confusing.
+- [x] when a choice feature (like metamagic, invocations, maneuvers) comes up during level up, there is no way to select the options (added selection UI with validation)
+- [x] when reaching an ASI level, the feature ASI is added to the sheet regardless of the choice that was made (ASI choices now recorded as a feature showing which stats were increased)
+- [x] optional features not hoverable (fixed featureType to "Optional Feature" for proper hover linking)
+- [x] optional features not grouped together (now grouped by type with headers like "Eldritch Invocations", "Metamagic Options")
+- [x] progression of optional features not calculated correctly (now counts existing features of that type)
+- [x] duplicate features like "Metamagic" appearing multiple times (now filters out features already on character)
+- [x] subclass and subclass features no longer appear in feature tab after being selected (fixed duplicate filter to only apply to non-subclass features)
+- [x] when choosing features on level up features already known should be disabled in the selection list unless they can be taken multiple times (now shows "Known" badge and disabled, with "Repeatable" badge for re-selectable options)
 
 ### General
- - [] skills, conditions and many other things are hard coded instead of being retrieved from the site, which would prevent homebrew from affecting the sheet
- - [] no ability to filter the sources used in the sheet (e.g only use PHB and TCoE)
+ - [x] skills, conditions and many other things are hard coded instead of being retrieved from the site, which would prevent homebrew from affecting the sheet
+ - [x] no ability to filter the sources used in the sheet (e.g only use PHB and TCoE)

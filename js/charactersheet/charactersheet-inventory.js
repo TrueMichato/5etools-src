@@ -100,7 +100,8 @@ class CharacterSheetInventory {
 	}
 
 	async _pShowItemPickerModal () {
-		const items = this._allItems;
+		// Filter items by allowed sources
+		const items = this._page.filterByAllowedSources(this._allItems);
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "Add Item",

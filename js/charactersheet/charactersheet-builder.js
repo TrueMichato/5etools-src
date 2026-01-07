@@ -920,7 +920,8 @@ class CharacterSheetBuilder {
 
 	// #region Step 1: Race
 	_renderRaceStep ($content) {
-		const races = this._page.getRaces();
+		// Get races filtered by allowed sources
+		const races = this._page.filterByAllowedSources(this._page.getRaces());
 
 		const $container = $(`
 			<div class="charsheet__builder-selection">
@@ -1067,7 +1068,8 @@ class CharacterSheetBuilder {
 
 	// #region Step 2: Class
 	_renderClassStep ($content) {
-		const classes = this._page.getClasses();
+		// Get classes filtered by allowed sources
+		const classes = this._page.filterByAllowedSources(this._page.getClasses());
 
 		const $container = $(`
 			<div class="charsheet__builder-selection">
@@ -1209,13 +1211,8 @@ class CharacterSheetBuilder {
 		let availableSkills = [];
 		let chooseCount = 2;
 
-		// All skills list for "any" choices
-		const allSkills = [
-			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
-			"History", "Insight", "Intimidation", "Investigation", "Medicine",
-			"Nature", "Perception", "Performance", "Persuasion", "Religion",
-			"Sleight of Hand", "Stealth", "Survival",
-		];
+		// Get skills dynamically from loaded data (supports homebrew)
+		const allSkills = this._page.getSkillsList();
 
 		skillChoices.forEach(skillChoice => {
 			if (skillChoice.choose) {
@@ -1654,7 +1651,8 @@ class CharacterSheetBuilder {
 
 	// #region Step 4: Background
 	_renderBackgroundStep ($content) {
-		const backgrounds = this._page.getBackgrounds();
+		// Get backgrounds filtered by allowed sources
+		const backgrounds = this._page.filterByAllowedSources(this._page.getBackgrounds());
 
 		const $container = $(`
 			<div class="charsheet__builder-selection">
