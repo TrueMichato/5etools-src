@@ -114,7 +114,7 @@ class CharacterSheetPage {
 	async _pLoadData () {
 		// Load all necessary data in parallel
 		// Note: Using loadRawJSON for classes to get classFeature and subclassFeature arrays
-		const [races, classes, backgrounds, spells, items, feats, optFeatures, skills, conditionsData] = await Promise.all([
+		const [races, classes, backgrounds, spells, items, feats, optFeatures, skills, conditionsData, prereleaseData, brewData] = await Promise.all([
 			DataUtil.race.loadJSON(),
 			DataUtil.class.loadRawJSON(),
 			DataUtil.loadJSON("data/backgrounds.json"),
@@ -124,8 +124,12 @@ class CharacterSheetPage {
 			DataUtil.loadJSON("data/optionalfeatures.json"),
 			DataUtil.loadJSON("data/skills.json"),
 			DataUtil.loadJSON("data/conditionsdiseases.json"),
+			// Load homebrew/prerelease data
+			PrereleaseUtil.pGetBrewProcessed(),
+			BrewUtil2.pGetBrewProcessed(),
 		]);
 
+		// Base site data
 		this._races = races.race || [];
 		this._classes = classes.class || [];
 		this._subclasses = classes.subclass || [];
@@ -139,6 +143,14 @@ class CharacterSheetPage {
 		this._optionalFeaturesData = optFeatures.optionalfeature || [];
 		this._skillsData = skills.skill || [];
 		this._conditionsData = conditionsData.condition || [];
+
+		// Merge prerelease/homebrew data
+		this._mergeBrewData(prereleaseData);
+		this._mergeBrewData(brewData);
+
+		console.log("[CharSheet] Data loaded - Races:", this._races.length, "Classes:", this._classes.length, 
+			"Spells:", this._spellsData.length, "Items:", this._itemsData.length,
+			"Homebrew sources loaded:", this._getBrewSourceCount(prereleaseData, brewData));
 
 		// Attach subclasses to their parent classes for easier access
 		this._classes.forEach(cls => {
@@ -156,6 +168,88 @@ class CharacterSheetPage {
 				return sourceMatches;
 			});
 		});
+	}
+
+	/**
+	 * Merge homebrew/prerelease data into the main data arrays
+	 * @param {Object} brewData - The processed brew data object
+	 */
+	_mergeBrewData (brewData) {
+		if (!brewData) return;
+
+		// Races
+		if (brewData.race?.length) {
+			this._races = [...this._races, ...MiscUtil.copyFast(brewData.race)];
+		}
+
+		// Classes
+		if (brewData.class?.length) {
+			this._classes = [...this._classes, ...MiscUtil.copyFast(brewData.class)];
+		}
+
+		// Subclasses
+		if (brewData.subclass?.length) {
+			this._subclasses = [...this._subclasses, ...MiscUtil.copyFast(brewData.subclass)];
+		}
+
+		// Class features
+		if (brewData.classFeature?.length) {
+			this._classFeatures = [...this._classFeatures, ...MiscUtil.copyFast(brewData.classFeature)];
+		}
+
+		// Subclass features
+		if (brewData.subclassFeature?.length) {
+			this._subclassFeatures = [...this._subclassFeatures, ...MiscUtil.copyFast(brewData.subclassFeature)];
+		}
+
+		// Backgrounds
+		if (brewData.background?.length) {
+			this._backgrounds = [...this._backgrounds, ...MiscUtil.copyFast(brewData.background)];
+		}
+
+		// Spells
+		if (brewData.spell?.length) {
+			this._spellsData = [...this._spellsData, ...MiscUtil.copyFast(brewData.spell)];
+		}
+
+		// Items - need to handle differently as items can be complex
+		if (brewData.item?.length) {
+			const brewItems = MiscUtil.copyFast(brewData.item).filter(it => !it._isItemGroup);
+			this._itemsData = [...this._itemsData, ...brewItems];
+		}
+
+		// Feats
+		if (brewData.feat?.length) {
+			this._featsData = [...this._featsData, ...MiscUtil.copyFast(brewData.feat)];
+		}
+
+		// Optional features (invocations, metamagic, etc.)
+		if (brewData.optionalfeature?.length) {
+			this._optionalFeaturesData = [...this._optionalFeaturesData, ...MiscUtil.copyFast(brewData.optionalfeature)];
+		}
+
+		// Skills (rare but possible)
+		if (brewData.skill?.length) {
+			this._skillsData = [...this._skillsData, ...MiscUtil.copyFast(brewData.skill)];
+		}
+
+		// Conditions/diseases
+		if (brewData.condition?.length) {
+			this._conditionsData = [...this._conditionsData, ...MiscUtil.copyFast(brewData.condition)];
+		}
+	}
+
+	/**
+	 * Count unique homebrew sources for logging
+	 */
+	_getBrewSourceCount (prereleaseData, brewData) {
+		const sources = new Set();
+		[prereleaseData, brewData].forEach(data => {
+			if (data?._meta?.sources) {
+				data._meta.sources.forEach(src => sources.add(src.json));
+			}
+		});
+		return sources.size;
 	}
 
 	_initUi () {
@@ -876,7 +970,8 @@ class CharacterSheetPage {
 
 		const conditions = this._state.getConditions();
 		conditions.forEach(condition => {
-			const conditionLink = CharacterSheetPage.getConditionLink(condition);
+			// Use instance method for proper homebrew source lookup
+			const conditionLink = this.getConditionLink(condition);
 			const $badge = $(`
 				<span class="charsheet__condition-badge">
 					${conditionLink}
@@ -1758,9 +1853,35 @@ class CharacterSheetPage {
 	}
 
 	/**
-	 * Create a condition hover link
+	 * Create a condition hover link (instance method)
 	 * @param {string} condition - Condition name
 	 * @returns {string} HTML string for the link
+	 */
+	getConditionLink (condition) {
+		const conditionClean = condition.trim().toLowerCase();
+		
+		// Look up the condition in loaded data to get the correct source
+		const conditionData = this._conditionsData?.find(c => 
+			c.name.toLowerCase() === conditionClean
+		);
+		
+		// Use found source, or fall back to XPHB for standard conditions
+		const source = conditionData?.source || Parser.SRC_XPHB;
+		const hash = UrlUtil.encodeForHash([condition.trim(), source].join(HASH_LIST_SEP));
+		
+		return this.getHoverLink(
+			UrlUtil.PG_CONDITIONS_DISEASES,
+			condition.trim(),
+			source,
+			hash,
+		);
+	}
+
+	/**
+	 * Create a condition hover link (static fallback - uses XPHB)
+	 * @param {string} condition - Condition name
+	 * @returns {string} HTML string for the link
+	 * @deprecated Use instance method instead for proper homebrew support
 	 */
 	static getConditionLink (condition) {
 		const conditionClean = condition.trim().toLowerCase();
@@ -1789,16 +1910,20 @@ class CharacterSheetPage {
 		const allSources = this._getAvailableSources();
 		const currentAllowed = this._state.getAllowedSources();
 
+		// Check if there's any homebrew
+		const hasHomebrew = allSources.some(src => BrewUtil2.hasSourceJson(src.json) || PrereleaseUtil.hasSourceJson(src.json));
+
 		// Build source selection UI
 		const $sourceFilter = $(`<div class="charsheet__settings-sources"></div>`);
 
 		// Quick select buttons
-		const $quickButtons = $$`<div class="mb-2">
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-all">All</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-none">None</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-core">Core Only (PHB/DMG/MM)</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1" id="settings-source-2024">2024 Rules</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-official">Official Only</button>
+		const $quickButtons = $$`<div class="mb-2 ve-flex-wrap">
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-all">All</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-none">None</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-core">Core Only</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-2024">2024 Rules</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-official">Official Only</button>
+			${hasHomebrew ? `<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-homebrew">Homebrew Only</button>` : ""}
 		</div>`;
 
 		// Group sources by category
@@ -1887,6 +2012,16 @@ class CharacterSheetPage {
 			this._updateAllowedSources($modalInner);
 		});
 
+		// Homebrew only button handler
+		$modalInner.find("#settings-source-homebrew").on("click", () => {
+			$modalInner.find(".source-checkbox").each((i, el) => {
+				const src = $(el).val();
+				const isHomebrew = BrewUtil2.hasSourceJson(src) || PrereleaseUtil.hasSourceJson(src);
+				$(el).prop("checked", isHomebrew);
+			});
+			this._updateAllowedSources($modalInner);
+		});
+
 		// Source checkbox change handler
 		$modalInner.find(".source-checkbox").on("change", () => {
 			this._updateAllowedSources($modalInner);
@@ -1938,6 +2073,7 @@ class CharacterSheetPage {
 			"Supplements": [],
 			"Adventures": [],
 			"Other Official": [],
+			"Prerelease": [],
 			"Homebrew": [],
 		};
 
@@ -1945,7 +2081,7 @@ class CharacterSheetPage {
 			if (BrewUtil2.hasSourceJson(src.json)) {
 				groups["Homebrew"].push(src);
 			} else if (PrereleaseUtil.hasSourceJson(src.json)) {
-				groups["Other Official"].push(src);
+				groups["Prerelease"].push(src);
 			} else if (SourceUtil.isNonstandardSource(src.json)) {
 				groups["Other Official"].push(src);
 			} else if ([Parser.SRC_PHB, Parser.SRC_DMG, Parser.SRC_MM, Parser.SRC_XPHB, Parser.SRC_XDMG, Parser.SRC_XMM].includes(src.json)) {
