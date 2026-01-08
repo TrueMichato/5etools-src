@@ -6,8 +6,10 @@ This file is used to track known bugs in the 5etools character sheet code.
 ### General
 - [x] need way to roll things with advantage/disadvantage from the sheet (fixed: Shift+click for advantage, Ctrl/Cmd+click for disadvantage)
 - [x] need to support rolling skills with different ability scores (fixed: right-click on skill to choose alternate ability)
-- [] need to support adding custom skills to sheet
-- [] need to support adding features, languages, proficiencies, etc manually to sheet
+- [x] need to support adding custom skills to sheet (fixed: "Add Custom Skill" button in skills section)
+- [x] need to support adding features, languages, proficiencies, etc manually to sheet (fixed: pencil icon on Proficiencies section, + button on Custom Features section in Features tab)
+- [] need to support adding custom modifiers to rolls, skills, abilities, hit, damage etc (circumstance, item, etc)
+- [] need to support toggling proficiency/expertise/half proficiency on skills manually
 - [] need to improve UI greatly, currently very basic and not user friendly
 - [] need to support mobile devices better (bigger buttons, less clicks, altternative ways to do things that require hover or shift/ctrl keys)
 

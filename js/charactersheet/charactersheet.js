@@ -386,6 +386,12 @@ class CharacterSheetPage {
 			this._updateDeathSaves();
 			this._saveCurrentCharacter();
 		});
+
+		// Edit proficiencies
+		$("#charsheet-edit-proficiencies").on("click", () => this._showEditProficienciesModal());
+
+		// Add custom feature
+		$("#charsheet-add-custom-feature").on("click", () => this._showAddCustomFeatureModal());
 	}
 
 	// #region Character Management
@@ -589,6 +595,7 @@ class CharacterSheetPage {
 		this._renderAttacks();
 		this._renderQuickSpells();
 		this._renderAbilitiesDetailed();
+		this._renderCustomFeatures();
 
 		// Sub-modules
 		if (this._spells) this._spells.render();
@@ -753,19 +760,45 @@ class CharacterSheetPage {
 				profTitle = "Half proficiency (Jack of All Trades)";
 			}
 
+			const customClass = skill.isCustom ? " charsheet__skill-row--custom" : "";
 			const $row = $(`
-				<div class="charsheet__skill-row" data-skill="${skillKey}" data-default-ability="${skill.ability}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
+				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${skill.ability}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
 					<span class="charsheet__prof-indicator ${profClass}" title="${profTitle}"></span>
-					<span class="charsheet__skill-name">${skill.name}</span>
+					<span class="charsheet__skill-name">${skill.name}${skill.isCustom ? " ✦" : ""}</span>
 					<span class="charsheet__skill-ability">(${skill.ability.toUpperCase()})</span>
 					<span class="charsheet__skill-mod">${modStr}</span>
+					${skill.isCustom ? `<span class="charsheet__skill-delete" title="Remove custom skill">×</span>` : ""}
 				</div>
 			`);
 
-			$row.on("click", (e) => this._rollSkillCheck(skillKey, skill.name, e));
+			$row.on("click", (e) => {
+				// Don't roll if clicking delete button
+				if ($(e.target).hasClass("charsheet__skill-delete")) return;
+				this._rollSkillCheck(skillKey, skill.name, e);
+			});
 			$row.on("contextmenu", (e) => this._showSkillAbilityMenu(e, skillKey, skill.name, skill.ability));
+
+			if (skill.isCustom) {
+				$row.find(".charsheet__skill-delete").on("click", (e) => {
+					e.stopPropagation();
+					this._state.removeCustomSkill(skill.name);
+					this._renderSkills();
+					this._saveCurrentCharacter();
+				});
+			}
+
 			$container.append($row);
 		});
+
+		// Add "Add Custom Skill" button
+		const $addBtn = $(`
+			<div class="charsheet__skill-add" title="Add a custom skill">
+				<span class="charsheet__skill-add-icon">+</span>
+				<span class="charsheet__skill-add-text">Add Custom Skill</span>
+			</div>
+		`);
+		$addBtn.on("click", () => this._showAddCustomSkillModal());
+		$container.append($addBtn);
 	}
 
 	_renderHp () {
@@ -2299,8 +2332,8 @@ class CharacterSheetPage {
 	getState () { return this._state; }
 
 	/**
-	 * Get unique skills list, preferring 2024 (XPHB) versions
-	 * @returns {Array} Array of {name, ability} objects
+	 * Get unique skills list, preferring 2024 (XPHB) versions, including custom skills
+	 * @returns {Array} Array of {name, ability, isCustom} objects
 	 */
 	getSkillsList () {
 		// Create map of skills, preferring XPHB sources
@@ -2313,9 +2346,25 @@ class CharacterSheetPage {
 					name: skill.name,
 					ability: skill.ability,
 					source: skill.source,
+					isCustom: false,
 				});
 			}
 		});
+
+		// Add custom skills from state
+		const customSkills = this._state.getCustomSkills();
+		customSkills.forEach(skill => {
+			// Only add if not overriding a standard skill
+			if (!skillsMap.has(skill.name)) {
+				skillsMap.set(skill.name, {
+					name: skill.name,
+					ability: skill.ability,
+					source: "Custom",
+					isCustom: true,
+				});
+			}
+		});
+
 		// Sort alphabetically
 		return Array.from(skillsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 	}
@@ -2344,6 +2393,291 @@ class CharacterSheetPage {
 
 	renderCharacter () {
 		this._renderCharacter();
+	}
+
+	/**
+	 * Show modal for adding a custom skill
+	 */
+	async _showAddCustomSkillModal () {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "Add Custom Skill",
+			isMinHeight0: true,
+		});
+
+		const abilityOptions = [
+			{value: "str", label: "Strength"},
+			{value: "dex", label: "Dexterity"},
+			{value: "con", label: "Constitution"},
+			{value: "int", label: "Intelligence"},
+			{value: "wis", label: "Wisdom"},
+			{value: "cha", label: "Charisma"},
+		];
+
+		const $form = $$`<div class="ve-flex-col">
+			<div class="ve-flex-v-center mb-2">
+				<label class="mr-2 w-100p">Skill Name:</label>
+				<input type="text" class="form-control" id="custom-skill-name" placeholder="e.g. Brewing, Sailing">
+			</div>
+			<div class="ve-flex-v-center mb-3">
+				<label class="mr-2 w-100p">Ability:</label>
+				<select class="form-control" id="custom-skill-ability">
+					${abilityOptions.map(a => `<option value="${a.value}">${a.label}</option>`).join("")}
+				</select>
+			</div>
+			<div class="ve-flex-h-right">
+				<button class="ve-btn ve-btn-default mr-2" id="custom-skill-cancel">Cancel</button>
+				<button class="ve-btn ve-btn-primary" id="custom-skill-add">Add Skill</button>
+			</div>
+		</div>`.appendTo($modalInner);
+
+		const $name = $form.find("#custom-skill-name");
+		const $ability = $form.find("#custom-skill-ability");
+		const $addBtn = $form.find("#custom-skill-add");
+		const $cancelBtn = $form.find("#custom-skill-cancel");
+
+		$cancelBtn.on("click", () => doClose());
+
+		$addBtn.on("click", () => {
+			const name = $name.val().trim();
+			const ability = $ability.val();
+
+			if (!name) {
+				JqueryUtil.doToast({type: "warning", content: "Please enter a skill name."});
+				return;
+			}
+
+			// Check if skill already exists
+			const skillKey = name.toLowerCase().replace(/\s+/g, "");
+			const existingSkills = this.getSkillsList();
+			if (existingSkills.some(s => s.name.toLowerCase().replace(/\s+/g, "") === skillKey)) {
+				JqueryUtil.doToast({type: "warning", content: `A skill named "${name}" already exists.`});
+				return;
+			}
+
+			// Add the custom skill
+			this._state.addCustomSkill(name, ability);
+			this._renderSkills();
+			this._saveCurrentCharacter();
+
+			JqueryUtil.doToast({type: "success", content: `Added custom skill: ${name}`});
+			doClose();
+		});
+
+		// Allow Enter key to submit
+		$name.on("keypress", (e) => {
+			if (e.which === 13) $addBtn.click();
+		});
+
+		// Focus the name input
+		$name.focus();
+	}
+
+	/**
+	 * Show modal for editing proficiencies and languages
+	 */
+	async _showEditProficienciesModal () {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "Edit Proficiencies & Languages",
+			isMinHeight0: true,
+			isWidth100: true,
+			cbClose: () => {
+				this._renderProficiencies();
+				this._saveCurrentCharacter();
+			},
+		});
+
+		const profTypes = [
+			{key: "armor", label: "Armor Proficiencies", getter: "getArmorProficiencies", adder: "addArmorProficiency", remover: "removeArmorProficiency", placeholder: "e.g. Light Armor, Medium Armor"},
+			{key: "weapons", label: "Weapon Proficiencies", getter: "getWeaponProficiencies", adder: "addWeaponProficiency", remover: "removeWeaponProficiency", placeholder: "e.g. Longsword, Longbow"},
+			{key: "tools", label: "Tool Proficiencies", getter: "getToolProficiencies", adder: "addToolProficiency", remover: "removeToolProficiency", placeholder: "e.g. Thieves' Tools, Herbalism Kit"},
+			{key: "languages", label: "Languages", getter: "getLanguages", adder: "addLanguage", remover: "removeLanguage", placeholder: "e.g. Elvish, Dwarvish"},
+		];
+
+		const renderSection = (profType) => {
+			const items = this._state[profType.getter]();
+			const $section = $(`
+				<div class="charsheet__edit-prof-section mb-3">
+					<label class="ve-bold mb-1">${profType.label}</label>
+					<div class="charsheet__edit-prof-list mb-2" id="edit-prof-${profType.key}"></div>
+					<div class="ve-flex-v-center">
+						<input type="text" class="form-control form-control--minimal mr-2" id="edit-prof-${profType.key}-input" placeholder="${profType.placeholder}">
+						<button class="ve-btn ve-btn-primary ve-btn-xs" id="edit-prof-${profType.key}-add">Add</button>
+					</div>
+				</div>
+			`);
+
+			const $list = $section.find(`#edit-prof-${profType.key}`);
+			const renderList = () => {
+				const currentItems = this._state[profType.getter]();
+				$list.empty();
+				if (!currentItems.length) {
+					$list.append(`<span class="ve-muted">None</span>`);
+					return;
+				}
+				currentItems.forEach(item => {
+					const displayName = typeof item === "string" ? item : item.full || item.name || item;
+					const $badge = $(`
+						<span class="charsheet__edit-prof-badge">
+							${displayName}
+							<span class="charsheet__edit-prof-remove glyphicon glyphicon-remove" title="Remove"></span>
+						</span>
+					`);
+					$badge.find(".charsheet__edit-prof-remove").on("click", () => {
+						this._state[profType.remover](item);
+						renderList();
+					});
+					$list.append($badge);
+				});
+			};
+			renderList();
+
+			const $input = $section.find(`#edit-prof-${profType.key}-input`);
+			const $addBtn = $section.find(`#edit-prof-${profType.key}-add`);
+
+			const addItem = () => {
+				const value = $input.val().trim();
+				if (!value) return;
+				this._state[profType.adder](value);
+				$input.val("");
+				renderList();
+			};
+
+			$addBtn.on("click", addItem);
+			$input.on("keypress", (e) => {
+				if (e.which === 13) addItem();
+			});
+
+			return $section;
+		};
+
+		profTypes.forEach(pt => {
+			$modalInner.append(renderSection(pt));
+		});
+
+		$$`<div class="ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-primary">Done</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose());
+	}
+
+	/**
+	 * Show modal for adding a custom feature
+	 */
+	async _showAddCustomFeatureModal () {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "Add Custom Feature",
+			isMinHeight0: true,
+		});
+
+		const $form = $$`<div class="ve-flex-col">
+			<div class="ve-flex-v-center mb-2">
+				<label class="mr-2 w-100p">Name:</label>
+				<input type="text" class="form-control" id="custom-feature-name" placeholder="e.g. Dark Vision, Lucky">
+			</div>
+			<div class="ve-flex-v-center mb-2">
+				<label class="mr-2 w-100p">Source:</label>
+				<input type="text" class="form-control" id="custom-feature-source" placeholder="e.g. Race, Feat, Item" value="Custom">
+			</div>
+			<div class="mb-2">
+				<label class="mb-1">Description (optional):</label>
+				<textarea class="form-control" id="custom-feature-desc" rows="4" placeholder="Enter feature description..."></textarea>
+			</div>
+			<div class="ve-flex-h-right">
+				<button class="ve-btn ve-btn-default mr-2" id="custom-feature-cancel">Cancel</button>
+				<button class="ve-btn ve-btn-primary" id="custom-feature-add">Add Feature</button>
+			</div>
+		</div>`.appendTo($modalInner);
+
+		const $name = $form.find("#custom-feature-name");
+		const $source = $form.find("#custom-feature-source");
+		const $desc = $form.find("#custom-feature-desc");
+		const $addBtn = $form.find("#custom-feature-add");
+		const $cancelBtn = $form.find("#custom-feature-cancel");
+
+		$cancelBtn.on("click", () => doClose());
+
+		$addBtn.on("click", () => {
+			const name = $name.val().trim();
+			const source = $source.val().trim() || "Custom";
+			const description = $desc.val().trim();
+
+			if (!name) {
+				JqueryUtil.doToast({type: "warning", content: "Please enter a feature name."});
+				return;
+			}
+
+			// Add the custom feature
+			this._state.addFeature({
+				name,
+				source,
+				description: description || null,
+				featureType: "Custom",
+				isCustom: true,
+			});
+
+			// Re-render features
+			if (this._features) this._features.render();
+			this._renderCustomFeatures();
+			this._saveCurrentCharacter();
+
+			JqueryUtil.doToast({type: "success", content: `Added custom feature: ${name}`});
+			doClose();
+		});
+
+		// Allow Enter in name to submit
+		$name.on("keypress", (e) => {
+			if (e.which === 13) $addBtn.click();
+		});
+
+		$name.focus();
+	}
+
+	/**
+	 * Render custom features section
+	 */
+	_renderCustomFeatures () {
+		const $container = $("#charsheet-custom-features");
+		$container.empty();
+
+		const features = this._state.getFeatures().filter(f => f.isCustom || f.featureType === "Custom");
+
+		if (!features.length) {
+			$container.append(`<div class="ve-muted ve-text-center py-2">No custom features added</div>`);
+			return;
+		}
+
+		features.forEach(feature => {
+			const $feature = $(`
+				<div class="charsheet__feature" data-feature-id="${feature.id}">
+					<div class="charsheet__feature-header">
+						<span class="charsheet__feature-toggle glyphicon glyphicon-chevron-down"></span>
+						<span class="charsheet__feature-name">${feature.name}</span>
+						<span class="charsheet__feature-source ve-muted">(${feature.source})</span>
+						<div class="charsheet__feature-actions">
+							<span class="charsheet__feature-remove glyphicon glyphicon-trash" title="Remove feature"></span>
+						</div>
+					</div>
+					<div class="charsheet__feature-body" style="display: none;">
+						${feature.description ? `<div class="charsheet__feature-desc">${Renderer.get().render(feature.description)}</div>` : `<div class="ve-muted">No description</div>`}
+					</div>
+				</div>
+			`);
+
+			$feature.find(".charsheet__feature-toggle, .charsheet__feature-header").on("click", (e) => {
+				if ($(e.target).closest(".charsheet__feature-actions").length) return;
+				const $body = $feature.find(".charsheet__feature-body");
+				const $toggle = $feature.find(".charsheet__feature-toggle");
+				$body.slideToggle(200);
+				$toggle.toggleClass("glyphicon-chevron-down glyphicon-chevron-up");
+			});
+
+			$feature.find(".charsheet__feature-remove").on("click", () => {
+				this._state.removeFeature(feature.id);
+				this._renderCustomFeatures();
+				this._saveCurrentCharacter();
+			});
+
+			$container.append($feature);
+		});
 	}
 	// #endregion
 }
