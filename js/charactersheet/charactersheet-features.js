@@ -920,7 +920,7 @@ class CharacterSheetFeatures {
 		// Tools
 		const toolProfs = this._state.getToolProficiencies();
 		if (toolProfs.length) {
-			$("#charsheet-tool-proficiencies").html(this._renderInlineList(toolProfs));
+			$("#charsheet-tool-proficiencies").html(this._renderToolProficiencies(toolProfs));
 		} else {
 			$("#charsheet-tool-proficiencies").text("None");
 		}
@@ -930,6 +930,23 @@ class CharacterSheetFeatures {
 		$("#charsheet-save-proficiencies").text(
 			saveProfs.length ? saveProfs.map(s => Parser.attAbvToFull(s)).join(", ") : "None",
 		);
+	}
+
+	/**
+	 * Render tool proficiencies with hover links
+	 */
+	_renderToolProficiencies (tools) {
+		return tools.map(tool => {
+			// Try to create a hover link for the tool
+			try {
+				const toolLower = tool.toLowerCase();
+				// Use {@item} tag format for proper rendering
+				return Renderer.get().render(`{@item ${toolLower}}`);
+			} catch (e) {
+				// Fallback to plain text if hover fails
+				return tool;
+			}
+		}).join(", ");
 	}
 
 	_renderInlineList (list) {

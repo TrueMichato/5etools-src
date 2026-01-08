@@ -266,6 +266,11 @@ class CharacterSheetState {
 
 	getRaceName () {
 		if (!this._data.race) return null;
+		// For merged races (with _baseName), the name already includes the subrace
+		if (this._data.race._baseName) {
+			return this._data.race.name;
+		}
+		// For non-merged races, append subrace if present
 		const subrace = this._data.subrace?.name ? ` (${this._data.subrace.name})` : "";
 		return `${this._data.race.name}${subrace}`;
 	}
@@ -642,14 +647,40 @@ class CharacterSheetState {
 		};
 
 		const ability = skillAbilities[skill] || "str";
+		return this.getSkillModWithAbility(skill, ability);
+	}
+
+	/**
+	 * Get skill modifier with a specific ability score (for alternate ability skill checks)
+	 * @param {string} skill - The skill key (e.g., "stealth", "athletics")
+	 * @param {string} ability - The ability to use (e.g., "dex", "int", "str")
+	 * @returns {number} The total skill modifier
+	 */
+	getSkillModWithAbility (skill, ability) {
 		const mod = this.getAbilityMod(ability);
 		const profLevel = this.getSkillProficiency(skill);
-		const profBonus = profLevel * this.getProficiencyBonus();
+		
+		let profBonus = profLevel * this.getProficiencyBonus();
+		
+		// Jack of All Trades: add half proficiency bonus to skills you're not proficient in
+		if (profLevel === 0 && this.hasJackOfAllTrades()) {
+			profBonus = Math.floor(this.getProficiencyBonus() / 2);
+		}
+		
 		const custom = this._data.customModifiers.skills[skill] || 0;
 		// Add item bonuses (ability check bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.abilityCheck || 0;
 
 		return mod + profBonus + custom + itemBonus;
+	}
+
+	/**
+	 * Check if the character has the Jack of All Trades feature
+	 */
+	hasJackOfAllTrades () {
+		return this._data.features.some(f => 
+			f.name?.toLowerCase().includes("jack of all trades")
+		);
 	}
 	// #endregion
 
@@ -774,7 +805,14 @@ class CharacterSheetState {
 
 	// #region Initiative
 	getInitiative () {
-		return this.getAbilityMod("dex") + (this._data.customModifiers.initiative || 0);
+		let initiative = this.getAbilityMod("dex") + (this._data.customModifiers.initiative || 0);
+		
+		// Jack of All Trades adds half proficiency to initiative (it's a DEX ability check)
+		if (this.hasJackOfAllTrades()) {
+			initiative += Math.floor(this.getProficiencyBonus() / 2);
+		}
+		
+		return initiative;
 	}
 	// #endregion
 
@@ -1575,6 +1613,23 @@ class CharacterSheetState {
 	}
 
 	addFeature (feature) {
+		// Deduplicate: don't add if feature with same name, source, and className/level combo exists
+		const isDuplicate = this._data.features.some(f => {
+			if (f.name !== feature.name) return false;
+			if (f.source !== feature.source) return false;
+			// For class features, also check className and level
+			if (feature.className) {
+				if (f.className !== feature.className) return false;
+				if (f.level !== feature.level) return false;
+			}
+			return true;
+		});
+
+		if (isDuplicate) {
+			console.log("[CharSheet State] Skipping duplicate feature:", feature.name);
+			return;
+		}
+
 		this._data.features.push({
 			id: CryptUtil.uid(),
 			...feature,
@@ -1691,13 +1746,6 @@ class CharacterSheetState {
 		if (this._data.exhaustion > 0) {
 			this._data.exhaustion = Math.max(0, this._data.exhaustion - 1);
 		}
-	}
-	// #endregion
-
-	// #region Character List
-	getAllCharacters () {
-		// This should be loaded from storage externally
-		return [];
 	}
 	// #endregion
 }
