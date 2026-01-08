@@ -58,6 +58,7 @@ class CharacterSheetState {
 			// Proficiencies
 			saveProficiencies: [], // ["str", "con"]
 			skillProficiencies: {}, // {athletics: 1, stealth: 2} (1 = prof, 2 = expertise)
+			customSkills: [], // [{name, ability}] - user-added custom skills
 			armorProficiencies: [],
 			weaponProficiencies: [],
 			toolProficiencies: [],
@@ -646,7 +647,16 @@ class CharacterSheetState {
 			survival: "wis",
 		};
 
-		const ability = skillAbilities[skill] || "str";
+		let ability = skillAbilities[skill];
+
+		// If not a standard skill, check custom skills
+		if (!ability) {
+			const customSkill = this._data.customSkills.find(s => 
+				s.name.toLowerCase().replace(/\s+/g, "") === skill
+			);
+			ability = customSkill?.ability || "str";
+		}
+
 		return this.getSkillModWithAbility(skill, ability);
 	}
 
@@ -681,6 +691,45 @@ class CharacterSheetState {
 		return this._data.features.some(f => 
 			f.name?.toLowerCase().includes("jack of all trades")
 		);
+	}
+
+	/**
+	 * Add a custom skill
+	 * @param {string} name - The skill name
+	 * @param {string} ability - The associated ability (str, dex, con, int, wis, cha)
+	 */
+	addCustomSkill (name, ability) {
+		const key = name.toLowerCase().replace(/\s+/g, "");
+		// Don't add if already exists
+		if (this._data.customSkills.some(s => s.name.toLowerCase().replace(/\s+/g, "") === key)) {
+			return false;
+		}
+		this._data.customSkills.push({name, ability});
+		return true;
+	}
+
+	/**
+	 * Remove a custom skill
+	 * @param {string} name - The skill name to remove
+	 */
+	removeCustomSkill (name) {
+		const key = name.toLowerCase().replace(/\s+/g, "");
+		const idx = this._data.customSkills.findIndex(s => s.name.toLowerCase().replace(/\s+/g, "") === key);
+		if (idx >= 0) {
+			this._data.customSkills.splice(idx, 1);
+			// Also remove proficiency if set
+			delete this._data.skillProficiencies[key];
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Get all custom skills
+	 * @returns {Array} Array of {name, ability} objects
+	 */
+	getCustomSkills () {
+		return this._data.customSkills || [];
 	}
 	// #endregion
 
@@ -838,10 +887,20 @@ class CharacterSheetState {
 		}
 	}
 
+	removeArmorProficiency (armor) {
+		const idx = this._data.armorProficiencies.indexOf(armor);
+		if (idx >= 0) this._data.armorProficiencies.splice(idx, 1);
+	}
+
 	addWeaponProficiency (weapon) {
 		if (!this._data.weaponProficiencies.includes(weapon)) {
 			this._data.weaponProficiencies.push(weapon);
 		}
+	}
+
+	removeWeaponProficiency (weapon) {
+		const idx = this._data.weaponProficiencies.indexOf(weapon);
+		if (idx >= 0) this._data.weaponProficiencies.splice(idx, 1);
 	}
 
 	addToolProficiency (tool) {
@@ -852,10 +911,21 @@ class CharacterSheetState {
 		}
 	}
 
+	removeToolProficiency (tool) {
+		const toolLower = tool.toLowerCase();
+		const idx = this._data.toolProficiencies.findIndex(t => t.toLowerCase() === toolLower);
+		if (idx >= 0) this._data.toolProficiencies.splice(idx, 1);
+	}
+
 	addLanguage (language) {
 		if (!this._data.languages.includes(language)) {
 			this._data.languages.push(language);
 		}
+	}
+
+	removeLanguage (language) {
+		const idx = this._data.languages.indexOf(language);
+		if (idx >= 0) this._data.languages.splice(idx, 1);
 	}
 	// #endregion
 

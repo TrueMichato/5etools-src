@@ -1716,6 +1716,120 @@
 	margin-left: 1rem;
 }
 
+/* Custom Skills */
+.charsheet__skill-row--custom {
+	background: rgba(76, 175, 80, 0.08);
+	border-left: 2px solid #4caf50;
+	padding-left: calc(0.25rem - 2px);
+}
+
+.charsheet__skill-row--custom:hover {
+	background: rgba(76, 175, 80, 0.15);
+}
+
+.charsheet__skill-delete {
+	margin-left: auto;
+	padding: 0 0.25rem;
+	color: var(--rgb-text-muted, #999);
+	cursor: pointer;
+	font-size: 1.1rem;
+	line-height: 1;
+	opacity: 0.6;
+	transition: opacity 0.15s, color 0.15s;
+}
+
+.charsheet__skill-delete:hover {
+	opacity: 1;
+	color: #dc3545;
+}
+
+.charsheet__skill-add {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.35rem 0.5rem;
+	margin-top: 0.5rem;
+	border: 1px dashed var(--rgb-border-grey, #444);
+	border-radius: 4px;
+	cursor: pointer;
+	color: var(--rgb-text-muted, #999);
+	transition: all 0.15s;
+}
+
+.charsheet__skill-add:hover {
+	border-color: #4caf50;
+	color: #4caf50;
+	background: rgba(76, 175, 80, 0.1);
+}
+
+.charsheet__skill-add-icon {
+	font-size: 1.2rem;
+	margin-right: 0.5rem;
+	font-weight: bold;
+}
+
+.charsheet__skill-add-text {
+	font-size: 0.85rem;
+}
+
+/* Section Edit/Add Buttons */
+.charsheet__section-edit,
+.charsheet__section-add {
+	float: right;
+	cursor: pointer;
+	opacity: 0.5;
+	font-size: 0.8rem;
+	transition: opacity 0.15s;
+}
+
+.charsheet__section-edit:hover,
+.charsheet__section-add:hover {
+	opacity: 1;
+}
+
+.charsheet__section-add {
+	color: #4caf50;
+}
+
+/* Edit Proficiencies Modal */
+.charsheet__edit-prof-section {
+	border-bottom: 1px solid var(--rgb-border-grey, #444);
+	padding-bottom: 0.75rem;
+}
+
+.charsheet__edit-prof-section:last-child {
+	border-bottom: none;
+}
+
+.charsheet__edit-prof-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.charsheet__edit-prof-badge {
+	display: inline-flex;
+	align-items: center;
+	background: var(--rgb-bg-alt, #2a2a2a);
+	border: 1px solid var(--rgb-border-grey, #444);
+	border-radius: 3px;
+	padding: 0.25rem 0.5rem;
+	font-size: 0.85rem;
+}
+
+.charsheet__edit-prof-remove {
+	margin-left: 0.5rem;
+	cursor: pointer;
+	opacity: 0.5;
+	font-size: 0.7rem;
+	transition: opacity 0.15s, color 0.15s;
+}
+
+.charsheet__edit-prof-remove:hover {
+	opacity: 1;
+	color: #dc3545;
+}
+
 /* Level Up Modal */
 .charsheet__levelup-body {
 	max-height: 60vh;
