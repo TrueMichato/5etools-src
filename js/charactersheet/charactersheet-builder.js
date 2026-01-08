@@ -20,6 +20,8 @@ class CharacterSheetBuilder {
 		this._selectedSkills = []; // For class skill proficiency choices
 		this._selectedAbilityBonuses = {}; // For background ASI choices
 		this._selectedOptionalFeatures = {}; // For class optional features like invocations {featureType: [features]}
+		this._selectedToolProficiencies = []; // For background tool proficiency choices
+		this._selectedLanguages = []; // For background language choices
 
 		this._init();
 	}
@@ -712,25 +714,45 @@ class CharacterSheetBuilder {
 			});
 		}
 
-		// Tool proficiencies
+		// Tool proficiencies - fixed ones from background
 		if (this._selectedBackground.toolProficiencies) {
 			this._selectedBackground.toolProficiencies.forEach(toolSet => {
-				Object.keys(toolSet).forEach(tool => {
-					if (tool !== "choose" && tool !== "any") {
-						this._state.addToolProficiency(tool.toTitleCase());
+				Object.entries(toolSet).forEach(([key, value]) => {
+					// Only add fixed tool proficiencies here (not choose/any)
+					if (key !== "choose" && key !== "any" && key !== "anyArtisansTool" && value === true) {
+						this._state.addToolProficiency(key.toTitleCase());
 					}
 				});
 			});
 		}
 
-		// Languages
+		// Tool proficiencies - choices made by user
+		if (this._selectedToolProficiencies?.length) {
+			this._selectedToolProficiencies.forEach(choice => {
+				if (choice.tool) {
+					this._state.addToolProficiency(choice.tool.toTitleCase());
+				}
+			});
+		}
+
+		// Languages - fixed ones from background
 		if (this._selectedBackground.languageProficiencies) {
 			this._selectedBackground.languageProficiencies.forEach(langSet => {
-				Object.keys(langSet).forEach(lang => {
-					if (lang !== "anyStandard" && lang !== "any") {
-						this._state.addLanguage(lang.toTitleCase());
+				Object.entries(langSet).forEach(([key, value]) => {
+					// Only add fixed language proficiencies here (not anyStandard/any)
+					if (key !== "anyStandard" && key !== "any" && value === true) {
+						this._state.addLanguage(key.toTitleCase());
 					}
 				});
+			});
+		}
+
+		// Languages - choices made by user
+		if (this._selectedLanguages?.length) {
+			this._selectedLanguages.forEach(choice => {
+				if (choice.language) {
+					this._state.addLanguage(choice.language);
+				}
 			});
 		}
 
@@ -923,6 +945,53 @@ class CharacterSheetBuilder {
 		// Get races filtered by allowed sources
 		const races = this._page.filterByAllowedSources(this._page.getRaces());
 
+		// Group races by base name - races with _baseName are subraces
+		// Group key is "baseName|baseSource" for subraces, or "name|source" for standalone races
+		const raceGroups = new Map();
+		
+		races.forEach(race => {
+			if (race._baseName && race._baseSource) {
+				// This is a subrace - group under the base race
+				const groupKey = `${race._baseName}|${race._baseSource}`;
+				if (!raceGroups.has(groupKey)) {
+					raceGroups.set(groupKey, {
+						baseName: race._baseName,
+						baseSource: race._baseSource,
+						subraces: [],
+						isBaseRace: false,
+					});
+				}
+				raceGroups.get(groupKey).subraces.push(race);
+			} else if (race._isBaseRace) {
+				// This is a base race entry (shown when isAddBaseRaces is true)
+				const groupKey = `${race._rawName || race.name}|${race.source}`;
+				if (!raceGroups.has(groupKey)) {
+					raceGroups.set(groupKey, {
+						baseName: race._rawName || race.name,
+						baseSource: race.source,
+						subraces: [],
+						isBaseRace: true,
+						baseRaceData: race,
+					});
+				} else {
+					raceGroups.get(groupKey).isBaseRace = true;
+					raceGroups.get(groupKey).baseRaceData = race;
+				}
+			} else {
+				// Standalone race without subraces
+				const groupKey = `${race.name}|${race.source}`;
+				if (!raceGroups.has(groupKey)) {
+					raceGroups.set(groupKey, {
+						baseName: race.name,
+						baseSource: race.source,
+						subraces: [],
+						isBaseRace: false,
+						standaloneRace: race,
+					});
+				}
+			}
+		});
+
 		const $container = $(`
 			<div class="charsheet__builder-selection">
 				<div class="charsheet__builder-list">
@@ -943,33 +1012,59 @@ class CharacterSheetBuilder {
 		const $preview = $("#builder-race-preview");
 		const $search = $("#builder-race-search");
 
-		// Populate race list
+		// Populate race list - show grouped races
 		const renderRaceList = (filter = "") => {
 			$list.empty();
 			const filterLower = filter.toLowerCase();
 
-			races
-				.filter(race => !filter || race.name.toLowerCase().includes(filterLower))
-				.sort((a, b) => a.name.localeCompare(b.name))
-				.forEach(race => {
-					const isSelected = this._selectedRace?.name === race.name && this._selectedRace?.source === race.source;
-					const $item = $(`
-						<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
-							<span class="charsheet__builder-list-item-name">${race.name}</span>
-							<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(race.source)}</span>
-						</div>
-					`);
+			// Convert map to array and sort by base name
+			const sortedGroups = Array.from(raceGroups.entries())
+				.filter(([key, group]) => {
+					if (!filter) return true;
+					// Search in base name and all subrace names
+					if (group.baseName.toLowerCase().includes(filterLower)) return true;
+					if (group.subraces.some(sr => sr.name.toLowerCase().includes(filterLower))) return true;
+					return false;
+				})
+				.sort((a, b) => a[1].baseName.localeCompare(b[1].baseName));
 
-					$item.on("click", () => {
-						$list.find(".charsheet__builder-list-item").removeClass("active");
-						$item.addClass("active");
-						this._selectedRace = race;
+			sortedGroups.forEach(([groupKey, group]) => {
+				const hasSubraces = group.subraces.length > 0;
+				const displayName = group.baseName;
+				
+				// Check if this group is selected
+				const isSelected = this._selectedRace && (
+					(this._selectedRace._baseName === group.baseName && this._selectedRace._baseSource === group.baseSource) ||
+					(this._selectedRace.name === group.baseName && this._selectedRace.source === group.baseSource && !this._selectedRace._baseName)
+				);
+
+				const subraceCount = hasSubraces ? ` (${group.subraces.length} subraces)` : "";
+				const $item = $(`
+					<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
+						<span class="charsheet__builder-list-item-name">${displayName}${subraceCount}</span>
+						<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(group.baseSource)}</span>
+					</div>
+				`);
+
+				$item.on("click", () => {
+					$list.find(".charsheet__builder-list-item").removeClass("active");
+					$item.addClass("active");
+					
+					if (hasSubraces) {
+						// Show subrace selection in preview
+						this._selectedRace = null;
 						this._selectedSubrace = null;
-						this._renderRacePreview($preview, race);
-					});
-
-					$list.append($item);
+						this._renderRaceGroupPreview($preview, group);
+					} else {
+						// Standalone race - select directly
+						this._selectedRace = group.standaloneRace;
+						this._selectedSubrace = null;
+						this._renderRacePreview($preview, group.standaloneRace);
+					}
 				});
+
+				$list.append($item);
+			});
 		};
 
 		$search.on("input", (e) => renderRaceList(e.target.value));
@@ -977,8 +1072,153 @@ class CharacterSheetBuilder {
 
 		// If race already selected, show preview
 		if (this._selectedRace) {
-			this._renderRacePreview($preview, this._selectedRace);
+			// Find the group this race belongs to
+			const groupKey = this._selectedRace._baseName 
+				? `${this._selectedRace._baseName}|${this._selectedRace._baseSource}`
+				: `${this._selectedRace.name}|${this._selectedRace.source}`;
+			const group = raceGroups.get(groupKey);
+			
+			if (group && group.subraces.length > 0) {
+				this._renderRaceGroupPreview($preview, group);
+			} else {
+				this._renderRacePreview($preview, this._selectedRace);
+			}
 		}
+	}
+
+	/**
+	 * Render preview for a race group with subrace selection
+	 */
+	_renderRaceGroupPreview ($preview, group) {
+		$preview.empty();
+
+		const $content = $(`
+			<div>
+				<h4>${group.baseName}</h4>
+				<p class="ve-muted">${Parser.sourceJsonToFull(group.baseSource)}</p>
+			</div>
+		`);
+
+		// Subrace selection dropdown
+		const $subraceSection = $(`
+			<div class="mt-3">
+				<strong>Select Subrace:</strong>
+				<select class="form-control form-control--minimal mt-1" id="builder-subrace-select">
+					<option value="">-- Choose a subrace --</option>
+				</select>
+			</div>
+		`);
+
+		const $select = $subraceSection.find("select");
+		
+		// Sort subraces alphabetically
+		const sortedSubraces = [...group.subraces].sort((a, b) => a.name.localeCompare(b.name));
+		
+		sortedSubraces.forEach((subrace, idx) => {
+			// Extract just the subrace name part from "BaseName (SubraceName)"
+			const subraceName = this._extractSubraceName(subrace.name, group.baseName);
+			const sourceAbv = Parser.sourceJsonToAbv(subrace.source);
+			$select.append(`<option value="${idx}" data-source="${subrace.source}">${subraceName} (${sourceAbv})</option>`);
+		});
+
+		// Container for subrace details
+		const $detailsContainer = $(`<div id="builder-subrace-details" class="mt-3"></div>`);
+
+		$select.on("change", (e) => {
+			const idx = e.target.value;
+			if (idx !== "") {
+				const selectedSubrace = sortedSubraces[parseInt(idx)];
+				this._selectedRace = selectedSubrace;
+				// Don't set _selectedSubrace for merged races - all subrace data is already in the race object
+				this._selectedSubrace = null;
+				this._renderSubraceDetails($detailsContainer, selectedSubrace, group.baseName);
+			} else {
+				this._selectedRace = null;
+				this._selectedSubrace = null;
+				$detailsContainer.empty();
+			}
+		});
+
+		// Pre-select if already chosen
+		if (this._selectedRace) {
+			const idx = sortedSubraces.findIndex(sr => 
+				sr.name === this._selectedRace.name && sr.source === this._selectedRace.source
+			);
+			if (idx >= 0) {
+				$select.val(idx);
+				this._renderSubraceDetails($detailsContainer, sortedSubraces[idx], group.baseName);
+			}
+		}
+
+		$content.append($subraceSection);
+		$content.append($detailsContainer);
+		$preview.append($content);
+	}
+
+	/**
+	 * Extract subrace name from full race name
+	 * e.g., "Elf (High Elf)" -> "High Elf", "Dwarf (Hill Dwarf)" -> "Hill Dwarf"
+	 */
+	_extractSubraceName (fullName, baseName) {
+		const match = fullName.match(/\(([^)]+)\)$/);
+		if (match) return match[1];
+		// Fallback: remove base name prefix
+		if (fullName.startsWith(baseName)) {
+			return fullName.substring(baseName.length).trim().replace(/^\(|\)$/g, "").trim() || fullName;
+		}
+		return fullName;
+	}
+
+	/**
+	 * Render details for a selected subrace
+	 */
+	_renderSubraceDetails ($container, race, baseName) {
+		$container.empty();
+
+		const subraceName = this._extractSubraceName(race.name, baseName);
+		
+		const $details = $(`<div class="charsheet__builder-subrace-details"></div>`);
+		
+		$details.append(`<h5>${subraceName}</h5>`);
+
+		// Ability scores
+		if (race.ability?.length) {
+			const abilityStr = race.ability.map(a => {
+				return Object.entries(a)
+					.filter(([k]) => Parser.ABIL_ABVS.includes(k))
+					.map(([k, v]) => `${k.toUpperCase()} +${v}`)
+					.join(", ");
+			}).join("; ");
+
+			if (abilityStr) {
+				$details.append(`<p><strong>Ability Scores:</strong> ${abilityStr}</p>`);
+			}
+		}
+
+		// Speed
+		if (race.speed) {
+			const speedStr = typeof race.speed === "number" ? `${race.speed} ft.` : `${race.speed.walk || 30} ft.`;
+			$details.append(`<p><strong>Speed:</strong> ${speedStr}</p>`);
+		}
+
+		// Size
+		if (race.size) {
+			const sizeStr = race.size.map(s => Parser.sizeAbvToFull(s)).join(" or ");
+			$details.append(`<p><strong>Size:</strong> ${sizeStr}</p>`);
+		}
+
+		// Traits
+		if (race.entries) {
+			const $traits = $(`<div class="mt-2"><strong>Traits:</strong></div>`);
+			race.entries.forEach(entry => {
+				if (typeof entry === "object" && entry.name) {
+					$traits.append(`<p><em>${entry.name}.</em> ${Renderer.get().render({entries: entry.entries || []})}</p>`);
+				}
+			});
+			$details.append($traits);
+		}
+
+		$container.append($details);
 	}
 
 	_renderRacePreview ($preview, race) {
@@ -1694,6 +1934,9 @@ class CharacterSheetBuilder {
 						$list.find(".charsheet__builder-list-item").removeClass("active");
 						$item.addClass("active");
 						this._selectedBackground = bg;
+						// Reset tool and language choices when changing background
+						this._selectedToolProficiencies = [];
+						this._selectedLanguages = [];
 						this._renderBackgroundPreview($preview, bg);
 					});
 
@@ -1770,35 +2013,23 @@ class CharacterSheetBuilder {
 			$content.append($asiSection);
 		}
 
-		// Skills
+		// Skills - use the built-in summary renderer
 		if (bg.skillProficiencies) {
-			const skills = bg.skillProficiencies.flatMap(sp =>
-				Object.keys(sp).filter(k => k !== "choose" && k !== "any").map(s => s.toTitleCase()),
-			);
-			if (skills.length) {
-				$content.append(`<p><strong>Skills:</strong> ${skills.join(", ")}</p>`);
+			const {summary: skillSummary} = Renderer.generic.getSkillSummary({
+				skillProfs: bg.skillProficiencies, 
+				skillToolLanguageProfs: bg.skillToolLanguageProficiencies,
+				isShort: false,
+			});
+			if (skillSummary) {
+				$content.append(`<p><strong>Skills:</strong> ${Renderer.get().render(skillSummary)}</p>`);
 			}
 		}
 
-		// Tools
-		if (bg.toolProficiencies) {
-			const tools = bg.toolProficiencies.flatMap(tp =>
-				Object.keys(tp).filter(k => k !== "choose" && k !== "any").map(t => t.toTitleCase()),
-			);
-			if (tools.length) {
-				$content.append(`<p><strong>Tools:</strong> ${tools.join(", ")}</p>`);
-			}
-		}
+		// Tools - show fixed tools and render choice UI if needed
+		this._renderBackgroundToolProficiencies($content, bg);
 
-		// Languages
-		if (bg.languageProficiencies) {
-			const langs = bg.languageProficiencies.flatMap(lp =>
-				Object.keys(lp).filter(k => k !== "anyStandard" && k !== "any").map(l => l.toTitleCase()),
-			);
-			if (langs.length) {
-				$content.append(`<p><strong>Languages:</strong> ${langs.join(", ")}</p>`);
-			}
-		}
+		// Languages - show fixed languages and render choice UI if needed  
+		this._renderBackgroundLanguages($content, bg);
 
 		// Equipment
 		if (bg.startingEquipment) {
@@ -1817,6 +2048,251 @@ class CharacterSheetBuilder {
 		}
 
 		$preview.append($content);
+	}
+
+	/**
+	 * Render tool proficiencies section with choice UI when needed
+	 */
+	_renderBackgroundToolProficiencies ($content, bg) {
+		if (!bg.toolProficiencies?.length) return;
+
+		const $toolSection = $(`<div class="charsheet__builder-tool-profs mb-2"></div>`);
+		
+		// Collect fixed tools and choice options
+		const fixedTools = [];
+		const choiceOptions = [];
+		let anyToolCount = 0;
+		let anyArtisanCount = 0;
+
+		bg.toolProficiencies.forEach(toolSet => {
+			Object.entries(toolSet).forEach(([key, value]) => {
+				if (key === "choose" && value.from) {
+					choiceOptions.push({
+						from: value.from,
+						count: value.count || 1,
+					});
+				} else if (key === "any") {
+					anyToolCount += (typeof value === "number" ? value : 1);
+				} else if (key === "anyArtisansTool") {
+					anyArtisanCount += (typeof value === "number" ? value : 1);
+				} else if (value === true) {
+					fixedTools.push(key);
+				}
+			});
+		});
+
+		// Show fixed tools
+		if (fixedTools.length) {
+			$toolSection.append(`<p><strong>Tools:</strong> ${fixedTools.map(t => t.toTitleCase()).join(", ")}</p>`);
+		}
+
+		// Render choice dropdowns for "choose from" options
+		choiceOptions.forEach((choice, choiceIdx) => {
+			const $choiceSection = $(`<div class="charsheet__builder-tool-choice mt-1"></div>`);
+			$choiceSection.append(`<p class="mb-1"><strong>Choose ${choice.count} tool${choice.count > 1 ? "s" : ""}:</strong></p>`);
+			
+			for (let i = 0; i < choice.count; i++) {
+				const selectId = `bg-tool-choice-${choiceIdx}-${i}`;
+				const $select = $(`
+					<select class="form-control form-control--minimal mb-1" id="${selectId}">
+						<option value="">-- Select Tool --</option>
+					</select>
+				`);
+				
+				choice.from.forEach(tool => {
+					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+				});
+
+				// Pre-select if already chosen
+				const existingChoice = this._selectedToolProficiencies.find(t => t.choiceIdx === choiceIdx && t.selectIdx === i);
+				if (existingChoice) {
+					$select.val(existingChoice.tool);
+				}
+
+				$select.on("change", (e) => {
+					// Remove old choice for this select
+					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
+						t => !(t.choiceIdx === choiceIdx && t.selectIdx === i)
+					);
+					// Add new choice
+					if (e.target.value) {
+						this._selectedToolProficiencies.push({
+							choiceIdx,
+							selectIdx: i,
+							tool: e.target.value,
+						});
+					}
+				});
+
+				$choiceSection.append($select);
+			}
+			$toolSection.append($choiceSection);
+		});
+
+		// Render "any tool" selection
+		if (anyToolCount > 0) {
+			const $anySection = $(`<div class="charsheet__builder-tool-any mt-1"></div>`);
+			$anySection.append(`<p class="mb-1"><strong>Choose ${anyToolCount} tool${anyToolCount > 1 ? "s" : ""} (any):</strong></p>`);
+			
+			const allTools = Renderer.generic.FEATURE__TOOLS_ALL;
+			for (let i = 0; i < anyToolCount; i++) {
+				const selectId = `bg-tool-any-${i}`;
+				const $select = $(`
+					<select class="form-control form-control--minimal mb-1" id="${selectId}">
+						<option value="">-- Select Tool --</option>
+					</select>
+				`);
+				
+				allTools.forEach(tool => {
+					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+				});
+
+				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && !t.isArtisan);
+				if (existingChoice) {
+					$select.val(existingChoice.tool);
+				}
+
+				$select.on("change", (e) => {
+					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
+						t => !(t.anyIdx === i && !t.isArtisan)
+					);
+					if (e.target.value) {
+						this._selectedToolProficiencies.push({
+							anyIdx: i,
+							tool: e.target.value,
+							isArtisan: false,
+						});
+					}
+				});
+
+				$anySection.append($select);
+			}
+			$toolSection.append($anySection);
+		}
+
+		// Render "any artisan's tool" selection
+		if (anyArtisanCount > 0) {
+			const $artisanSection = $(`<div class="charsheet__builder-tool-artisan mt-1"></div>`);
+			$artisanSection.append(`<p class="mb-1"><strong>Choose ${anyArtisanCount} artisan's tool${anyArtisanCount > 1 ? "s" : ""}:</strong></p>`);
+			
+			const artisanTools = Renderer.generic.FEATURE__TOOLS_ARTISANS;
+			for (let i = 0; i < anyArtisanCount; i++) {
+				const selectId = `bg-tool-artisan-${i}`;
+				const $select = $(`
+					<select class="form-control form-control--minimal mb-1" id="${selectId}">
+						<option value="">-- Select Artisan's Tool --</option>
+					</select>
+				`);
+				
+				artisanTools.forEach(tool => {
+					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+				});
+
+				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isArtisan);
+				if (existingChoice) {
+					$select.val(existingChoice.tool);
+				}
+
+				$select.on("change", (e) => {
+					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
+						t => !(t.anyIdx === i && t.isArtisan)
+					);
+					if (e.target.value) {
+						this._selectedToolProficiencies.push({
+							anyIdx: i,
+							tool: e.target.value,
+							isArtisan: true,
+						});
+					}
+				});
+
+				$artisanSection.append($select);
+			}
+			$toolSection.append($artisanSection);
+		}
+
+		if (fixedTools.length || choiceOptions.length || anyToolCount || anyArtisanCount) {
+			$content.append($toolSection);
+		}
+	}
+
+	/**
+	 * Render language proficiencies section with choice UI when needed
+	 */
+	_renderBackgroundLanguages ($content, bg) {
+		if (!bg.languageProficiencies?.length) return;
+
+		const $langSection = $(`<div class="charsheet__builder-lang-profs mb-2"></div>`);
+		
+		// Collect fixed languages and choice options
+		const fixedLangs = [];
+		let anyStandardCount = 0;
+		let anyCount = 0;
+
+		bg.languageProficiencies.forEach(langSet => {
+			Object.entries(langSet).forEach(([key, value]) => {
+				if (key === "anyStandard") {
+					anyStandardCount += (typeof value === "number" ? value : 1);
+				} else if (key === "any") {
+					anyCount += (typeof value === "number" ? value : 1);
+				} else if (value === true) {
+					fixedLangs.push(key);
+				}
+			});
+		});
+
+		// Show fixed languages
+		if (fixedLangs.length) {
+			$langSection.append(`<p><strong>Languages:</strong> ${fixedLangs.map(l => l.toTitleCase()).join(", ")}</p>`);
+		}
+
+		// Render language choice dropdowns
+		const totalLangChoices = anyStandardCount + anyCount;
+		if (totalLangChoices > 0) {
+			const $choiceSection = $(`<div class="charsheet__builder-lang-choice mt-1"></div>`);
+			const choiceLabel = anyCount > 0 ? "any language" : "standard language";
+			$choiceSection.append(`<p class="mb-1"><strong>Choose ${totalLangChoices} ${choiceLabel}${totalLangChoices > 1 ? "s" : ""}:</strong></p>`);
+			
+			// Get available languages
+			const availableLanguages = anyCount > 0 
+				? Parser.LANGUAGES_ALL 
+				: Parser.LANGUAGES_STANDARD;
+			
+			for (let i = 0; i < totalLangChoices; i++) {
+				const selectId = `bg-lang-choice-${i}`;
+				const $select = $(`
+					<select class="form-control form-control--minimal mb-1" id="${selectId}">
+						<option value="">-- Select Language --</option>
+					</select>
+				`);
+				
+				availableLanguages.forEach(lang => {
+					$select.append(`<option value="${lang}">${lang}</option>`);
+				});
+
+				const existingChoice = this._selectedLanguages.find(l => l.selectIdx === i);
+				if (existingChoice) {
+					$select.val(existingChoice.language);
+				}
+
+				$select.on("change", (e) => {
+					this._selectedLanguages = this._selectedLanguages.filter(l => l.selectIdx !== i);
+					if (e.target.value) {
+						this._selectedLanguages.push({
+							selectIdx: i,
+							language: e.target.value,
+						});
+					}
+				});
+
+				$choiceSection.append($select);
+			}
+			$langSection.append($choiceSection);
+		}
+
+		if (fixedLangs.length || totalLangChoices > 0) {
+			$content.append($langSection);
+		}
 	}
 
 	_renderBackgroundASIChoices ($container, abilityChoice) {

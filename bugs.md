@@ -1,7 +1,28 @@
 # Bugs Tracking
 This file is used to track known bugs in the 5etools character sheet code.
 
+## Feature Requests
+
+### General
+- [x] need way to roll things with advantage/disadvantage from the sheet (fixed: Shift+click for advantage, Ctrl/Cmd+click for disadvantage)
+- [x] need to support rolling skills with different ability scores (fixed: right-click on skill to choose alternate ability)
+- [] need to support adding custom skills to sheet
+- [] need to support adding features, languages, proficiencies, etc manually to sheet
+- [] need to improve UI greatly, currently very basic and not user friendly
+- [] need to support mobile devices better (bigger buttons, less clicks, altternative ways to do things that require hover or shift/ctrl keys)
+
+
 ## Known Bugs
+
+### Character Builder
+- [x] races with subraces don't show subrace selection in the builder, and subcraces appear as different races
+- [x] some backgrounds don't show tool proficiencies selection in the builder, or tool proficiencies that are broken
+
+### Features
+- [x] some classes (bard) add their features twice for some reason (fixed: added deduplication in addFeature)
+- [x] Jack of all trades feature does not add half proficiency to all skills correctly (fixed: added hasJackOfAllTrades() check in getSkillMod and getInitiative)
+
+## Old Bugs
 
 ### Items
 - [x] armors are not affecting the actual AC of the character

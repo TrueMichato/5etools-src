@@ -24,10 +24,10 @@ class CharacterSheetCombat {
 		// Add attack button - support both ID variants
 		$(document).on("click", "#charsheet-add-attack, #charsheet-btn-add-attack", () => this._showAttackCreator());
 
-		// Roll attack
+		// Roll attack (Shift=Advantage, Ctrl=Disadvantage)
 		$(document).on("click", ".charsheet__attack-roll", (e) => {
 			const attackId = $(e.currentTarget).closest(".charsheet__attack-item").data("attack-id");
-			this._rollAttack(attackId);
+			this._rollAttack(attackId, e);
 		});
 
 		// Roll damage
@@ -48,8 +48,8 @@ class CharacterSheetCombat {
 			this._removeAttack(attackId);
 		});
 
-		// Initiative roll
-		$(document).on("click", "#charsheet-roll-initiative", () => this._rollInitiative());
+		// Initiative roll (Shift=Advantage, Ctrl=Disadvantage)
+		$(document).on("click", "#charsheet-roll-initiative", (e) => this._rollInitiative(e));
 
 		// Death save buttons
 		$(document).on("click", "#charsheet-death-save-success", () => this._rollDeathSave(true));
@@ -297,7 +297,7 @@ class CharacterSheetCombat {
 		this._page.saveCharacter();
 	}
 
-	_rollAttack (attackId) {
+	_rollAttack (attackId, event) {
 		const attacks = this._state.getAttacks();
 		let attack = attacks.find(a => a.id === attackId);
 		if (!attack && this._cachedAttacks?.length) {
@@ -310,29 +310,31 @@ class CharacterSheetCombat {
 		const profBonus = this._state.getProficiencyBonus();
 		const totalBonus = abilityMod + profBonus + (attack.attackBonus || 0);
 
-		// Roll d20
-		const roll = this._page.rollDice(1, 20);
-		const total = roll + totalBonus;
+		// Roll d20 with advantage/disadvantage support
+		const rollResult = this._page.rollD20({event});
+		const total = rollResult.roll + totalBonus;
 
 		// Check for crit/fumble
 		let resultClass = "";
 		let resultNote = "";
-		if (roll === 20) {
-			resultClass = "text-success";
-			resultNote = " (Critical Hit!)";
-		} else if (roll === 1) {
-			resultClass = "text-danger";
-			resultNote = " (Critical Miss!)";
+		if (rollResult.roll === 20) {
+			resultClass = "charsheet__dice-result-total--crit";
+			resultNote = "Critical Hit!";
+		} else if (rollResult.roll === 1) {
+			resultClass = "charsheet__dice-result-total--fumble";
+			resultNote = "Critical Miss!";
 		}
 
 		// Show result
+		const modeLabel = this._page.getModeLabel(rollResult.mode);
 		this._page.showDiceResult({
-			title: `${attack.name} Attack`,
-			roll,
+			title: `${attack.name} Attack${modeLabel}`,
+			roll: rollResult.roll,
 			modifier: totalBonus,
 			total,
 			resultClass,
 			resultNote,
+			subtitle: this._page.formatD20Breakdown(rollResult, totalBonus),
 		});
 	}
 
@@ -402,16 +404,18 @@ class CharacterSheetCombat {
 		return isNaN(parsed) ? 0 : parsed;
 	}
 
-	_rollInitiative () {
-		const dexMod = this._state.getAbilityMod("dex");
-		const roll = this._page.rollDice(1, 20);
-		const total = roll + dexMod;
+	_rollInitiative (event) {
+		const mod = this._state.getInitiative();
+		const rollResult = this._page.rollD20({event});
+		const total = rollResult.roll + mod;
 
+		const modeLabel = this._page.getModeLabel(rollResult.mode);
 		this._page.showDiceResult({
-			title: "Initiative",
-			roll,
-			modifier: dexMod,
+			title: `Initiative${modeLabel}`,
+			roll: rollResult.roll,
+			modifier: mod,
 			total,
+			subtitle: this._page.formatD20Breakdown(rollResult, mod),
 		});
 
 		// Update initiative display

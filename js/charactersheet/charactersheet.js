@@ -341,7 +341,7 @@ class CharacterSheetPage {
 		$("#charsheet-btn-damage").on("click", () => this._onDamage());
 
 		// Combat
-		$("#charsheet-box-initiative").on("click", () => this._rollInitiative());
+		$("#charsheet-box-initiative").on("click", (e) => this._rollInitiative(e));
 		$("#charsheet-btn-use-hitdie").on("click", () => this._onUseHitDie());
 		$("#charsheet-btn-deathsave").on("click", () => this._onDeathSave());
 
@@ -654,14 +654,14 @@ class CharacterSheetPage {
 
 		Parser.ABIL_ABVS.forEach(abl => {
 			const $ability = $(`
-				<div class="charsheet__ability" data-ability="${abl}" title="Click to roll ${Parser.attAbvToFull(abl)}">
+				<div class="charsheet__ability" data-ability="${abl}" title="Click to roll ${Parser.attAbvToFull(abl)} (Shift=Adv, Ctrl=Dis)">
 					<div class="charsheet__ability-name">${abl.toUpperCase()}</div>
 					<div class="charsheet__ability-score" id="charsheet-ability-${abl}-score">10</div>
 					<div class="charsheet__ability-mod" id="charsheet-ability-${abl}-mod">+0</div>
 				</div>
 			`);
 
-			$ability.on("click", () => this._rollAbilityCheck(abl));
+			$ability.on("click", (e) => this._rollAbilityCheck(abl, e));
 			$container.append($ability);
 		});
 	}
@@ -694,14 +694,14 @@ class CharacterSheetPage {
 			const modStr = mod >= 0 ? `+${mod}` : mod;
 
 			const $row = $(`
-				<div class="charsheet__save-row" data-save="${abl}" title="Click to roll ${Parser.attAbvToFull(abl)} saving throw">
+				<div class="charsheet__save-row" data-save="${abl}" title="Click to roll ${Parser.attAbvToFull(abl)} save (Shift=Adv, Ctrl=Dis)">
 					<span class="charsheet__prof-indicator ${isProficient ? "charsheet__prof-indicator--proficient" : ""}"></span>
 					<span class="charsheet__save-name">${Parser.attAbvToFull(abl)}</span>
 					<span class="charsheet__save-mod">${modStr}</span>
 				</div>
 			`);
 
-			$row.on("click", () => this._rollSavingThrow(abl));
+			$row.on("click", (e) => this._rollSavingThrow(abl, e));
 			$container.append($row);
 		});
 	}
@@ -732,9 +732,7 @@ class CharacterSheetPage {
 		const skills = this.getSkillsList();
 
 		// Check for Jack of All Trades (half proficiency for non-proficient skills)
-		const hasJackOfAllTrades = this._state.getFeatures().some(f => 
-			f.name?.toLowerCase().includes("jack of all trades")
-		);
+		const hasJackOfAllTrades = this._state.hasJackOfAllTrades();
 
 		skills.forEach(skill => {
 			const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
@@ -756,7 +754,7 @@ class CharacterSheetPage {
 			}
 
 			const $row = $(`
-				<div class="charsheet__skill-row" data-skill="${skillKey}" title="Click to roll ${skill.name}">
+				<div class="charsheet__skill-row" data-skill="${skillKey}" data-default-ability="${skill.ability}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
 					<span class="charsheet__prof-indicator ${profClass}" title="${profTitle}"></span>
 					<span class="charsheet__skill-name">${skill.name}</span>
 					<span class="charsheet__skill-ability">(${skill.ability.toUpperCase()})</span>
@@ -764,7 +762,8 @@ class CharacterSheetPage {
 				</div>
 			`);
 
-			$row.on("click", () => this._rollSkillCheck(skillKey, skill.name));
+			$row.on("click", (e) => this._rollSkillCheck(skillKey, skill.name, e));
+			$row.on("contextmenu", (e) => this._showSkillAbilityMenu(e, skillKey, skill.name, skill.ability));
 			$container.append($row);
 		});
 	}
@@ -1696,86 +1695,241 @@ class CharacterSheetPage {
 		return 0;
 	}
 
-	_rollAbilityCheck (ability) {
+	/**
+	 * Roll a d20 with advantage/disadvantage support
+	 * @param {Object} opts - Roll options
+	 * @param {Event} [opts.event] - The triggering event (to detect modifier keys)
+	 * @param {"advantage"|"disadvantage"|"normal"} [opts.mode] - Force a specific mode
+	 * @returns {{roll: number, roll1: number, roll2: number, mode: string}} Roll result
+	 */
+	_rollD20 ({event, mode} = {}) {
+		// Determine roll mode from event modifier keys if not explicitly set
+		if (!mode && event) {
+			if (event.shiftKey) mode = "advantage";
+			else if (event.ctrlKey || event.metaKey) mode = "disadvantage";
+		}
+		mode = mode || "normal";
+
+		const roll1 = RollerUtil.roll(20);
+		const roll2 = RollerUtil.roll(20);
+
+		let roll;
+		if (mode === "advantage") {
+			roll = Math.max(roll1, roll2);
+		} else if (mode === "disadvantage") {
+			roll = Math.min(roll1, roll2);
+		} else {
+			roll = roll1;
+		}
+
+		return {roll, roll1, roll2, mode};
+	}
+
+	/**
+	 * Format a d20 roll breakdown string
+	 * @param {Object} rollResult - Result from _rollD20
+	 * @param {number} modifier - The modifier to add
+	 * @param {string} [extraStr] - Extra text to append (e.g., exhaustion)
+	 * @returns {string} Formatted breakdown
+	 */
+	_formatD20Breakdown (rollResult, modifier, extraStr = "") {
+		const modStr = modifier >= 0 ? `+ ${modifier}` : `- ${Math.abs(modifier)}`;
+		
+		if (rollResult.mode === "advantage") {
+			return `2d20kh (${rollResult.roll1}, ${rollResult.roll2}) → ${rollResult.roll} ${modStr}${extraStr}`;
+		} else if (rollResult.mode === "disadvantage") {
+			return `2d20kl (${rollResult.roll1}, ${rollResult.roll2}) → ${rollResult.roll} ${modStr}${extraStr}`;
+		}
+		return `1d20 (${rollResult.roll}) ${modStr}${extraStr}`;
+	}
+
+	/**
+	 * Get the mode label for display
+	 */
+	_getModeLabel (mode) {
+		if (mode === "advantage") return " (Advantage)";
+		if (mode === "disadvantage") return " (Disadvantage)";
+		return "";
+	}
+
+	_rollAbilityCheck (ability, event) {
 		const mod = this._state.getAbilityMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const roll = RollerUtil.roll(20);
-		const total = roll + mod - exhaustionPenalty;
+		const rollResult = this._rollD20({event});
+		const total = rollResult.roll + mod - exhaustionPenalty;
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
-			`${Parser.attAbvToFull(ability)} Check`,
+			`${Parser.attAbvToFull(ability)} Check${this._getModeLabel(rollResult.mode)}`,
 			total,
-			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
+			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 		);
 	}
 
-	_rollSavingThrow (ability) {
+	_rollSavingThrow (ability, event) {
 		const mod = this._state.getSaveMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const roll = RollerUtil.roll(20);
-		const total = roll + mod - exhaustionPenalty;
+		const rollResult = this._rollD20({event});
+		const total = rollResult.roll + mod - exhaustionPenalty;
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
-			`${Parser.attAbvToFull(ability)} Save`,
+			`${Parser.attAbvToFull(ability)} Save${this._getModeLabel(rollResult.mode)}`,
 			total,
-			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
+			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 		);
 	}
 
-	_rollSkillCheck (skillKey, skillName) {
-		const mod = this._state.getSkillMod(skillKey);
+	_rollSkillCheck (skillKey, skillName, event, overrideAbility = null) {
+		const mod = overrideAbility
+			? this._state.getSkillModWithAbility(skillKey, overrideAbility)
+			: this._state.getSkillMod(skillKey);
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const roll = RollerUtil.roll(20);
-		const total = roll + mod - exhaustionPenalty;
+		const rollResult = this._rollD20({event});
+		const total = rollResult.roll + mod - exhaustionPenalty;
 
+		const abilityLabel = overrideAbility ? ` (${overrideAbility.toUpperCase()})` : "";
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
-			`${skillName} Check`,
+			`${skillName}${abilityLabel} Check${this._getModeLabel(rollResult.mode)}`,
 			total,
-			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
+			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 		);
 	}
 
-	_rollInitiative () {
+	_showSkillAbilityMenu (event, skillKey, skillName, defaultAbility) {
+		event.preventDefault();
+		event.stopPropagation();
+
+		// Remove any existing menu
+		$(".charsheet__ability-menu").remove();
+
+		const abilities = ["str", "dex", "con", "int", "wis", "cha"];
+		const abilityNames = {
+			str: "Strength",
+			dex: "Dexterity",
+			con: "Constitution",
+			int: "Intelligence",
+			wis: "Wisdom",
+			cha: "Charisma",
+		};
+
+		const $menu = $(`<div class="charsheet__ability-menu"></div>`);
+
+		abilities.forEach(ability => {
+			const isDefault = ability === defaultAbility;
+			const mod = this._state.getSkillModWithAbility(skillKey, ability);
+			const modStr = mod >= 0 ? `+${mod}` : mod.toString();
+			const $option = $(`
+				<div class="charsheet__ability-menu-option ${isDefault ? "charsheet__ability-menu-option--default" : ""}" 
+					 title="${isDefault ? "Default ability" : ""}">
+					<span class="charsheet__ability-menu-name">${abilityNames[ability]}</span>
+					<span class="charsheet__ability-menu-mod">${modStr}</span>
+				</div>
+			`);
+			$option.on("click", (e) => {
+				$menu.remove();
+				this._rollSkillCheck(skillKey, skillName, e, ability);
+			});
+			$menu.append($option);
+		});
+
+		// Position menu near cursor
+		$menu.css({
+			position: "fixed",
+			left: event.clientX + "px",
+			top: event.clientY + "px",
+			zIndex: 10000,
+		});
+
+		$("body").append($menu);
+
+		// Close menu when clicking elsewhere
+		const closeMenu = (e) => {
+			if (!$(e.target).closest(".charsheet__ability-menu").length) {
+				$menu.remove();
+				$(document).off("click", closeMenu);
+			}
+		};
+		setTimeout(() => $(document).on("click", closeMenu), 10);
+	}
+
+	_rollInitiative (event) {
 		const mod = this._state.getInitiative();
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const roll = RollerUtil.roll(20);
-		const total = roll + mod - exhaustionPenalty;
+		const rollResult = this._rollD20({event});
+		const total = rollResult.roll + mod - exhaustionPenalty;
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
-			"Initiative",
+			`Initiative${this._getModeLabel(rollResult.mode)}`,
 			total,
-			`1d20 (${roll}) + ${mod}${exhaustionStr}`,
+			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 		);
 	}
 
-	_rollAttack (attack) {
+	_rollAttack (attack, event) {
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const attackRoll = RollerUtil.roll(20);
-		const attackTotal = attackRoll + attack.attackBonus - exhaustionPenalty;
+		const rollResult = this._rollD20({event});
+		const attackTotal = rollResult.roll + attack.attackBonus - exhaustionPenalty;
+
+		// Check for crit/fumble
+		let resultClass = "";
+		let resultNote = "";
+		if (rollResult.roll === 20) {
+			resultClass = "charsheet__dice-result-total--crit";
+			resultNote = "Critical Hit!";
+		} else if (rollResult.roll === 1) {
+			resultClass = "charsheet__dice-result-total--fumble";
+			resultNote = "Critical Miss!";
+		}
 
 		// Parse and roll damage
 		const damageResult = Renderer.dice.parseRandomise2(attack.damage);
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
-			attack.name,
+			`${attack.name}${this._getModeLabel(rollResult.mode)}`,
 			attackTotal,
-			`Attack: 1d20 (${attackRoll}) + ${attack.attackBonus}${exhaustionStr} = ${attackTotal}
+			`Attack: ${this._formatD20Breakdown(rollResult, attack.attackBonus, exhaustionStr)}
 			 Damage: ${attack.damage} = ${damageResult}`,
+			resultClass,
+			resultNote,
 		);
 	}
 
-	// Public method for sub-modules
+	// Public methods for sub-modules
 	rollDice (num, sides) {
 		let total = 0;
 		for (let i = 0; i < num; i++) {
 			total += RollerUtil.roll(sides);
 		}
 		return total;
+	}
+
+	/**
+	 * Roll a d20 with advantage/disadvantage support (public method for sub-modules)
+	 * @param {Object} opts - Roll options
+	 * @param {Event} [opts.event] - The triggering event (to detect modifier keys)
+	 * @param {"advantage"|"disadvantage"|"normal"} [opts.mode] - Force a specific mode
+	 * @returns {{roll: number, roll1: number, roll2: number, mode: string}} Roll result
+	 */
+	rollD20 (opts) {
+		return this._rollD20(opts);
+	}
+
+	/**
+	 * Format a d20 roll breakdown string (public method for sub-modules)
+	 */
+	formatD20Breakdown (rollResult, modifier, extraStr = "") {
+		return this._formatD20Breakdown(rollResult, modifier, extraStr);
+	}
+
+	/**
+	 * Get mode label (public method for sub-modules)
+	 */
+	getModeLabel (mode) {
+		return this._getModeLabel(mode);
 	}
 
 	showDiceResult (opts) {

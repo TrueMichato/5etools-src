@@ -1650,6 +1650,18 @@
 	text-shadow: 0 0 8px var(--rgb-warning, #ffc107);
 }
 
+/* Critical hit (nat 20) */
+.charsheet__dice-result-total--crit {
+	color: #28a745;
+	text-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+}
+
+/* Critical miss (nat 1) / fumble */
+.charsheet__dice-result-total--fumble {
+	color: #dc3545;
+	text-shadow: 0 0 8px rgba(220, 53, 69, 0.5);
+}
+
 .charsheet__dice-result-close {
 	position: absolute;
 	top: 0.5rem;
@@ -1660,6 +1672,48 @@
 
 .charsheet__dice-result-close:hover {
 	opacity: 1;
+}
+
+/* Ability Selection Menu (for alternate skill checks) */
+.charsheet__ability-menu {
+	background: var(--rgb-bg-alt, #1e1e1e);
+	border: 1px solid var(--rgb-border-grey, #444);
+	border-radius: 4px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	min-width: 150px;
+	overflow: hidden;
+}
+
+.charsheet__ability-menu-option {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.5rem 0.75rem;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.charsheet__ability-menu-option:hover {
+	background: var(--rgb-bg-hover, #333);
+}
+
+.charsheet__ability-menu-option--default {
+	background: rgba(76, 175, 80, 0.15);
+	border-left: 3px solid #4caf50;
+}
+
+.charsheet__ability-menu-option--default:hover {
+	background: rgba(76, 175, 80, 0.25);
+}
+
+.charsheet__ability-menu-name {
+	font-weight: 500;
+}
+
+.charsheet__ability-menu-mod {
+	font-family: monospace;
+	color: var(--rgb-text-muted, #999);
+	margin-left: 1rem;
 }
 
 /* Level Up Modal */
