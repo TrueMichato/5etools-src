@@ -41,6 +41,7 @@ class CharacterSheetPage {
 		this._optionalFeaturesData = [];
 		this._skillsData = [];
 		this._conditionsData = [];
+		this._languagesData = [];
 	}
 
 	async pInit () {
@@ -114,7 +115,7 @@ class CharacterSheetPage {
 	async _pLoadData () {
 		// Load all necessary data in parallel
 		// Note: Using loadRawJSON for classes to get classFeature and subclassFeature arrays
-		const [races, classes, backgrounds, spells, items, feats, optFeatures, skills, conditionsData, prereleaseData, brewData] = await Promise.all([
+		const [races, classes, backgrounds, spells, items, feats, optFeatures, skills, conditionsData, languagesData, prereleaseData, brewData] = await Promise.all([
 			DataUtil.race.loadJSON(),
 			DataUtil.class.loadRawJSON(),
 			DataUtil.loadJSON("data/backgrounds.json"),
@@ -124,6 +125,7 @@ class CharacterSheetPage {
 			DataUtil.loadJSON("data/optionalfeatures.json"),
 			DataUtil.loadJSON("data/skills.json"),
 			DataUtil.loadJSON("data/conditionsdiseases.json"),
+			DataUtil.loadJSON("data/languages.json"),
 			// Load homebrew/prerelease data
 			PrereleaseUtil.pGetBrewProcessed(),
 			BrewUtil2.pGetBrewProcessed(),
@@ -143,6 +145,7 @@ class CharacterSheetPage {
 		this._optionalFeaturesData = optFeatures.optionalfeature || [];
 		this._skillsData = skills.skill || [];
 		this._conditionsData = conditionsData.condition || [];
+		this._languagesData = languagesData.language || [];
 
 		// Merge prerelease/homebrew data
 		this._mergeBrewData(prereleaseData);
@@ -2473,6 +2476,51 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Get available suggestions for each proficiency type
+	 */
+	_getProficiencySuggestions () {
+		// Armor types
+		const armorSuggestions = ["Light Armor", "Medium Armor", "Heavy Armor", "Shields"];
+
+		// Weapons - from items data, filter by weapon types
+		const weaponTypes = new Set();
+		this._itemsData.forEach(item => {
+			if (item.weapon || item.type === "M" || item.type === "R") {
+				weaponTypes.add(item.name);
+			}
+		});
+		// Add category proficiencies
+		const weaponSuggestions = ["Simple Weapons", "Martial Weapons", ...Array.from(weaponTypes).sort()];
+
+		// Tools - from items data, filter by tool types (AT, GS, INS, T)
+		const toolTypes = new Set();
+		this._itemsData.forEach(item => {
+			const type = item.type?.split("|")[0]; // Strip source from type
+			if (["AT", "GS", "INS", "T"].includes(type)) {
+				toolTypes.add(item.name);
+			}
+		});
+		const toolSuggestions = Array.from(toolTypes).sort();
+
+		// Languages - from languages data, deduplicated by name (prefer XPHB)
+		const langMap = new Map();
+		this._languagesData.forEach(lang => {
+			const existing = langMap.get(lang.name);
+			if (!existing || lang.source === Parser.SRC_XPHB) {
+				langMap.set(lang.name, lang.name);
+			}
+		});
+		const languageSuggestions = Array.from(langMap.values()).sort();
+
+		return {
+			armor: armorSuggestions,
+			weapons: weaponSuggestions,
+			tools: toolSuggestions,
+			languages: languageSuggestions,
+		};
+	}
+
+	/**
 	 * Show modal for editing proficiencies and languages
 	 */
 	async _showEditProficienciesModal () {
@@ -2486,27 +2534,33 @@ class CharacterSheetPage {
 			},
 		});
 
+		const suggestions = this._getProficiencySuggestions();
+
 		const profTypes = [
-			{key: "armor", label: "Armor Proficiencies", getter: "getArmorProficiencies", adder: "addArmorProficiency", remover: "removeArmorProficiency", placeholder: "e.g. Light Armor, Medium Armor"},
-			{key: "weapons", label: "Weapon Proficiencies", getter: "getWeaponProficiencies", adder: "addWeaponProficiency", remover: "removeWeaponProficiency", placeholder: "e.g. Longsword, Longbow"},
-			{key: "tools", label: "Tool Proficiencies", getter: "getToolProficiencies", adder: "addToolProficiency", remover: "removeToolProficiency", placeholder: "e.g. Thieves' Tools, Herbalism Kit"},
-			{key: "languages", label: "Languages", getter: "getLanguages", adder: "addLanguage", remover: "removeLanguage", placeholder: "e.g. Elvish, Dwarvish"},
+			{key: "armor", label: "Armor Proficiencies", getter: "getArmorProficiencies", adder: "addArmorProficiency", remover: "removeArmorProficiency", suggestions: suggestions.armor},
+			{key: "weapons", label: "Weapon Proficiencies", getter: "getWeaponProficiencies", adder: "addWeaponProficiency", remover: "removeWeaponProficiency", suggestions: suggestions.weapons},
+			{key: "tools", label: "Tool Proficiencies", getter: "getToolProficiencies", adder: "addToolProficiency", remover: "removeToolProficiency", suggestions: suggestions.tools},
+			{key: "languages", label: "Languages", getter: "getLanguages", adder: "addLanguage", remover: "removeLanguage", suggestions: suggestions.languages},
 		];
 
 		const renderSection = (profType) => {
-			const items = this._state[profType.getter]();
 			const $section = $(`
 				<div class="charsheet__edit-prof-section mb-3">
 					<label class="ve-bold mb-1">${profType.label}</label>
 					<div class="charsheet__edit-prof-list mb-2" id="edit-prof-${profType.key}"></div>
-					<div class="ve-flex-v-center">
-						<input type="text" class="form-control form-control--minimal mr-2" id="edit-prof-${profType.key}-input" placeholder="${profType.placeholder}">
+					<div class="ve-flex-v-center" style="position: relative;">
+						<input type="text" class="form-control form-control--minimal mr-2" id="edit-prof-${profType.key}-input" placeholder="Type to search or enter custom...">
 						<button class="ve-btn ve-btn-primary ve-btn-xs" id="edit-prof-${profType.key}-add">Add</button>
 					</div>
+					<div class="charsheet__autocomplete-dropdown" id="edit-prof-${profType.key}-dropdown" style="display: none;"></div>
 				</div>
 			`);
 
 			const $list = $section.find(`#edit-prof-${profType.key}`);
+			const $input = $section.find(`#edit-prof-${profType.key}-input`);
+			const $addBtn = $section.find(`#edit-prof-${profType.key}-add`);
+			const $dropdown = $section.find(`#edit-prof-${profType.key}-dropdown`);
+
 			const renderList = () => {
 				const currentItems = this._state[profType.getter]();
 				$list.empty();
@@ -2531,21 +2585,49 @@ class CharacterSheetPage {
 			};
 			renderList();
 
-			const $input = $section.find(`#edit-prof-${profType.key}-input`);
-			const $addBtn = $section.find(`#edit-prof-${profType.key}-add`);
+			const renderDropdown = (filter = "") => {
+				const currentItems = this._state[profType.getter]().map(i => (typeof i === "string" ? i : i.name || i).toLowerCase());
+				const filtered = profType.suggestions.filter(s => {
+					if (currentItems.includes(s.toLowerCase())) return false;
+					if (filter && !s.toLowerCase().includes(filter.toLowerCase())) return false;
+					return true;
+				}).slice(0, 10); // Limit to 10 suggestions
+
+				$dropdown.empty();
+				if (!filtered.length) {
+					$dropdown.hide();
+					return;
+				}
+
+				filtered.forEach(suggestion => {
+					const $item = $(`<div class="charsheet__autocomplete-item">${suggestion}</div>`);
+					$item.on("click", () => {
+						this._state[profType.adder](suggestion);
+						$input.val("");
+						$dropdown.hide();
+						renderList();
+					});
+					$dropdown.append($item);
+				});
+				$dropdown.show();
+			};
 
 			const addItem = () => {
 				const value = $input.val().trim();
 				if (!value) return;
 				this._state[profType.adder](value);
 				$input.val("");
+				$dropdown.hide();
 				renderList();
 			};
 
-			$addBtn.on("click", addItem);
+			$input.on("input", () => renderDropdown($input.val()));
+			$input.on("focus", () => renderDropdown($input.val()));
+			$input.on("blur", () => setTimeout(() => $dropdown.hide(), 200)); // Delay to allow click
 			$input.on("keypress", (e) => {
 				if (e.which === 13) addItem();
 			});
+			$addBtn.on("click", addItem);
 
 			return $section;
 		};
@@ -2560,18 +2642,78 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Get available feature suggestions from game data
+	 */
+	_getFeatureSuggestions () {
+		const features = [];
+
+		// Add class features (deduplicated by name)
+		const classFeatureNames = new Set();
+		this._classFeatures.forEach(f => {
+			if (!classFeatureNames.has(f.name)) {
+				classFeatureNames.add(f.name);
+				features.push({
+					name: f.name,
+					source: f.source,
+					description: f.entries ? Renderer.get().render({entries: f.entries}) : null,
+					featureType: `Class (${f.className})`,
+				});
+			}
+		});
+
+		// Add optional features (invocations, fighting styles, etc.)
+		this._optionalFeaturesData.forEach(f => {
+			features.push({
+				name: f.name,
+				source: f.source,
+				description: f.entries ? Renderer.get().render({entries: f.entries}) : null,
+				featureType: f.featureType?.join(", ") || "Optional Feature",
+			});
+		});
+
+		// Add racial traits from race data
+		this._races.forEach(race => {
+			if (race.entries) {
+				race.entries.forEach(entry => {
+					if (entry.name && entry.entries) {
+						features.push({
+							name: entry.name,
+							source: race.source,
+							description: Renderer.get().render({entries: entry.entries}),
+							featureType: `Race (${race.name})`,
+						});
+					}
+				});
+			}
+		});
+
+		// Sort by name and deduplicate
+		const seen = new Set();
+		return features.filter(f => {
+			const key = f.name.toLowerCase();
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		}).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
 	 * Show modal for adding a custom feature
 	 */
 	async _showAddCustomFeatureModal () {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Add Custom Feature",
+			title: "Add Feature",
 			isMinHeight0: true,
+			isWidth100: true,
 		});
 
+		const featureSuggestions = this._getFeatureSuggestions();
+
 		const $form = $$`<div class="ve-flex-col">
-			<div class="ve-flex-v-center mb-2">
-				<label class="mr-2 w-100p">Name:</label>
-				<input type="text" class="form-control" id="custom-feature-name" placeholder="e.g. Dark Vision, Lucky">
+			<div class="mb-2" style="position: relative;">
+				<label class="mb-1">Search existing features or enter custom name:</label>
+				<input type="text" class="form-control" id="custom-feature-name" placeholder="Type to search features...">
+				<div class="charsheet__autocomplete-dropdown" id="custom-feature-dropdown" style="display: none; max-height: 200px;"></div>
 			</div>
 			<div class="ve-flex-v-center mb-2">
 				<label class="mr-2 w-100p">Source:</label>
@@ -2590,8 +2732,43 @@ class CharacterSheetPage {
 		const $name = $form.find("#custom-feature-name");
 		const $source = $form.find("#custom-feature-source");
 		const $desc = $form.find("#custom-feature-desc");
+		const $dropdown = $form.find("#custom-feature-dropdown");
 		const $addBtn = $form.find("#custom-feature-add");
 		const $cancelBtn = $form.find("#custom-feature-cancel");
+
+		const renderDropdown = (filter = "") => {
+			const filtered = featureSuggestions.filter(f => {
+				if (!filter) return false; // Don't show all when empty
+				return f.name.toLowerCase().includes(filter.toLowerCase());
+			}).slice(0, 15);
+
+			$dropdown.empty();
+			if (!filtered.length) {
+				$dropdown.hide();
+				return;
+			}
+
+			filtered.forEach(feature => {
+				const $item = $(`
+					<div class="charsheet__autocomplete-item">
+						<span class="charsheet__autocomplete-item-name">${feature.name}</span>
+						<span class="charsheet__autocomplete-item-type ve-muted">${feature.featureType}</span>
+					</div>
+				`);
+				$item.on("click", () => {
+					$name.val(feature.name);
+					$source.val(feature.featureType);
+					if (feature.description) $desc.val(feature.description.replace(/<[^>]*>/g, "")); // Strip HTML
+					$dropdown.hide();
+				});
+				$dropdown.append($item);
+			});
+			$dropdown.show();
+		};
+
+		$name.on("input", () => renderDropdown($name.val()));
+		$name.on("focus", () => renderDropdown($name.val()));
+		$name.on("blur", () => setTimeout(() => $dropdown.hide(), 200));
 
 		$cancelBtn.on("click", () => doClose());
 
@@ -2619,7 +2796,7 @@ class CharacterSheetPage {
 			this._renderCustomFeatures();
 			this._saveCurrentCharacter();
 
-			JqueryUtil.doToast({type: "success", content: `Added custom feature: ${name}`});
+			JqueryUtil.doToast({type: "success", content: `Added feature: ${name}`});
 			doClose();
 		});
 
