@@ -1830,6 +1830,44 @@
 	color: #dc3545;
 }
 
+/* Autocomplete Dropdown */
+.charsheet__autocomplete-dropdown {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 40px;
+	background: var(--rgb-bg-alt, #1e1e1e);
+	border: 1px solid var(--rgb-border-grey, #444);
+	border-top: none;
+	border-radius: 0 0 4px 4px;
+	max-height: 200px;
+	overflow-y: auto;
+	z-index: 1000;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.charsheet__autocomplete-item {
+	padding: 0.5rem 0.75rem;
+	cursor: pointer;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	transition: background 0.15s;
+}
+
+.charsheet__autocomplete-item:hover {
+	background: var(--rgb-bg-hover, #333);
+}
+
+.charsheet__autocomplete-item-name {
+	font-weight: 500;
+}
+
+.charsheet__autocomplete-item-type {
+	font-size: 0.8rem;
+	margin-left: 1rem;
+}
+
 /* Level Up Modal */
 .charsheet__levelup-body {
 	max-height: 60vh;
