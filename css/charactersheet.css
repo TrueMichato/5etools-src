@@ -186,6 +186,16 @@
 	position: relative;
 }
 
+.charsheet__prof-indicator--clickable {
+	cursor: pointer;
+	transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.charsheet__prof-indicator--clickable:hover {
+	transform: scale(1.2);
+	box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+}
+
 .charsheet__prof-indicator--proficient {
 	background: #28a745;
 	border-color: #28a745;
@@ -2334,4 +2344,130 @@
 
 .charsheet__modifiers-summary {
 	padding-top: 0.5rem;
+}
+
+/* Modifier badge on button */
+.charsheet__modifier-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	margin-left: 4px;
+	font-size: 0.7rem;
+	font-weight: 700;
+	color: #fff;
+	background: var(--rgb-name-green, #28a745);
+	border-radius: 8px;
+	line-height: 1;
+}
+
+.charsheet__btn--has-modifiers {
+	border-color: var(--rgb-name-green, #28a745) !important;
+	box-shadow: 0 0 0 1px var(--rgb-name-green, #28a745);
+}
+
+/* Modified stat indicators - positive (green) */
+.charsheet__stat-box--modified-positive,
+.charsheet__combat-stat--modified-positive {
+	position: relative;
+	border-color: var(--rgb-name-green, #28a745) !important;
+	box-shadow: inset 0 0 0 1px rgba(40, 167, 69, 0.3);
+}
+
+.charsheet__stat-box--modified-positive::after,
+.charsheet__combat-stat--modified-positive::after {
+	content: "✦";
+	position: absolute;
+	top: 2px;
+	right: 4px;
+	font-size: 0.6rem;
+	color: var(--rgb-name-green, #28a745);
+}
+
+/* Modified stat indicators - negative (red) */
+.charsheet__stat-box--modified-negative,
+.charsheet__combat-stat--modified-negative {
+	position: relative;
+	border-color: var(--rgb-name-red, #dc3545) !important;
+	box-shadow: inset 0 0 0 1px rgba(220, 53, 69, 0.3);
+}
+
+.charsheet__stat-box--modified-negative::after,
+.charsheet__combat-stat--modified-negative::after {
+	content: "✦";
+	position: absolute;
+	top: 2px;
+	right: 4px;
+	font-size: 0.6rem;
+	color: var(--rgb-name-red, #dc3545);
+}
+
+/* Modified save row - positive */
+.charsheet__save-row--modified-positive {
+	position: relative;
+	background: rgba(40, 167, 69, 0.1);
+	border-radius: 3px;
+}
+
+.charsheet__save-row--modified-positive::after {
+	content: "✦";
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 0.6rem;
+	color: var(--rgb-name-green, #28a745);
+}
+
+/* Modified save row - negative */
+.charsheet__save-row--modified-negative {
+	position: relative;
+	background: rgba(220, 53, 69, 0.1);
+	border-radius: 3px;
+}
+
+.charsheet__save-row--modified-negative::after {
+	content: "✦";
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 0.6rem;
+	color: var(--rgb-name-red, #dc3545);
+}
+
+/* Modified skill row - positive */
+.charsheet__skill-row--modified-positive {
+	position: relative;
+	background: rgba(40, 167, 69, 0.1);
+	border-radius: 3px;
+}
+
+.charsheet__skill-row--modified-positive::after {
+	content: "✦";
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 0.6rem;
+	color: var(--rgb-name-green, #28a745);
+}
+
+/* Modified skill row - negative */
+.charsheet__skill-row--modified-negative {
+	position: relative;
+	background: rgba(220, 53, 69, 0.1);
+	border-radius: 3px;
+}
+
+.charsheet__skill-row--modified-negative::after {
+	content: "✦";
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 0.6rem;
+	color: var(--rgb-name-red, #dc3545);
 }

@@ -600,6 +600,7 @@ class CharacterSheetPage {
 		this._renderQuickSpells();
 		this._renderAbilitiesDetailed();
 		this._renderCustomFeatures();
+		this._renderModifierIndicators();
 
 		// Sub-modules
 		if (this._spells) this._spells.render();
@@ -752,22 +753,22 @@ class CharacterSheetPage {
 			const modStr = mod >= 0 ? `+${mod}` : mod;
 
 			let profClass = "";
-			let profTitle = "Not proficient";
+			let profTitle = "Not proficient - Click to toggle proficiency";
 			if (profLevel === 2) {
 				profClass = "charsheet__prof-indicator--expertise";
-				profTitle = "Expertise (2x proficiency bonus)";
+				profTitle = "Expertise (2x proficiency bonus) - Click to toggle";
 			} else if (profLevel === 1) {
 				profClass = "charsheet__prof-indicator--proficient";
-				profTitle = "Proficient";
+				profTitle = "Proficient - Click to toggle";
 			} else if (hasJackOfAllTrades) {
 				profClass = "charsheet__prof-indicator--half";
-				profTitle = "Half proficiency (Jack of All Trades)";
+				profTitle = "Half proficiency (Jack of All Trades) - Click to toggle";
 			}
 
 			const customClass = skill.isCustom ? " charsheet__skill-row--custom" : "";
 			const $row = $(`
 				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${skill.ability}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
-					<span class="charsheet__prof-indicator ${profClass}" title="${profTitle}"></span>
+					<span class="charsheet__prof-indicator charsheet__prof-indicator--clickable ${profClass}" title="${profTitle}" data-skill="${skillKey}"></span>
 					<span class="charsheet__skill-name">${skill.name}${skill.isCustom ? " ✦" : ""}</span>
 					<span class="charsheet__skill-ability">(${skill.ability.toUpperCase()})</span>
 					<span class="charsheet__skill-mod">${modStr}</span>
@@ -775,9 +776,16 @@ class CharacterSheetPage {
 				</div>
 			`);
 
+			// Proficiency toggle click handler
+			$row.find(".charsheet__prof-indicator").on("click", (e) => {
+				e.stopPropagation();
+				this._cycleSkillProficiency(skillKey);
+			});
+
 			$row.on("click", (e) => {
-				// Don't roll if clicking delete button
+				// Don't roll if clicking delete button or prof indicator
 				if ($(e.target).hasClass("charsheet__skill-delete")) return;
+				if ($(e.target).hasClass("charsheet__prof-indicator")) return;
 				this._rollSkillCheck(skillKey, skill.name, e);
 			});
 			$row.on("contextmenu", (e) => this._showSkillAbilityMenu(e, skillKey, skill.name, skill.ability));
@@ -997,6 +1005,82 @@ class CharacterSheetPage {
 	_renderAppearance () {
 		["age", "height", "weight", "eyes", "skin", "hair"].forEach(field => {
 			$(`#charsheet-ipt-${field}`).val(this._state.getAppearance(field));
+		});
+	}
+
+	/**
+	 * Render visual indicators for active modifiers
+	 * Updates the button badge and adds visual cues to affected stats
+	 */
+	_renderModifierIndicators () {
+		const modifiers = this._state.getNamedModifiers();
+		const activeModifiers = modifiers.filter(m => m.enabled);
+		const activeCount = activeModifiers.length;
+
+		// Update button badge
+		const $btn = $("#charsheet-btn-modifiers");
+		$btn.find(".charsheet__modifier-badge").remove();
+		
+		if (activeCount > 0) {
+			$btn.append(`<span class="charsheet__modifier-badge">${activeCount}</span>`);
+			$btn.addClass("charsheet__btn--has-modifiers");
+		} else {
+			$btn.removeClass("charsheet__btn--has-modifiers");
+		}
+
+		// Add/remove indicator classes on affected stat displays
+		const acMod = this._state.getCustomModifier("ac");
+		const initMod = this._state.getCustomModifier("initiative");
+		const speedMod = this._state.getCustomModifier("speed");
+		const attackMod = this._state.getCustomModifier("attack");
+		const damageMod = this._state.getCustomModifier("damage");
+
+		// AC indicator
+		const $acBox = $("#charsheet-box-ac");
+		$acBox.removeClass("charsheet__combat-stat--modified-positive charsheet__combat-stat--modified-negative");
+		if (acMod !== 0) {
+			$acBox.addClass(acMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
+		}
+		$acBox.attr("title", acMod !== 0 ? `AC modified by ${acMod >= 0 ? "+" : ""}${acMod}` : "Armor Class");
+
+		// Initiative indicator
+		const $initBox = $("#charsheet-box-initiative");
+		$initBox.removeClass("charsheet__combat-stat--modified-positive charsheet__combat-stat--modified-negative");
+		if (initMod !== 0) {
+			$initBox.addClass(initMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
+		}
+		$initBox.attr("title", initMod !== 0 ? `Initiative modified by ${initMod >= 0 ? "+" : ""}${initMod}` : "Click to roll Initiative (Shift=Adv, Ctrl=Dis)");
+
+		// Speed indicator
+		const $speedBox = $("#charsheet-box-speed");
+		if ($speedBox.length) {
+			$speedBox.removeClass("charsheet__combat-stat--modified-positive charsheet__combat-stat--modified-negative");
+			if (speedMod !== 0) {
+				$speedBox.addClass(speedMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
+			}
+			$speedBox.attr("title", speedMod !== 0 ? `Speed modified by ${speedMod >= 0 ? "+" : ""}${speedMod} ft.` : "Speed");
+		}
+
+		// Also update save rows if they have modifiers
+		Parser.ABIL_ABVS.forEach(abl => {
+			const saveMod = this._state.getCustomModifier(`save:${abl}`);
+			const $row = $(`.charsheet__save-row[data-save="${abl}"]`);
+			$row.removeClass("charsheet__save-row--modified-positive charsheet__save-row--modified-negative");
+			if (saveMod !== 0) {
+				$row.addClass(saveMod > 0 ? "charsheet__save-row--modified-positive" : "charsheet__save-row--modified-negative");
+			}
+		});
+
+		// Update skill rows if they have modifiers
+		const skills = this.getSkillsList();
+		skills.forEach(skill => {
+			const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
+			const skillMod = this._state.getSkillCustomMod(skillKey);
+			const $row = $(`.charsheet__skill-row[data-skill="${skillKey}"]`);
+			$row.removeClass("charsheet__skill-row--modified-positive charsheet__skill-row--modified-negative");
+			if (skillMod !== 0) {
+				$row.addClass(skillMod > 0 ? "charsheet__skill-row--modified-positive" : "charsheet__skill-row--modified-negative");
+			}
 		});
 	}
 
@@ -1832,6 +1916,35 @@ class CharacterSheetPage {
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 		);
+	}
+
+	/**
+	 * Cycle skill proficiency: none → proficient → expertise → none
+	 * @param {string} skillKey - The skill key (e.g., "stealth", "athletics")
+	 */
+	_cycleSkillProficiency (skillKey) {
+		const currentLevel = this._state.getSkillProficiency(skillKey);
+		let newLevel;
+		let message;
+
+		if (currentLevel === 0) {
+			newLevel = 1;
+			message = "Proficient";
+		} else if (currentLevel === 1) {
+			newLevel = 2;
+			message = "Expertise";
+		} else {
+			newLevel = 0;
+			message = "Not proficient";
+		}
+
+		this._state.setSkillProficiency(skillKey, newLevel);
+		this._saveCurrentCharacter();
+		this._renderSkills();
+
+		// Show feedback toast
+		const skillName = this.getSkillsList().find(s => s.name.toLowerCase().replace(/\s+/g, "") === skillKey)?.name || skillKey;
+		JqueryUtil.doToast({type: "info", content: `${skillName}: ${message}`});
 	}
 
 	_showSkillAbilityMenu (event, skillKey, skillName, defaultAbility) {
