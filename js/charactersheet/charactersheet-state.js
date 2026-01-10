@@ -146,18 +146,25 @@ class CharacterSheetState {
 			vulnerabilities: [],
 			conditionImmunities: [],
 
-			// Custom modifiers
+			// Custom modifiers (simple totals for quick access)
 			customModifiers: {
 				ac: 0,
 				initiative: 0,
 				speed: 0,
-				savingThrows: {},
-				skills: {},
+				savingThrows: {}, // {str: 2, dex: 1, ...}
+				skills: {}, // {athletics: 2, stealth: -1, ...}
 				attackBonus: 0,
 				damageBonus: 0,
 				spellDc: 0,
 				spellAttack: 0,
+				abilityChecks: {}, // {str: 1, dex: 2, ...} - raw ability checks
 			},
+
+			// Named modifiers list (for detailed tracking with sources/notes)
+			// Each modifier: {id, name, type, value, note, enabled}
+			// type: "ac", "initiative", "speed", "attack", "damage", "spellDc", "spellAttack", 
+			//       "save:all", "save:str", "skill:all", "skill:stealth", "check:all", "check:str"
+			namedModifiers: [],
 
 			// Sheet settings/options
 			settings: {
@@ -197,6 +204,11 @@ class CharacterSheetState {
 		this._data.appearance = {...this._getDefaultState().appearance, ...this._data.appearance};
 		this._data.ac = {...this._getDefaultState().ac, ...this._data.ac};
 		this._data.customModifiers = {...this._getDefaultState().customModifiers, ...this._data.customModifiers};
+		
+		// Ensure namedModifiers array exists
+		if (!Array.isArray(this._data.namedModifiers)) {
+			this._data.namedModifiers = [];
+		}
 
 		// Migrate features: infer featureType for old saves that don't have it
 		this._migrateFeatures();
@@ -677,7 +689,8 @@ class CharacterSheetState {
 			profBonus = Math.floor(this.getProficiencyBonus() / 2);
 		}
 		
-		const custom = this._data.customModifiers.skills[skill] || 0;
+		// Get custom modifiers (specific skill + "all skills" bonus)
+		const custom = this.getSkillCustomMod(skill);
 		// Add item bonuses (ability check bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.abilityCheck || 0;
 
@@ -1782,6 +1795,218 @@ class CharacterSheetState {
 	// #region Appearance
 	getAppearance (field) { return this._data.appearance[field] || ""; }
 	setAppearance (field, value) { this._data.appearance[field] = value; }
+	// #endregion
+
+	// #region Custom Modifiers
+	/**
+	 * Get all named modifiers
+	 * @returns {Array} Array of modifier objects {id, name, type, value, note, enabled}
+	 */
+	getNamedModifiers () { return [...this._data.namedModifiers]; }
+
+	/**
+	 * Get enabled named modifiers of a specific type
+	 * @param {string} type - The modifier type (e.g., "ac", "save:str", "skill:all")
+	 * @returns {Array} Array of enabled modifier objects matching the type
+	 */
+	getNamedModifiersByType (type) {
+		return this._data.namedModifiers.filter(m => m.enabled && m.type === type);
+	}
+
+	/**
+	 * Add a named modifier
+	 * @param {Object} modifier - {name, type, value, note, enabled}
+	 * @returns {string} The ID of the new modifier
+	 */
+	addNamedModifier (modifier) {
+		const id = CryptUtil.uid();
+		this._data.namedModifiers.push({
+			id,
+			name: modifier.name || "Custom Modifier",
+			type: modifier.type || "ac",
+			value: modifier.value || 0,
+			note: modifier.note || "",
+			enabled: modifier.enabled !== false,
+		});
+		this._recalculateCustomModifiers();
+		return id;
+	}
+
+	/**
+	 * Update a named modifier
+	 * @param {string} id - The modifier ID
+	 * @param {Object} updates - The fields to update
+	 */
+	updateNamedModifier (id, updates) {
+		const modifier = this._data.namedModifiers.find(m => m.id === id);
+		if (modifier) {
+			Object.assign(modifier, updates);
+			this._recalculateCustomModifiers();
+		}
+	}
+
+	/**
+	 * Remove a named modifier
+	 * @param {string} id - The modifier ID
+	 */
+	removeNamedModifier (id) {
+		this._data.namedModifiers = this._data.namedModifiers.filter(m => m.id !== id);
+		this._recalculateCustomModifiers();
+	}
+
+	/**
+	 * Toggle a named modifier's enabled state
+	 * @param {string} id - The modifier ID
+	 * @returns {boolean} The new enabled state
+	 */
+	toggleNamedModifier (id) {
+		const modifier = this._data.namedModifiers.find(m => m.id === id);
+		if (modifier) {
+			modifier.enabled = !modifier.enabled;
+			this._recalculateCustomModifiers();
+			return modifier.enabled;
+		}
+		return false;
+	}
+
+	/**
+	 * Recalculate the quick-access customModifiers totals from named modifiers
+	 * This updates the cached totals used by getSaveMod, getSkillMod, getAc, etc.
+	 */
+	_recalculateCustomModifiers () {
+		// Reset totals
+		const cm = this._data.customModifiers;
+		cm.ac = 0;
+		cm.initiative = 0;
+		cm.speed = 0;
+		cm.attackBonus = 0;
+		cm.damageBonus = 0;
+		cm.spellDc = 0;
+		cm.spellAttack = 0;
+		cm.savingThrows = {};
+		cm.skills = {};
+		cm.abilityChecks = {};
+
+		// Sum up enabled modifiers
+		this._data.namedModifiers.forEach(mod => {
+			if (!mod.enabled) return;
+			const value = mod.value || 0;
+
+			switch (mod.type) {
+				case "ac": cm.ac += value; break;
+				case "initiative": cm.initiative += value; break;
+				case "speed": cm.speed += value; break;
+				case "attack": cm.attackBonus += value; break;
+				case "damage": cm.damageBonus += value; break;
+				case "spellDc": cm.spellDc += value; break;
+				case "spellAttack": cm.spellAttack += value; break;
+				case "save:all":
+					Parser.ABIL_ABVS.forEach(abl => {
+						cm.savingThrows[abl] = (cm.savingThrows[abl] || 0) + value;
+					});
+					break;
+				case "check:all":
+					Parser.ABIL_ABVS.forEach(abl => {
+						cm.abilityChecks[abl] = (cm.abilityChecks[abl] || 0) + value;
+					});
+					// Also apply to initiative (it's a DEX check)
+					cm.initiative += value;
+					break;
+				default:
+					// Handle save:str, save:dex, etc.
+					if (mod.type.startsWith("save:")) {
+						const abl = mod.type.split(":")[1];
+						cm.savingThrows[abl] = (cm.savingThrows[abl] || 0) + value;
+					}
+					// Handle check:str, check:dex, etc.
+					else if (mod.type.startsWith("check:")) {
+						const abl = mod.type.split(":")[1];
+						cm.abilityChecks[abl] = (cm.abilityChecks[abl] || 0) + value;
+						// DEX checks include initiative
+						if (abl === "dex") cm.initiative += value;
+					}
+					// Handle skill:stealth, skill:athletics, etc.
+					else if (mod.type.startsWith("skill:")) {
+						const skill = mod.type.split(":")[1];
+						if (skill === "all") {
+							// "all" will be handled specially in getSkillMod
+							cm.skills["_all"] = (cm.skills["_all"] || 0) + value;
+						} else {
+							cm.skills[skill] = (cm.skills[skill] || 0) + value;
+						}
+					}
+					break;
+			}
+		});
+	}
+
+	/**
+	 * Get custom modifier for a specific skill (includes "all skills" bonus)
+	 * @param {string} skill - The skill key
+	 * @returns {number} The total custom modifier
+	 */
+	getSkillCustomMod (skill) {
+		const specific = this._data.customModifiers.skills[skill] || 0;
+		const all = this._data.customModifiers.skills["_all"] || 0;
+		return specific + all;
+	}
+
+	/**
+	 * Get custom modifier for a specific ability check (includes "all checks" bonus)
+	 * @param {string} ability - The ability abbreviation
+	 * @returns {number} The total custom modifier
+	 */
+	getAbilityCheckCustomMod (ability) {
+		return this._data.customModifiers.abilityChecks[ability] || 0;
+	}
+
+	/**
+	 * Set a quick custom modifier value directly (for simple numeric adjustments)
+	 * @param {string} type - The modifier type
+	 * @param {number} value - The value to set
+	 */
+	setCustomModifier (type, value) {
+		if (type in this._data.customModifiers) {
+			this._data.customModifiers[type] = value;
+		} else if (type.startsWith("save:")) {
+			const abl = type.split(":")[1];
+			this._data.customModifiers.savingThrows[abl] = value;
+		} else if (type.startsWith("skill:")) {
+			const skill = type.split(":")[1];
+			this._data.customModifiers.skills[skill] = value;
+		}
+	}
+
+	/**
+	 * Get total custom modifier for a type (for display purposes)
+	 * @param {string} type - The modifier type
+	 * @returns {number} The total modifier value
+	 */
+	getCustomModifier (type) {
+		switch (type) {
+			case "ac": return this._data.customModifiers.ac || 0;
+			case "initiative": return this._data.customModifiers.initiative || 0;
+			case "speed": return this._data.customModifiers.speed || 0;
+			case "attack": return this._data.customModifiers.attackBonus || 0;
+			case "damage": return this._data.customModifiers.damageBonus || 0;
+			case "spellDc": return this._data.customModifiers.spellDc || 0;
+			case "spellAttack": return this._data.customModifiers.spellAttack || 0;
+			default:
+				if (type.startsWith("save:")) {
+					const abl = type.split(":")[1];
+					return this._data.customModifiers.savingThrows[abl] || 0;
+				}
+				if (type.startsWith("skill:")) {
+					const skill = type.split(":")[1];
+					return this.getSkillCustomMod(skill);
+				}
+				if (type.startsWith("check:")) {
+					const abl = type.split(":")[1];
+					return this.getAbilityCheckCustomMod(abl);
+				}
+				return 0;
+		}
+	}
 	// #endregion
 
 	// #region Rest

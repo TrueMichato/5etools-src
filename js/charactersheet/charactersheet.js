@@ -317,6 +317,7 @@ class CharacterSheetPage {
 		$("#charsheet-btn-new").on("click", () => this._onNewCharacter());
 		$("#charsheet-btn-duplicate").on("click", () => this._onDuplicateCharacter());
 		$("#charsheet-btn-delete").on("click", () => this._onDeleteCharacter());
+		$("#charsheet-btn-modifiers").on("click", () => this._showCustomModifiersModal());
 		$("#charsheet-btn-settings").on("click", () => this._showSettingsModal());
 		// Import/Export/Print handled by CharacterSheetExport module
 		$("#charsheet-btn-levelup").on("click", () => this._levelUp?.showLevelUp());
@@ -2316,6 +2317,279 @@ class CharacterSheetPage {
 		const allowed = this._state.getAllowedSources();
 		if (!allowed) return entities; // null = all allowed
 		return entities.filter(e => allowed.includes(e.source));
+	}
+	// #endregion
+
+	// #region Custom Modifiers Modal
+	/**
+	 * Show the custom modifiers management modal
+	 */
+	async _showCustomModifiersModal () {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "Custom Modifiers",
+			isMinHeight0: true,
+			isWidth100: true,
+			cbClose: () => {
+				this._saveCurrentCharacter();
+				this._renderCharacter();
+			},
+		});
+
+		// Get modifier type options
+		const modifierTypes = [
+			{value: "ac", label: "Armor Class (AC)"},
+			{value: "initiative", label: "Initiative"},
+			{value: "speed", label: "Speed (ft.)"},
+			{value: "attack", label: "Attack Rolls"},
+			{value: "damage", label: "Damage Rolls"},
+			{value: "spellDc", label: "Spell Save DC"},
+			{value: "spellAttack", label: "Spell Attack"},
+			{value: "save:all", label: "All Saving Throws"},
+			{value: "check:all", label: "All Ability Checks"},
+			{value: "skill:all", label: "All Skill Checks"},
+		];
+
+		// Add individual saving throws
+		Parser.ABIL_ABVS.forEach(abl => {
+			modifierTypes.push({value: `save:${abl}`, label: `${Parser.attAbvToFull(abl)} Save`});
+		});
+
+		// Add individual ability checks
+		Parser.ABIL_ABVS.forEach(abl => {
+			modifierTypes.push({value: `check:${abl}`, label: `${Parser.attAbvToFull(abl)} Checks`});
+		});
+
+		// Add individual skills
+		const skills = this.getSkillsList();
+		skills.forEach(skill => {
+			const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
+			modifierTypes.push({value: `skill:${skillKey}`, label: `${skill.name} (${skill.ability.toUpperCase()})`});
+		});
+
+		// Render the modifiers list
+		const renderModifiersList = () => {
+			const modifiers = this._state.getNamedModifiers();
+			const $list = $modalInner.find("#charsheet-modifiers-list");
+			$list.empty();
+
+			if (!modifiers.length) {
+				$list.append(`<div class="ve-muted ve-text-center py-3">No custom modifiers. Add one below!</div>`);
+				return;
+			}
+
+			modifiers.forEach(mod => {
+				const typeLabel = modifierTypes.find(t => t.value === mod.type)?.label || mod.type;
+				const valueStr = mod.value >= 0 ? `+${mod.value}` : mod.value;
+				
+				const $row = $$`<div class="charsheet__modifier-row ${mod.enabled ? "" : "charsheet__modifier-row--disabled"}">
+					<div class="charsheet__modifier-toggle">
+						<input type="checkbox" ${mod.enabled ? "checked" : ""} title="Enable/disable this modifier">
+					</div>
+					<div class="charsheet__modifier-info">
+						<div class="charsheet__modifier-name">${mod.name}</div>
+						<div class="charsheet__modifier-type ve-small ve-muted">${typeLabel}</div>
+						${mod.note ? `<div class="charsheet__modifier-note ve-small ve-muted">${mod.note}</div>` : ""}
+					</div>
+					<div class="charsheet__modifier-value ${mod.value >= 0 ? "charsheet__modifier-value--positive" : "charsheet__modifier-value--negative"}">${valueStr}</div>
+					<div class="charsheet__modifier-actions">
+						<button class="ve-btn ve-btn-xs ve-btn-default charsheet__modifier-edit" title="Edit"><span class="glyphicon glyphicon-pencil"></span></button>
+						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__modifier-delete" title="Remove"><span class="glyphicon glyphicon-trash"></span></button>
+					</div>
+				</div>`;
+
+				// Toggle handler
+				$row.find("input[type='checkbox']").on("change", () => {
+					this._state.toggleNamedModifier(mod.id);
+					renderModifiersList();
+				});
+
+				// Edit handler
+				$row.find(".charsheet__modifier-edit").on("click", () => {
+					showEditForm(mod);
+				});
+
+				// Delete handler
+				$row.find(".charsheet__modifier-delete").on("click", () => {
+					if (confirm(`Remove "${mod.name}" modifier?`)) {
+						this._state.removeNamedModifier(mod.id);
+						renderModifiersList();
+					}
+				});
+
+				$list.append($row);
+			});
+		};
+
+		// Show edit/add form
+		const showEditForm = (existingMod = null) => {
+			const $form = $modalInner.find("#charsheet-modifier-form");
+			$form.show();
+
+			const $nameInput = $form.find("#mod-name");
+			const $typeSelect = $form.find("#mod-type");
+			const $valueInput = $form.find("#mod-value");
+			const $noteInput = $form.find("#mod-note");
+
+			if (existingMod) {
+				$nameInput.val(existingMod.name);
+				$typeSelect.val(existingMod.type);
+				$valueInput.val(existingMod.value);
+				$noteInput.val(existingMod.note || "");
+				$form.data("editing-id", existingMod.id);
+				$form.find(".charsheet__modifier-form-title").text("Edit Modifier");
+			} else {
+				$nameInput.val("");
+				$typeSelect.val("ac");
+				$valueInput.val(1);
+				$noteInput.val("");
+				$form.removeData("editing-id");
+				$form.find(".charsheet__modifier-form-title").text("Add Modifier");
+			}
+
+			$nameInput.focus();
+		};
+
+		// Build type select options
+		const $typeOptions = modifierTypes.map(t => `<option value="${t.value}">${t.label}</option>`).join("");
+
+		// Build modal content
+		$$`<div class="charsheet__modifiers-modal">
+			<p class="ve-muted ve-small mb-3">
+				Add custom modifiers to adjust your rolls. These can represent temporary effects (Bless, Guidance, Cover), 
+				magic items, or other situational bonuses. Toggle modifiers on/off as needed.
+			</p>
+			
+			<div class="charsheet__modifiers-list" id="charsheet-modifiers-list">
+				<!-- Populated by renderModifiersList -->
+			</div>
+
+			<div class="charsheet__modifier-form" id="charsheet-modifier-form" style="display: none;">
+				<h5 class="charsheet__modifier-form-title">Add Modifier</h5>
+				<div class="ve-flex mb-2">
+					<div class="ve-flex-col mr-2" style="flex: 2;">
+						<label class="ve-small ve-muted">Name</label>
+						<input type="text" class="form-control form-control--minimal" id="mod-name" placeholder="e.g., Bless, Shield of Faith, Cover">
+					</div>
+					<div class="ve-flex-col mr-2" style="flex: 2;">
+						<label class="ve-small ve-muted">Type</label>
+						<select class="form-control form-control--minimal" id="mod-type">
+							${$typeOptions}
+						</select>
+					</div>
+					<div class="ve-flex-col" style="flex: 1;">
+						<label class="ve-small ve-muted">Value</label>
+						<input type="number" class="form-control form-control--minimal" id="mod-value" value="1">
+					</div>
+				</div>
+				<div class="mb-2">
+					<label class="ve-small ve-muted">Note (optional)</label>
+					<input type="text" class="form-control form-control--minimal" id="mod-note" placeholder="e.g., Lasts 1 minute, Concentration">
+				</div>
+				<div class="ve-flex">
+					<button class="ve-btn ve-btn-primary ve-btn-sm mr-2" id="mod-save">Save</button>
+					<button class="ve-btn ve-btn-default ve-btn-sm" id="mod-cancel">Cancel</button>
+				</div>
+			</div>
+
+			<div class="mt-3">
+				<button class="ve-btn ve-btn-primary ve-btn-sm" id="charsheet-btn-add-modifier">
+					<span class="glyphicon glyphicon-plus"></span> Add Modifier
+				</button>
+			</div>
+			
+			<hr class="my-3">
+			
+			<div class="charsheet__modifiers-summary">
+				<h5>Current Totals</h5>
+				<div class="ve-flex ve-flex-wrap" id="charsheet-modifiers-summary">
+					<!-- Populated by renderSummary -->
+				</div>
+			</div>
+		</div>`.appendTo($modalInner);
+
+		// Render summary of active modifiers
+		const renderSummary = () => {
+			const $summary = $modalInner.find("#charsheet-modifiers-summary");
+			$summary.empty();
+
+			const summaryItems = [
+				{type: "ac", label: "AC"},
+				{type: "initiative", label: "Initiative"},
+				{type: "speed", label: "Speed"},
+				{type: "attack", label: "Attack"},
+				{type: "damage", label: "Damage"},
+				{type: "spellDc", label: "Spell DC"},
+				{type: "spellAttack", label: "Spell Attack"},
+			];
+
+			summaryItems.forEach(item => {
+				const value = this._state.getCustomModifier(item.type);
+				if (value !== 0) {
+					const valueStr = value >= 0 ? `+${value}` : value;
+					$summary.append(`
+						<div class="charsheet__modifier-summary-item mr-3 mb-1">
+							<span class="ve-muted ve-small">${item.label}:</span>
+							<span class="ve-bold ${value >= 0 ? "text-success" : "text-danger"}">${valueStr}</span>
+						</div>
+					`);
+				}
+			});
+
+			// Show any save bonuses
+			Parser.ABIL_ABVS.forEach(abl => {
+				const value = this._state.getCustomModifier(`save:${abl}`);
+				if (value !== 0) {
+					const valueStr = value >= 0 ? `+${value}` : value;
+					$summary.append(`
+						<div class="charsheet__modifier-summary-item mr-3 mb-1">
+							<span class="ve-muted ve-small">${Parser.attAbvToFull(abl)} Save:</span>
+							<span class="ve-bold ${value >= 0 ? "text-success" : "text-danger"}">${valueStr}</span>
+						</div>
+					`);
+				}
+			});
+
+			if (!$summary.children().length) {
+				$summary.append(`<div class="ve-muted">No active modifiers</div>`);
+			}
+		};
+
+		// Add modifier button
+		$modalInner.find("#charsheet-btn-add-modifier").on("click", () => showEditForm());
+
+		// Save modifier
+		$modalInner.find("#mod-save").on("click", () => {
+			const $form = $modalInner.find("#charsheet-modifier-form");
+			const name = $form.find("#mod-name").val().trim();
+			const type = $form.find("#mod-type").val();
+			const value = parseInt($form.find("#mod-value").val()) || 0;
+			const note = $form.find("#mod-note").val().trim();
+
+			if (!name) {
+				JqueryUtil.doToast({type: "warning", content: "Please enter a name for the modifier."});
+				return;
+			}
+
+			const editingId = $form.data("editing-id");
+			if (editingId) {
+				this._state.updateNamedModifier(editingId, {name, type, value, note});
+			} else {
+				this._state.addNamedModifier({name, type, value, note, enabled: true});
+			}
+
+			$form.hide();
+			renderModifiersList();
+			renderSummary();
+		});
+
+		// Cancel form
+		$modalInner.find("#mod-cancel").on("click", () => {
+			$modalInner.find("#charsheet-modifier-form").hide();
+		});
+
+		// Initial render
+		renderModifiersList();
+		renderSummary();
 	}
 	// #endregion
 
