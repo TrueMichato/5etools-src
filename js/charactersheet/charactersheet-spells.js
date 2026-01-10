@@ -396,6 +396,7 @@ class CharacterSheetSpells {
 		if (spellData) {
 			const spellcastingMod = this._state.getAbilityMod(this._state.getSpellcastingAbility() || "int");
 			const profBonus = this._state.getProficiencyBonus();
+			const exhaustionDcPenalty = this._state._getExhaustionDcPenalty?.() || 0;
 
 			// Check if spell attack
 			if (spellData.entries?.some(e => typeof e === "string" && e.toLowerCase().includes("spell attack"))) {
@@ -406,7 +407,7 @@ class CharacterSheetSpells {
 
 			// Check for save DC
 			if (spellData.savingThrow) {
-				const saveDC = 8 + spellcastingMod + profBonus;
+				const saveDC = 8 + spellcastingMod + profBonus - exhaustionDcPenalty;
 				attackInfo += `<br>Save DC: <strong>${saveDC}</strong> (${spellData.savingThrow.join("/")} save)`;
 			}
 
@@ -861,8 +862,11 @@ class CharacterSheetSpells {
 		const spellAttackBonus = itemBonuses.spellAttack || 0;
 		const spellDcBonus = itemBonuses.spellSaveDc || 0;
 		
+		// Get exhaustion DC penalty (Thelemar rules only)
+		const exhaustionDcPenalty = this._state._getExhaustionDcPenalty?.() || 0;
+		
 		const attackBonus = mod + prof + spellAttackBonus;
-		const saveDC = 8 + mod + prof + spellDcBonus;
+		const saveDC = 8 + mod + prof + spellDcBonus - exhaustionDcPenalty;
 		const abilityFull = {
 			"str": "Strength",
 			"dex": "Dexterity",

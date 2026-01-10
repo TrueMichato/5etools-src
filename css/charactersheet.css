@@ -796,7 +796,8 @@
 }
 
 .charsheet__exhaustion-number.exhaustion-5,
-.charsheet__exhaustion-number.exhaustion-6 {
+.charsheet__exhaustion-number.exhaustion-6,
+.charsheet__exhaustion-number.exhaustion-max {
 	color: #dc3545;
 }
 

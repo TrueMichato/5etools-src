@@ -826,9 +826,10 @@ class CharacterSheetPage {
 		// Calculate speed with exhaustion penalty
 		const exhaustion = this._state.getExhaustion();
 		const rules = this._state.getExhaustionRules();
+		const maxExhaustion = this._state.getMaxExhaustion();
 		let speedDisplay = this._state.getSpeed();
 		
-		if (exhaustion > 0 && exhaustion < 6) {
+		if (exhaustion > 0 && exhaustion < maxExhaustion) {
 			if (rules === "2024") {
 				// 2024: -5 ft per level of exhaustion
 				const speedPenalty = exhaustion * 5;
@@ -849,6 +850,7 @@ class CharacterSheetPage {
 					speedDisplay += " (halved)";
 				}
 			}
+			// Thelemar rules: no speed penalty
 		}
 		
 		$("#charsheet-disp-speed").text(speedDisplay);
@@ -1112,15 +1114,26 @@ class CharacterSheetPage {
 	_renderExhaustion () {
 		const exhaustion = this._state.getExhaustion();
 		const rules = this._state.getExhaustionRules();
+		const maxExhaustion = this._state.getMaxExhaustion();
 		const $number = $("#charsheet-exhaustion-display .charsheet__exhaustion-number");
+		const $label = $("#charsheet-exhaustion-display .charsheet__exhaustion-label");
 		const $effect = $("#charsheet-exhaustion-effect");
 		const $rulesToggle = $("#charsheet-exhaustion-rules");
 
 		$number.text(exhaustion);
+		$label.text(`/ ${maxExhaustion}`);
 
-		// Update color based on level
-		$number.removeClass("exhaustion-0 exhaustion-1 exhaustion-2 exhaustion-3 exhaustion-4 exhaustion-5 exhaustion-6");
-		$number.addClass(`exhaustion-${exhaustion}`);
+		// Update color based on level (normalize to 0-6 range for CSS classes)
+		$number.removeClass("exhaustion-0 exhaustion-1 exhaustion-2 exhaustion-3 exhaustion-4 exhaustion-5 exhaustion-6 exhaustion-max");
+		if (exhaustion >= maxExhaustion) {
+			$number.addClass("exhaustion-max");
+		} else if (rules === "thelemar") {
+			// For Thelemar, map 0-10 to color classes
+			const colorLevel = Math.min(6, Math.floor(exhaustion * 6 / 10));
+			$number.addClass(`exhaustion-${colorLevel}`);
+		} else {
+			$number.addClass(`exhaustion-${exhaustion}`);
+		}
 
 		// 2024 rules: -2 per level to d20 Tests, -5 ft speed per level
 		const effects2024 = [
@@ -1144,8 +1157,21 @@ class CharacterSheetPage {
 			"Death",
 		];
 
-		const effects = rules === "2024" ? effects2024 : effects2014;
-		$effect.html(effects[exhaustion]);
+		// Thelemar rules: -1 per level to all rolls and DCs, death at 10
+		let effectText;
+		if (rules === "thelemar") {
+			if (exhaustion === 0) {
+				effectText = "No exhaustion";
+			} else if (exhaustion >= 10) {
+				effectText = "Death";
+			} else {
+				effectText = `-${exhaustion} to all rolls and DCs`;
+			}
+		} else {
+			const effects = rules === "2024" ? effects2024 : effects2014;
+			effectText = effects[exhaustion] || effects[effects.length - 1];
+		}
+		$effect.html(effectText);
 
 		// Render rules toggle if container exists
 		if ($rulesToggle.length && !$rulesToggle.data("initialized")) {
@@ -1154,6 +1180,7 @@ class CharacterSheetPage {
 				<select id="charsheet-exhaustion-rules-select" class="ve-form-control ve-form-control--sm">
 					<option value="2024" ${rules === "2024" ? "selected" : ""}>2024 Rules</option>
 					<option value="2014" ${rules === "2014" ? "selected" : ""}>2014 Rules</option>
+					<option value="thelemar" ${rules === "thelemar" ? "selected" : ""}>Thelemar Rules</option>
 				</select>
 			`);
 			$rulesToggle.find("select").on("change", (e) => {
@@ -1161,6 +1188,10 @@ class CharacterSheetPage {
 				this._saveCurrentCharacter();
 				this._renderExhaustion();
 				this._renderCombatStats(); // Re-render to update speed
+				// Re-render spells to update DC
+				if (this._spellsModule) {
+					this._spellsModule.render();
+				}
 			});
 		} else if ($rulesToggle.length) {
 			$rulesToggle.find("select").val(rules);
@@ -1169,13 +1200,19 @@ class CharacterSheetPage {
 
 	_addExhaustion () {
 		const current = this._state.getExhaustion();
-		if (current >= 6) {
-			JqueryUtil.doToast({type: "warning", content: "Maximum exhaustion (6) reached!"});
+		const max = this._state.getMaxExhaustion();
+		if (current >= max) {
+			JqueryUtil.doToast({type: "warning", content: `Maximum exhaustion (${max}) reached!`});
 			return;
 		}
 		this._state.addExhaustion();
 		this._saveCurrentCharacter();
 		this._renderExhaustion();
+		this._renderCombatStats();
+		// Re-render spells to update DC (Thelemar rules)
+		if (this._spellsModule && this._state.getExhaustionRules() === "thelemar") {
+			this._spellsModule.render();
+		}
 	}
 
 	_removeExhaustion () {
@@ -1187,6 +1224,11 @@ class CharacterSheetPage {
 		this._state.removeExhaustion();
 		this._saveCurrentCharacter();
 		this._renderExhaustion();
+		this._renderCombatStats();
+		// Re-render spells to update DC (Thelemar rules)
+		if (this._spellsModule && this._state.getExhaustionRules() === "thelemar") {
+			this._spellsModule.render();
+		}
 	}
 
 	_renderAbilitiesDetailed () {
@@ -1477,11 +1519,13 @@ class CharacterSheetPage {
 		if (spellcastingAbility) {
 			const spellMod = this._state.getAbilityMod(spellcastingAbility);
 			const profBonus = this._state.getProficiencyBonus();
-			const saveDC = 8 + spellMod + profBonus;
+			const dcPenalty = this._getExhaustionDcPenalty();
+			const saveDC = 8 + spellMod + profBonus - dcPenalty;
 			const attackBonus = spellMod + profBonus;
+			const dcPenaltyText = dcPenalty > 0 ? ` <span class="ve-muted ve-small">(−${dcPenalty} exhaustion)</span>` : "";
 			$container.append(`
 				<div class="charsheet__spell-stats ve-flex ve-flex-wrap mb-2">
-					<span class="ve-small mr-3"><strong>Save DC:</strong> ${saveDC}</span>
+					<span class="ve-small mr-3"><strong>Save DC:</strong> ${saveDC}${dcPenaltyText}</span>
 					<span class="ve-small mr-3"><strong>Attack:</strong> ${this._formatMod(attackBonus)}</span>
 					<span class="ve-small"><strong>Ability:</strong> ${spellcastingAbility.toUpperCase()}</span>
 				</div>
@@ -1803,6 +1847,7 @@ class CharacterSheetPage {
 	/**
 	 * Get exhaustion penalty for d20 rolls
 	 * 2024 rules: -2 per exhaustion level to d20 Tests (ability checks, attack rolls, saving throws)
+	 * Thelemar rules: -1 per exhaustion level to all rolls and DCs
 	 * 2014 rules: Handled separately (disadvantage, etc.)
 	 * @returns {number} Penalty to subtract from d20 tests
 	 */
@@ -1812,7 +1857,24 @@ class CharacterSheetPage {
 		if (rules === "2024") {
 			return exhaustion * 2; // -2 per level in 2024 rules
 		}
+		if (rules === "thelemar") {
+			return exhaustion; // -1 per level in Thelemar rules
+		}
 		// 2014 rules don't have a flat penalty to rolls
+		return 0;
+	}
+
+	/**
+	 * Get exhaustion penalty for DCs (spell save DC, etc.)
+	 * Only applies in Thelemar rules (-1 per level)
+	 * @returns {number} Penalty to subtract from DCs
+	 */
+	_getExhaustionDcPenalty () {
+		const exhaustion = this._state.getExhaustion();
+		const rules = this._state.getSettings().exhaustionRules || "2024";
+		if (rules === "thelemar") {
+			return exhaustion; // -1 per level in Thelemar rules
+		}
 		return 0;
 	}
 
@@ -2261,6 +2323,7 @@ class CharacterSheetPage {
 				<select class="form-control form-control--minimal input-sm" id="settings-exhaustion-rules" style="width: auto;">
 					<option value="2024" ${currentExhaustionRules === "2024" ? "selected" : ""}>2024 Rules (Stacking -2 to d20 tests)</option>
 					<option value="2014" ${currentExhaustionRules === "2014" ? "selected" : ""}>2014 Rules (Tiered effects)</option>
+					<option value="thelemar" ${currentExhaustionRules === "thelemar" ? "selected" : ""}>Thelemar Rules (-1 to rolls/DCs, max 10)</option>
 				</select>
 			</label>
 		</div>`;
@@ -2335,6 +2398,11 @@ class CharacterSheetPage {
 		$modalInner.find("#settings-exhaustion-rules").on("change", (e) => {
 			this._state.setExhaustionRules(e.target.value);
 			this._renderExhaustion();
+			this._renderCombatStats();
+			// Re-render spells tab if it exists to update spell save DC
+			if (this._spellsModule) {
+				this._spellsModule.render();
+			}
 		});
 	}
 

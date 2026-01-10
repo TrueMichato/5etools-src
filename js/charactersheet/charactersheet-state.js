@@ -952,7 +952,9 @@ class CharacterSheetState {
 		if (!ability) return null;
 		// Add item bonuses (spell save DC bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.spellSaveDc || 0;
-		return 8 + this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellDc || 0) + itemBonus;
+		// Apply exhaustion DC penalty (Thelemar rules only)
+		const exhaustionPenalty = this._getExhaustionDcPenalty();
+		return 8 + this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellDc || 0) + itemBonus - exhaustionPenalty;
 	}
 
 	getSpellAttackBonus () {
@@ -1611,12 +1613,23 @@ class CharacterSheetState {
 	// #region Exhaustion
 	getExhaustion () { return this._data.exhaustion || 0; }
 
+	/**
+	 * Get the maximum exhaustion level before death based on rules
+	 * @returns {number} Maximum exhaustion (6 for 2014/2024, 10 for Thelemar)
+	 */
+	getMaxExhaustion () {
+		const rules = this.getExhaustionRules();
+		return rules === "thelemar" ? 10 : 6;
+	}
+
 	setExhaustion (level) {
-		this._data.exhaustion = Math.max(0, Math.min(6, level));
+		const max = this.getMaxExhaustion();
+		this._data.exhaustion = Math.max(0, Math.min(max, level));
 	}
 
 	addExhaustion (amount = 1) {
-		this._data.exhaustion = Math.min(6, (this._data.exhaustion || 0) + amount);
+		const max = this.getMaxExhaustion();
+		this._data.exhaustion = Math.min(max, (this._data.exhaustion || 0) + amount);
 	}
 
 	removeExhaustion (amount = 1) {
@@ -1641,6 +1654,25 @@ class CharacterSheetState {
 	setExhaustionRules (rules) {
 		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null};
 		this._data.settings.exhaustionRules = rules;
+		// Clamp current exhaustion to new max when switching rules
+		const max = this.getMaxExhaustion();
+		if (this._data.exhaustion > max) {
+			this._data.exhaustion = max;
+		}
+	}
+
+	/**
+	 * Get exhaustion penalty for DCs (spell save DC, etc.)
+	 * Only applies in Thelemar rules (-1 per level)
+	 * @returns {number} Penalty to subtract from DCs
+	 */
+	_getExhaustionDcPenalty () {
+		const exhaustion = this.getExhaustion();
+		const rules = this.getExhaustionRules();
+		if (rules === "thelemar") {
+			return exhaustion; // -1 per level in Thelemar rules
+		}
+		return 0;
 	}
 
 	// Source filtering
