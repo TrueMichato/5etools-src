@@ -394,6 +394,9 @@ class CharacterSheetPage {
 		// Edit proficiencies
 		$("#charsheet-edit-proficiencies").on("click", () => this._showEditProficienciesModal());
 
+		// Edit weapon masteries
+		$("#charsheet-edit-masteries").on("click", () => this._showEditWeaponMasteriesModal());
+
 		// Add custom feature
 		$("#charsheet-add-custom-feature").on("click", () => this._showAddCustomFeatureModal());
 	}
@@ -989,6 +992,75 @@ class CharacterSheetPage {
 			$("#charsheet-prof-languages").html(langHtml);
 		} else {
 			$("#charsheet-prof-languages").text("—");
+		}
+
+		// Weapon Masteries
+		this._renderWeaponMasteries();
+	}
+
+	/**
+	 * Extract mastery name from item's mastery property
+	 * Handles both string format ("Sap|XPHB") and object format ({uid: "Sap|XPHB", note: "..."})
+	 */
+	_getMasteryName (masteryEntry) {
+		if (!masteryEntry) return "";
+		if (typeof masteryEntry === "string") {
+			return masteryEntry.split("|")[0];
+		}
+		if (typeof masteryEntry === "object" && masteryEntry.uid) {
+			return masteryEntry.uid.split("|")[0];
+		}
+		return "";
+	}
+
+	/**
+	 * Render weapon masteries display in combat section
+	 */
+	_renderWeaponMasteries () {
+		const masteries = this._state.getWeaponMasteries();
+		const $group = $("#charsheet-masteries-group");
+		const $container = $("#charsheet-combat-masteries");
+
+		// Check if character has Weapon Mastery feature
+		const maxMasteries = this._getMaxWeaponMasteries();
+		const hasWeaponMasteryFeature = maxMasteries > 0;
+
+		if (!hasWeaponMasteryFeature) {
+			// Hide if character doesn't have the Weapon Mastery feature
+			$group.hide();
+			return;
+		}
+
+		// Show the section since character has the feature
+		$group.show();
+		$container.empty();
+
+		if (masteries?.length) {
+			// Render each mastery as a badge with the mastery property
+			masteries.forEach(m => {
+				const [weaponName, source] = m.split("|");
+				// Find the BASE weapon to get its mastery property
+				const weapon = this._itemsData?.find(i => 
+					i._isBaseItem &&
+					i.name.toLowerCase() === weaponName.toLowerCase() && 
+					(!source || i.source === source)
+				);
+				const masteryProp = this._getMasteryName(weapon?.mastery?.[0]);
+				
+				const $badge = $(`
+					<span class="charsheet__mastery-badge" title="${masteryProp ? `Mastery: ${masteryProp}` : weaponName}">
+						<strong>${weaponName}</strong>
+						${masteryProp ? `<span class="charsheet__mastery-prop">${masteryProp}</span>` : ""}
+					</span>
+				`);
+				$container.append($badge);
+			});
+			
+			// Show count
+			$container.append(`<span class="ve-muted ve-small ml-2">(${masteries.length}/${maxMasteries})</span>`);
+		} else {
+			// No masteries selected yet
+			$container.html(`<span class="ve-muted">None selected - click ✎ to choose weapons</span>`);
 		}
 	}
 
@@ -3094,6 +3166,157 @@ class CharacterSheetPage {
 		$$`<div class="ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-primary">Done</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose());
+	}
+
+	/**
+	 * Show modal for editing weapon masteries
+	 * Allows changing which weapons the character has mastery with
+	 */
+	async _showEditWeaponMasteriesModal () {
+		const currentMasteries = this._state.getWeaponMasteries();
+		
+		// Determine max masteries from class features
+		const maxMasteries = this._getMaxWeaponMasteries();
+		
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "Edit Weapon Masteries",
+			isMinHeight0: true,
+			isWidth100: true,
+			cbClose: () => {
+				this._renderWeaponMasteries();
+				this._saveCurrentCharacter();
+			},
+		});
+
+		$modalInner.append(`
+			<p class="ve-muted mb-2">Choose up to ${maxMasteries} weapons to master. You can change these after a Long Rest.</p>
+			<div class="ve-small ve-muted mb-2">Selected: <span id="mastery-count">${currentMasteries.length}</span>/${maxMasteries}</div>
+		`);
+
+		// Get only BASE weapons with mastery properties (not magic variants)
+		const weaponsWithMastery = (this._itemsData || []).filter(item => {
+			// Must be a base item, not a magic variant
+			if (!item._isBaseItem) return false;
+			// Must be a weapon
+			if (!item.weaponCategory && !["M", "R", "S"].includes(item.type)) return false;
+			// Must have mastery property
+			return item.mastery?.length > 0;
+		});
+
+		// Group by type
+		const simpleWeapons = weaponsWithMastery.filter(w => 
+			w.weaponCategory === "simple" || w.type === "S"
+		).sort((a, b) => a.name.localeCompare(b.name));
+		
+		const martialWeapons = weaponsWithMastery.filter(w => 
+			w.weaponCategory === "martial" || w.type === "M"
+		).sort((a, b) => a.name.localeCompare(b.name));
+
+		const selectedMasteries = [...currentMasteries];
+
+		const renderWeaponGroup = (weapons, groupName) => {
+			if (!weapons.length) return;
+
+			const $group = $(`<div class="mb-3"><strong>${groupName}:</strong></div>`);
+			const $checkboxes = $(`<div class="charsheet__mastery-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>`);
+
+			weapons.forEach(weapon => {
+				const masteryName = this._getMasteryName(weapon.mastery?.[0]);
+				const weaponKey = `${weapon.name}|${weapon.source}`;
+				const isSelected = selectedMasteries.includes(weaponKey);
+				
+				const $label = $(`
+					<label class="charsheet__mastery-checkbox" style="display: flex; align-items: center; cursor: pointer; padding: 4px 8px; border: 1px solid var(--rgb-border-grey); border-radius: 4px; ${isSelected ? "background: var(--rgb-bg-highlight);" : ""}">
+						<input type="checkbox" value="${weaponKey}" ${isSelected ? "checked" : ""} style="margin-right: 6px;">
+						<span>${weapon.name}</span>
+						${masteryName ? `<span class="ve-small text-muted ml-1">(${masteryName})</span>` : ""}
+					</label>
+				`);
+
+				$label.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (selectedMasteries.length < maxMasteries) {
+							selectedMasteries.push(weaponKey);
+							$label.css("background", "var(--rgb-bg-highlight)");
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${maxMasteries} weapon masteries.`});
+						}
+					} else {
+						const idx = selectedMasteries.indexOf(weaponKey);
+						if (idx > -1) selectedMasteries.splice(idx, 1);
+						$label.css("background", "");
+					}
+					$("#mastery-count").text(selectedMasteries.length);
+				});
+
+				$checkboxes.append($label);
+			});
+
+			$group.append($checkboxes);
+			$modalInner.append($group);
+		};
+
+		renderWeaponGroup(simpleWeapons, "Simple Weapons");
+		renderWeaponGroup(martialWeapons, "Martial Weapons");
+
+		// Save button
+		$$`<div class="ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-primary">Save</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => {
+			this._state.setWeaponMasteries(selectedMasteries);
+			doClose();
+		});
+	}
+
+	/**
+	 * Get the maximum number of weapon masteries for this character
+	 * Based on class and level
+	 * Returns 0 if the character doesn't have the Weapon Mastery feature
+	 */
+	_getMaxWeaponMasteries () {
+		const classes = this._state.getClasses();
+		if (!classes?.length) return 0; // No class = no weapon mastery
+
+		// Check each class for weapon mastery progression
+		let maxMasteries = 0;
+		
+		for (const cls of classes) {
+			const classData = this._classes?.find(c => c.name === cls.name && c.source === cls.source);
+			if (!classData) continue;
+
+			// Check classTableGroups for Weapon Mastery column
+			if (classData.classTableGroups) {
+				for (const tableGroup of classData.classTableGroups) {
+					const masteryColIndex = tableGroup.colLabels?.findIndex(
+						col => col === "Weapon Mastery" || (typeof col === "string" && col.toLowerCase().includes("mastery"))
+					);
+					
+					if (masteryColIndex === -1) continue;
+
+					// Get value at current level (rows are 0-indexed)
+					const level = cls.level || 1;
+					const row = tableGroup.rows?.[level - 1];
+					if (!row) continue;
+
+					const value = row[masteryColIndex];
+					const count = typeof value === "number" ? value : parseInt(value) || 0;
+					if (count > maxMasteries) maxMasteries = count;
+				}
+			}
+
+			// If no table found, check for Weapon Mastery feature (defaults to 2)
+			if (maxMasteries === 0) {
+				const hasWeaponMastery = this._classFeatures?.some(f => 
+					f.name === "Weapon Mastery" && 
+					f.className === cls.name && 
+					f.level <= (cls.level || 1)
+				);
+				if (hasWeaponMastery) maxMasteries = 2;
+			}
+		}
+
+		return maxMasteries; // 0 if no Weapon Mastery feature found
 	}
 
 	/**

@@ -108,6 +108,9 @@ class CharacterSheetState {
 			features: [], // [{name, source, description, uses: {current, max, recharge}}]
 			feats: [], // [{name, source}]
 
+			// Weapon Masteries (2024 rules)
+			weaponMasteries: [], // ["Longsword|XPHB", "Shortsword|XPHB"] - weapon keys (name|source)
+
 			// Attacks (weapons + custom)
 			attacks: [], // [{name, attackBonus, damage, damageType, range, properties}]
 
@@ -1791,6 +1794,60 @@ class CharacterSheetState {
 			if (f.id === featIdOrName) return false;
 			if (f.name === featIdOrName && f.source === source) return false;
 			return true;
+		});
+	}
+	// #endregion
+
+	// #region Weapon Masteries
+	/**
+	 * Get list of weapon masteries (weapon keys in "name|source" format)
+	 */
+	getWeaponMasteries () {
+		return [...(this._data.weaponMasteries || [])];
+	}
+
+	/**
+	 * Set the full list of weapon masteries
+	 * @param {Array<string>} masteries - Array of weapon keys like "Longsword|XPHB"
+	 */
+	setWeaponMasteries (masteries) {
+		this._data.weaponMasteries = [...masteries];
+	}
+
+	/**
+	 * Add a weapon mastery
+	 * @param {string} weaponKey - Weapon key in "name|source" format
+	 */
+	addWeaponMastery (weaponKey) {
+		if (!this._data.weaponMasteries) this._data.weaponMasteries = [];
+		if (!this._data.weaponMasteries.includes(weaponKey)) {
+			this._data.weaponMasteries.push(weaponKey);
+		}
+	}
+
+	/**
+	 * Remove a weapon mastery
+	 * @param {string} weaponKey - Weapon key to remove
+	 */
+	removeWeaponMastery (weaponKey) {
+		if (!this._data.weaponMasteries) return;
+		this._data.weaponMasteries = this._data.weaponMasteries.filter(m => m !== weaponKey);
+	}
+
+	/**
+	 * Check if character has mastery with a specific weapon
+	 * @param {string} weaponName - Weapon name to check
+	 * @param {string} weaponSource - Optional source to check
+	 * @returns {boolean}
+	 */
+	hasWeaponMastery (weaponName, weaponSource) {
+		if (!this._data.weaponMasteries?.length) return false;
+		return this._data.weaponMasteries.some(m => {
+			const [name, source] = m.split("|");
+			if (weaponSource) {
+				return name.toLowerCase() === weaponName.toLowerCase() && source === weaponSource;
+			}
+			return name.toLowerCase() === weaponName.toLowerCase();
 		});
 	}
 	// #endregion
