@@ -18,12 +18,16 @@ This file is used to track known bugs in the 5etools character sheet code.
 ## Known Bugs
 
 ### Character Builder
-- [x] races with subraces don't show subrace selection in the builder, and subcraces appear as different races
-- [x] some backgrounds don't show tool proficiencies selection in the builder, or tool proficiencies that are broken
+- [x] When assigning ability scores, the system allows going over the maximum allowed points with race bonuses applied afterwards (fixed: capped manual entry base score to 18, the max before racial bonuses)
+- [x] when assigning ability scores, using standard array does not remove the placeholders for unassigned scores, creating some confusion (fixed: summary now shows "—" for unassigned scores with message, and validation requires all scores to be assigned)
 
 ### Features
-- [x] some classes (bard) add their features twice for some reason (fixed: added deduplication in addFeature)
-- [x] Jack of all trades feature does not add half proficiency to all skills correctly (fixed: added hasJackOfAllTrades() check in getSkillMod and getInitiative)
+- [x] classes with expertise feature don't get to choose their expertise skills during builder (fixed: added expertise selection UI for Rogue at level 1, shows after skill selection)
+- [x] weapon masteries choices not given during builder for classes that get them (fixed: added weapon mastery selection UI for Fighter, Paladin, Ranger, Rogue with proper count from class tables)
+- [] specialties and combat methods (treaveler's guide to thelemar) not selectable during builder or level up for classes that get them (bard, rogue, etc). SHould be a general fix for similar features that require choice, weather they are OptionalFeature type or classFeature/subclassFeature type.
+- [] sneak attack die, save DCs for non spell related features (combat methods, monk ki features, etc) not calculated/displayed
+- [] natural weapons features (like claws, bite, etc) not added to attacks automatically
+
 
 ## Old Bugs
 
@@ -60,11 +64,16 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] 2024 classes don't have starting equipment options displayed at the choice, e.g efa articificer gives them to you but does not show them in the builder
 - [x] Character age, height, and weight inputs should only accept numbers
 - [x] Background tool proficiencies override existing proficiencies instead of adding to them
+- [x] races with subraces don't show subrace selection in the builder, and subcraces appear as different races
+- [x] some backgrounds don't show tool proficiencies selection in the builder, or tool proficiencies that are broken
+
 
 ### Features
 - [x] class features not being added correctly from the builder, e.g warlock's eldritch invocations
 - [x] feature display should be drop down and link, currently class features are only links.
 - [x] race features are all called the race name instead of their actual names, e.g darkvision is called "Dwarf" for dwarves
+- [x] some classes (bard) add their features twice for some reason (fixed: added deduplication in addFeature)
+- [x] Jack of all trades feature does not add half proficiency to all skills correctly (fixed: added hasJackOfAllTrades() check in getSkillMod and getInitiative)
 
 ### Overview
 - [x] attacks and spells should also appear at the overview page for quick access (enhanced with Combat stats, spell stats, range, properties)

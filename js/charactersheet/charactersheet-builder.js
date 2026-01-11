@@ -18,6 +18,8 @@ class CharacterSheetBuilder {
 		this._abilityScores = {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10};
 		this._pointBuyRemaining = 27;
 		this._selectedSkills = []; // For class skill proficiency choices
+		this._selectedExpertise = []; // For class expertise choices (Rogue, Bard)
+		this._selectedWeaponMasteries = []; // For weapon mastery choices (Fighter, Paladin, Ranger, Rogue)
 		this._selectedAbilityBonuses = {}; // For background ASI choices
 		this._selectedOptionalFeatures = {}; // For class optional features like invocations {featureType: [features]}
 		this._selectedToolProficiencies = []; // For background tool proficiency choices
@@ -138,9 +140,26 @@ class CharacterSheetBuilder {
 					let requiredCount = 2;
 					skillChoices.forEach(sc => {
 						if (sc.choose?.count) requiredCount = sc.choose.count;
+						if (sc.any) requiredCount = sc.any;
 					});
 					if (this._selectedSkills.length < requiredCount) {
 						JqueryUtil.doToast({type: "warning", content: `Please select ${requiredCount} skills for your class.`});
+						return false;
+					}
+				}
+				// Validate expertise selection if class has expertise at level 1
+				const expertiseInfo = this._getClassExpertiseInfo(this._selectedClass, 1);
+				if (expertiseInfo && expertiseInfo.count > 0) {
+					if (this._selectedExpertise.length < expertiseInfo.count) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${expertiseInfo.count} skills for expertise.`});
+						return false;
+					}
+				}
+				// Validate weapon mastery selection if class has weapon mastery at level 1
+				const masteryInfo = this._getClassWeaponMasteryInfo(this._selectedClass, 1);
+				if (masteryInfo && masteryInfo.count > 0) {
+					if (this._selectedWeaponMasteries.length < masteryInfo.count) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${masteryInfo.count} weapon masteries.`});
 						return false;
 					}
 				}
@@ -150,6 +169,13 @@ class CharacterSheetBuilder {
 				if (this._abilityMethod === "pointbuy" && this._pointBuyRemaining !== 0) {
 					JqueryUtil.doToast({type: "warning", content: "Please spend all ability score points."});
 					return false;
+				}
+				if (this._abilityMethod === "standard") {
+					const unassigned = Parser.ABIL_ABVS.filter(abl => this._abilityScores[abl] == null);
+					if (unassigned.length > 0) {
+						JqueryUtil.doToast({type: "warning", content: "Please assign all ability scores from the standard array."});
+						return false;
+					}
 				}
 				return true;
 
@@ -419,6 +445,22 @@ class CharacterSheetBuilder {
 			});
 		}
 
+		// Expertise (from user selection - Rogue, Bard, etc.)
+		if (this._selectedExpertise.length) {
+			this._selectedExpertise.forEach(skill => {
+				const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+				// Check if it's a tool (like "thieves' tools")
+				if (skill.toLowerCase().includes("tools")) {
+					// For tools, we track them differently - add to tool proficiencies if not already
+					this._state.addToolProficiency(skill);
+					// Mark tool expertise separately (could be tracked in features)
+				} else {
+					// Skills get expertise level (2)
+					this._state.setSkillProficiency(skillKey, 2);
+				}
+			});
+		}
+
 		// Armor proficiencies
 		if (this._selectedClass.startingProficiencies?.armor) {
 			this._selectedClass.startingProficiencies.armor.forEach(armor => {
@@ -450,6 +492,11 @@ class CharacterSheetBuilder {
 					this._state.addToolProficiency(toolName);
 				}
 			});
+		}
+
+		// Weapon Masteries (from user selection - Fighter, Paladin, Ranger, Rogue)
+		if (this._selectedWeaponMasteries.length) {
+			this._state.setWeaponMasteries(this._selectedWeaponMasteries);
 		}
 
 		// Spellcasting
@@ -1354,6 +1401,10 @@ class CharacterSheetBuilder {
 						this._selectedSubclass = null;
 						// Reset skill selections when changing class
 						this._selectedSkills = [];
+						// Reset expertise selections when changing class
+						this._selectedExpertise = [];
+						// Reset weapon mastery selections when changing class
+						this._selectedWeaponMasteries = [];
 						// Reset equipment choices when changing class
 						this._equipmentChoices = {};
 						this._useGoldAlternative = false;
@@ -1429,6 +1480,20 @@ class CharacterSheetBuilder {
 			const skillChoices = cls.startingProficiencies.skills;
 			const $skillSection = this._renderClassSkillSelection(cls, skillChoices);
 			$content.append($skillSection);
+		}
+
+		// Expertise selection (for Rogue at level 1, etc.)
+		const expertiseInfo = this._getClassExpertiseInfo(cls, 1);
+		if (expertiseInfo && expertiseInfo.count > 0) {
+			const $expertiseSection = this._renderExpertiseSelection(cls, expertiseInfo);
+			$content.append($expertiseSection);
+		}
+
+		// Weapon Mastery selection (for Fighter, Paladin, Ranger, Rogue at level 1)
+		const weaponMasteryInfo = this._getClassWeaponMasteryInfo(cls, 1);
+		if (weaponMasteryInfo && weaponMasteryInfo.count > 0) {
+			const $masterySection = this._renderWeaponMasterySelection(cls, weaponMasteryInfo);
+			$content.append($masterySection);
 		}
 
 		// Optional features selection (invocations, metamagic, etc.)
@@ -1507,12 +1572,424 @@ class CharacterSheetBuilder {
 					}
 				} else {
 					this._selectedSkills = this._selectedSkills.filter(s => s !== skill);
+					// Also remove from expertise if it was selected
+					this._selectedExpertise = this._selectedExpertise.filter(s => s !== skill);
 				}
 				$section.find(".skill-count").text(this._selectedSkills.length);
+				// Update expertise section to reflect new available skills
+				this._updateExpertiseSection(cls);
 			});
 
 			$checkboxes.append($label);
 		});
+
+		return $section;
+	}
+
+	/**
+	 * Update expertise section when skills change
+	 */
+	_updateExpertiseSection (cls) {
+		const expertiseInfo = this._getClassExpertiseInfo(cls, 1);
+		if (!expertiseInfo || expertiseInfo.count === 0) return;
+		
+		const $container = $(".charsheet__builder-expertise-selection");
+		if (!$container.length) return;
+		
+		// Replace with new section
+		const $newSection = this._renderExpertiseSelection(cls, expertiseInfo);
+		$container.replaceWith($newSection);
+	}
+
+	/**
+	 * Get expertise info from class features (feature-based, supports homebrew)
+	 * Looks at the class's classFeatures array to find expertise grants at the specified level.
+	 * Handles both dedicated "Expertise" features and features with nested expertise entries (like Deft Explorer).
+	 * @param {Object} cls - Class data
+	 * @param {number} level - Level to check for expertise
+	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
+	 */
+	_getClassExpertiseInfo (cls, level) {
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length || !cls.classFeatures?.length) return null;
+
+		// Get the class's feature references for this level
+		const levelFeatures = this._getClassFeatureRefsAtLevel(cls, level);
+		if (!levelFeatures.length) return null;
+
+		// Look for expertise in these features
+		for (const featureRef of levelFeatures) {
+			const expertiseInfo = this._extractExpertiseFromFeatureRef(featureRef, classFeatures, cls);
+			if (expertiseInfo) return expertiseInfo;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get feature references from a class at a specific level
+	 * @param {Object} cls - Class data
+	 * @param {number} level - Level to check
+	 * @returns {Array} Array of feature reference strings
+	 */
+	_getClassFeatureRefsAtLevel (cls, level) {
+		const features = [];
+		
+		for (const f of cls.classFeatures) {
+			let featureStr;
+			if (typeof f === "string") {
+				featureStr = f;
+			} else if (typeof f === "object" && f.classFeature) {
+				featureStr = f.classFeature;
+			} else {
+				continue;
+			}
+
+			// Parse "FeatureName|ClassName|Source|Level" format
+			const parts = featureStr.split("|");
+			const featureLevel = parseInt(parts[3]) || 1;
+			if (featureLevel === level) {
+				features.push(featureStr);
+			}
+		}
+
+		return features;
+	}
+
+	/**
+	 * Extract expertise info from a feature reference
+	 * @param {string} featureRef - Feature reference string like "Expertise|Rogue|XPHB|1"
+	 * @param {Array} allFeatures - All loaded class features
+	 * @param {Object} cls - Class data for context
+	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
+	 */
+	_extractExpertiseFromFeatureRef (featureRef, allFeatures, cls) {
+		const parts = featureRef.split("|");
+		const featureName = parts[0];
+		const className = parts[1] || cls.name;
+		const featureSource = parts[2] || cls.source;
+		const featureLevel = parseInt(parts[3]) || 1;
+
+		// Find the actual feature data
+		const featureData = allFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.level !== featureLevel) return false;
+			// Match source - feature source or class source
+			if (featureSource && f.source && f.source !== featureSource) return false;
+			return true;
+		});
+
+		if (!featureData) return null;
+
+		// Check if this feature IS an Expertise feature
+		if (featureName === "Expertise") {
+			return this._parseExpertiseEntries(featureData.entries || []);
+		}
+
+		// Check if this feature CONTAINS an Expertise entry (like Deft Explorer)
+		return this._findExpertiseInEntries(featureData.entries || []);
+	}
+
+	/**
+	 * Recursively search entries for nested Expertise grants
+	 * @param {Array} entries - Feature entries
+	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
+	 */
+	_findExpertiseInEntries (entries) {
+		for (const entry of entries) {
+			if (typeof entry === "object" && entry.type === "entries") {
+				// Check if this is an "Expertise" sub-entry
+				if (entry.name === "Expertise") {
+					return this._parseExpertiseEntries(entry.entries || []);
+				}
+				// Recursively check nested entries
+				if (entry.entries) {
+					const result = this._findExpertiseInEntries(entry.entries);
+					if (result) return result;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Parse expertise entries to determine count and tool allowance
+	 * @param {Array} entries - Expertise feature entries
+	 * @returns {{count: number, allowTools: boolean, toolName: string}}
+	 */
+	_parseExpertiseEntries (entries) {
+		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
+
+		// Determine count - typically "two" or "one" or look for explicit number
+		let count = 2; // Default
+		if (entriesText.includes("one ") || entriesText.includes("one of")) count = 1;
+		if (entriesText.includes("two")) count = 2;
+		if (entriesText.includes("three")) count = 3;
+		if (entriesText.includes("four")) count = 4;
+
+		// Check if tools are allowed (PHB wording vs XPHB wording)
+		// PHB: "two of your skill proficiencies, or one of your skill proficiencies and your proficiency with thieves' tools"
+		// XPHB: "two of your skill proficiencies" (no tools option) - uses variantrule tag
+		const allowTools = entriesText.includes("thieves' tools") && !entriesText.includes("variantrule");
+
+		return {
+			count,
+			allowTools,
+			toolName: allowTools ? "Thieves' Tools" : null,
+		};
+	}
+
+	/**
+	 * Render expertise selection UI
+	 * @param {Object} cls - Class data
+	 * @param {{count: number, allowTools: boolean, toolName: string}} expertiseInfo - Expertise requirements
+	 */
+	_renderExpertiseSelection (cls, expertiseInfo) {
+		const {count, allowTools, toolName} = expertiseInfo;
+		
+		const $section = $(`
+			<div class="charsheet__builder-expertise-selection mt-3">
+				<p><strong>Expertise:</strong> Choose ${count} skills you're proficient in to gain expertise (double proficiency bonus):</p>
+				${allowTools ? `<p class="ve-small ve-muted">You may also choose ${toolName} if you're proficient with it.</p>` : ""}
+				<div class="charsheet__builder-expertise-checkboxes"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="expertise-count">${this._selectedExpertise.length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $checkboxes = $section.find(".charsheet__builder-expertise-checkboxes");
+
+		// Get available skills - must be skills the player selected for proficiency
+		const availableSkills = [...this._selectedSkills];
+		
+		// Optionally add thieves' tools for Rogue
+		if (allowTools && toolName) {
+			availableSkills.push(toolName);
+		}
+
+		if (availableSkills.length === 0) {
+			$checkboxes.append(`<p class="ve-muted">Select your skill proficiencies first.</p>`);
+		} else {
+			availableSkills.forEach(skill => {
+				const isSelected = this._selectedExpertise.includes(skill);
+				const $label = $(`
+					<label class="charsheet__builder-skill-checkbox mr-3 mb-1">
+						<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
+						${skill}
+					</label>
+				`);
+
+				$label.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (this._selectedExpertise.length < count) {
+							this._selectedExpertise.push(skill);
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} skills for expertise.`});
+						}
+					} else {
+						this._selectedExpertise = this._selectedExpertise.filter(s => s !== skill);
+					}
+					$section.find(".expertise-count").text(this._selectedExpertise.length);
+				});
+
+				$checkboxes.append($label);
+			});
+		}
+
+		return $section;
+	}
+
+	/**
+	 * Get weapon mastery info from class features (feature-based, supports homebrew)
+	 * @param {Object} cls - Class data
+	 * @param {number} level - Level to check for weapon mastery
+	 * @returns {{count: number}|null}
+	 */
+	_getClassWeaponMasteryInfo (cls, level) {
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length || !cls.classFeatures?.length) return null;
+
+		// Get the class's feature references for this level
+		const levelFeatures = this._getClassFeatureRefsAtLevel(cls, level);
+		if (!levelFeatures.length) return null;
+
+		// Look for "Weapon Mastery" feature
+		for (const featureRef of levelFeatures) {
+			const parts = featureRef.split("|");
+			const featureName = parts[0];
+			
+			if (featureName !== "Weapon Mastery") continue;
+
+			const className = parts[1] || cls.name;
+			const featureSource = parts[2] || cls.source;
+			const featureLevel = parseInt(parts[3]) || 1;
+
+			// Find the actual feature data
+			const featureData = classFeatures.find(f => {
+				if (f.name !== featureName) return false;
+				if (f.className !== className) return false;
+				if (f.level !== featureLevel) return false;
+				if (featureSource && f.source && f.source !== featureSource) return false;
+				return true;
+			});
+
+			if (!featureData) continue;
+
+			// Try to get count from classTableGroups first (more accurate)
+			const count = this._getWeaponMasteryCountFromTable(cls, level) 
+				|| this._parseWeaponMasteryCount(featureData.entries || []);
+
+			return {count};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get weapon mastery count from class table groups
+	 * @param {Object} cls - Class data
+	 * @param {number} level - Character level
+	 * @returns {number|null}
+	 */
+	_getWeaponMasteryCountFromTable (cls, level) {
+		if (!cls.classTableGroups?.length) return null;
+
+		for (const tableGroup of cls.classTableGroups) {
+			const masteryColIndex = tableGroup.colLabels?.findIndex(
+				col => col === "Weapon Mastery" || col.toLowerCase().includes("mastery")
+			);
+			
+			if (masteryColIndex === -1) continue;
+
+			// Rows are 0-indexed for level 1, 1-indexed for level 2, etc.
+			const row = tableGroup.rows?.[level - 1];
+			if (!row) continue;
+
+			const value = row[masteryColIndex];
+			if (typeof value === "number") return value;
+			if (typeof value === "string") return parseInt(value) || null;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Parse weapon mastery count from feature entries
+	 * @param {Array} entries - Feature entries
+	 * @returns {number}
+	 */
+	_parseWeaponMasteryCount (entries) {
+		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
+
+		// Parse count from text
+		if (entriesText.includes("three kinds")) return 3;
+		if (entriesText.includes("two kinds")) return 2;
+		if (entriesText.includes("one kind")) return 1;
+
+		return 2; // Default
+	}
+
+	/**
+	 * Render weapon mastery selection UI
+	 * @param {Object} cls - Class data
+	 * @param {{count: number}} masteryInfo - Weapon mastery requirements
+	 */
+	_renderWeaponMasterySelection (cls, masteryInfo) {
+		const {count} = masteryInfo;
+		
+		const $section = $(`
+			<div class="charsheet__builder-mastery-selection mt-3">
+				<p><strong>Weapon Mastery:</strong> Choose ${count} weapon${count > 1 ? "s" : ""} to master:</p>
+				<p class="ve-small ve-muted">You can use the mastery property of your chosen weapons. You can change these after a long rest.</p>
+				<div class="charsheet__builder-mastery-select-container"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="mastery-count">${this._selectedWeaponMasteries.length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__builder-mastery-select-container");
+
+		// Get only BASE weapons with mastery properties (not magic variants)
+		const allItems = this._page.getItems();
+		const weaponsWithMastery = allItems.filter(item => {
+			// Must be a base item, not a magic variant
+			if (!item._isBaseItem) return false;
+			// Must be a weapon
+			if (!item.type || !["M", "R", "S"].includes(item.type)) {
+				// Also check weaponCategory for more specific filtering
+				if (!item.weaponCategory) return false;
+			}
+			// Must have mastery property
+			return item.mastery?.length > 0;
+		});
+
+		// Group weapons by type for easier selection
+		const simpleWeapons = weaponsWithMastery.filter(w => 
+			w.weaponCategory === "simple" || w.type === "S"
+		).sort((a, b) => a.name.localeCompare(b.name));
+		
+		const martialWeapons = weaponsWithMastery.filter(w => 
+			w.weaponCategory === "martial" || w.type === "M"
+		).sort((a, b) => a.name.localeCompare(b.name));
+
+		// Helper function to extract mastery name from string or object format
+		const getMasteryName = (masteryEntry) => {
+			if (!masteryEntry) return "";
+			if (typeof masteryEntry === "string") {
+				return masteryEntry.split("|")[0];
+			}
+			if (typeof masteryEntry === "object" && masteryEntry.uid) {
+				return masteryEntry.uid.split("|")[0];
+			}
+			return "";
+		};
+
+		// Create checkboxes
+		const renderWeaponGroup = (weapons, groupName) => {
+			if (!weapons.length) return;
+
+			const $group = $(`<div class="mb-2"><strong class="ve-small">${groupName}:</strong></div>`);
+			const $checkboxes = $(`<div class="charsheet__builder-mastery-checkboxes"></div>`);
+
+			weapons.forEach(weapon => {
+				const masteryName = getMasteryName(weapon.mastery?.[0]);
+				const weaponKey = `${weapon.name}|${weapon.source}`;
+				const isSelected = this._selectedWeaponMasteries.includes(weaponKey);
+				
+				const $label = $(`
+					<label class="charsheet__builder-skill-checkbox mr-3 mb-1" title="${masteryName ? `Mastery: ${masteryName}` : ""}">
+						<input type="checkbox" value="${weaponKey}" ${isSelected ? "checked" : ""}>
+						${weapon.name} ${masteryName ? `<span class="ve-small text-muted">(${masteryName})</span>` : ""}
+					</label>
+				`);
+
+				$label.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (this._selectedWeaponMasteries.length < count) {
+							this._selectedWeaponMasteries.push(weaponKey);
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} weapon masteries.`});
+						}
+					} else {
+						this._selectedWeaponMasteries = this._selectedWeaponMasteries.filter(m => m !== weaponKey);
+					}
+					$section.find(".mastery-count").text(this._selectedWeaponMasteries.length);
+				});
+
+				$checkboxes.append($label);
+			});
+
+			$group.append($checkboxes);
+			$container.append($group);
+		};
+
+		renderWeaponGroup(simpleWeapons, "Simple Weapons");
+		renderWeaponGroup(martialWeapons, "Martial Weapons");
+
+		if (!simpleWeapons.length && !martialWeapons.length) {
+			$container.append(`<p class="ve-muted">No weapons with mastery properties found.</p>`);
+		}
 
 		return $section;
 	}
@@ -1696,7 +2173,7 @@ class CharacterSheetBuilder {
 			const scoreDisplay = this._abilityMethod === "standard"
 				? `<span class="charsheet__builder-ability-score charsheet__builder-ability-dropzone" data-ability="${abl}" style="min-width: 2rem; text-align: center; border: 1px dashed #ccc; padding: 0.25rem 0.5rem; cursor: pointer;">${score ?? "—"}</span>`
 				: this._abilityMethod === "manual"
-					? `<input type="number" class="form-control form-control--minimal charsheet__builder-ability-score" value="${score}" min="3" max="20">`
+					? `<input type="number" class="form-control form-control--minimal charsheet__builder-ability-score" value="${score}" min="3" max="18" title="Max starting score is 18 (before racial bonuses)">`
 					: `<span class="charsheet__builder-ability-score">${score}</span>`;
 
 			const $row = $(`
@@ -1719,7 +2196,9 @@ class CharacterSheetBuilder {
 
 			if (this._abilityMethod === "manual") {
 				$row.find("input").on("change", (e) => {
-					this._abilityScores[abl] = Math.max(3, Math.min(20, parseInt(e.target.value) || 8));
+					// Max base score is 18 for starting characters (before racial bonuses)
+					this._abilityScores[abl] = Math.max(3, Math.min(18, parseInt(e.target.value) || 8));
+					e.target.value = this._abilityScores[abl]; // Update display if clamped
 					this._updateAbilitySummary();
 				});
 			}
@@ -1873,9 +2352,23 @@ class CharacterSheetBuilder {
 		const $summary = $("#builder-abilities-summary");
 		$summary.empty();
 
+		let allAssigned = true;
 		Parser.ABIL_ABVS.forEach(abl => {
 			const base = this._abilityScores[abl];
 			const racial = this._getRacialBonus(abl);
+			
+			// Handle unassigned scores (null in standard array mode)
+			if (base == null) {
+				allAssigned = false;
+				$summary.append(`
+					<div class="ve-flex-v-center">
+						<strong class="mr-2" style="width: 80px;">${Parser.attAbvToFull(abl)}:</strong>
+						<span class="ve-muted">—${racial ? ` (+${racial})` : ""}</span>
+					</div>
+				`);
+				return;
+			}
+			
 			const total = base + racial;
 			const mod = Math.floor((total - 10) / 2);
 
@@ -1886,6 +2379,11 @@ class CharacterSheetBuilder {
 				</div>
 			`);
 		});
+		
+		// Show warning if using standard array and not all scores assigned
+		if (this._abilityMethod === "standard" && !allAssigned) {
+			$summary.append(`<p class="ve-muted mt-2 ve-small">Assign all scores from the standard array above.</p>`);
+		}
 	}
 	// #endregion
 

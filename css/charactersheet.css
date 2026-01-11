@@ -2472,3 +2472,37 @@
 	font-size: 0.6rem;
 	color: var(--rgb-name-red, #dc3545);
 }
+
+/* Weapon Masteries Display */
+.charsheet__masteries-display {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+.charsheet__mastery-badge {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 6px 12px;
+	background: linear-gradient(135deg, var(--rgb-bg-alt) 0%, rgba(255, 193, 7, 0.15) 100%);
+	border: 1px solid rgba(255, 193, 7, 0.4);
+	border-radius: 6px;
+	font-size: 0.85rem;
+	cursor: default;
+}
+
+.charsheet__mastery-badge:hover {
+	border-color: rgba(255, 193, 7, 0.7);
+	background: linear-gradient(135deg, var(--rgb-bg-alt) 0%, rgba(255, 193, 7, 0.25) 100%);
+}
+
+.charsheet__mastery-prop {
+	font-size: 0.7rem;
+	color: var(--rgb-name-gold, #d4a700);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin-top: 2px;
+}
