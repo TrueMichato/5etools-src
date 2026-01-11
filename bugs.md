@@ -24,7 +24,9 @@ This file is used to track known bugs in the 5etools character sheet code.
 ### Features
 - [x] classes with expertise feature don't get to choose their expertise skills during builder (fixed: added expertise selection UI for Rogue at level 1, shows after skill selection)
 - [x] weapon masteries choices not given during builder for classes that get them (fixed: added weapon mastery selection UI for Fighter, Paladin, Ranger, Rogue with proper count from class tables)
-- [] specialties and combat methods (treaveler's guide to thelemar) not selectable during builder or level up for classes that get them (bard, rogue, etc). SHould be a general fix for similar features that require choice, weather they are OptionalFeature type or classFeature/subclassFeature type.
+- [x] specialties and combat methods (treaveler's guide to thelemar) not selectable during builder or level up for classes that get them (bard, rogue, etc). SHould be a general fix for similar features that require choice, weather they are OptionalFeature type or classFeature/subclassFeature type.
+- [] exertion pool (thelemar homebrew) not recovered on long rest or short rest and doesn't appear in resources section
+- [] combat traditions and methods not selectable during level up
 - [] sneak attack die, save DCs for non spell related features (combat methods, monk ki features, etc) not calculated/displayed
 - [] natural weapons features (like claws, bite, etc) not added to attacks automatically
 
