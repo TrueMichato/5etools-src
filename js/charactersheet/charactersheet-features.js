@@ -426,11 +426,48 @@ class CharacterSheetFeatures {
 		const regularFeatures = features.filter(f => f.featureType !== "Optional Feature");
 		const optionalFeatures = features.filter(f => f.featureType === "Optional Feature");
 
-		// Render regular class features
-		regularFeatures.forEach(feature => {
+		// Separate feature options (like Specialties) from standalone features
+		const standaloneFeatures = regularFeatures.filter(f => !f.parentFeature);
+		const featureOptions = regularFeatures.filter(f => f.parentFeature);
+
+		// Render standalone class features
+		standaloneFeatures.forEach(feature => {
 			const $feature = this._renderFeature(feature);
 			$container.append($feature);
 		});
+
+		// Group and render feature options by parentFeature
+		if (featureOptions.length > 0) {
+			const featureOptionGroups = {};
+			featureOptions.forEach(f => {
+				const groupKey = f.parentFeature;
+				if (!featureOptionGroups[groupKey]) {
+					featureOptionGroups[groupKey] = {name: groupKey, features: []};
+				}
+				featureOptionGroups[groupKey].features.push(f);
+			});
+
+			// Render each group
+			Object.values(featureOptionGroups).forEach(group => {
+				const $groupContainer = $(`
+					<div class="charsheet__feature-group mb-3">
+						<div class="charsheet__feature-group-header">
+							<span class="glyphicon glyphicon-list-alt"></span> ${group.name}
+							<span class="badge badge-info">${group.features.length}</span>
+						</div>
+						<div class="charsheet__feature-group-body"></div>
+					</div>
+				`);
+				const $groupBody = $groupContainer.find(".charsheet__feature-group-body");
+				
+				group.features.forEach(feature => {
+					const $feature = this._renderFeature(feature);
+					$groupBody.append($feature);
+				});
+				
+				$container.append($groupContainer);
+			});
+		}
 
 		// Group and render optional features by type
 		if (optionalFeatures.length > 0) {
@@ -715,6 +752,37 @@ class CharacterSheetFeatures {
 			"AF": "Alchemist Formulas",
 		};
 
+		// Combat tradition names (Thelemar homebrew)
+		const traditionNames = {
+			"AM": "Adamant Mountain",
+			"AK": "Arcane Knight",
+			"BU": "Beast Unity",
+			"BZ": "Biting Zephyr",
+			"CJ": "Comedic Jabs",
+			"EB": "Eldritch Blackguard",
+			"GH": "Gallant Heart",
+			"MG": "Mirror's Glint",
+			"MS": "Mist and Shade",
+			"RC": "Rapid Current",
+			"RE": "Razor's Edge",
+			"SK": "Sanguine Knot",
+			"SS": "Spirited Steed",
+			"TI": "Tempered Iron",
+			"TC": "Tooth and Claw",
+			"UW": "Unending Wheel",
+			"UH": "Unerring Hawk",
+		};
+
+		// Check for Combat Methods (CTM:X patterns) - group by tradition
+		for (const ft of featureTypes) {
+			const ctmMatch = ft.match(/^CTM:\d([A-Z]{2})$/);
+			if (ctmMatch) {
+				const tradCode = ctmMatch[1];
+				const tradName = traditionNames[tradCode] || tradCode;
+				return `Combat Methods: ${tradName}`;
+			}
+		}
+
 		// Try to find a matching name
 		for (const ft of featureTypes) {
 			if (typeNames[ft]) return typeNames[ft];
@@ -884,7 +952,59 @@ class CharacterSheetFeatures {
 
 		const resources = this._state.getResources();
 
-		if (!resources.length) {
+		// Check if character has combat methods (for exertion display)
+		const features = this._state.getFeatures();
+		const hasCombatMethods = features.some(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft));
+		});
+
+		// Add exertion as a tracked resource if character has combat methods
+		if (hasCombatMethods) {
+			const exertionMax = this._state.getExertionMax() || 0;
+			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
+			const exertionUsed = exertionMax - exertionCurrent;
+
+			if (exertionMax > 0) {
+				const $exertion = $(`
+					<div class="charsheet__resource" data-resource-id="exertion">
+						<div class="charsheet__resource-header">
+							<span class="charsheet__resource-name">Exertion</span>
+							<span class="charsheet__resource-recharge ve-muted ve-small">Short Rest</span>
+						</div>
+						<div class="charsheet__resource-pips">
+							${Array(exertionMax).fill(0).map((_, i) => `<span class="charsheet__resource-pip charsheet__resource-pip--exertion ${i < exertionUsed ? "used" : ""}" data-pip="${i}"></span>`).join("")}
+						</div>
+					</div>
+				`);
+
+				// Allow clicking pips to toggle exertion
+				$exertion.find(".charsheet__resource-pip--exertion").on("click", (e) => {
+					const pipIndex = $(e.currentTarget).data("pip");
+					const current = this._state.getExertionCurrent() || 0;
+					const max = this._state.getExertionMax() || 0;
+					// If clicking a used pip, restore up to that point
+					// If clicking an available pip, use down to that point
+					const used = max - current;
+					if (pipIndex < used) {
+						// Restore: set current to (max - pipIndex)
+						this._state.setExertionCurrent(max - pipIndex);
+					} else {
+						// Use: set current to (max - pipIndex - 1)
+						this._state.setExertionCurrent(max - pipIndex - 1);
+					}
+					this._renderResources();
+					// Also update combat tab display
+					if (this._page?._combat) {
+						this._page._combat._updateExertionDisplay();
+					}
+				});
+
+				$container.append($exertion);
+			}
+		}
+
+		if (!resources.length && !hasCombatMethods) {
 			$container.append(`<p class="ve-muted text-center">No class resources</p>`);
 			return;
 		}

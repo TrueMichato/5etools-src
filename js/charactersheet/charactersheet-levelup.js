@@ -9,6 +9,118 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
+	 * Find entries of type "options" in a feature's entries array
+	 * These represent choices the player must make (like Specialties)
+	 * @param {Object} feature - The feature object with entries
+	 * @param {number} characterLevel - Current character level for filtering
+	 * @returns {Array} Array of {count, options} objects
+	 */
+	_findFeatureOptions (feature, characterLevel = 1) {
+		if (!feature?.entries) return [];
+		
+		const results = [];
+		
+		const searchEntries = (entries) => {
+			if (!Array.isArray(entries)) return;
+			
+			for (const entry of entries) {
+				if (typeof entry === "object" && entry.type === "options") {
+					// Found an options entry
+					const count = entry.count || 1;
+					const options = [];
+					
+					// Process the option entries
+					if (entry.entries) {
+						for (const opt of entry.entries) {
+							if (opt.type === "refClassFeature" && opt.classFeature) {
+								// Parse "FeatureName|ClassName|Source|Level" format
+								const parts = opt.classFeature.split("|");
+								const optLevel = parseInt(parts[3]) || 1;
+								
+								// Only include options available at current level
+								if (optLevel <= characterLevel) {
+									options.push({
+										name: parts[0],
+										className: parts[1],
+										source: parts[2],
+										level: optLevel,
+										type: "classFeature",
+										ref: opt.classFeature,
+									});
+								}
+							} else if (opt.type === "refSubclassFeature" && opt.subclassFeature) {
+								const parts = opt.subclassFeature.split("|");
+								const optLevel = parseInt(parts[5]) || 1;
+								
+								if (optLevel <= characterLevel) {
+									options.push({
+										name: parts[0],
+										className: parts[1],
+										classSource: parts[2],
+										subclassShortName: parts[3],
+										subclassSource: parts[4],
+										level: optLevel,
+										type: "subclassFeature",
+										ref: opt.subclassFeature,
+									});
+								}
+							} else if (opt.type === "refOptionalfeature" && opt.optionalfeature) {
+								options.push({
+									name: opt.optionalfeature.split("|")[0],
+									source: opt.optionalfeature.split("|")[1],
+									type: "optionalfeature",
+									ref: opt.optionalfeature,
+								});
+							} else if (typeof opt === "string") {
+								options.push({
+									name: opt,
+									type: "text",
+								});
+							}
+						}
+					}
+					
+					if (options.length > 0) {
+						results.push({count, options, featureName: feature.name});
+					}
+				}
+				
+				// Recursively search nested entries
+				if (entry.entries) {
+					searchEntries(entry.entries);
+				}
+			}
+		};
+		
+		searchEntries(feature.entries);
+		return results;
+	}
+
+	/**
+	 * Get feature options from features gained at a specific level
+	 * @param {Array} features - Array of features gained at this level
+	 * @param {number} level - The level being gained
+	 * @returns {Array} Array of {featureName, featureSource, count, options} objects
+	 */
+	_getFeatureOptionsForLevel (features, level) {
+		const allOptions = [];
+		
+		for (const feature of features) {
+			const featureOptions = this._findFeatureOptions(feature, level);
+			for (const optionGroup of featureOptions) {
+				allOptions.push({
+					featureName: feature.name,
+					featureSource: feature.source,
+					isSubclassFeature: feature.isSubclassFeature,
+					...optionGroup,
+				});
+			}
+		}
+		
+		return allOptions;
+	}
+
+	/**
 	 * Show level up dialog for a specific class
 	 * @param {string} className - The class to level up (optional, prompts if multiple classes)
 	 */
@@ -148,6 +260,32 @@ class CharacterSheetLevelUp {
 			}
 		};
 
+		// Feature options tracking - defined early for use in subclass callback
+		let selectedFeatureOptions = {};
+		let featureOptionGroups = [];
+		let $featOptSection = null;
+		
+		const updateFeatureOptionsDisplay = () => {
+			if ($featOptSection) {
+				$featOptSection.remove();
+				$featOptSection = null;
+			}
+			selectedFeatureOptions = {}; // Reset selections when features change
+			featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
+			if (featureOptionGroups.length) {
+				$featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
+					selectedFeatureOptions[featureKey] = options;
+				});
+				// Insert after optional features section or before HP section
+				const $hpSection = $content.find(".charsheet__levelup-section").last();
+				if ($hpSection.length) {
+					$featOptSection.insertBefore($hpSection);
+				} else {
+					$content.append($featOptSection);
+				}
+			}
+		};
+
 		// Subclass selection
 		if (needsSubclass) {
 			const $subclassSection = this._renderSubclassSelection(classData, (subclass) => {
@@ -155,6 +293,7 @@ class CharacterSheetLevelUp {
 				// Update features to include subclass features and filter out placeholders
 				currentFeatures = this._getLevelFeatures(classData, newLevel, subclass);
 				updateFeaturesDisplay();
+				updateFeatureOptionsDisplay();
 			});
 			$content.append($subclassSection);
 		}
@@ -177,8 +316,18 @@ class CharacterSheetLevelUp {
 		if (optionalFeatureGains.length) {
 			const $optSection = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features) => {
 				selectedOptionalFeatures[featureType] = features;
-			});
+			}, newLevel);
 			$content.append($optSection);
+		}
+
+		// Feature options (features with embedded type: "options", like Specialties)
+		// Initial render (updateFeatureOptionsDisplay is defined above for subclass callback use)
+		featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
+		if (featureOptionGroups.length) {
+			$featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
+				selectedFeatureOptions[featureKey] = options;
+			});
+			$content.append($featOptSection);
 		}
 
 		// New features (initial render with ASI features filtered)
@@ -222,6 +371,16 @@ class CharacterSheetLevelUp {
 					}
 				}
 
+				// Validate feature options if applicable
+				for (const optGroup of featureOptionGroups) {
+					const featureKey = `${optGroup.featureName}_${optGroup.featureSource || ""}`;
+					const selected = selectedFeatureOptions[featureKey] || [];
+					if (selected.length < optGroup.count) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${optGroup.count} option(s) for ${optGroup.featureName}.`});
+						return;
+					}
+				}
+
 				// Apply level up
 				await this._applyLevelUp({
 					classEntry,
@@ -230,6 +389,7 @@ class CharacterSheetLevelUp {
 					selectedFeat,
 					selectedSubclass,
 					selectedOptionalFeatures,
+					selectedFeatureOptions,
 					newFeatures: currentFeatures, // Use updated features if subclass was selected
 					hpMethod,
 					classData,
@@ -515,25 +675,49 @@ class CharacterSheetLevelUp {
 				// Parse feature reference - format is "FeatureName|ClassName|ClassSource|Level"
 				if (typeof featureRef === "string") {
 					const parts = featureRef.split("|");
+					const featureName = parts[0];
+					const className = parts[1] || classData.name;
+					const source = parts[2] || classData.source;
+					
+					// Look up full feature data to get entries
+					const fullFeature = this._getClassFeatureData(featureName, className, source, level);
+					
 					features.push({
-						name: parts[0],
-						className: parts[1] || classData.name,
-						classSource: parts[2] || classData.source,
-						source: parts[2] || classData.source,
+						name: featureName,
+						className: className,
+						classSource: source,
+						source: source,
 						level: level,
 						gainSubclassFeature: false,
+						entries: fullFeature?.entries, // Include entries for option detection
 					});
 				} else if (typeof featureRef === "object" && featureRef.classFeature) {
 					const parts = featureRef.classFeature.split("|");
+					const featureName = parts[0];
+					const className = parts[1] || classData.name;
+					const source = parts[2] || classData.source;
+					
+					// Look up full feature data to get entries
+					const fullFeature = this._getClassFeatureData(featureName, className, source, level);
+					
 					features.push({
-						name: parts[0],
-						className: parts[1] || classData.name,
-						classSource: parts[2] || classData.source,
-						source: parts[2] || classData.source,
+						name: featureName,
+						className: className,
+						classSource: source,
+						source: source,
 						level: level,
 						gainSubclassFeature: !!featureRef.gainSubclassFeature,
+						entries: fullFeature?.entries, // Include entries for option detection
 					});
 				} else if (typeof featureRef === "object" && featureRef.name) {
+					// Look up full feature data to get entries
+					const fullFeature = this._getClassFeatureData(
+						featureRef.name, 
+						classData.name, 
+						featureRef.source || classData.source, 
+						level
+					);
+					
 					features.push({
 						name: featureRef.name,
 						className: classData.name,
@@ -541,6 +725,7 @@ class CharacterSheetLevelUp {
 						source: featureRef.source || classData.source,
 						level: level,
 						gainSubclassFeature: !!featureRef.gainSubclassFeature,
+						entries: fullFeature?.entries, // Include entries for option detection
 					});
 				}
 			});
@@ -688,8 +873,16 @@ class CharacterSheetLevelUp {
 
 			// Count how many of this feature type the character already has
 			const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
+			
+			// Helper to check if a feature type matches (exact or prefix match)
+			const matchesFeatureType = (optFeatTypes) => {
+				return optFeatTypes?.some(ft => 
+					featureTypes.some(progType => ft === progType || ft.startsWith(progType))
+				);
+			};
+			
 			const existingOfType = existingOptFeatures.filter(f => 
-				f.optionalFeatureTypes?.some(ft => featureTypes.includes(ft))
+				matchesFeatureType(f.optionalFeatureTypes)
 			).length;
 
 			// Calculate how many new options to pick
@@ -715,8 +908,9 @@ class CharacterSheetLevelUp {
 	 * @param {Object} classData - The class data
 	 * @param {Array} gains - Array of feature gains from _getOptionalFeatureGains
 	 * @param {Function} onSelect - Callback(featureType, selectedFeatures)
+	 * @param {number} newLevel - The new level for filtering by max degree
 	 */
-	_renderOptionalFeaturesSelection (classData, gains, onSelect) {
+	_renderOptionalFeaturesSelection (classData, gains, onSelect, newLevel) {
 		// Filter optional features by allowed sources
 		const allOptFeatures = this._page.filterByAllowedSources(this._page.getOptionalFeatures() || []);
 		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
@@ -734,129 +928,512 @@ class CharacterSheetLevelUp {
 
 		gains.forEach(gain => {
 			const featureKey = gain.featureTypes.join("_");
-			const selectedForType = [];
+			const isCombatMethods = gain.featureTypes.some(ft => ft.startsWith("CTM:"));
+			
+			if (isCombatMethods) {
+				// Use special Combat Methods rendering with tradition filtering
+				this._renderCombatMethodsLevelUp($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey);
+			} else {
+				// Standard optional feature rendering
+				this._renderStandardOptionalFeaturesLevelUp($container, gain, allOptFeatures, existingOptFeatures, onSelect, featureKey);
+			}
+		});
 
-			// Check if a feature is repeatable (can be taken multiple times)
-			const isRepeatable = (opt) => {
-				if (!opt.entries) return false;
-				// Check for "Repeatable" entry in the feature
-				const checkEntries = (entries) => {
-					for (const entry of entries) {
-						if (typeof entry === "string" && entry.toLowerCase().includes("repeatable")) return true;
-						if (entry?.name?.toLowerCase().includes("repeatable")) return true;
-						if (entry?.entries && checkEntries(entry.entries)) return true;
-					}
-					return false;
-				};
-				return checkEntries(opt.entries);
+		return $section;
+	}
+
+	/**
+	 * Render Combat Methods selection during level-up with tradition filtering
+	 */
+	_renderCombatMethodsLevelUp ($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
+		const selectedForType = [];
+		
+		// Get character's known traditions from existing Combat Methods
+		const knownTraditions = this._getKnownCombatTraditions(existingOptFeatures);
+		
+		// Get max degree for the new level
+		const maxDegree = this._getMaxMethodDegree(classData, newLevel);
+		
+		if (knownTraditions.length === 0) {
+			$container.append(`<div class="charsheet__levelup-opt-gain mb-3">
+				<p><strong>${gain.name}:</strong></p>
+				<p class="ve-muted">You haven't selected any Combat Traditions yet. This should have been done at character creation.</p>
+			</div>`);
+			return;
+		}
+
+		// Filter methods by known traditions and max degree
+		const availableMethods = allOptFeatures.filter(opt => {
+			if (!opt.featureType) return false;
+			
+			return opt.featureType.some(ft => {
+				const match = ft.match(/^CTM:(\d)([A-Z]{2})$/);
+				if (!match) return false;
+				
+				const degree = parseInt(match[1]);
+				const tradCode = match[2];
+				
+				return degree <= maxDegree && knownTraditions.includes(tradCode);
+			});
+		});
+
+		// Mark as already known or available
+		const processedMethods = availableMethods.map(opt => {
+			const alreadyHas = existingOptFeatures.some(
+				existing => existing.name === opt.name && existing.source === opt.source,
+			);
+			return {
+				...opt,
+				_alreadyKnown: alreadyHas,
+				_selectable: !alreadyHas,
+				_degree: this._getMethodDegree(opt),
+				_tradition: this._getMethodTradition(opt),
 			};
+		});
 
-			// Filter options by feature type and prerequisites (but include already-taken ones)
-			const allMatchingOptions = allOptFeatures.filter(opt => {
-				// Check feature type match
-				if (!opt.featureType?.some(ft => gain.featureTypes.includes(ft))) return false;
+		const $gainSection = $(`
+			<div class="charsheet__levelup-opt-gain mb-3">
+				<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new method${gain.newCount > 1 ? "s" : ""}</p>
+				<p class="ve-small ve-muted">Max degree available: ${maxDegree}${this._getOrdinalSuffix(maxDegree)} | Traditions: ${knownTraditions.map(t => this._getTraditionName(t)).join(", ")}</p>
+				<div class="charsheet__levelup-opt-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
+			</div>
+		`);
 
-				// Check prerequisites
-				if (opt.prerequisite) {
-					for (const prereq of opt.prerequisite) {
-						// Level prerequisite
-						if (prereq.level) {
-							const reqLevel = prereq.level.level || prereq.level;
-							const classes = this._state.getClasses();
-							const totalLevel = this._state.getTotalLevel();
-							// Check if prereq is for specific class or general
-							if (prereq.level.class) {
-								const classMatch = classes.find(c => 
-									c.name.toLowerCase() === prereq.level.class.name.toLowerCase()
-								);
-								if (!classMatch || classMatch.level < reqLevel) return false;
-							} else if (totalLevel < reqLevel) {
-								return false;
-							}
-						}
-						// TODO: Could add more prerequisite checks (spells, pact boon, other features, etc.)
-					}
-				}
+		const $list = $gainSection.find(".charsheet__levelup-opt-list");
 
-				return true;
-			});
+		// Group by tradition
+		const methodsByTradition = new Map();
+		for (const method of processedMethods) {
+			const trad = method._tradition;
+			if (!methodsByTradition.has(trad)) {
+				methodsByTradition.set(trad, []);
+			}
+			methodsByTradition.get(trad).push(method);
+		}
 
-			// Mark options as already taken or available
-			const availableOptions = allMatchingOptions.map(opt => {
-				const alreadyHas = existingOptFeatures.some(
-					existing => existing.name === opt.name && existing.source === opt.source,
-				);
-				const repeatable = isRepeatable(opt);
-				return {
-					...opt,
-					_alreadyKnown: alreadyHas,
-					_selectable: !alreadyHas || repeatable,
-				};
-			});
+		// Render grouped by tradition
+		for (const tradCode of knownTraditions) {
+			const methods = methodsByTradition.get(tradCode) || [];
+			if (methods.length === 0) continue;
 
-			const $gainSection = $(`
-				<div class="charsheet__levelup-opt-gain mb-3">
-					<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new option${gain.newCount > 1 ? "s" : ""}</p>
-					<div class="charsheet__levelup-opt-list" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
-					<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
+			const $tradGroup = $(`
+				<div class="charsheet__levelup-method-group mb-2">
+					<p class="ve-small mb-1"><strong>${this._getTraditionName(tradCode)}</strong></p>
 				</div>
 			`);
 
-			const $list = $gainSection.find(".charsheet__levelup-opt-list");
+			methods.sort((a, b) => a._degree - b._degree || a.name.localeCompare(b.name)).forEach(method => {
+				const isDisabled = !method._selectable;
+				const knownBadge = method._alreadyKnown ? `<span class="badge badge-secondary ml-1">Known</span>` : "";
 
-			const selectableOptions = availableOptions.filter(opt => opt._selectable);
-			if (!selectableOptions.length && !availableOptions.some(opt => opt._alreadyKnown)) {
-				$list.append(`<div class="ve-muted">No options available at this level.</div>`);
+				const $item = $(`
+					<label class="charsheet__levelup-opt-item d-block mb-1 ml-2${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.25rem; border-radius: 4px;${isDisabled ? " opacity: 0.6;" : ""}">
+						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
+						<strong class="opt-name">${method.name}</strong>
+						${knownBadge}
+						<span class="ve-muted ve-small ml-1">(${method._degree}${this._getOrdinalSuffix(method._degree)} degree)</span>
+					</label>
+				`);
+
+				$item.find(".opt-name").on("click", (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					const desc = Renderer.get().render({entries: method.entries || []});
+					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${method.name}</strong><br>${desc}</div>`)});
+				});
+
+				$item.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (selectedForType.length < gain.newCount) {
+							selectedForType.push(method);
+							$item.css("background", "var(--rgb-link-opacity-10)");
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${gain.newCount} methods.`});
+						}
+					} else {
+						const idx = selectedForType.findIndex(s => s.name === method.name && s.source === method.source);
+						if (idx >= 0) selectedForType.splice(idx, 1);
+						$item.css("background", "");
+					}
+					$gainSection.find(".opt-count").text(selectedForType.length);
+					onSelect(featureKey, [...selectedForType]);
+				});
+
+				$tradGroup.append($item);
+			});
+
+			$list.append($tradGroup);
+		}
+
+		if ($list.children().length === 0) {
+			$list.append(`<div class="ve-muted">No new methods available at this level.</div>`);
+		}
+
+		$container.append($gainSection);
+	}
+
+	/**
+	 * Render standard optional features (non-Combat Methods) during level-up
+	 */
+	_renderStandardOptionalFeaturesLevelUp ($container, gain, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
+		const selectedForType = [];
+
+		// Check if a feature is repeatable
+		const isRepeatable = (opt) => {
+			if (!opt.entries) return false;
+			const checkEntries = (entries) => {
+				for (const entry of entries) {
+					if (typeof entry === "string" && entry.toLowerCase().includes("repeatable")) return true;
+					if (entry?.name?.toLowerCase().includes("repeatable")) return true;
+					if (entry?.entries && checkEntries(entry.entries)) return true;
+				}
+				return false;
+			};
+			return checkEntries(opt.entries);
+		};
+
+		// Filter options by feature type
+		const allMatchingOptions = allOptFeatures.filter(opt => {
+			const matchesType = opt.featureType?.some(ft => 
+				gain.featureTypes.some(progType => ft === progType || ft.startsWith(progType))
+			);
+			if (!matchesType) return false;
+
+			if (opt.prerequisite) {
+				for (const prereq of opt.prerequisite) {
+					if (prereq.level) {
+						const reqLevel = prereq.level.level || prereq.level;
+						const totalLevel = this._state.getTotalLevel();
+						if (prereq.level.class) {
+							const classes = this._state.getClasses();
+							const classMatch = classes.find(c => 
+								c.name.toLowerCase() === prereq.level.class.name.toLowerCase()
+							);
+							if (!classMatch || classMatch.level < reqLevel) return false;
+						} else if (totalLevel < reqLevel) {
+							return false;
+						}
+					}
+				}
+			}
+			return true;
+		});
+
+		const availableOptions = allMatchingOptions.map(opt => {
+			const alreadyHas = existingOptFeatures.some(
+				existing => existing.name === opt.name && existing.source === opt.source,
+			);
+			const repeatable = isRepeatable(opt);
+			return {
+				...opt,
+				_alreadyKnown: alreadyHas,
+				_selectable: !alreadyHas || repeatable,
+			};
+		});
+
+		const $gainSection = $(`
+			<div class="charsheet__levelup-opt-gain mb-3">
+				<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new option${gain.newCount > 1 ? "s" : ""}</p>
+				<div class="charsheet__levelup-opt-list" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
+			</div>
+		`);
+
+		const $list = $gainSection.find(".charsheet__levelup-opt-list");
+
+		const selectableOptions = availableOptions.filter(opt => opt._selectable);
+		if (!selectableOptions.length && !availableOptions.some(opt => opt._alreadyKnown)) {
+			$list.append(`<div class="ve-muted">No options available at this level.</div>`);
+		} else {
+			availableOptions.sort((a, b) => {
+				if (a._selectable !== b._selectable) return a._selectable ? -1 : 1;
+				return a.name.localeCompare(b.name);
+			}).forEach(opt => {
+				const isDisabled = !opt._selectable;
+				const knownBadge = opt._alreadyKnown ? `<span class="badge badge-secondary ml-1" title="Already known">Known</span>` : "";
+				const repeatableBadge = opt._alreadyKnown && opt._selectable ? `<span class="badge badge-info ml-1" title="Can be taken multiple times">Repeatable</span>` : "";
+				
+				const $item = $(`
+					<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.25rem; border-radius: 4px;${isDisabled ? " opacity: 0.6;" : ""}">
+						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
+						<strong class="opt-name">${opt.name}</strong>
+						${knownBadge}${repeatableBadge}
+						<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
+					</label>
+				`);
+
+				$item.find(".opt-name").on("click", (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					const desc = Renderer.get().render({entries: opt.entries || []});
+					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
+				});
+
+				$item.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (selectedForType.length < gain.newCount) {
+							selectedForType.push(opt);
+							$item.css("background", "var(--rgb-link-opacity-10)");
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${gain.newCount} ${gain.name}.`});
+						}
+					} else {
+						const idx = selectedForType.findIndex(s => s.name === opt.name && s.source === opt.source);
+						if (idx >= 0) selectedForType.splice(idx, 1);
+						$item.css("background", "");
+					}
+					$gainSection.find(".opt-count").text(selectedForType.length);
+					onSelect(featureKey, [...selectedForType]);
+				});
+
+				$list.append($item);
+			});
+		}
+
+		$container.append($gainSection);
+	}
+
+	/**
+	 * Get character's known combat traditions from stored traditions or infer from existing features
+	 */
+	_getKnownCombatTraditions (existingOptFeatures) {
+		// First check if traditions are explicitly stored on the character
+		const storedTraditions = this._state.getCombatTraditions?.() || [];
+		if (storedTraditions.length > 0) {
+			return storedTraditions;
+		}
+
+		// Fall back to inferring from existing combat method features
+		const traditions = new Set();
+		
+		for (const feature of existingOptFeatures) {
+			if (!feature.optionalFeatureTypes) continue;
+			
+			for (const ft of feature.optionalFeatureTypes) {
+				// Match CTM:XYY where X is degree and YY is tradition code
+				const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
+				if (match) {
+					traditions.add(match[2]);
+				}
+			}
+		}
+		
+		return Array.from(traditions);
+	}
+
+	/**
+	 * Get the maximum method degree available at a given level from the class table
+	 */
+	_getMaxMethodDegree (cls, level) {
+		if (!cls.classTableGroups) return 0;
+		
+		for (const group of cls.classTableGroups) {
+			const degreeColIdx = group.colLabels?.findIndex(label => 
+				label.toLowerCase().includes("method degree")
+			);
+			
+			if (degreeColIdx >= 0 && group.rows) {
+				const row = group.rows[level - 1];
+				if (row) {
+					const degreeVal = row[degreeColIdx];
+					if (typeof degreeVal === "string") {
+						const match = degreeVal.match(/^(\d)/);
+						if (match) return parseInt(match[1]);
+					} else if (typeof degreeVal === "number") {
+						return degreeVal;
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Get tradition name from code
+	 */
+	_getTraditionName (tradCode) {
+		const names = {
+			"AM": "Adamant Mountain",
+			"AK": "Arcane Knight",
+			"BU": "Beast Unity",
+			"BZ": "Biting Zephyr",
+			"CJ": "Comedic Jabs",
+			"EB": "Eldritch Blackguard",
+			"GH": "Gallant Heart",
+			"MG": "Mirror's Glint",
+			"MS": "Mist and Shade",
+			"RC": "Rapid Current",
+			"RE": "Razor's Edge",
+			"SK": "Sanguine Knot",
+			"SS": "Spirited Steed",
+			"TI": "Tempered Iron",
+			"TC": "Tooth and Claw",
+			"UW": "Unending Wheel",
+			"UH": "Unerring Hawk",
+		};
+		return names[tradCode] || tradCode;
+	}
+
+	/**
+	 * Get method degree from optional feature
+	 */
+	_getMethodDegree (opt) {
+		if (!opt.featureType) return 0;
+		for (const ft of opt.featureType) {
+			const match = ft.match(/^CTM:(\d)[A-Z]{2}$/);
+			if (match) return parseInt(match[1]);
+		}
+		return 0;
+	}
+
+	/**
+	 * Get method tradition code from optional feature
+	 */
+	_getMethodTradition (opt) {
+		if (!opt.featureType) return null;
+		for (const ft of opt.featureType) {
+			const match = ft.match(/^CTM:\d([A-Z]{2})$/);
+			if (match) return match[1];
+		}
+		return null;
+	}
+
+	_getOrdinalSuffix (n) {
+		const s = ["th", "st", "nd", "rd"];
+		const v = n % 100;
+		return s[(v - 20) % 10] || s[v] || s[0];
+	}
+
+	/**
+	 * Look up full class feature data to get description/entries
+	 */
+	_getClassFeatureData (featureName, className, source, level) {
+		const classFeatures = this._page.getClassFeatures?.();
+		if (!classFeatures?.length) {
+			console.log("[LevelUp] No class features available for lookup");
+			return null;
+		}
+
+		const result = classFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.level !== level) return false;
+			// Be more flexible with source matching
+			if (source && f.source && f.source !== source) {
+				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source) &&
+					[Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
+				if (!sourcesMatch) return false;
+			}
+			return true;
+		});
+
+		if (!result && featureName) {
+			console.log(`[LevelUp] Could not find class feature: ${featureName} for ${className} level ${level} (source: ${source})`);
+		}
+		return result;
+	}
+
+	/**
+	 * Look up full class feature data from a reference string
+	 * @param {string} featureRef - "FeatureName|ClassName|Source|Level" format
+	 * @returns {Object|null} The feature object or null
+	 */
+	_getClassFeatureDataFromRef (featureRef) {
+		const parts = featureRef.split("|");
+		const [name, className, source, level] = parts;
+		const parsedLevel = parseInt(level) || 1;
+		
+		return this._getClassFeatureData(name, className, source, parsedLevel);
+	}
+
+	/**
+	 * Render feature options selection UI for level up (for features with embedded type: "options")
+	 * @param {Array} optionGroups - Array of {featureName, featureSource, count, options} objects
+	 * @param {Function} onSelect - Callback(featureKey, selectedOptions)
+	 */
+	_renderFeatureOptionsSelection (optionGroups, onSelect) {
+		const $section = $(`
+			<div class="charsheet__levelup-section">
+				<h5 class="charsheet__levelup-section-title">
+					<span class="glyphicon glyphicon-star"></span> Feature Choices
+				</h5>
+				<div class="charsheet__levelup-feat-options"></div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__levelup-feat-options");
+
+		optionGroups.forEach(optGroup => {
+			const featureKey = `${optGroup.featureName}_${optGroup.featureSource || ""}`;
+			const selectedForGroup = [];
+
+			const $groupSection = $(`
+				<div class="charsheet__levelup-feat-opt-group mb-3">
+					<p><strong>${optGroup.featureName}:</strong> Choose ${optGroup.count}</p>
+					<div class="charsheet__levelup-feat-opt-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="feat-opt-count">0</span>/${optGroup.count}</div>
+				</div>
+			`);
+
+			const $list = $groupSection.find(".charsheet__levelup-feat-opt-list");
+
+			if (!optGroup.options.length) {
+				$list.append(`<div class="ve-muted">No options available.</div>`);
 			} else {
-				// Sort: selectable first, then already known
-				availableOptions.sort((a, b) => {
-					if (a._selectable !== b._selectable) return a._selectable ? -1 : 1;
-					return a.name.localeCompare(b.name);
-				}).forEach(opt => {
-					const isDisabled = !opt._selectable;
-					const knownBadge = opt._alreadyKnown ? `<span class="badge badge-secondary ml-1" title="Already known">Known</span>` : "";
-					const repeatableBadge = opt._alreadyKnown && opt._selectable ? `<span class="badge badge-info ml-1" title="Can be taken multiple times">Repeatable</span>` : "";
-					
+				optGroup.options.forEach(opt => {
 					const $item = $(`
-						<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.25rem; border-radius: 4px;${isDisabled ? " opacity: 0.6;" : ""}">
-							<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
-							<strong class="opt-name">${opt.name}</strong>
-							${knownBadge}${repeatableBadge}
-							<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
+						<label class="charsheet__levelup-feat-opt-item d-block mb-1" style="cursor: pointer; padding: 0.25rem; border-radius: 4px;">
+							<input type="checkbox" class="mr-2">
+							<span class="feat-opt-name">${opt.name}</span>
+							${opt.source ? `<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 						</label>
 					`);
 
-					// Show description on name click
-					$item.find(".opt-name").on("click", (e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						const desc = Renderer.get().render({entries: opt.entries || []});
-						JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
-					});
+					// Show description on name click for class features
+					if (opt.type === "classFeature" && opt.ref) {
+						$item.find(".feat-opt-name").on("click", (e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							const parts = opt.ref.split("|");
+							const classFeatures = this._page.getClassFeatures();
+							const fullOpt = classFeatures.find(f =>
+								f.name === parts[0] &&
+								f.className === parts[1] &&
+								f.source === parts[2]
+							);
+							if (fullOpt) {
+								const desc = Renderer.get().render({entries: fullOpt.entries || []});
+								JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
+							}
+						});
+					}
 
 					$item.find("input").on("change", (e) => {
 						if (e.target.checked) {
-							if (selectedForType.length < gain.newCount) {
-								selectedForType.push(opt);
+							if (selectedForGroup.length < optGroup.count) {
+								selectedForGroup.push(opt);
 								$item.css("background", "var(--rgb-link-opacity-10)");
 							} else {
 								e.target.checked = false;
-								JqueryUtil.doToast({type: "warning", content: `You can only choose ${gain.newCount} ${gain.name}.`});
+								JqueryUtil.doToast({type: "warning", content: `You can only choose ${optGroup.count} options.`});
 							}
 						} else {
-							const idx = selectedForType.findIndex(s => s.name === opt.name && s.source === opt.source);
-							if (idx >= 0) selectedForType.splice(idx, 1);
+							const idx = selectedForGroup.findIndex(s => s.name === opt.name && s.ref === opt.ref);
+							if (idx >= 0) selectedForGroup.splice(idx, 1);
 							$item.css("background", "");
 						}
-						$gainSection.find(".opt-count").text(selectedForType.length);
-						onSelect(featureKey, [...selectedForType]);
+						$groupSection.find(".feat-opt-count").text(selectedForGroup.length);
+						onSelect(featureKey, [...selectedForGroup]);
 					});
 
 					$list.append($item);
 				});
 			}
 
-			$container.append($gainSection);
+			$container.append($groupSection);
 		});
 
 		return $section;
@@ -880,7 +1457,7 @@ class CharacterSheetLevelUp {
 		return classData.hd?.faces || hitDieMap[classData.name] || 8;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, newFeatures, hpMethod, classData}) {
 		console.log(`[LevelUp] _applyLevelUp called: selectedSubclass=${selectedSubclass?.name || "null"}`);
 		console.log(`[LevelUp] Initial newFeatures:`, newFeatures?.map(f => f.name));
 
@@ -952,6 +1529,71 @@ class CharacterSheetLevelUp {
 						entries: opt.entries,
 					};
 					this._state.addFeature(featureData);
+				});
+			});
+		}
+
+		// Apply selected feature options (specialties, etc. - features with embedded options)
+		if (selectedFeatureOptions) {
+			const classFeatures = this._page.getClassFeatures();
+			Object.entries(selectedFeatureOptions).forEach(([featureKey, options]) => {
+				options.forEach(opt => {
+					if (opt.type === "classFeature" && opt.ref) {
+						// Look up full feature data
+						const parts = opt.ref.split("|");
+						const fullOpt = classFeatures.find(f =>
+							f.name === parts[0] &&
+							f.className === parts[1] &&
+							f.source === parts[2]
+						);
+						
+						this._state.addFeature({
+							name: opt.name,
+							source: opt.source || fullOpt?.source || classEntry.source,
+							level: opt.level || newLevel,
+							className: opt.className || classEntry.name,
+							classSource: classEntry.source,
+							featureType: "Class",
+							entries: fullOpt?.entries,
+							description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
+							isFeatureOption: true,
+							parentFeature: featureKey.split("_")[0],
+						});
+					} else if (opt.type === "subclassFeature" && opt.ref) {
+						const currentSubclass = this._state.getClasses().find(c => c.name === classEntry.name)?.subclass;
+						this._state.addFeature({
+							name: opt.name,
+							source: opt.subclassSource || currentSubclass?.source || classEntry.source,
+							level: opt.level || newLevel,
+							className: opt.className || classEntry.name,
+							classSource: classEntry.source,
+							subclassName: currentSubclass?.name,
+							subclassShortName: opt.subclassShortName || currentSubclass?.shortName,
+							subclassSource: opt.subclassSource || currentSubclass?.source,
+							featureType: "Class",
+							isSubclassFeature: true,
+							isFeatureOption: true,
+							parentFeature: featureKey.split("_")[0],
+						});
+					} else if (opt.type === "optionalfeature" && opt.ref) {
+						const allOptFeatures = this._page.getOptionalFeatures();
+						const fullOpt = allOptFeatures.find(f =>
+							f.name === opt.name &&
+							(f.source === opt.source || !opt.source)
+						);
+						this._state.addFeature({
+							name: opt.name,
+							source: opt.source || fullOpt?.source,
+							level: newLevel,
+							className: classEntry.name,
+							classSource: classEntry.source,
+							featureType: "Optional Feature",
+							entries: fullOpt?.entries,
+							description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
+							isFeatureOption: true,
+							parentFeature: featureKey.split("_")[0],
+						});
+					}
 				});
 			});
 		}

@@ -61,6 +61,16 @@ class CharacterSheetCombat {
 			const spellId = $(e.currentTarget).data("spell-id");
 			this._castCombatSpell(spellId);
 		});
+
+		// Combat Methods: use method (spend exertion)
+		$(document).on("click", ".charsheet__method-use", (e) => {
+			const methodId = $(e.currentTarget).data("method-id");
+			this._useMethod(methodId);
+		});
+
+		// Exertion controls
+		$(document).on("click", "#charsheet-exertion-add", () => this._modifyExertion(1));
+		$(document).on("click", "#charsheet-exertion-remove", () => this._modifyExertion(-1));
 	}
 
 	_castCombatSpell (spellId) {
@@ -820,10 +830,269 @@ class CharacterSheetCombat {
 		this.renderAttacks();
 		this.renderDeathSaves();
 		this.renderCombatSpells();
+		this.renderCombatMethods();
 
 		// Render combat stats
 		const initiative = this._state.getAbilityMod("dex");
 		$("#charsheet-initiative").text(`+${initiative}`);
+	}
+
+	/**
+	 * Render Combat Methods section (Thelemar homebrew)
+	 */
+	renderCombatMethods () {
+		// Get combat method features from character
+		const features = this._state.getFeatures();
+		const combatMethods = features.filter(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			// Check if it's a combat method (has CTM:X featureType)
+			return f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft));
+		});
+
+		// Main page section
+		const $section = $("#charsheet-combat-methods-section");
+		const $container = $("#charsheet-combat-methods");
+		const $dcDisplay = $("#charsheet-method-dc");
+		const $exertionDisplay = $("#charsheet-exertion-pool");
+
+		// Combat Tab section
+		const $tabSection = $("#charsheet-combat-methods-tab-section");
+		const $tabContainer = $("#charsheet-combat-methods-tab");
+		const $tabDcDisplay = $("#charsheet-method-dc-tab");
+
+		// Hide sections if no combat methods
+		if (combatMethods.length === 0) {
+			$section.hide();
+			$tabSection.hide();
+			return;
+		}
+
+		$section.show();
+		$tabSection.show();
+		$container.empty();
+		$tabContainer.empty();
+
+		// Calculate Method DC: 8 + prof + STR or DEX mod (whichever is higher or chosen)
+		const profBonus = this._state.getProficiencyBonus();
+		const strMod = this._state.getAbilityMod("str");
+		const dexMod = this._state.getAbilityMod("dex");
+		const methodDC = 8 + profBonus + Math.max(strMod, dexMod);
+		$dcDisplay.text(methodDC);
+		$tabDcDisplay.text(methodDC);
+
+		// Calculate Exertion Pool: 2 × proficiency bonus
+		const exertionMax = profBonus * 2;
+		$exertionDisplay.text(exertionMax);
+
+		// Initialize exertion in state if not set
+		if (this._state.getExertionMax() !== exertionMax) {
+			this._state.setExertionMax(exertionMax);
+		}
+		if (this._state.getExertionCurrent() === null || this._state.getExertionCurrent() === undefined) {
+			this._state.setExertionCurrent(exertionMax);
+		}
+
+		// Update exertion display
+		this._updateExertionDisplay();
+
+		// Group methods by tradition
+		const methodsByTradition = new Map();
+		for (const method of combatMethods) {
+			const tradCode = this._getMethodTradition(method);
+			if (!methodsByTradition.has(tradCode)) {
+				methodsByTradition.set(tradCode, []);
+			}
+			methodsByTradition.get(tradCode).push(method);
+		}
+
+		// Render methods grouped by tradition to both containers
+		this._renderMethodsToContainer($container, methodsByTradition, {showUseButton: false});
+		this._renderMethodsToContainer($tabContainer, methodsByTradition, {showUseButton: true});
+	}
+
+	_renderMethodsToContainer ($container, methodsByTradition, {showUseButton = false} = {}) {
+		for (const [tradCode, methods] of methodsByTradition) {
+			const tradName = this._getTraditionName(tradCode);
+			const $tradGroup = $(`
+				<div class="charsheet__methods-group mb-2">
+					<div class="charsheet__methods-tradition-header ve-small ve-muted mb-1 ve-flex ve-flex-v-center">
+						<span class="bold">${tradName}</span>
+					</div>
+				</div>
+			`);
+
+			methods.sort((a, b) => {
+				const degreeA = this._getMethodDegree(a);
+				const degreeB = this._getMethodDegree(b);
+				return degreeA - degreeB || a.name.localeCompare(b.name);
+			}).forEach(method => {
+				const degree = this._getMethodDegree(method);
+				const exertionCost = this._getMethodExertionCost(method);
+				const methodId = `${method.name}-${method.source || ""}`.replace(/\s+/g, "-").toLowerCase();
+
+				// Create hoverable link for method name (like spells/weapons)
+				let methodNameHtml = method.name;
+				if (this._page?.getHoverLink && method.source) {
+					try {
+						methodNameHtml = this._page.getHoverLink(
+							UrlUtil.PG_OPT_FEATURES,
+							method.name,
+							method.source,
+						);
+					} catch (e) {
+						methodNameHtml = method.name;
+					}
+				}
+
+				const $method = $(`
+					<div class="charsheet__method-item mb-1 p-1 ve-flex ve-flex-v-center ve-flex-h-space-between" style="border-left: 2px solid var(--rgb-link); padding-left: 0.5rem;">
+						<div class="ve-flex ve-flex-v-center">
+							<span class="charsheet__method-name" style="font-weight: bold;">${methodNameHtml}</span>
+							<span class="ve-muted ve-small ml-2">(${degree}${this._getOrdinalSuffix(degree)})</span>
+							${exertionCost > 0 ? `<span class="badge badge-secondary ml-2" title="Exertion cost">${exertionCost} EP</span>` : ""}
+						</div>
+						${showUseButton ? `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__method-use ml-2" data-method-id="${methodId}" data-cost="${exertionCost}" title="Use this method (costs ${exertionCost} exertion)">Use</button>` : ""}
+					</div>
+				`);
+
+				// Store method data for later use
+				$method.data("method", method);
+
+				$tradGroup.append($method);
+			});
+
+			$container.append($tradGroup);
+		}
+	}
+
+	_getMethodExertionCost (method) {
+		// Try to extract exertion cost from method entries
+		// Usually formatted like "Cost: X exertion" or mentions exertion in the text
+		if (!method.entries) return 1; // Default cost
+
+		const entriesStr = JSON.stringify(method.entries).toLowerCase();
+
+		// Look for patterns like "costs X exertion" or "X exertion points"
+		const costMatch = entriesStr.match(/costs?\s+(\d+)\s+exertion/i);
+		if (costMatch) return parseInt(costMatch[1]);
+
+		// Also check for degree-based default costs (1st=1, 2nd=2, etc.)
+		const degree = this._getMethodDegree(method);
+		return degree || 1;
+	}
+
+	_useMethod (methodId) {
+		const $btn = $(`.charsheet__method-use[data-method-id="${methodId}"]`);
+		const cost = parseInt($btn.data("cost")) || 1;
+		const currentExertion = this._state.getExertionCurrent();
+
+		if (currentExertion < cost) {
+			JqueryUtil.doToast({type: "warning", content: `Not enough exertion! You have ${currentExertion}, but this method costs ${cost}.`});
+			return;
+		}
+
+		this._state.setExertionCurrent(currentExertion - cost);
+		this._updateExertionDisplay();
+
+		// Also update resources section
+		if (this._page?._features) {
+			this._page._features._renderResources();
+		}
+
+		// Find method name for feedback
+		const methodName = methodId.split("-").slice(0, -1).join(" ").replace(/\b\w/g, c => c.toUpperCase());
+		JqueryUtil.doToast({type: "success", content: `Used ${methodName}! (−${cost} exertion)`});
+
+		// Flash the button to indicate use
+		$btn.addClass("ve-btn-success");
+		setTimeout(() => $btn.removeClass("ve-btn-success"), 200);
+	}
+
+	_modifyExertion (delta) {
+		const current = this._state.getExertionCurrent() || 0;
+		const max = this._state.getExertionMax() || 0;
+		const newValue = Math.max(0, Math.min(max, current + delta));
+		this._state.setExertionCurrent(newValue);
+		this._updateExertionDisplay();
+		// Also update resources section
+		if (this._page?._features) {
+			this._page._features._renderResources();
+		}
+	}
+
+	_updateExertionDisplay () {
+		const current = this._state.getExertionCurrent() || 0;
+		const max = this._state.getExertionMax() || 0;
+
+		$("#charsheet-exertion-current").text(current);
+		$("#charsheet-exertion-max").text(max);
+
+		// Color-code based on remaining exertion
+		const $display = $("#charsheet-exertion-display-tab");
+		$display.removeClass("text-success text-warning text-danger");
+		if (current === 0) {
+			$display.addClass("text-danger");
+		} else if (current <= max / 2) {
+			$display.addClass("text-warning");
+		} else {
+			$display.addClass("text-success");
+		}
+
+		// Update resource pips in the resources section
+		const $resourcePips = $('[data-resource-id="exertion"] .charsheet__resource-pip--exertion');
+		if ($resourcePips.length) {
+			const used = max - current;
+			$resourcePips.each((i, pip) => {
+				$(pip).toggleClass("used", i < used);
+			});
+		}
+	}
+
+	_getMethodDegree (feature) {
+		if (!feature.optionalFeatureTypes) return 0;
+		for (const ft of feature.optionalFeatureTypes) {
+			const match = ft.match(/^CTM:(\d)[A-Z]{2}$/);
+			if (match) return parseInt(match[1]);
+		}
+		return 0;
+	}
+
+	_getMethodTradition (feature) {
+		if (!feature.optionalFeatureTypes) return "Unknown";
+		for (const ft of feature.optionalFeatureTypes) {
+			const match = ft.match(/^CTM:\d([A-Z]{2})$/);
+			if (match) return match[1];
+		}
+		return "Unknown";
+	}
+
+	_getTraditionName (tradCode) {
+		const names = {
+			"AM": "Adamant Mountain",
+			"AK": "Arcane Knight",
+			"BU": "Beast Unity",
+			"BZ": "Biting Zephyr",
+			"CJ": "Comedic Jabs",
+			"EB": "Eldritch Blackguard",
+			"GH": "Gallant Heart",
+			"MG": "Mirror's Glint",
+			"MS": "Mist and Shade",
+			"RC": "Rapid Current",
+			"RE": "Razor's Edge",
+			"SK": "Sanguine Knot",
+			"SS": "Spirited Steed",
+			"TI": "Tempered Iron",
+			"TC": "Tooth and Claw",
+			"UW": "Unending Wheel",
+			"UH": "Unerring Hawk",
+		};
+		return names[tradCode] || tradCode;
+	}
+
+	_getOrdinalSuffix (n) {
+		const s = ["th", "st", "nd", "rd"];
+		const v = n % 100;
+		return s[(v - 20) % 10] || s[v] || s[0];
 	}
 	// #endregion
 }

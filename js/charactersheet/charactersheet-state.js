@@ -111,6 +111,13 @@ class CharacterSheetState {
 			// Weapon Masteries (2024 rules)
 			weaponMasteries: [], // ["Longsword|XPHB", "Shortsword|XPHB"] - weapon keys (name|source)
 
+			// Combat Traditions (Thelemar homebrew) - tradition codes like ["AM", "RC"]
+			combatTraditions: [],
+
+			// Exertion pool (Thelemar homebrew) - resource for combat methods
+			exertionCurrent: 0, // Current exertion points
+			exertionMax: 0, // Max exertion = 2 × proficiency bonus
+
 			// Attacks (weapons + custom)
 			attacks: [], // [{name, attackBonus, damage, damageType, range, properties}]
 
@@ -1852,6 +1859,109 @@ class CharacterSheetState {
 	}
 	// #endregion
 
+	// #region Combat Traditions (Thelemar homebrew)
+	/**
+	 * Get list of combat traditions the character is proficient with
+	 * @returns {Array<string>} Array of tradition codes like ["AM", "RC"]
+	 */
+	getCombatTraditions () {
+		return [...(this._data.combatTraditions || [])];
+	}
+
+	/**
+	 * Set the full list of combat traditions
+	 * @param {Array<string>} traditions - Array of tradition codes like ["AM", "RC"]
+	 */
+	setCombatTraditions (traditions) {
+		this._data.combatTraditions = [...traditions];
+	}
+
+	/**
+	 * Add a combat tradition
+	 * @param {string} tradCode - Tradition code like "AM" for Adamant Mountain
+	 */
+	addCombatTradition (tradCode) {
+		if (!this._data.combatTraditions) this._data.combatTraditions = [];
+		if (!this._data.combatTraditions.includes(tradCode)) {
+			this._data.combatTraditions.push(tradCode);
+		}
+	}
+
+	/**
+	 * Remove a combat tradition
+	 * @param {string} tradCode - Tradition code to remove
+	 */
+	removeCombatTradition (tradCode) {
+		if (!this._data.combatTraditions) return;
+		this._data.combatTraditions = this._data.combatTraditions.filter(t => t !== tradCode);
+	}
+
+	/**
+	 * Check if character is proficient with a specific tradition
+	 * @param {string} tradCode - Tradition code to check
+	 * @returns {boolean}
+	 */
+	hasCombatTradition (tradCode) {
+		return this._data.combatTraditions?.includes(tradCode) ?? false;
+	}
+	// #endregion
+
+	// #region Exertion (Combat Methods resource)
+	/**
+	 * Get current exertion points
+	 * @returns {number}
+	 */
+	getExertionCurrent () {
+		return this._data.exertionCurrent;
+	}
+
+	/**
+	 * Set current exertion points
+	 * @param {number} value
+	 */
+	setExertionCurrent (value) {
+		this._data.exertionCurrent = Math.max(0, Math.min(value, this.getExertionMax() || Infinity));
+	}
+
+	/**
+	 * Get maximum exertion points (2 × proficiency bonus)
+	 * @returns {number}
+	 */
+	getExertionMax () {
+		return this._data.exertionMax;
+	}
+
+	/**
+	 * Set maximum exertion points
+	 * @param {number} value
+	 */
+	setExertionMax (value) {
+		this._data.exertionMax = value;
+		// Ensure current doesn't exceed new max
+		if (this._data.exertionCurrent > value) {
+			this._data.exertionCurrent = value;
+		}
+	}
+
+	/**
+	 * Restore all exertion (e.g., on short/long rest)
+	 */
+	restoreExertion () {
+		this._data.exertionCurrent = this._data.exertionMax || 0;
+	}
+
+	/**
+	 * Spend exertion points
+	 * @param {number} amount - Amount to spend
+	 * @returns {boolean} - True if successful, false if not enough exertion
+	 */
+	spendExertion (amount) {
+		if ((this._data.exertionCurrent || 0) < amount) return false;
+		this._data.exertionCurrent -= amount;
+		return true;
+	}
+	// #endregion
+
 	// #region Defenses
 	getResistances () { return [...this._data.resistances]; }
 	getImmunities () { return [...this._data.immunities]; }
@@ -2107,6 +2217,9 @@ class CharacterSheetState {
 		if (this._data.spellcasting.pactSlots.max > 0) {
 			this._data.spellcasting.pactSlots.current = this._data.spellcasting.pactSlots.max;
 		}
+
+		// Recover exertion (Thelemar: recovers on short rest)
+		this.restoreExertion();
 	}
 
 	onLongRest () {
@@ -2130,6 +2243,9 @@ class CharacterSheetState {
 		if (this._data.exhaustion > 0) {
 			this._data.exhaustion = Math.max(0, this._data.exhaustion - 1);
 		}
+
+		// Recover exertion (Thelemar: recovers on any rest)
+		this.restoreExertion();
 	}
 	// #endregion
 }

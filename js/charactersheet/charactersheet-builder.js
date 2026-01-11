@@ -24,6 +24,8 @@ class CharacterSheetBuilder {
 		this._selectedOptionalFeatures = {}; // For class optional features like invocations {featureType: [features]}
 		this._selectedToolProficiencies = []; // For background tool proficiency choices
 		this._selectedLanguages = []; // For background language choices
+		this._selectedFeatureOptions = {}; // For class/subclass features with embedded options (like Specialties)
+		this._selectedCombatTraditions = []; // For combat tradition proficiency choices (Thelemar homebrew)
 
 		this._init();
 	}
@@ -46,6 +48,107 @@ class CharacterSheetBuilder {
 	_backgroundProvidesASI () {
 		if (!this._selectedBackground) return false;
 		return !!(this._selectedBackground.ability && this._selectedBackground.ability.length);
+	}
+
+	/**
+	 * Find entries of type "options" in a feature's entries array
+	 * These represent choices the player must make (like Specialties)
+	 * @param {Object} feature - The feature object with entries
+	 * @param {number} characterLevel - Current character level for filtering
+	 * @returns {Array} Array of {count, options} objects
+	 */
+	_findFeatureOptions (feature, characterLevel = 1) {
+		if (!feature?.entries) return [];
+		
+		const results = [];
+		
+		const searchEntries = (entries) => {
+			if (!Array.isArray(entries)) return;
+			
+			for (const entry of entries) {
+				if (typeof entry === "object" && entry.type === "options") {
+					// Found an options entry
+					const count = entry.count || 1;
+					const options = [];
+					
+					// Process the option entries
+					if (entry.entries) {
+						for (const opt of entry.entries) {
+							if (opt.type === "refClassFeature" && opt.classFeature) {
+								// Parse "FeatureName|ClassName|Source|Level" format
+								const parts = opt.classFeature.split("|");
+								const optLevel = parseInt(parts[3]) || 1;
+								
+								// Only include options available at current level
+								if (optLevel <= characterLevel) {
+									options.push({
+										name: parts[0],
+										className: parts[1],
+										source: parts[2],
+										level: optLevel,
+										type: "classFeature",
+										ref: opt.classFeature,
+									});
+								}
+							} else if (opt.type === "refSubclassFeature" && opt.subclassFeature) {
+								const parts = opt.subclassFeature.split("|");
+								const optLevel = parseInt(parts[5]) || 1;
+								
+								if (optLevel <= characterLevel) {
+									options.push({
+										name: parts[0],
+										className: parts[1],
+										classSource: parts[2],
+										subclassShortName: parts[3],
+										subclassSource: parts[4],
+										level: optLevel,
+										type: "subclassFeature",
+										ref: opt.subclassFeature,
+									});
+								}
+							} else if (opt.type === "refOptionalfeature" && opt.optionalfeature) {
+								options.push({
+									name: opt.optionalfeature.split("|")[0],
+									source: opt.optionalfeature.split("|")[1],
+									type: "optionalfeature",
+									ref: opt.optionalfeature,
+								});
+							} else if (typeof opt === "string") {
+								options.push({
+									name: opt,
+									type: "text",
+								});
+							}
+						}
+					}
+					
+					if (options.length > 0) {
+						results.push({count, options, featureName: feature.name});
+					}
+				}
+				
+				// Recursively search nested entries
+				if (entry.entries) {
+					searchEntries(entry.entries);
+				}
+			}
+		};
+		
+		searchEntries(feature.entries);
+		return results;
+	}
+
+	/**
+	 * Get the full feature data for a class feature reference
+	 * @param {string} featureRef - "FeatureName|ClassName|Source|Level" format
+	 * @returns {Object|null} The feature object or null
+	 */
+	_getClassFeatureDataFromRef (featureRef) {
+		const parts = featureRef.split("|");
+		const [name, className, source, level] = parts;
+		const parsedLevel = parseInt(level) || 1;
+		
+		return this._getClassFeatureData(name, className, source, parsedLevel);
 	}
 
 	_init () {
@@ -704,6 +807,9 @@ class CharacterSheetBuilder {
 
 		// Apply selected optional features (invocations, metamagic, etc.)
 		this._applySelectedOptionalFeatures();
+
+		// Apply selected feature options (specialties, etc. - features with embedded options)
+		this._applySelectedFeatureOptions();
 	}
 
 	_applySelectedOptionalFeatures () {
@@ -720,7 +826,77 @@ class CharacterSheetBuilder {
 					featureType: "Optional Feature",
 					entries: opt.entries,
 					description: Renderer.get().render({entries: opt.entries || []}),
+					// Store the featureType array so we can identify traditions/methods during level-up
+					optionalFeatureTypes: opt.featureType,
 				});
+			});
+		});
+
+		// Store selected combat traditions on the character for level-up reference
+		if (this._selectedCombatTraditions?.length) {
+			this._state.setCombatTraditions([...this._selectedCombatTraditions]);
+		}
+	}
+
+	_applySelectedFeatureOptions () {
+		if (!this._selectedFeatureOptions) return;
+
+		Object.entries(this._selectedFeatureOptions).forEach(([featureKey, options]) => {
+			options.forEach(opt => {
+				// For class feature options (like Specialties), look up the full feature data
+				if (opt.type === "classFeature" && opt.ref) {
+					const fullOpt = this._getClassFeatureDataFromRef(opt.ref);
+					this._state.addFeature({
+						name: opt.name,
+						source: opt.source || fullOpt?.source || this._selectedClass?.source,
+						level: opt.level || 1,
+						className: opt.className || this._selectedClass?.name,
+						classSource: this._selectedClass?.source,
+						featureType: "Class",
+						entries: fullOpt?.entries,
+						description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
+						isFeatureOption: true,
+						parentFeature: featureKey.split("_")[0], // Track which feature this is an option of
+					});
+				} else if (opt.type === "subclassFeature" && opt.ref) {
+					// Handle subclass feature options
+					this._state.addFeature({
+						name: opt.name,
+						source: opt.subclassSource || this._selectedSubclass?.source || this._selectedClass?.source,
+						level: opt.level || 1,
+						className: opt.className || this._selectedClass?.name,
+						classSource: this._selectedClass?.source,
+						subclassName: this._selectedSubclass?.name,
+						subclassShortName: opt.subclassShortName || this._selectedSubclass?.shortName,
+						subclassSource: opt.subclassSource || this._selectedSubclass?.source,
+						featureType: "Class",
+						isSubclassFeature: true,
+						isFeatureOption: true,
+						parentFeature: featureKey.split("_")[0],
+					});
+				} else if (opt.type === "optionalfeature" && opt.ref) {
+					// Handle optional feature options
+					const allOptFeatures = this._page.getOptionalFeatures();
+					const fullOpt = allOptFeatures.find(f => 
+						f.name === opt.name && 
+						(f.source === opt.source || !opt.source),
+					);
+					this._state.addFeature({
+						name: opt.name,
+						source: opt.source || fullOpt?.source,
+						level: 1,
+						className: this._selectedClass?.name,
+						classSource: this._selectedClass?.source,
+						featureType: "Optional Feature",
+						entries: fullOpt?.entries,
+						description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
+						isFeatureOption: true,
+						parentFeature: featureKey.split("_")[0],
+					});
+				} else if (opt.type === "text") {
+					// Simple text option - just note the selection
+					console.log(`[CharSheet Builder] Selected text option: ${opt.name} for ${featureKey}`);
+				}
 			});
 		});
 	}
@@ -1410,6 +1586,10 @@ class CharacterSheetBuilder {
 						this._useGoldAlternative = false;
 						// Reset optional features when changing class
 						this._selectedOptionalFeatures = {};
+						// Reset feature options when changing class
+						this._selectedFeatureOptions = {};
+						// Reset combat traditions when changing class
+						this._selectedCombatTraditions = [];
 						this._renderClassPreview($preview, cls);
 					});
 
@@ -1500,6 +1680,12 @@ class CharacterSheetBuilder {
 		if (cls.optionalfeatureProgression?.length) {
 			const $optFeatSection = this._renderClassOptionalFeatures(cls);
 			$content.append($optFeatSection);
+		}
+
+		// Feature options selection (specialties, etc. - features with embedded type: "options")
+		const $featureOptionsSection = this._renderClassFeatureOptions(cls, 1);
+		if ($featureOptionsSection) {
+			$content.append($featureOptionsSection);
 		}
 
 		// Spellcasting
@@ -1994,6 +2180,116 @@ class CharacterSheetBuilder {
 		return $section;
 	}
 
+	/**
+	 * Get the maximum method degree available at a given level from the class table
+	 * Parses the "Method Degree" column from classTableGroups
+	 */
+	_getMaxMethodDegree (cls, level) {
+		if (!cls.classTableGroups) return 0;
+		
+		for (const group of cls.classTableGroups) {
+			// Look for a group with "Method Degree" column
+			const degreeColIdx = group.colLabels?.findIndex(label => 
+				label.toLowerCase().includes("method degree")
+			);
+			
+			if (degreeColIdx >= 0 && group.rows) {
+				const row = group.rows[level - 1]; // 0-indexed
+				if (row) {
+					const degreeVal = row[degreeColIdx];
+					// Parse "1st", "2nd", "3rd", "4th", "5th" to numbers
+					if (typeof degreeVal === "string") {
+						const match = degreeVal.match(/^(\d)/);
+						if (match) return parseInt(match[1]);
+					} else if (typeof degreeVal === "number") {
+						return degreeVal;
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Get available combat traditions from optional features
+	 * Traditions are identified by feature types like "CTM:AM", "CTM:RC", etc. (no degree number)
+	 */
+	_getAvailableTraditions (allOptFeatures) {
+		const traditions = new Map();
+		
+		// Find all unique traditions from optional features
+		for (const opt of allOptFeatures) {
+			if (!opt.featureType) continue;
+			
+			for (const ft of opt.featureType) {
+				// Match tradition codes like "CTM:AM", "CTM:1AM", etc.
+				const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
+				if (match) {
+					const tradCode = match[2]; // e.g., "AM", "RC", "BZ"
+					if (!traditions.has(tradCode)) {
+						// Get the tradition name from optionalFeatureTypes if available
+						const tradKey = `CTM:${tradCode}`;
+						traditions.set(tradCode, {
+							code: tradCode,
+							fullCode: tradKey,
+							name: this._getTraditionName(tradCode),
+						});
+					}
+				}
+			}
+		}
+		
+		return Array.from(traditions.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * Get the display name for a tradition code
+	 */
+	_getTraditionName (tradCode) {
+		const names = {
+			"AM": "Adamant Mountain",
+			"AK": "Arcane Knight",
+			"BU": "Beast Unity",
+			"BZ": "Biting Zephyr",
+			"CJ": "Comedic Jabs",
+			"EB": "Eldritch Blackguard",
+			"GH": "Gallant Heart",
+			"MG": "Mirror's Glint",
+			"MS": "Mist and Shade",
+			"RC": "Rapid Current",
+			"RE": "Razor's Edge",
+			"SK": "Sanguine Knot",
+			"SS": "Spirited Steed",
+			"TI": "Tempered Iron",
+			"TC": "Tooth and Claw",
+			"UW": "Unending Wheel",
+			"UH": "Unerring Hawk",
+		};
+		return names[tradCode] || tradCode;
+	}
+
+	/**
+	 * Check if an optional feature matches the selected traditions and is within max degree
+	 */
+	_methodMatchesTraditionsAndDegree (opt, selectedTraditions, maxDegree) {
+		if (!opt.featureType) return false;
+		
+		for (const ft of opt.featureType) {
+			// Parse feature type like "CTM:1AM", "CTM:2RC"
+			const match = ft.match(/^CTM:(\d)([A-Z]{2})$/);
+			if (match) {
+				const degree = parseInt(match[1]);
+				const tradCode = match[2];
+				
+				// Check if within max degree and matches selected tradition
+				if (degree <= maxDegree && selectedTraditions.includes(tradCode)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	_renderClassOptionalFeatures (cls) {
 		const allOptFeatures = this._page.getOptionalFeatures();
 		const $container = $(`<div class="charsheet__builder-optional-features mt-3"></div>`);
@@ -2011,83 +2307,442 @@ class CharacterSheetBuilder {
 
 			const featureTypes = optFeatProg.featureType || [];
 			const name = optFeatProg.name || featureTypes.join(", ");
+			const featureKey = featureTypes.join("_");
 
-			// Filter available options by feature type and match class/source requirements
-			const availableOptions = allOptFeatures.filter(opt => {
-				// Check feature type match
-				if (!opt.featureType?.some(ft => featureTypes.includes(ft))) return false;
+			// Check if this is a Combat Methods progression (has CTM:X feature types)
+			const isCombatMethods = featureTypes.some(ft => ft.startsWith("CTM:"));
 
-				// Check prerequisites
-				if (opt.prerequisite) {
-					for (const prereq of opt.prerequisite) {
-						// Level prerequisite
-						if (prereq.level) {
-							const reqLevel = prereq.level.level || prereq.level;
-							if (reqLevel > 1) return false;
-						}
-						// TODO: Could add more prerequisite checks (spells, pact boon, etc.)
+			if (isCombatMethods) {
+				// Handle Combat Methods with tradition selection
+				this._renderCombatMethodsSelection($container, cls, optFeatProg, count, name, featureKey, allOptFeatures);
+			} else {
+				// Standard optional feature selection
+				this._renderStandardOptionalFeatures($container, optFeatProg, count, name, featureKey, allOptFeatures, featureTypes);
+			}
+		});
+
+		return $container;
+	}
+
+	/**
+	 * Render Combat Methods selection with tradition choice first, then method selection
+	 */
+	_renderCombatMethodsSelection ($container, cls, optFeatProg, methodCount, name, featureKey, allOptFeatures) {
+		// Get available traditions and max degree
+		const availableTraditions = this._getAvailableTraditions(allOptFeatures);
+		const maxDegree = this._getMaxMethodDegree(cls, 1);
+		
+		// Determine how many traditions to select (usually 2)
+		// This info comes from the class feature text, but we'll default to 2
+		const traditionCount = 2;
+
+		// Initialize storage
+		if (!this._selectedCombatTraditions) this._selectedCombatTraditions = [];
+		if (!this._selectedOptionalFeatures[featureKey]) {
+			this._selectedOptionalFeatures[featureKey] = [];
+		}
+
+		const $section = $(`
+			<div class="charsheet__builder-combat-methods mb-3">
+				<h6 class="mt-2 mb-1">Combat Traditions & Methods</h6>
+				<p class="ve-small ve-muted">First choose ${traditionCount} traditions you're proficient with, then select ${methodCount} methods from those traditions.</p>
+				
+				<div class="charsheet__builder-traditions mb-2">
+					<p><strong>Combat Traditions:</strong> Choose ${traditionCount}</p>
+					<div class="charsheet__builder-tradition-list" style="max-height: 150px; overflow-y: auto;"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="tradition-count">${this._selectedCombatTraditions.length}</span>/${traditionCount}</div>
+				</div>
+				
+				<div class="charsheet__builder-methods">
+					<p><strong>${name}:</strong> Choose ${methodCount} (max degree: ${maxDegree > 0 ? maxDegree + this._getOrdinalSuffix(maxDegree) : "none"})</p>
+					<div class="charsheet__builder-method-list" style="max-height: 250px; overflow-y: auto;"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="method-count">${this._selectedOptionalFeatures[featureKey].length}</span>/${methodCount}</div>
+				</div>
+			</div>
+		`);
+
+		const $traditionList = $section.find(".charsheet__builder-tradition-list");
+		const $methodList = $section.find(".charsheet__builder-method-list");
+
+		// Render tradition selection
+		availableTraditions.forEach(trad => {
+			const isSelected = this._selectedCombatTraditions.includes(trad.code);
+			const $item = $(`
+				<label class="charsheet__builder-tradition-item d-block mb-1" style="cursor: pointer;">
+					<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
+					<strong>${trad.name}</strong>
+					<span class="ve-muted ve-small ml-1">(${trad.code})</span>
+				</label>
+			`);
+
+			$item.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedCombatTraditions.length < traditionCount) {
+						this._selectedCombatTraditions.push(trad.code);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${traditionCount} traditions.`});
+						return;
 					}
+				} else {
+					this._selectedCombatTraditions = this._selectedCombatTraditions.filter(t => t !== trad.code);
+					// Also remove any selected methods from this tradition
+					this._selectedOptionalFeatures[featureKey] = this._selectedOptionalFeatures[featureKey].filter(m => {
+						return !m.featureType?.some(ft => ft.includes(trad.code));
+					});
+					$section.find(".method-count").text(this._selectedOptionalFeatures[featureKey].length);
 				}
-
-				return true;
+				$section.find(".tradition-count").text(this._selectedCombatTraditions.length);
+				// Re-render method list when traditions change
+				this._renderMethodList($methodList, allOptFeatures, featureKey, methodCount, maxDegree, $section);
 			});
 
-			// Initialize storage for this feature type if needed
-			const featureKey = featureTypes.join("_");
-			if (!this._selectedOptionalFeatures[featureKey]) {
-				this._selectedOptionalFeatures[featureKey] = [];
-			}
+			$traditionList.append($item);
+		});
 
-			const $section = $(`
-				<div class="charsheet__builder-opt-feat-section mb-3">
-					<p><strong>${name}:</strong> Choose ${count}</p>
-					<div class="charsheet__builder-opt-feat-list" style="max-height: 200px; overflow-y: auto;"></div>
-					<div class="ve-small ve-muted mt-1">Selected: <span class="opt-feat-count">${this._selectedOptionalFeatures[featureKey].length}</span>/${count}</div>
+		// Initial method list render
+		this._renderMethodList($methodList, allOptFeatures, featureKey, methodCount, maxDegree, $section);
+
+		$container.append($section);
+	}
+
+	/**
+	 * Render the list of available methods based on selected traditions and max degree
+	 */
+	_renderMethodList ($methodList, allOptFeatures, featureKey, methodCount, maxDegree, $section) {
+		$methodList.empty();
+
+		if (this._selectedCombatTraditions.length === 0) {
+			$methodList.append(`<p class="ve-muted ve-small">Select traditions first to see available methods.</p>`);
+			return;
+		}
+
+		if (maxDegree === 0) {
+			$methodList.append(`<p class="ve-muted ve-small">No methods available at this level.</p>`);
+			return;
+		}
+
+		// Filter methods by selected traditions and max degree
+		const availableMethods = allOptFeatures.filter(opt => 
+			this._methodMatchesTraditionsAndDegree(opt, this._selectedCombatTraditions, maxDegree)
+		);
+
+		if (availableMethods.length === 0) {
+			$methodList.append(`<p class="ve-muted ve-small">No methods available for selected traditions at this degree.</p>`);
+			return;
+		}
+
+		// Group methods by tradition for easier browsing
+		const methodsByTradition = new Map();
+		for (const method of availableMethods) {
+			for (const ft of method.featureType || []) {
+				const match = ft.match(/^CTM:(\d)([A-Z]{2})$/);
+				if (match && this._selectedCombatTraditions.includes(match[2])) {
+					const tradCode = match[2];
+					if (!methodsByTradition.has(tradCode)) {
+						methodsByTradition.set(tradCode, []);
+					}
+					// Avoid duplicates
+					if (!methodsByTradition.get(tradCode).some(m => m.name === method.name)) {
+						methodsByTradition.get(tradCode).push({
+							...method,
+							degree: parseInt(match[1]),
+						});
+					}
+				}
+			}
+		}
+
+		// Render methods grouped by tradition
+		for (const tradCode of this._selectedCombatTraditions) {
+			const methods = methodsByTradition.get(tradCode) || [];
+			if (methods.length === 0) continue;
+
+			const $tradGroup = $(`
+				<div class="charsheet__builder-method-group mb-2">
+					<p class="ve-small mb-1"><strong>${this._getTraditionName(tradCode)}</strong></p>
 				</div>
 			`);
 
-			const $list = $section.find(".charsheet__builder-opt-feat-list");
-
-			availableOptions.sort((a, b) => a.name.localeCompare(b.name)).forEach(opt => {
+			methods.sort((a, b) => a.degree - b.degree || a.name.localeCompare(b.name)).forEach(method => {
 				const isSelected = this._selectedOptionalFeatures[featureKey].some(
-					s => s.name === opt.name && s.source === opt.source,
+					s => s.name === method.name && s.source === method.source,
 				);
 				const $item = $(`
-					<label class="charsheet__builder-opt-feat-item d-block mb-1" style="cursor: pointer;">
+					<label class="charsheet__builder-method-item d-block mb-1 ml-2" style="cursor: pointer;">
 						<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
-						<span class="opt-feat-name">${opt.name}</span>
-						<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
+						<span class="method-name">${method.name}</span>
+						<span class="ve-muted ve-small ml-1">(${method.degree}${this._getOrdinalSuffix(method.degree)} degree)</span>
 					</label>
 				`);
 
-				// Show description on hover/click
-				$item.find(".opt-feat-name").on("click", (e) => {
+				// Show description on name click
+				$item.find(".method-name").on("click", (e) => {
 					e.preventDefault();
-					const desc = Renderer.get().render({entries: opt.entries || []});
-					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
+					e.stopPropagation();
+					const desc = Renderer.get().render({entries: method.entries || []});
+					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${method.name}</strong><br>${desc}</div>`)});
 				});
 
 				$item.find("input").on("change", (e) => {
 					if (e.target.checked) {
-						if (this._selectedOptionalFeatures[featureKey].length < count) {
-							this._selectedOptionalFeatures[featureKey].push(opt);
+						if (this._selectedOptionalFeatures[featureKey].length < methodCount) {
+							this._selectedOptionalFeatures[featureKey].push(method);
 						} else {
 							e.target.checked = false;
-							JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} ${name}.`});
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${methodCount} methods.`});
 						}
 					} else {
 						this._selectedOptionalFeatures[featureKey] = this._selectedOptionalFeatures[featureKey].filter(
-							s => !(s.name === opt.name && s.source === opt.source),
+							s => !(s.name === method.name && s.source === method.source),
 						);
 					}
-					$section.find(".opt-feat-count").text(this._selectedOptionalFeatures[featureKey].length);
+					$section.find(".method-count").text(this._selectedOptionalFeatures[featureKey].length);
+				});
+
+				$tradGroup.append($item);
+			});
+
+			$methodList.append($tradGroup);
+		}
+	}
+
+	_getOrdinalSuffix (n) {
+		const s = ["th", "st", "nd", "rd"];
+		const v = n % 100;
+		return s[(v - 20) % 10] || s[v] || s[0];
+	}
+
+	/**
+	 * Render standard optional features (non-Combat Methods)
+	 */
+	_renderStandardOptionalFeatures ($container, optFeatProg, count, name, featureKey, allOptFeatures, featureTypes) {
+		// Helper to check if a feature type matches the progression requirements
+		const matchesFeatureType = (optFeatTypes) => {
+			return optFeatTypes?.some(ft => 
+				featureTypes.some(progType => 
+					ft === progType || ft.startsWith(progType)
+				)
+			);
+		};
+
+		// Filter available options
+		const availableOptions = allOptFeatures.filter(opt => {
+			if (!matchesFeatureType(opt.featureType)) return false;
+
+			// Check prerequisites
+			if (opt.prerequisite) {
+				for (const prereq of opt.prerequisite) {
+					if (prereq.level) {
+						const reqLevel = prereq.level.level || prereq.level;
+						if (reqLevel > 1) return false;
+					}
+				}
+			}
+			return true;
+		});
+
+		// Initialize storage
+		if (!this._selectedOptionalFeatures[featureKey]) {
+			this._selectedOptionalFeatures[featureKey] = [];
+		}
+
+		const $section = $(`
+			<div class="charsheet__builder-opt-feat-section mb-3">
+				<p><strong>${name}:</strong> Choose ${count}</p>
+				<div class="charsheet__builder-opt-feat-list" style="max-height: 200px; overflow-y: auto;"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-feat-count">${this._selectedOptionalFeatures[featureKey].length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $list = $section.find(".charsheet__builder-opt-feat-list");
+
+		availableOptions.sort((a, b) => a.name.localeCompare(b.name)).forEach(opt => {
+			const isSelected = this._selectedOptionalFeatures[featureKey].some(
+				s => s.name === opt.name && s.source === opt.source,
+			);
+			const $item = $(`
+				<label class="charsheet__builder-opt-feat-item d-block mb-1" style="cursor: pointer;">
+					<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
+					<span class="opt-feat-name">${opt.name}</span>
+					<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
+				</label>
+			`);
+
+			$item.find(".opt-feat-name").on("click", (e) => {
+				e.preventDefault();
+				const desc = Renderer.get().render({entries: opt.entries || []});
+				JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
+			});
+
+			$item.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedOptionalFeatures[featureKey].length < count) {
+						this._selectedOptionalFeatures[featureKey].push(opt);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} ${name}.`});
+					}
+				} else {
+					this._selectedOptionalFeatures[featureKey] = this._selectedOptionalFeatures[featureKey].filter(
+						s => !(s.name === opt.name && s.source === opt.source),
+					);
+				}
+				$section.find(".opt-feat-count").text(this._selectedOptionalFeatures[featureKey].length);
+			});
+
+			$list.append($item);
+		});
+
+		$container.append($section);
+	}
+
+	/**
+	 * Render selection UI for class features that have embedded options (like Specialties)
+	 * These are features with {type: "options", count: N, entries: [refClassFeature, ...]}
+	 */
+	_renderClassFeatureOptions (cls, level) {
+		// Get level 1 class features
+		let levelFeatures = [];
+		if (cls.classFeatures && cls.classFeatures.length > 0) {
+			if (Array.isArray(cls.classFeatures[level - 1])) {
+				levelFeatures = cls.classFeatures[level - 1];
+			} else if (!Array.isArray(cls.classFeatures[0])) {
+				// Flat format - filter by level
+				levelFeatures = cls.classFeatures.filter(f => {
+					if (typeof f === "string") {
+						const parts = f.split("|");
+						return parts[3] === String(level) || parts.length < 4;
+					} else if (typeof f === "object" && f.classFeature) {
+						const parts = f.classFeature.split("|");
+						return parts[3] === String(level) || parts.length < 4;
+					}
+					return false;
+				});
+			}
+		}
+
+		// Find all feature option choices
+		const allOptions = [];
+		
+		for (const featureRef of levelFeatures) {
+			let featureName, featureSource;
+			if (typeof featureRef === "string") {
+				const parts = featureRef.split("|");
+				featureName = parts[0];
+				featureSource = parts[2] || cls.source;
+			} else if (typeof featureRef === "object" && featureRef.classFeature) {
+				const parts = featureRef.classFeature.split("|");
+				featureName = parts[0];
+				featureSource = parts[2] || cls.source;
+			} else {
+				continue;
+			}
+
+			// Look up the full feature data
+			const fullFeature = this._getClassFeatureData(featureName, cls.name, featureSource, level);
+			if (!fullFeature) continue;
+
+			// Check for embedded options
+			const featureOptions = this._findFeatureOptions(fullFeature, level);
+			for (const optionGroup of featureOptions) {
+				allOptions.push({
+					featureName: fullFeature.name,
+					featureSource: fullFeature.source,
+					...optionGroup,
+				});
+			}
+		}
+
+		// Also check subclass features for options if subclass selected
+		if (this._selectedSubclass && this._selectedSubclass.subclassFeatures) {
+			this._selectedSubclass.subclassFeatures.forEach(levelFeatures => {
+				if (Array.isArray(levelFeatures)) {
+					levelFeatures.forEach(feature => {
+						if (typeof feature === "object" && feature.level === level) {
+							const featureOptions = this._findFeatureOptions(feature, level);
+							for (const optionGroup of featureOptions) {
+								allOptions.push({
+									featureName: feature.name || Renderer.findName(feature),
+									featureSource: feature.source || this._selectedSubclass.source,
+									isSubclassFeature: true,
+									...optionGroup,
+								});
+							}
+						}
+					});
+				}
+			});
+		}
+
+		if (allOptions.length === 0) return null;
+
+		const $container = $(`<div class="charsheet__builder-feature-options mt-3"></div>`);
+
+		for (const optGroup of allOptions) {
+			const featureKey = `${optGroup.featureName}_${optGroup.featureSource}`;
+			
+			// Initialize storage if needed
+			if (!this._selectedFeatureOptions[featureKey]) {
+				this._selectedFeatureOptions[featureKey] = [];
+			}
+
+			const $section = $(`
+				<div class="charsheet__builder-feat-opt-section mb-3">
+					<p><strong>${optGroup.featureName}:</strong> Choose ${optGroup.count}</p>
+					<div class="charsheet__builder-feat-opt-list" style="max-height: 200px; overflow-y: auto;"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="feat-opt-count">${this._selectedFeatureOptions[featureKey].length}</span>/${optGroup.count}</div>
+				</div>
+			`);
+
+			const $list = $section.find(".charsheet__builder-feat-opt-list");
+
+			for (const opt of optGroup.options) {
+				const isSelected = this._selectedFeatureOptions[featureKey].some(
+					s => s.name === opt.name && s.ref === opt.ref,
+				);
+
+				const $item = $(`
+					<label class="charsheet__builder-feat-opt-item d-block mb-1" style="cursor: pointer;">
+						<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
+						<span class="feat-opt-name">${opt.name}</span>
+						${opt.source ? `<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
+					</label>
+				`);
+
+				// Show description on hover/click for class features
+				if (opt.type === "classFeature" && opt.ref) {
+					$item.find(".feat-opt-name").on("click", (e) => {
+						e.preventDefault();
+						const fullOpt = this._getClassFeatureDataFromRef(opt.ref);
+						if (fullOpt) {
+							const desc = Renderer.get().render({entries: fullOpt.entries || []});
+							JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
+						}
+					});
+				}
+
+				$item.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (this._selectedFeatureOptions[featureKey].length < optGroup.count) {
+							this._selectedFeatureOptions[featureKey].push(opt);
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${optGroup.count} options.`});
+						}
+					} else {
+						this._selectedFeatureOptions[featureKey] = this._selectedFeatureOptions[featureKey].filter(
+							s => !(s.name === opt.name && s.ref === opt.ref),
+						);
+					}
+					$section.find(".feat-opt-count").text(this._selectedFeatureOptions[featureKey].length);
 				});
 
 				$list.append($item);
-			});
+			}
 
 			$container.append($section);
-		});
+		}
 
 		return $container;
 	}
