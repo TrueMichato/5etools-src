@@ -11,6 +11,7 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] need to support adding custom modifiers to rolls, skills, abilities, hit, damage etc (fixed: "Modifiers" button in header opens modal to add/edit/toggle named modifiers for AC, initiative, attacks, damage, saves, skills, etc)
 - [x] need to support toggling proficiency/expertise/half proficiency on skills manually (fixed: click on the proficiency dot next to any skill to cycle through none → proficient → expertise → none)
 - [x] need to support Thelemar exhaustion rules (-1 to all rolls and DCs per level, max 10 before death) (fixed: added "Thelemar Rules" option in exhaustion dropdown)
+- [] need to support various features giving modifiers to rolls, damage, AC, stats, skills etc (e.g magic items, class features, racial features, etc)
 - [] need to improve UI greatly, currently very basic and not user friendly
 - [] need to support mobile devices better (bigger buttons, less clicks, altternative ways to do things that require hover or shift/ctrl keys)
 
