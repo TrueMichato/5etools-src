@@ -948,17 +948,85 @@ class CharacterSheetLevelUp {
 	_renderCombatMethodsLevelUp ($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
 		const selectedForType = [];
 		
-		// Get character's known traditions from existing Combat Methods
-		const knownTraditions = this._getKnownCombatTraditions(existingOptFeatures);
+		// Get character's known traditions from existing Combat Methods or state
+		let knownTraditions = this._getKnownCombatTraditions(existingOptFeatures);
 		
 		// Get max degree for the new level
 		const maxDegree = this._getMaxMethodDegree(classData, newLevel);
+
+		// Track selected traditions during this level-up (for characters without traditions)
+		let tempSelectedTraditions = [...knownTraditions];
 		
+		// If no traditions set, allow selecting them now (retroactive fix)
 		if (knownTraditions.length === 0) {
-			$container.append(`<div class="charsheet__levelup-opt-gain mb-3">
-				<p><strong>${gain.name}:</strong></p>
-				<p class="ve-muted">You haven't selected any Combat Traditions yet. This should have been done at character creation.</p>
-			</div>`);
+			// Filter traditions to only those the class has access to
+			const classAllowedTypes = gain.featureTypes || [];
+			const availableTraditions = this._getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, classData?.name);
+			const traditionCount = 2; // Default tradition count
+			
+			const $section = $(`
+				<div class="charsheet__levelup-opt-gain mb-3">
+					<p><strong>${gain.name}:</strong></p>
+					<div class="charsheet__levelup-traditions mb-3">
+						<p class="ve-muted ve-small mb-2">You haven't selected Combat Traditions yet. Please choose ${traditionCount} traditions first:</p>
+						<div class="charsheet__levelup-tradition-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
+						<div class="ve-small ve-muted mt-1">Selected: <span class="tradition-count">0</span>/${traditionCount}</div>
+					</div>
+					<div class="charsheet__levelup-methods-container"></div>
+				</div>
+			`);
+
+			const $traditionList = $section.find(".charsheet__levelup-tradition-list");
+			const $methodsContainer = $section.find(".charsheet__levelup-methods-container");
+
+			availableTraditions.forEach(trad => {
+				const $item = $(`
+					<label class="charsheet__builder-tradition-item d-block mb-1" style="cursor: pointer;">
+						<input type="checkbox" class="mr-2">
+						<strong>${trad.name}</strong>
+						<span class="ve-muted ve-small ml-1">(${trad.code})</span>
+					</label>
+				`);
+
+				$item.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						if (tempSelectedTraditions.length < traditionCount) {
+							tempSelectedTraditions.push(trad.code);
+							// Save to state immediately
+							this._state.setCombatTraditions([...tempSelectedTraditions]);
+						} else {
+							e.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${traditionCount} traditions.`});
+							return;
+						}
+					} else {
+						tempSelectedTraditions = tempSelectedTraditions.filter(t => t !== trad.code);
+						this._state.setCombatTraditions([...tempSelectedTraditions]);
+					}
+					$section.find(".tradition-count").text(tempSelectedTraditions.length);
+					// Re-render methods when traditions change
+					this._renderMethodsForLevelUp($methodsContainer, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, tempSelectedTraditions, maxDegree, selectedForType);
+				});
+
+				$traditionList.append($item);
+			});
+
+			$container.append($section);
+			return;
+		}
+
+		// Normal flow: has traditions, render methods directly
+		this._renderMethodsForLevelUp($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, knownTraditions, maxDegree, selectedForType);
+	}
+
+	/**
+	 * Render the actual method selection list (used by both flows)
+	 */
+	_renderMethodsForLevelUp ($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, knownTraditions, maxDegree, selectedForType) {
+		$container.empty();
+
+		if (knownTraditions.length === 0) {
+			$container.append(`<p class="ve-muted ve-small">Select traditions above to see available methods.</p>`);
 			return;
 		}
 
@@ -1278,6 +1346,145 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
+	 * Get available combat traditions from optional features
+	 * Traditions are identified by feature types like "CTM:1AM", "CTM:2RC", etc.
+	 */
+	_getAvailableTraditions (allOptFeatures) {
+		const traditions = new Map();
+
+		// Find all unique traditions from optional features
+		for (const opt of allOptFeatures) {
+			if (!opt.featureType) continue;
+			for (const ft of opt.featureType) {
+				// Match tradition codes like "CTM:1AM", "CTM:2RC", etc.
+				const match = ft.match(/^CTM:\d([A-Z]{2})$/);
+				if (match) {
+					const tradCode = match[1];
+					if (!traditions.has(tradCode)) {
+						traditions.set(tradCode, {
+							code: tradCode,
+							name: this._getTraditionName(tradCode),
+						});
+					}
+				}
+			}
+		}
+
+		return Array.from(traditions.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * Extract tradition codes from class feature description text.
+	 * Looks for patterns like {@filter ...|feature type=ctm:am} in the feature entries.
+	 * @param {string} className - The class name to look up
+	 * @param {number} level - The level to search features at (default 1-2 for Combat Methods)
+	 * @returns {Set<string>} Set of tradition codes like "AM", "RC", etc.
+	 */
+	_extractTraditionsFromClassFeature (className, level = 2) {
+		const traditions = new Set();
+		
+		// Look up "Combat Methods" feature for this class
+		const classFeatures = this._page.getClassFeatures?.();
+		if (!classFeatures?.length) {
+			console.log("[LevelUp] No class features available for tradition extraction");
+			return traditions;
+		}
+		
+		// Find the Combat Methods feature (prioritize "Combat Methods" over "Specialties")
+		// "Combat Methods" is the feature that contains the tradition list
+		let combatMethodsFeature = classFeatures.find(f => 
+			f.className === className && 
+			f.name === "Combat Methods" &&
+			f.level <= 5
+		);
+		
+		// If no "Combat Methods" feature found, this class might not have combat traditions
+		if (!combatMethodsFeature) {
+			console.log(`[LevelUp] No Combat Methods feature found for ${className}`);
+			return traditions;
+		}
+		
+		console.log(`[LevelUp] Found Combat Methods feature:`, combatMethodsFeature.name, "at level", combatMethodsFeature.level, "with", combatMethodsFeature.entries?.length, "entries");
+		
+		// Recursively extract text from entries and look for tradition codes
+		const extractFromEntries = (entries) => {
+			if (!entries) return;
+			if (typeof entries === "string") {
+				// Look for patterns like "feature type=ctm:am" or "feature type=CTM:AM"
+				const matches = entries.matchAll(/feature\s+type[=:]\s*ctm:([a-z]{2})/gi);
+				for (const match of matches) {
+					traditions.add(match[1].toUpperCase());
+				}
+				return;
+			}
+			if (Array.isArray(entries)) {
+				for (const entry of entries) {
+					extractFromEntries(entry);
+				}
+				return;
+			}
+			if (typeof entries === "object") {
+				if (entries.entries) extractFromEntries(entries.entries);
+				if (entries.items) extractFromEntries(entries.items);
+				if (entries.entry) extractFromEntries(entries.entry);
+			}
+		};
+		
+		extractFromEntries(combatMethodsFeature.entries);
+		
+		console.log(`[LevelUp] Extracted traditions from feature text:`, [...traditions]);
+		return traditions;
+	}
+
+	/**
+	 * Get available combat traditions filtered by what the class has access to
+	 * @param {Array} allOptFeatures - All optional features
+	 * @param {Array<string>} classAllowedTypes - Feature types the class has access to (e.g., ["CTM:1", "CTM:2"])
+	 * @param {string} [className] - The class name to extract traditions from
+	 */
+	_getAvailableTraditionsForClass (allOptFeatures, classAllowedTypes, className) {
+		console.log("[LevelUp] _getAvailableTraditionsForClass called with classAllowedTypes:", classAllowedTypes, "className:", className);
+		
+		// First try to extract tradition codes from class-allowed types (e.g., "CTM:AM" -> "AM", "CTM:1AM" -> "AM")
+		const allowedTraditionCodes = new Set();
+		for (const ft of classAllowedTypes) {
+			const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
+			if (match && match[2]) {
+				allowedTraditionCodes.add(match[2]);
+			}
+		}
+		
+		console.log("[LevelUp] Extracted tradition codes from types:", [...allowedTraditionCodes]);
+
+		// If no tradition codes found in types, try to extract from class feature description
+		if (allowedTraditionCodes.size === 0 && className) {
+			const featureTraditions = this._extractTraditionsFromClassFeature(className);
+			for (const trad of featureTraditions) {
+				allowedTraditionCodes.add(trad);
+			}
+		}
+		
+		// If still no traditions found, fall back to all traditions
+		if (allowedTraditionCodes.size === 0) {
+			console.log("[LevelUp] No tradition codes found, falling back to all traditions");
+			return this._getAvailableTraditions(allOptFeatures);
+		}
+
+		console.log("[LevelUp] Filtering to allowed traditions:", [...allowedTraditionCodes]);
+
+		// Filter to only allowed traditions
+		const traditions = new Map();
+		for (const tradCode of allowedTraditionCodes) {
+			traditions.set(tradCode, {
+				code: tradCode,
+				name: this._getTraditionName(tradCode),
+			});
+		}
+
+		return Array.from(traditions.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
 	 * Get method degree from optional feature
 	 */
 	_getMethodDegree (opt) {
@@ -1514,9 +1721,13 @@ class CharacterSheetLevelUp {
 		// Apply selected optional features (invocations, metamagic, maneuvers, etc.)
 		if (selectedOptionalFeatures) {
 			Object.entries(selectedOptionalFeatures).forEach(([featureKey, opts]) => {
-				// featureKey is like "EI" or "MM" - the feature types joined
+				// featureKey is like "EI" or "MM" or "CTM:1_CTM:2_..." - the feature types joined
 				const featureTypes = featureKey.split("_");
 				opts.forEach(opt => {
+					// Use the original feature's featureType if available (e.g., ["CTM:1AM", "CTM:2AM"])
+					// This preserves the full type info including tradition codes
+					const originalTypes = opt.featureType || featureTypes;
+					
 					const featureData = {
 						name: opt.name,
 						source: opt.source,
@@ -1524,10 +1735,11 @@ class CharacterSheetLevelUp {
 						classSource: classEntry.source,
 						level: newLevel,
 						featureType: "Optional Feature",
-						optionalFeatureTypes: featureTypes, // Store which type for grouping
+						optionalFeatureTypes: originalTypes, // Store original types for proper grouping
 						description: opt.entries ? Renderer.get().render({entries: opt.entries}) : "",
 						entries: opt.entries,
 					};
+					console.log("[LevelUp] Adding optional feature:", featureData.name, "types:", featureData.optionalFeatureTypes);
 					this._state.addFeature(featureData);
 				});
 			});
