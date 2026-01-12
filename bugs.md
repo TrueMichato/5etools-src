@@ -25,9 +25,16 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] classes with expertise feature don't get to choose their expertise skills during builder (fixed: added expertise selection UI for Rogue at level 1, shows after skill selection)
 - [x] weapon masteries choices not given during builder for classes that get them (fixed: added weapon mastery selection UI for Fighter, Paladin, Ranger, Rogue with proper count from class tables)
 - [x] specialties and combat methods (treaveler's guide to thelemar) not selectable during builder or level up for classes that get them (bard, rogue, etc). SHould be a general fix for similar features that require choice, weather they are OptionalFeature type or classFeature/subclassFeature type.
-- [] exertion pool (thelemar homebrew) not recovered on long rest or short rest and doesn't appear in resources section
-- [] combat traditions and methods not selectable during level up
+- [x] exertion pool (thelemar homebrew) not recovered on long rest or short rest and doesn't appear in resources section (fixed: exertion now appears in tracked resources section with clickable pips, recovers on short/long rest)
+- [x] combat traditions and methods not selectable during level up (fixed: if no traditions set, level-up now allows selecting traditions before methods; methods filtered by known traditions and max degree)
+
+### Overview 
+- [] resources section doesn't update when features that add resources are added/removed (e.g adding/removing a feature that gives a resource doesn't update the resources display until page refresh)
+- [] resources don't have a use button and don't recover on rests
+- [] not all resources from features are added to resources section automatically (some features that give resources are not detected and added)
 - [] sneak attack die, save DCs for non spell related features (combat methods, monk ki features, etc) not calculated/displayed
+
+### Combat
 - [] natural weapons features (like claws, bite, etc) not added to attacks automatically
 
 

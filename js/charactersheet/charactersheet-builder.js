@@ -2243,6 +2243,118 @@ class CharacterSheetBuilder {
 	}
 
 	/**
+	 * Extract tradition codes from class feature description text.
+	 * Looks for patterns like {@filter ...|feature type=ctm:am} in the feature entries.
+	 * @param {string} className - The class name to look up
+	 * @param {number} level - The level to search features at (default 1-2 for Combat Methods)
+	 * @returns {Set<string>} Set of tradition codes like "AM", "RC", etc.
+	 */
+	_extractTraditionsFromClassFeature (className, level = 2) {
+		const traditions = new Set();
+		
+		// Look up "Combat Methods" feature for this class
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length) {
+			console.log("[CharSheet Builder] No class features available for tradition extraction");
+			return traditions;
+		}
+		
+		// Find the Combat Methods feature (prioritize "Combat Methods" over "Specialties")
+		// "Combat Methods" is the feature that contains the tradition list
+		let combatMethodsFeature = classFeatures.find(f => 
+			f.className === className && 
+			f.name === "Combat Methods" &&
+			f.level <= 5
+		);
+		
+		// If no "Combat Methods" feature found, this class might not have combat traditions
+		if (!combatMethodsFeature) {
+			console.log(`[CharSheet Builder] No Combat Methods feature found for ${className}`);
+			return traditions;
+		}
+		
+		console.log(`[CharSheet Builder] Found Combat Methods feature:`, combatMethodsFeature.name, "at level", combatMethodsFeature.level, "with", combatMethodsFeature.entries?.length, "entries");
+		
+		// Recursively extract text from entries and look for tradition codes
+		const extractFromEntries = (entries) => {
+			if (!entries) return;
+			if (typeof entries === "string") {
+				// Look for patterns like "feature type=ctm:am" or "feature type=CTM:AM"
+				const matches = entries.matchAll(/feature\s+type[=:]\s*ctm:([a-z]{2})/gi);
+				for (const match of matches) {
+					traditions.add(match[1].toUpperCase());
+				}
+				return;
+			}
+			if (Array.isArray(entries)) {
+				for (const entry of entries) {
+					extractFromEntries(entry);
+				}
+				return;
+			}
+			if (typeof entries === "object") {
+				if (entries.entries) extractFromEntries(entries.entries);
+				if (entries.items) extractFromEntries(entries.items);
+				if (entries.entry) extractFromEntries(entries.entry);
+			}
+		};
+		
+		extractFromEntries(combatMethodsFeature.entries);
+		
+		console.log(`[CharSheet Builder] Extracted traditions from feature text:`, [...traditions]);
+		return traditions;
+	}
+
+	/**
+	 * Get available combat traditions filtered by what the class has access to
+	 * @param {Array} allOptFeatures - All optional features
+	 * @param {Array<string>} classAllowedTypes - Feature types the class has access to (e.g., ["CTM:1", "CTM:2"])
+	 * @param {string} [className] - The class name to extract traditions from
+	 */
+	_getAvailableTraditionsForClass (allOptFeatures, classAllowedTypes, className) {
+		console.log("[CharSheet Builder] _getAvailableTraditionsForClass called with classAllowedTypes:", classAllowedTypes, "className:", className);
+		
+		// First try to extract tradition codes from class-allowed types (e.g., "CTM:AM" -> "AM", "CTM:1AM" -> "AM")
+		const allowedTraditionCodes = new Set();
+		for (const ft of classAllowedTypes) {
+			const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
+			if (match && match[2]) {
+				allowedTraditionCodes.add(match[2]);
+			}
+		}
+		
+		console.log("[CharSheet Builder] Extracted tradition codes from types:", [...allowedTraditionCodes]);
+
+		// If no tradition codes found in types, try to extract from class feature description
+		if (allowedTraditionCodes.size === 0 && className) {
+			const featureTraditions = this._extractTraditionsFromClassFeature(className);
+			for (const trad of featureTraditions) {
+				allowedTraditionCodes.add(trad);
+			}
+		}
+		
+		// If still no traditions found, fall back to all traditions
+		if (allowedTraditionCodes.size === 0) {
+			console.log("[CharSheet Builder] No tradition codes found, falling back to all traditions");
+			return this._getAvailableTraditions(allOptFeatures);
+		}
+
+		console.log("[CharSheet Builder] Filtering to allowed traditions:", [...allowedTraditionCodes]);
+		
+		// Filter to only allowed traditions
+		const traditions = new Map();
+		for (const tradCode of allowedTraditionCodes) {
+			traditions.set(tradCode, {
+				code: tradCode,
+				fullCode: `CTM:${tradCode}`,
+				name: this._getTraditionName(tradCode),
+			});
+		}
+
+		return Array.from(traditions.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
 	 * Get the display name for a tradition code
 	 */
 	_getTraditionName (tradCode) {
@@ -2328,8 +2440,9 @@ class CharacterSheetBuilder {
 	 * Render Combat Methods selection with tradition choice first, then method selection
 	 */
 	_renderCombatMethodsSelection ($container, cls, optFeatProg, methodCount, name, featureKey, allOptFeatures) {
-		// Get available traditions and max degree
-		const availableTraditions = this._getAvailableTraditions(allOptFeatures);
+		// Get traditions filtered by what the class has access to
+		const classAllowedTypes = optFeatProg.featureType || [];
+		const availableTraditions = this._getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, cls?.name);
 		const maxDegree = this._getMaxMethodDegree(cls, 1);
 		
 		// Determine how many traditions to select (usually 2)

@@ -1947,7 +1947,73 @@ class CharacterSheetState {
 	 * Restore all exertion (e.g., on short/long rest)
 	 */
 	restoreExertion () {
+		console.log("[CharSheet State] restoreExertion called, current exertionMax:", this._data.exertionMax);
+		// Initialize exertion max if not set and character uses combat system
+		this._ensureExertionInitialized();
 		this._data.exertionCurrent = this._data.exertionMax || 0;
+		console.log("[CharSheet State] restoreExertion completed, exertionCurrent:", this._data.exertionCurrent);
+	}
+
+	/**
+	 * Check if character uses the combat methods system
+	 * @returns {boolean}
+	 */
+	usesCombatSystem () {
+		// Check for combat traditions
+		if (this._data.combatTraditions?.length > 0) {
+			console.log("[CharSheet State] usesCombatSystem: true (has traditions:", this._data.combatTraditions, ")");
+			return true;
+		}
+		
+		// Check for combat method features - look for any CTM: feature type
+		const hasMethods = this._data.features?.some(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			// Match any CTM feature type (CTM:1RC, CTM:RC, etc.)
+			const result = f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"));
+			if (result) {
+				console.log("[CharSheet State] Found combat method feature:", f.name, f.optionalFeatureTypes);
+			}
+			return result;
+		}) ?? false;
+		
+		console.log("[CharSheet State] usesCombatSystem:", hasMethods, "(checked", this._data.features?.length || 0, "features)");
+		return hasMethods;
+	}
+
+	/**
+	 * Ensure exertion pool is initialized based on proficiency bonus
+	 * This is a public method that can be called from other modules
+	 */
+	ensureExertionInitialized () {
+		if (!this.usesCombatSystem()) {
+			console.log("[CharSheet State] ensureExertionInitialized: not using combat system, skipping");
+			return;
+		}
+		
+		const profBonus = this.getProficiencyBonus();
+		const calculatedMax = profBonus * 2;
+		
+		console.log("[CharSheet State] ensureExertionInitialized: profBonus=", profBonus, "calculatedMax=", calculatedMax, "currentMax=", this._data.exertionMax);
+		
+		if (this._data.exertionMax !== calculatedMax) {
+			this._data.exertionMax = calculatedMax;
+			// If current exceeds new max, adjust it
+			if ((this._data.exertionCurrent || 0) > calculatedMax) {
+				this._data.exertionCurrent = calculatedMax;
+			}
+			// If current was 0 (never set), initialize to full
+			if (!this._data.exertionCurrent) {
+				this._data.exertionCurrent = calculatedMax;
+			}
+			console.log("[CharSheet State] Exertion initialized: current=", this._data.exertionCurrent, "max=", this._data.exertionMax);
+		}
+	}
+	
+	/**
+	 * @deprecated Use ensureExertionInitialized instead
+	 */
+	_ensureExertionInitialized () {
+		return this.ensureExertionInitialized();
 	}
 
 	/**

@@ -269,6 +269,11 @@ class CharacterSheetRest {
 			}
 		});
 
+		// Restore exertion (Combat Methods system) - recovers on both short and long rests
+		if (this._state.usesCombatSystem?.()) {
+			this._state.restoreExertion?.();
+		}
+
 		// Restore item charges
 		const items = this._state.getItems();
 		const restoredItems = [];

@@ -1431,7 +1431,44 @@ class CharacterSheetPage {
 		$container.empty();
 
 		const resources = this._state.getResources();
-		if (!resources.length) {
+		const usesCombatSystem = this._state.usesCombatSystem?.() || false;
+
+		// Show exertion if character uses combat methods system
+		if (usesCombatSystem) {
+			// Ensure exertion is initialized
+			if (typeof this._state.ensureExertionInitialized === "function") {
+				this._state.ensureExertionInitialized();
+			}
+			
+			const exertionMax = this._state.getExertionMax() || 0;
+			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
+			
+			if (exertionMax > 0) {
+				const $row = $(`
+					<div class="charsheet__resource-row" data-resource-id="exertion">
+						<span class="charsheet__resource-name">Exertion</span>
+						<div class="charsheet__resource-uses">
+							<input type="number" class="form-control form-control--minimal charsheet__resource-current" 
+								value="${exertionCurrent}" min="0" max="${exertionMax}">
+							<span class="charsheet__resource-max">/ ${exertionMax}</span>
+						</div>
+					</div>
+				`);
+
+				$row.find("input").on("change", (e) => {
+					const newValue = Math.max(0, Math.min(exertionMax, parseInt(e.target.value) || 0));
+					this._state.setExertionCurrent(newValue);
+					this._saveCurrentCharacter();
+					// Also update Features tab and Combat tab displays
+					if (this._features) this._features._renderResources();
+					if (this._combat) this._combat._updateExertionDisplay();
+				});
+
+				$container.append($row);
+			}
+		}
+
+		if (!resources.length && !usesCombatSystem) {
 			$container.html(`<div class="ve-muted ve-text-center py-2">No limited-use features</div>`);
 			return;
 		}

@@ -846,7 +846,8 @@ class CharacterSheetCombat {
 		const combatMethods = features.filter(f => {
 			if (f.featureType !== "Optional Feature") return false;
 			// Check if it's a combat method (has CTM:X featureType)
-			return f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft));
+			// Format: CTM:XYY where X is optional degree (1-5), YY is tradition code
+			return f.optionalFeatureTypes?.some(ft => /^CTM:\d?[A-Z]{2}$/.test(ft));
 		});
 
 		// Main page section

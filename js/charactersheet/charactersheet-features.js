@@ -952,18 +952,21 @@ class CharacterSheetFeatures {
 
 		const resources = this._state.getResources();
 
-		// Check if character has combat methods (for exertion display)
-		const features = this._state.getFeatures();
-		const hasCombatMethods = features.some(f => {
-			if (f.featureType !== "Optional Feature") return false;
-			return f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft));
-		});
-
-		// Add exertion as a tracked resource if character has combat methods
-		if (hasCombatMethods) {
+		// Check if character uses the combat methods system (has traditions or methods)
+		const usesCombatSystem = this._state.usesCombatSystem?.() || false;
+		console.log("[CharSheet Features] _renderResources: usesCombatSystem=", usesCombatSystem);
+		
+		if (usesCombatSystem) {
+			// Ensure exertion is initialized (use public method)
+			if (typeof this._state.ensureExertionInitialized === "function") {
+				this._state.ensureExertionInitialized();
+			}
+			
 			const exertionMax = this._state.getExertionMax() || 0;
 			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
 			const exertionUsed = exertionMax - exertionCurrent;
+			
+			console.log("[CharSheet Features] Exertion display: max=", exertionMax, "current=", exertionCurrent, "used=", exertionUsed);
 
 			if (exertionMax > 0) {
 				const $exertion = $(`
@@ -1004,7 +1007,7 @@ class CharacterSheetFeatures {
 			}
 		}
 
-		if (!resources.length && !hasCombatMethods) {
+		if (!resources.length && !usesCombatSystem) {
 			$container.append(`<p class="ve-muted text-center">No class resources</p>`);
 			return;
 		}
