@@ -647,23 +647,27 @@ class CharacterSheetBuilder {
 			const hasSubclass = !!this._selectedSubclass;
 
 			level1Features.forEach(f => {
-				let featureName, featureSource;
+				let featureName, featureSource, classSource;
 				let hasGainSubclassFeature = false;
 
 				if (typeof f === "string") {
-					// Format: "Feature Name|ClassName|ClassSource|Level"
+					// Format: "FeatureName|ClassName|ClassSource|Level|FeatureSource"
+					// FeatureSource is optional, defaults to ClassSource
 					const parts = f.split("|");
 					featureName = parts[0];
-					featureSource = parts[2] || this._selectedClass.source;
+					classSource = parts[2] || this._selectedClass.source;
+					featureSource = parts[4] || classSource; // Feature source defaults to class source
 				} else if (typeof f === "object" && f.classFeature) {
-					// Format: {classFeature: "Feature Name|ClassName|ClassSource|Level", gainSubclassFeature: true}
+					// Format: {classFeature: "FeatureName|ClassName|ClassSource|Level|FeatureSource", gainSubclassFeature: true}
 					const parts = f.classFeature.split("|");
 					featureName = parts[0];
-					featureSource = parts[2] || this._selectedClass.source;
+					classSource = parts[2] || this._selectedClass.source;
+					featureSource = parts[4] || classSource; // Feature source defaults to class source
 					hasGainSubclassFeature = !!f.gainSubclassFeature;
 				} else if (typeof f === "object" && f.name) {
 					featureName = f.name;
-					featureSource = f.source || this._selectedClass.source;
+					classSource = f.classSource || this._selectedClass.source;
+					featureSource = f.source || classSource;
 					hasGainSubclassFeature = !!f.gainSubclassFeature;
 				} else {
 					console.log("[CharSheet Builder] Unknown feature format:", f);
@@ -678,17 +682,18 @@ class CharacterSheetBuilder {
 				}
 
 				// Look up full feature data to get description
-				const fullFeatureData = this._getClassFeatureData(featureName, this._selectedClass.name, featureSource, 1);
+				// Use classSource from the reference (e.g., XPHB) not the selected class (e.g., TGTT for homebrew)
+				const fullFeatureData = this._getClassFeatureData(featureName, this._selectedClass.name, classSource, 1);
 				const description = fullFeatureData?.entries
 					? Renderer.get().render({entries: fullFeatureData.entries})
 					: "";
 
 				const featureToAdd = {
 					name: featureName,
-					source: featureSource || this._selectedClass.source,
+					source: featureSource, // Feature's own source
 					level: 1,
 					className: this._selectedClass.name,
-					classSource: this._selectedClass.source,
+					classSource: classSource, // Class source from the reference (e.g., XPHB)
 					featureType: "Class",
 					description,
 				};
