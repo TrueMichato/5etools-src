@@ -597,16 +597,35 @@ class CharacterSheetFeatures {
 						}
 					// Class/Subclass features
 					} else if (feature.source && feature.className) {
+						// Determine the actual classSource for hover links
+						// Priority: 1. feature.classSource (if valid), 2. feature.source if it's a class source, 3. storedClass.source, 4. fallback
+						const storedClass = this._state.getClasses().find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
+						
+						// Check if feature.source looks like a class source (official sources like PHB, XPHB)
+						// This handles existing characters where classSource wasn't stored correctly
+						const officialClassSources = [Parser.SRC_PHB, Parser.SRC_XPHB, "PHB", "XPHB", "TCE", "XGE"];
+						const isOfficialSource = (src) => officialClassSources.includes(src?.toUpperCase?.() || src);
+						
+						let actualClassSource = feature.classSource;
+						// If classSource is not set or is a homebrew source but feature.source is official, use feature.source
+						if (!actualClassSource || (!isOfficialSource(actualClassSource) && isOfficialSource(feature.source))) {
+							actualClassSource = feature.source;
+						}
+						// Final fallback to stored class or XPHB
+						if (!actualClassSource) {
+							actualClassSource = storedClass?.source || Parser.SRC_XPHB;
+						}
+						
 						const hashInput = {
 							name: feature.name,
 							className: feature.className,
-							classSource: feature.classSource || feature.source || Parser.SRC_XPHB,
+							classSource: actualClassSource,
 							level: feature.level || 1,
 							source: feature.source,
 						};
 						if (feature.subclassName) {
 							hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
-							hashInput.subclassSource = feature.subclassSource || feature.source;
+							hashInput.subclassSource = feature.subclassSource || storedClass?.subclass?.source || feature.source;
 						}
 						const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASS_SUBCLASS_FEATURES](hashInput);
 						featureNameHtml = this._page.getHoverLink(
@@ -801,16 +820,35 @@ class CharacterSheetFeatures {
 			try {
 				// Class/Subclass features - link to the actual class feature page
 				if (feature.featureType === "Class" && feature.className) {
+					// Determine the actual classSource for hover links
+					// Priority: 1. feature.classSource (if valid), 2. feature.source if it's a class source, 3. storedClass.source, 4. fallback
+					const storedClass = this._state.getClasses().find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
+					
+					// Check if feature.source looks like a class source (official sources like PHB, XPHB)
+					// This handles existing characters where classSource wasn't stored correctly
+					const officialClassSources = [Parser.SRC_PHB, Parser.SRC_XPHB, "PHB", "XPHB", "TCE", "XGE"];
+					const isOfficialSource = (src) => officialClassSources.includes(src?.toUpperCase?.() || src);
+					
+					let actualClassSource = feature.classSource;
+					// If classSource is not set or is a homebrew source but feature.source is official, use feature.source
+					if (!actualClassSource || (!isOfficialSource(actualClassSource) && isOfficialSource(feature.source))) {
+						actualClassSource = feature.source || Parser.SRC_XPHB;
+					}
+					// Final fallback to stored class or XPHB
+					if (!actualClassSource) {
+						actualClassSource = storedClass?.source || Parser.SRC_XPHB;
+					}
+					
 					const hashInput = {
 						name: feature.name,
 						className: feature.className,
-						classSource: feature.classSource || feature.source || Parser.SRC_XPHB,
+						classSource: actualClassSource,
 						level: feature.level || 1,
 						source: feature.source || Parser.SRC_XPHB,
 					};
 					if (feature.subclassName || feature.isSubclassFeature) {
 						hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
-						hashInput.subclassSource = feature.subclassSource || feature.source || Parser.SRC_XPHB;
+						hashInput.subclassSource = feature.subclassSource || storedClass?.subclass?.source || feature.source || Parser.SRC_XPHB;
 					}
 					const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASS_SUBCLASS_FEATURES](hashInput);
 					featureNameHtml = this._page.getHoverLink(

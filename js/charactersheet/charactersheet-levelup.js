@@ -672,21 +672,23 @@ class CharacterSheetLevelUp {
 			console.log(`[LevelUp] Level ${level} feature refs (before parsing):`, featureRefs);
 
 			featureRefs.forEach(featureRef => {
-				// Parse feature reference - format is "FeatureName|ClassName|ClassSource|Level"
+				// Parse feature reference - format is "FeatureName|ClassName|ClassSource|Level|FeatureSource"
+				// FeatureSource is optional, defaults to ClassSource
 				if (typeof featureRef === "string") {
 					const parts = featureRef.split("|");
 					const featureName = parts[0];
 					const className = parts[1] || classData.name;
-					const source = parts[2] || classData.source;
+					const classSource = parts[2] || classData.source;
+					const featureSource = parts[4] || classSource; // Feature source defaults to class source
 					
 					// Look up full feature data to get entries
-					const fullFeature = this._getClassFeatureData(featureName, className, source, level);
+					const fullFeature = this._getClassFeatureData(featureName, className, classSource, level);
 					
 					features.push({
 						name: featureName,
 						className: className,
-						classSource: source,
-						source: source,
+						classSource: classSource,
+						source: featureSource,
 						level: level,
 						gainSubclassFeature: false,
 						entries: fullFeature?.entries, // Include entries for option detection
@@ -695,34 +697,39 @@ class CharacterSheetLevelUp {
 					const parts = featureRef.classFeature.split("|");
 					const featureName = parts[0];
 					const className = parts[1] || classData.name;
-					const source = parts[2] || classData.source;
+					const classSource = parts[2] || classData.source;
+					const featureSource = parts[4] || classSource; // Feature source defaults to class source
 					
 					// Look up full feature data to get entries
-					const fullFeature = this._getClassFeatureData(featureName, className, source, level);
+					const fullFeature = this._getClassFeatureData(featureName, className, classSource, level);
 					
 					features.push({
 						name: featureName,
 						className: className,
-						classSource: source,
-						source: source,
+						classSource: classSource,
+						source: featureSource,
 						level: level,
 						gainSubclassFeature: !!featureRef.gainSubclassFeature,
 						entries: fullFeature?.entries, // Include entries for option detection
 					});
 				} else if (typeof featureRef === "object" && featureRef.name) {
+					// Feature object - may have classSource and source properties
+					const classSource = featureRef.classSource || classData.source;
+					const featureSource = featureRef.source || classSource;
+					
 					// Look up full feature data to get entries
 					const fullFeature = this._getClassFeatureData(
 						featureRef.name, 
 						classData.name, 
-						featureRef.source || classData.source, 
+						classSource, 
 						level
 					);
 					
 					features.push({
 						name: featureRef.name,
 						className: classData.name,
-						classSource: classData.source,
-						source: featureRef.source || classData.source,
+						classSource: classSource,
+						source: featureSource,
 						level: level,
 						gainSubclassFeature: !!featureRef.gainSubclassFeature,
 						entries: fullFeature?.entries, // Include entries for option detection
