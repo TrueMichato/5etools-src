@@ -1780,6 +1780,12 @@ class CharacterSheetLevelUp {
 						});
 					} else if (opt.type === "subclassFeature" && opt.ref) {
 						const currentSubclass = this._state.getClasses().find(c => c.name === classEntry.name)?.subclass;
+						// Look up full subclass feature data for description
+						const subclassFeatures = this._page.getSubclassFeatures() || [];
+						const fullSubFeature = subclassFeatures.find(f =>
+							f.name === opt.name &&
+							(f.subclassShortName === currentSubclass?.shortName || f.subclassShortName === opt.subclassShortName)
+						);
 						this._state.addFeature({
 							name: opt.name,
 							source: opt.subclassSource || currentSubclass?.source || classEntry.source,
@@ -1793,6 +1799,8 @@ class CharacterSheetLevelUp {
 							isSubclassFeature: true,
 							isFeatureOption: true,
 							parentFeature: featureKey.split("_")[0],
+							entries: fullSubFeature?.entries,
+							description: fullSubFeature?.entries ? Renderer.get().render({entries: fullSubFeature.entries}) : "",
 						});
 					} else if (opt.type === "optionalfeature" && opt.ref) {
 						const allOptFeatures = this._page.getOptionalFeatures();
@@ -1864,6 +1872,12 @@ class CharacterSheetLevelUp {
 		});
 		console.log(`[LevelUp] FINAL features to add:`, featuresToAdd?.map(f => `${f.name} (isSubclass=${f.isSubclassFeature})`));
 		featuresToAdd.forEach(feature => {
+			// Render description from entries if not already rendered
+			let description = feature.description;
+			if (!description && feature.entries) {
+				description = Renderer.get().render({entries: feature.entries});
+			}
+
 			const featureData = {
 				name: feature.name,
 				source: feature.source || classData.source,
@@ -1874,7 +1888,7 @@ class CharacterSheetLevelUp {
 				subclassShortName: feature.subclassShortName,
 				subclassSource: feature.subclassSource,
 				featureType: "Class",
-				description: feature.description || "",
+				description: description || "",
 			};
 			this._state.addFeature(featureData);
 		});
@@ -2210,6 +2224,12 @@ class CharacterSheetLevelUp {
 				// Get first level features
 				const features = this._getLevelFeatures(selectedClass, 1);
 				features.forEach(f => {
+					// Render description from entries if available
+					let description = f.description;
+					if (!description && f.entries) {
+						description = Renderer.get().render({entries: f.entries});
+					}
+					
 					this._state.addFeature({
 						name: f.name,
 						source: f.source || selectedClass.source,
@@ -2220,7 +2240,7 @@ class CharacterSheetLevelUp {
 						subclassShortName: f.subclassShortName,
 						subclassSource: f.subclassSource,
 						featureType: "Class",
-						description: "",
+						description: description || "",
 					});
 				});
 

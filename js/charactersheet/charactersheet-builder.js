@@ -453,7 +453,7 @@ class CharacterSheetBuilder {
 	_applyRacialTraits () {
 		if (!this._selectedRace) return;
 
-		// Speed
+		// Speed - base race
 		if (this._selectedRace.speed) {
 			if (typeof this._selectedRace.speed === "number") {
 				this._state.setSpeed("walk", this._selectedRace.speed);
@@ -462,6 +462,20 @@ class CharacterSheetBuilder {
 				if (this._selectedRace.speed.fly) this._state.setSpeed("fly", this._selectedRace.speed.fly);
 				if (this._selectedRace.speed.swim) this._state.setSpeed("swim", this._selectedRace.speed.swim);
 				if (this._selectedRace.speed.climb) this._state.setSpeed("climb", this._selectedRace.speed.climb);
+				if (this._selectedRace.speed.burrow) this._state.setSpeed("burrow", this._selectedRace.speed.burrow);
+			}
+		}
+
+		// Speed - subrace can override or add
+		if (this._selectedSubrace?.speed) {
+			if (typeof this._selectedSubrace.speed === "number") {
+				this._state.setSpeed("walk", this._selectedSubrace.speed);
+			} else {
+				if (this._selectedSubrace.speed.walk) this._state.setSpeed("walk", this._selectedSubrace.speed.walk);
+				if (this._selectedSubrace.speed.fly) this._state.setSpeed("fly", this._selectedSubrace.speed.fly);
+				if (this._selectedSubrace.speed.swim) this._state.setSpeed("swim", this._selectedSubrace.speed.swim);
+				if (this._selectedSubrace.speed.climb) this._state.setSpeed("climb", this._selectedSubrace.speed.climb);
+				if (this._selectedSubrace.speed.burrow) this._state.setSpeed("burrow", this._selectedSubrace.speed.burrow);
 			}
 		}
 
@@ -488,7 +502,7 @@ class CharacterSheetBuilder {
 			});
 		}
 
-		// Languages
+		// Languages - base race
 		if (this._selectedRace.languageProficiencies) {
 			this._selectedRace.languageProficiencies.forEach(langProf => {
 				Object.keys(langProf).forEach(lang => {
@@ -499,20 +513,116 @@ class CharacterSheetBuilder {
 			});
 		}
 
-		// Resistances
+		// Languages - subrace
+		if (this._selectedSubrace?.languageProficiencies) {
+			this._selectedSubrace.languageProficiencies.forEach(langProf => {
+				Object.keys(langProf).forEach(lang => {
+					if (lang !== "anyStandard" && lang !== "any") {
+						this._state.addLanguage(lang.toTitleCase());
+					}
+				});
+			});
+		}
+
+		// Resistances - base race
 		if (this._selectedRace.resist) {
 			this._selectedRace.resist.forEach(r => {
 				if (typeof r === "string") this._state.addResistance(r);
 			});
 		}
 
-		// Darkvision and other senses are stored as features
+		// Resistances - subrace
+		if (this._selectedSubrace?.resist) {
+			this._selectedSubrace.resist.forEach(r => {
+				if (typeof r === "string") this._state.addResistance(r);
+			});
+		}
+
+		// Darkvision and other senses - set as base values
 		if (this._selectedRace.darkvision) {
-			this._state.addFeature({
-				name: "Darkvision",
-				source: this._selectedRace.source,
-				description: `You can see in dim light within ${this._selectedRace.darkvision} feet of you as if it were bright light, and in darkness as if it were dim light.`,
-				featureType: "Species",
+			this._state.setSense("darkvision", this._selectedRace.darkvision);
+		}
+		// Subrace can override darkvision (e.g., Drow get 120ft)
+		if (this._selectedSubrace?.darkvision) {
+			const currentDv = this._state.getSense("darkvision") || 0;
+			if (this._selectedSubrace.darkvision > currentDv) {
+				this._state.setSense("darkvision", this._selectedSubrace.darkvision);
+			}
+		}
+
+		// Skill proficiencies from race data
+		if (this._selectedRace.skillProficiencies) {
+			this._selectedRace.skillProficiencies.forEach(skillProf => {
+				Object.keys(skillProf).forEach(skill => {
+					if (skill !== "any" && skill !== "choose") {
+						const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+						this._state.setSkillProficiency(skillKey, 1);
+					}
+				});
+			});
+		}
+
+		// Skill proficiencies from subrace
+		if (this._selectedSubrace?.skillProficiencies) {
+			this._selectedSubrace.skillProficiencies.forEach(skillProf => {
+				Object.keys(skillProf).forEach(skill => {
+					if (skill !== "any" && skill !== "choose") {
+						const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+						this._state.setSkillProficiency(skillKey, 1);
+					}
+				});
+			});
+		}
+
+		// Armor proficiencies from race (e.g., Mountain Dwarf)
+		if (this._selectedRace.armorProficiencies) {
+			this._selectedRace.armorProficiencies.forEach(armorProf => {
+				Object.keys(armorProf).forEach(armor => {
+					this._state.addArmorProficiency(armor.toTitleCase());
+				});
+			});
+		}
+		if (this._selectedSubrace?.armorProficiencies) {
+			this._selectedSubrace.armorProficiencies.forEach(armorProf => {
+				Object.keys(armorProf).forEach(armor => {
+					this._state.addArmorProficiency(armor.toTitleCase());
+				});
+			});
+		}
+
+		// Weapon proficiencies from race (e.g., Elf weapon training)
+		if (this._selectedRace.weaponProficiencies) {
+			this._selectedRace.weaponProficiencies.forEach(weaponProf => {
+				Object.keys(weaponProf).forEach(weapon => {
+					this._state.addWeaponProficiency(weapon.toTitleCase());
+				});
+			});
+		}
+		if (this._selectedSubrace?.weaponProficiencies) {
+			this._selectedSubrace.weaponProficiencies.forEach(weaponProf => {
+				Object.keys(weaponProf).forEach(weapon => {
+					this._state.addWeaponProficiency(weapon.toTitleCase());
+				});
+			});
+		}
+
+		// Tool proficiencies from race (e.g., Dwarf stonecunning tools)
+		if (this._selectedRace.toolProficiencies) {
+			this._selectedRace.toolProficiencies.forEach(toolProf => {
+				Object.keys(toolProf).forEach(tool => {
+					if (tool !== "any" && tool !== "choose") {
+						this._state.addToolProficiency(tool.toTitleCase());
+					}
+				});
+			});
+		}
+		if (this._selectedSubrace?.toolProficiencies) {
+			this._selectedSubrace.toolProficiencies.forEach(toolProf => {
+				Object.keys(toolProf).forEach(tool => {
+					if (tool !== "any" && tool !== "choose") {
+						this._state.addToolProficiency(tool.toTitleCase());
+					}
+				});
 			});
 		}
 

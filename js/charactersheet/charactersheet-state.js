@@ -399,6 +399,648 @@ class SpellGrantParser {
 // Make available globally
 globalThis.SpellGrantParser = SpellGrantParser;
 
+/**
+ * Utility to parse feature text and extract modifiers to rolls, AC, saves, etc.
+ * Works with both official and homebrew content
+ */
+class FeatureModifierParser {
+	/**
+	 * Parse feature/item text to extract modifiers
+	 * @param {string} text - The feature description text (can include HTML)
+	 * @param {string} sourceName - Name of the feature/item granting the modifier
+	 * @param {object} options - Additional context (isItem, isAttuned, etc.)
+	 * @returns {Array} Array of modifier objects {type, value, note, conditional}
+	 */
+	static parseModifiers (text, sourceName, options = {}) {
+		if (!text) return [];
+
+		const modifiers = [];
+		const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+
+		// Helper to parse signed number from various formats
+		const parseSignedValue = (match, signGroup, numGroup) => {
+			const sign = match[signGroup];
+			const num = parseInt(match[numGroup]);
+			if (sign === "-" || sign === "−") return -num;
+			return num;
+		};
+
+		// ===================
+		// ARMOR CLASS (AC)
+		// ===================
+		// Patterns: "+X to AC", "-X to AC", "AC increases/decreases by X", "bonus/penalty of X to AC"
+		const acPatterns = [
+			// +X or -X to AC
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:your\s*)?(?:armor\s*class|ac)\b/gi, signed: true},
+			// bonus/penalty of X to AC
+			{pattern: /(?:bonus|penalty)\s*of\s*([+\-−])?(\d+)\s*to\s*(?:your\s*)?(?:armor\s*class|ac)\b/gi, signed: true, defaultPositive: true},
+			// AC increases by X
+			{pattern: /(?:armor\s*class|ac)\s*(?:increases?|is\s*increased)\s*by\s*(\d+)/gi, positive: true},
+			// AC decreases by X / AC is reduced by X
+			{pattern: /(?:armor\s*class|ac)\s*(?:decreases?|is\s*(?:decreased|reduced))\s*by\s*(\d+)/gi, negative: true},
+			// gain a +X bonus to AC
+			{pattern: /gain(?:s)?\s*(?:a\s*)?([+\-−])?(\d+)\s*(?:bonus\s*)?to\s*(?:your\s*)?(?:armor\s*class|ac)\b/gi, signed: true, defaultPositive: true},
+		];
+		this._applyPatterns(plainText, acPatterns, "ac", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// SAVING THROWS
+		// ===================
+		// All saving throws
+		const saveAllPatterns = [
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:all\s*)?saving\s*throws/gi, signed: true},
+			{pattern: /saving\s*throws?\s*(?:increase|bonus)\s*(?:by|of)\s*([+\-−])?(\d+)/gi, signed: true, defaultPositive: true},
+			{pattern: /saving\s*throws?\s*(?:decrease|penalty|are\s*reduced)\s*by\s*(\d+)/gi, negative: true},
+			{pattern: /(?:bonus|penalty)\s*of\s*([+\-−])?(\d+)\s*to\s*(?:all\s*)?saving\s*throws/gi, signed: true, defaultPositive: true},
+			{pattern: /gain(?:s)?\s*(?:a\s*)?([+\-−])?(\d+)\s*(?:bonus\s*)?to\s*(?:all\s*)?saving\s*throws/gi, signed: true, defaultPositive: true},
+		];
+		this._applyPatterns(plainText, saveAllPatterns, "save:all", sourceName, modifiers, parseSignedValue);
+
+		// Specific ability saving throws
+		const abilities = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"];
+		const abilityMap = {strength: "str", dexterity: "dex", constitution: "con", intelligence: "int", wisdom: "wis", charisma: "cha"};
+		abilities.forEach(ability => {
+			const abl = abilityMap[ability];
+			const saveSpecificPatterns = [
+				{pattern: new RegExp(`([+\\-−])(\\d+)\\s*(?:bonus\\s*)?to\\s*(?:your\\s*)?${ability}\\s*saving\\s*throws?`, "gi"), signed: true},
+				{pattern: new RegExp(`${ability}\\s*saving\\s*throws?\\s*(?:increase|bonus)\\s*(?:by|of)\\s*([+\\-−])?(\\d+)`, "gi"), signed: true, defaultPositive: true},
+				{pattern: new RegExp(`${ability}\\s*saving\\s*throws?\\s*(?:decrease|penalty)\\s*by\\s*(\\d+)`, "gi"), negative: true},
+				{pattern: new RegExp(`(?:bonus|penalty)\\s*of\\s*([+\\-−])?(\\d+)\\s*to\\s*(?:your\\s*)?${ability}\\s*saving\\s*throws?`, "gi"), signed: true, defaultPositive: true},
+			];
+			this._applyPatterns(plainText, saveSpecificPatterns, `save:${abl}`, sourceName, modifiers, parseSignedValue);
+		});
+
+		// ===================
+		// ATTACK ROLLS
+		// ===================
+		const attackPatterns = [
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:weapon\s*)?attack\s*rolls?/gi, signed: true},
+			{pattern: /attack\s*rolls?\s*(?:increase|bonus)\s*(?:by|of)\s*([+\-−])?(\d+)/gi, signed: true, defaultPositive: true},
+			{pattern: /attack\s*rolls?\s*(?:decrease|penalty|are\s*reduced)\s*by\s*(\d+)/gi, negative: true},
+			{pattern: /(?:bonus|penalty)\s*of\s*([+\-−])?(\d+)\s*to\s*(?:weapon\s*)?attack\s*rolls?/gi, signed: true, defaultPositive: true},
+			{pattern: /gain(?:s)?\s*(?:a\s*)?([+\-−])?(\d+)\s*(?:bonus\s*)?to\s*(?:weapon\s*)?attack\s*rolls?/gi, signed: true, defaultPositive: true},
+		];
+		this._applyPatterns(plainText, attackPatterns, "attack", sourceName, modifiers, parseSignedValue);
+
+		// Check for "attack and damage rolls" combo
+		if (/attack\s*and\s*damage\s*rolls?/i.test(plainText)) {
+			const comboPatterns = [
+				{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:weapon\s*)?attack\s*and\s*damage\s*rolls?/gi, signed: true},
+				{pattern: /(?:bonus|penalty)\s*of\s*([+\-−])?(\d+)\s*to\s*(?:weapon\s*)?attack\s*and\s*damage\s*rolls?/gi, signed: true, defaultPositive: true},
+			];
+			this._applyPatterns(plainText, comboPatterns, "damage", sourceName, modifiers, parseSignedValue);
+		}
+
+		// ===================
+		// DAMAGE ROLLS
+		// ===================
+		const damagePatterns = [
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:weapon\s*)?damage\s*rolls?/gi, signed: true},
+			{pattern: /damage\s*rolls?\s*(?:increase|bonus)\s*(?:by|of)\s*([+\-−])?(\d+)/gi, signed: true, defaultPositive: true},
+			{pattern: /damage\s*rolls?\s*(?:decrease|penalty|are\s*reduced)\s*by\s*(\d+)/gi, negative: true},
+			{pattern: /(?:deal|deals?)\s*(?:an?\s*)?(?:extra|additional)\s*(\d+)\s*(?:extra\s*)?damage/gi, positive: true},
+			{pattern: /(?:bonus|penalty)\s*of\s*([+\-−])?(\d+)\s*to\s*(?:weapon\s*)?damage\s*rolls?/gi, signed: true, defaultPositive: true},
+		];
+		this._applyPatterns(plainText, damagePatterns, "damage", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// SPELL SAVE DC
+		// ===================
+		const spellDcPatterns = [
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:your\s*)?spell\s*save\s*dc/gi, signed: true},
+			{pattern: /spell\s*save\s*dc\s*(?:increases?|is\s*increased)\s*by\s*(\d+)/gi, positive: true},
+			{pattern: /spell\s*save\s*dc\s*(?:decreases?|is\s*(?:decreased|reduced))\s*by\s*(\d+)/gi, negative: true},
+		];
+		this._applyPatterns(plainText, spellDcPatterns, "spellDc", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// SPELL ATTACK ROLLS
+		// ===================
+		const spellAttackPatterns = [
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:your\s*)?spell\s*attack\s*rolls?/gi, signed: true},
+			{pattern: /spell\s*attack\s*rolls?\s*(?:increase|bonus)\s*(?:by|of)\s*([+\-−])?(\d+)/gi, signed: true, defaultPositive: true},
+			{pattern: /spell\s*attack\s*rolls?\s*(?:decrease|penalty)\s*by\s*(\d+)/gi, negative: true},
+		];
+		this._applyPatterns(plainText, spellAttackPatterns, "spellAttack", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// INITIATIVE
+		// ===================
+		const initiativePatterns = [
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:your\s*)?initiative/gi, signed: true},
+			{pattern: /initiative\s*(?:increases?|bonus)\s*(?:by|of)\s*([+\-−])?(\d+)/gi, signed: true, defaultPositive: true},
+			{pattern: /initiative\s*(?:decreases?|penalty)\s*by\s*(\d+)/gi, negative: true},
+			{pattern: /add\s*(?:your\s*)?(\w+)\s*modifier\s*to\s*(?:your\s*)?initiative/gi, abilityMod: true},
+		];
+		this._applyPatterns(plainText, initiativePatterns, "initiative", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// SPEED (Walking, Flying, Swimming, Climbing, Burrowing)
+		// ===================
+		const speedTypes = [
+			{name: "walking", type: "speed:walk", aliases: ["walking speed", "speed", "movement"]},
+			{name: "flying", type: "speed:fly", aliases: ["flying speed", "fly speed", "flight speed"]},
+			{name: "swimming", type: "speed:swim", aliases: ["swimming speed", "swim speed"]},
+			{name: "climbing", type: "speed:climb", aliases: ["climbing speed", "climb speed"]},
+			{name: "burrowing", type: "speed:burrow", aliases: ["burrowing speed", "burrow speed"]},
+		];
+
+		speedTypes.forEach(speedType => {
+			const aliasPattern = speedType.aliases.join("|");
+			const speedPatterns = [
+				// Your speed increases/decreases by X feet
+				{pattern: new RegExp(`(?:your\\s*)?(?:${aliasPattern})\\s*(?:increases?|is\\s*increased)\\s*by\\s*(\\d+)\\s*(?:feet|ft\\.?)`, "gi"), positive: true},
+				{pattern: new RegExp(`(?:your\\s*)?(?:${aliasPattern})\\s*(?:decreases?|is\\s*(?:decreased|reduced))\\s*by\\s*(\\d+)\\s*(?:feet|ft\\.?)`, "gi"), negative: true},
+				// gain a +X bonus to speed
+				{pattern: new RegExp(`([+\\-−])(\\d+)\\s*(?:feet|ft\\.?)?\\s*(?:bonus\\s*)?to\\s*(?:your\\s*)?(?:${aliasPattern})`, "gi"), signed: true},
+				// +X feet to speed
+				{pattern: new RegExp(`([+\\-−])(\\d+)\\s*(?:feet|ft\\.?)\\s*to\\s*(?:your\\s*)?(?:${aliasPattern})`, "gi"), signed: true},
+				// speed is increased/reduced by X
+				{pattern: new RegExp(`(?:${aliasPattern})\\s*(?:bonus|penalty)\\s*of\\s*([+\\-−])?(\\d+)\\s*(?:feet|ft\\.?)`, "gi"), signed: true, defaultPositive: true},
+			];
+			this._applyPatterns(plainText, speedPatterns, speedType.type, sourceName, modifiers, parseSignedValue);
+		});
+
+		// General speed (applies to all movement)
+		const generalSpeedPatterns = [
+			{pattern: /(?:your\s*)?(?:base\s*)?speed\s*(?:increases?|is\s*increased)\s*by\s*(\d+)\s*(?:feet|ft\.?)/gi, positive: true},
+			{pattern: /(?:your\s*)?(?:base\s*)?speed\s*(?:decreases?|is\s*(?:decreased|reduced))\s*by\s*(\d+)\s*(?:feet|ft\.?)/gi, negative: true},
+			{pattern: /([+\-−])(\d+)\s*(?:feet|ft\.?)?\s*(?:bonus\s*)?to\s*(?:your\s*)?(?:base\s*)?speed/gi, signed: true},
+			{pattern: /gain(?:s)?\s*(?:a\s*)?([+\-−])?(\d+)\s*(?:feet|ft\.?)\s*(?:bonus\s*)?to\s*(?:your\s*)?speed/gi, signed: true, defaultPositive: true},
+		];
+		this._applyPatterns(plainText, generalSpeedPatterns, "speed:walk", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// SENSES (Darkvision, Blindsight, Tremorsense, Truesight)
+		// ===================
+		const senseTypes = [
+			{name: "darkvision", type: "sense:darkvision"},
+			{name: "blindsight", type: "sense:blindsight"},
+			{name: "tremorsense", type: "sense:tremorsense"},
+			{name: "truesight", type: "sense:truesight"},
+		];
+
+		senseTypes.forEach(sense => {
+			const sensePatterns = [
+				// gain darkvision out to X feet
+				{pattern: new RegExp(`(?:gain|have|grants?)\\s*${sense.name}\\s*(?:out\\s*to|to\\s*a\\s*(?:range|distance)\\s*of)?\\s*(\\d+)\\s*(?:feet|ft\\.?)`, "gi"), setValue: true},
+				// darkvision increases by X feet
+				{pattern: new RegExp(`${sense.name}\\s*(?:increases?|is\\s*increased|extends?)\\s*by\\s*(\\d+)\\s*(?:feet|ft\\.?)`, "gi"), positive: true},
+				// darkvision of X feet
+				{pattern: new RegExp(`${sense.name}\\s*(?:of|to)\\s*(\\d+)\\s*(?:feet|ft\\.?)`, "gi"), setValue: true},
+				// X feet of darkvision
+				{pattern: new RegExp(`(\\d+)\\s*(?:feet|ft\\.?)\\s*of\\s*${sense.name}`, "gi"), setValue: true},
+				// your darkvision range increases to X feet
+				{pattern: new RegExp(`${sense.name}\\s*(?:range\\s*)?(?:increases?\\s*)?to\\s*(\\d+)\\s*(?:feet|ft\\.?)`, "gi"), setValue: true},
+			];
+			this._applyPatterns(plainText, sensePatterns, sense.type, sourceName, modifiers, parseSignedValue);
+		});
+
+		// ===================
+		// HIT POINTS
+		// ===================
+		const hpPatterns = [
+			// hit point maximum increases/decreases by X
+			{pattern: /hit\s*point\s*maximum\s*(?:increases?|is\s*increased)\s*by\s*(\d+)/gi, positive: true},
+			{pattern: /hit\s*point\s*maximum\s*(?:decreases?|is\s*(?:decreased|reduced))\s*by\s*(\d+)/gi, negative: true},
+			// gain X additional hit points
+			{pattern: /gain(?:s)?\s*(?:an?\s*)?(?:additional|extra)\s*(\d+)\s*hit\s*points?/gi, positive: true},
+			// +X hit points per level
+			{pattern: /([+\-−])(\d+)\s*hit\s*points?\s*(?:per|for\s*each)\s*(?:level|character\s*level)/gi, signed: true, perLevel: true},
+			// hit points increase by X per level
+			{pattern: /hit\s*points?\s*(?:increase|maximum\s*increases?)\s*by\s*(\d+)\s*(?:per|for\s*each)\s*(?:level|character\s*level)/gi, positive: true, perLevel: true},
+			// lose X hit points
+			{pattern: /lose(?:s)?\s*(\d+)\s*hit\s*points?/gi, negative: true},
+		];
+		this._applyPatterns(plainText, hpPatterns, "hp", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// ABILITY SCORES
+		// ===================
+		abilities.forEach(ability => {
+			const abl = abilityMap[ability];
+			const shortAbl = abl.toUpperCase();
+			const abilityPatterns = [
+				// Strength score increases by X / Strength increases by X
+				{pattern: new RegExp(`(?:your\\s*)?${ability}(?:\\s*score)?\\s*(?:increases?|is\\s*increased)\\s*by\\s*(\\d+)`, "gi"), positive: true},
+				{pattern: new RegExp(`(?:your\\s*)?${ability}(?:\\s*score)?\\s*(?:decreases?|is\\s*(?:decreased|reduced))\\s*by\\s*(\\d+)`, "gi"), negative: true},
+				// +X to Strength / +X Strength
+				{pattern: new RegExp(`([+\\-−])(\\d+)\\s*(?:to\\s*(?:your\\s*)?)?${ability}(?:\\s*score)?(?!\\s*(?:saving|check|modifier))`, "gi"), signed: true},
+				// gain +X to your Strength score
+				{pattern: new RegExp(`gain(?:s)?\\s*(?:a\\s*)?([+\\-−])?(\\d+)\\s*(?:bonus\\s*)?(?:to\\s*(?:your\\s*)?)?${ability}(?:\\s*score)?`, "gi"), signed: true, defaultPositive: true},
+				// STR +X or STR increases by X
+				{pattern: new RegExp(`${shortAbl}\\s*([+\\-−])(\\d+)(?!\\s*(?:save|check))`, "gi"), signed: true},
+			];
+			this._applyPatterns(plainText, abilityPatterns, `ability:${abl}`, sourceName, modifiers, parseSignedValue);
+		});
+
+		// ===================
+		// SKILL CHECKS
+		// ===================
+		const skillNames = [
+			"acrobatics", "animal handling", "arcana", "athletics", "deception",
+			"history", "insight", "intimidation", "investigation", "medicine",
+			"nature", "perception", "performance", "persuasion", "religion",
+			"sleight of hand", "stealth", "survival",
+		];
+		skillNames.forEach(skill => {
+			const skillKey = skill.replace(/\s+/g, "");
+			const skillPatterns = [
+				{pattern: new RegExp(`([+\\-−])(\\d+)\\s*(?:bonus\\s*)?to\\s*(?:your\\s*)?${skill}\\s*(?:checks?|rolls?)?`, "gi"), signed: true},
+				{pattern: new RegExp(`${skill}\\s*(?:checks?|rolls?)?\\s*(?:increase|bonus)\\s*(?:by|of)\\s*([+\\-−])?(\\d+)`, "gi"), signed: true, defaultPositive: true},
+				{pattern: new RegExp(`${skill}\\s*(?:checks?|rolls?)?\\s*(?:decrease|penalty)\\s*by\\s*(\\d+)`, "gi"), negative: true},
+				{pattern: new RegExp(`(?:bonus|penalty)\\s*of\\s*([+\\-−])?(\\d+)\\s*to\\s*(?:your\\s*)?${skill}\\s*(?:checks?|rolls?)?`, "gi"), signed: true, defaultPositive: true},
+			];
+			this._applyPatterns(plainText, skillPatterns, `skill:${skillKey}`, sourceName, modifiers, parseSignedValue);
+		});
+
+		// ===================
+		// ABILITY CHECKS (All or specific)
+		// ===================
+		const abilityCheckAllPatterns = [
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:all\s*)?ability\s*checks/gi, signed: true},
+			{pattern: /ability\s*checks?\s*(?:increase|bonus)\s*(?:by|of)\s*([+\-−])?(\d+)/gi, signed: true, defaultPositive: true},
+			{pattern: /ability\s*checks?\s*(?:decrease|penalty|are\s*reduced)\s*by\s*(\d+)/gi, negative: true},
+		];
+		this._applyPatterns(plainText, abilityCheckAllPatterns, "check:all", sourceName, modifiers, parseSignedValue);
+
+		// Specific ability checks (Strength checks, Dexterity checks, etc.)
+		abilities.forEach(ability => {
+			const abl = abilityMap[ability];
+			const abilityCheckPatterns = [
+				{pattern: new RegExp(`([+\\-−])(\\d+)\\s*(?:bonus\\s*)?to\\s*(?:your\\s*)?${ability}\\s*(?:ability\\s*)?checks?(?!.*saving)`, "gi"), signed: true},
+				{pattern: new RegExp(`${ability}\\s*(?:ability\\s*)?checks?\\s*(?:increase|bonus)\\s*(?:by|of)\\s*([+\\-−])?(\\d+)`, "gi"), signed: true, defaultPositive: true},
+				{pattern: new RegExp(`${ability}\\s*(?:ability\\s*)?checks?\\s*(?:decrease|penalty)\\s*by\\s*(\\d+)`, "gi"), negative: true},
+			];
+			this._applyPatterns(plainText, abilityCheckPatterns, `check:${abl}`, sourceName, modifiers, parseSignedValue);
+		});
+
+		// ===================
+		// PROFICIENCY BONUS
+		// ===================
+		const profBonusPatterns = [
+			{pattern: /proficiency\s*bonus\s*(?:increases?|is\s*increased)\s*by\s*(\d+)/gi, positive: true},
+			{pattern: /proficiency\s*bonus\s*(?:decreases?|is\s*(?:decreased|reduced))\s*by\s*(\d+)/gi, negative: true},
+			{pattern: /([+\-−])(\d+)\s*(?:to\s*(?:your\s*)?)?proficiency\s*bonus/gi, signed: true},
+			{pattern: /add\s*(\d+)\s*to\s*(?:your\s*)?proficiency\s*bonus/gi, positive: true},
+		];
+		this._applyPatterns(plainText, profBonusPatterns, "proficiencyBonus", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// SPELL SLOTS
+		// ===================
+		const spellSlotPatterns = [
+			{pattern: /gain(?:s)?\s*(?:an?\s*)?(?:additional|extra)\s*(\d+)(?:st|nd|rd|th)?\s*level\s*spell\s*slots?/gi, positive: true, spellSlot: true},
+			{pattern: /(\d+)\s*(?:additional|extra)\s*(\d+)(?:st|nd|rd|th)?\s*level\s*spell\s*slots?/gi, spellSlotCount: true},
+		];
+		this._applyPatterns(plainText, spellSlotPatterns, "spellSlots", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// CARRY CAPACITY
+		// ===================
+		const carryPatterns = [
+			{pattern: /carrying\s*capacity\s*(?:increases?|is\s*(?:increased|doubled))\s*(?:by\s*)?(\d+)?/gi, positive: true, maybeDouble: true},
+			{pattern: /carrying\s*capacity\s*(?:decreases?|is\s*(?:decreased|reduced|halved))\s*(?:by\s*)?(\d+)?/gi, negative: true, maybeHalve: true},
+			{pattern: /count(?:s)?\s*as\s*(?:one\s*)?size\s*(?:category\s*)?larger\s*(?:for|when)\s*(?:determining\s*)?(?:your\s*)?carrying\s*capacity/gi, sizeIncrease: true},
+		];
+		this._applyPatterns(plainText, carryPatterns, "carryCapacity", sourceName, modifiers, parseSignedValue);
+
+		// ===================
+		// SKILL PROFICIENCIES
+		// ===================
+		skillNames.forEach(skill => {
+			const skillKey = skill.replace(/\s+/g, "");
+			const profPatterns = [
+				// "you gain proficiency in Athletics" / "you are proficient in Athletics"
+				{pattern: new RegExp(`(?:you\\s+)?(?:gain|have|are)\\s+proficien(?:cy|t)\\s+(?:in|with)\\s+(?:the\\s+)?${skill}(?:\\s+skill)?`, "gi"), proficiency: true},
+				// "proficiency in Athletics" / "proficiency with the Athletics skill"
+				{pattern: new RegExp(`proficien(?:cy|t)\\s+(?:in|with)\\s+(?:the\\s+)?${skill}(?:\\s+skill)?`, "gi"), proficiency: true},
+				// "you gain expertise in Athletics"
+				{pattern: new RegExp(`(?:you\\s+)?(?:gain|have)\\s+expertise\\s+(?:in|with)\\s+(?:the\\s+)?${skill}(?:\\s+skill)?`, "gi"), expertise: true},
+			];
+			profPatterns.forEach(({pattern, proficiency, expertise}) => {
+				if (pattern.test(plainText)) {
+					modifiers.push({
+						type: `proficiency:skill:${skillKey}`,
+						value: expertise ? 2 : 1,
+						note: sourceName,
+						isProficiency: true,
+					});
+				}
+			});
+		});
+
+		// ===================
+		// SAVING THROW PROFICIENCIES
+		// ===================
+		abilities.forEach(ability => {
+			const abl = abilityMap[ability];
+			const saveProfPatterns = [
+				// "you gain proficiency in Wisdom saving throws"
+				{pattern: new RegExp(`(?:you\\s+)?(?:gain|have|are)\\s+proficien(?:cy|t)\\s+(?:in|with)\\s+${ability}\\s+saving\\s+throws?`, "gi")},
+				// "proficiency in Strength saves"
+				{pattern: new RegExp(`proficien(?:cy|t)\\s+(?:in|with)\\s+${ability}\\s+(?:saving\\s+throws?|saves?)`, "gi")},
+			];
+			saveProfPatterns.forEach(({pattern}) => {
+				if (pattern.test(plainText)) {
+					modifiers.push({
+						type: `proficiency:save:${abl}`,
+						value: 1,
+						note: sourceName,
+						isProficiency: true,
+					});
+				}
+			});
+		});
+
+		// ===================
+		// ARMOR PROFICIENCIES
+		// ===================
+		const armorTypes = ["light armor", "medium armor", "heavy armor", "shields"];
+		armorTypes.forEach(armor => {
+			const armorKey = armor.replace(/\s+/g, "");
+			const armorProfPatterns = [
+				{pattern: new RegExp(`(?:you\\s+)?(?:gain|have|are)\\s+proficien(?:cy|t)\\s+(?:in|with)\\s+${armor}`, "gi")},
+				{pattern: new RegExp(`proficien(?:cy|t)\\s+(?:in|with)\\s+${armor}`, "gi")},
+			];
+			armorProfPatterns.forEach(({pattern}) => {
+				if (pattern.test(plainText)) {
+					modifiers.push({
+						type: `proficiency:armor:${armorKey}`,
+						value: 1,
+						note: sourceName,
+						isProficiency: true,
+					});
+				}
+			});
+		});
+
+		// ===================
+		// WEAPON PROFICIENCIES
+		// ===================
+		const weaponCategories = ["simple weapons", "martial weapons"];
+		weaponCategories.forEach(category => {
+			const categoryKey = category.replace(/\s+/g, "");
+			const weaponProfPatterns = [
+				{pattern: new RegExp(`(?:you\\s+)?(?:gain|have|are)\\s+proficien(?:cy|t)\\s+(?:in|with)\\s+${category}`, "gi")},
+				{pattern: new RegExp(`proficien(?:cy|t)\\s+(?:in|with)\\s+${category}`, "gi")},
+			];
+			weaponProfPatterns.forEach(({pattern}) => {
+				if (pattern.test(plainText)) {
+					modifiers.push({
+						type: `proficiency:weapon:${categoryKey}`,
+						value: 1,
+						note: sourceName,
+						isProficiency: true,
+					});
+				}
+			});
+		});
+
+		// Specific weapon proficiencies (common ones)
+		const specificWeapons = [
+			"longsword", "shortsword", "longbow", "shortbow", "rapier", "scimitar",
+			"hand crossbow", "light crossbow", "heavy crossbow", "battleaxe", "warhammer",
+			"glaive", "halberd", "pike", "greatsword", "maul", "trident", "whip",
+		];
+		specificWeapons.forEach(weapon => {
+			const weaponPattern = new RegExp(`(?:you\\s+)?(?:gain|have|are)\\s+proficien(?:cy|t)\\s+(?:in|with)\\s+(?:the\\s+)?${weapon}s?`, "gi");
+			if (weaponPattern.test(plainText)) {
+				modifiers.push({
+					type: `proficiency:weapon:${weapon}`,
+					value: 1,
+					note: sourceName,
+					isProficiency: true,
+				});
+			}
+		});
+
+		// ===================
+		// TOOL PROFICIENCIES
+		// ===================
+		const commonTools = [
+			"thieves' tools", "thieves tools", "artisan's tools", "musical instrument",
+			"navigator's tools", "poisoner's kit", "herbalism kit", "alchemist's supplies",
+			"brewer's supplies", "calligrapher's supplies", "carpenter's tools", "cartographer's tools",
+			"cobbler's tools", "cook's utensils", "glassblower's tools", "jeweler's tools",
+			"leatherworker's tools", "mason's tools", "painter's supplies", "potter's tools",
+			"smith's tools", "tinker's tools", "weaver's tools", "woodcarver's tools",
+			"disguise kit", "forgery kit", "gaming set", "vehicles",
+		];
+		commonTools.forEach(tool => {
+			const toolPattern = new RegExp(`(?:you\\s+)?(?:gain|have|are)\\s+proficien(?:cy|t)\\s+(?:in|with)\\s+(?:one\\s+)?${tool.replace(/'/g, "'")}`, "gi");
+			if (toolPattern.test(plainText)) {
+				modifiers.push({
+					type: `proficiency:tool:${tool.replace(/['\s]+/g, "")}`,
+					value: 1,
+					note: sourceName,
+					isProficiency: true,
+				});
+			}
+		});
+
+		// ===================
+		// NATURAL ARMOR / CUSTOM AC FORMULAS
+		// ===================
+		// "your AC equals 13 + your Dexterity modifier" (Lizardfolk, Tortle, etc.)
+		const acFormulaPatterns = [
+			// AC equals X + DEX modifier
+			{pattern: /(?:your\s+)?(?:armor\s*class|ac)\s+(?:equals?|is)\s+(\d+)\s*\+\s*(?:your\s+)?(?:dexterity|dex)(?:\s+modifier)?(?:\s+\(([^)]+)\))?/gi, type: "naturalArmor", addDex: true},
+			// AC equals X (no DEX, like Tortle)
+			{pattern: /(?:your\s+)?(?:armor\s*class|ac)\s+(?:equals?|is)\s+(\d+)(?:\s+when\s+(?:you\s+)?(?:aren't|are\s+not)\s+wearing\s+armor)?/gi, type: "naturalArmor", noDex: true},
+			// Natural armor AC of X
+			{pattern: /natural\s+armor\s+(?:that\s+)?(?:gives\s+you\s+)?(?:an?\s+)?(?:ac|armor\s*class)\s*(?:of|equal(?:s?\s+to)?)\s*(\d+)/gi, type: "naturalArmor", noDex: true},
+			// base AC of X
+			{pattern: /base\s+(?:ac|armor\s*class)\s+(?:of|equal(?:s?\s+to)?|is)\s+(\d+)/gi, type: "naturalArmor"},
+			// Unarmored Defense: AC = 10 + DEX + CON/WIS
+			{pattern: /(?:your\s+)?(?:armor\s*class|ac)\s+(?:equals?|is)\s+10\s*\+\s*(?:your\s+)?(?:dexterity|dex)(?:\s+modifier)?\s*\+\s*(?:your\s+)?(constitution|con|wisdom|wis|charisma|cha)(?:\s+modifier)?/gi, type: "unarmoredDefense"},
+		];
+		acFormulaPatterns.forEach(({pattern, type, addDex, noDex}) => {
+			let match;
+			while ((match = pattern.exec(plainText)) !== null) {
+				const baseAc = parseInt(match[1]) || 10;
+				let secondAbility = null;
+				if (type === "unarmoredDefense" && match[2]) {
+					const ablMatch = match[2].toLowerCase();
+					if (ablMatch.startsWith("con")) secondAbility = "con";
+					else if (ablMatch.startsWith("wis")) secondAbility = "wis";
+					else if (ablMatch.startsWith("cha")) secondAbility = "cha";
+				}
+				modifiers.push({
+					type: "acFormula",
+					value: baseAc,
+					note: sourceName,
+					acFormula: {
+						base: baseAc,
+						addDex: addDex || (type === "unarmoredDefense"),
+						noDex: noDex,
+						secondAbility,
+						formulaType: type,
+					},
+					conditional: this._extractCondition(plainText, match.index),
+				});
+			}
+		});
+
+		// Deduplicate modifiers of same type from same source
+		const unique = [];
+		const seen = new Set();
+		modifiers.forEach(m => {
+			const key = `${m.type}|${m.value}|${m.conditional || ""}`;
+			if (!seen.has(key)) {
+				seen.add(key);
+				unique.push(m);
+			}
+		});
+
+		return unique;
+	}
+
+	/**
+	 * Helper to apply multiple patterns and extract modifiers
+	 */
+	static _applyPatterns (text, patterns, type, sourceName, modifiers, parseSignedValue) {
+		patterns.forEach(({pattern, signed, positive, negative, defaultPositive, setValue, perLevel, sizeIncrease, maybeDouble, maybeHalve, abilityMod}) => {
+			let match;
+			while ((match = pattern.exec(text)) !== null) {
+				let value;
+
+				if (abilityMod) {
+					// Special case: "add your X modifier to initiative"
+					// We can't resolve this statically, mark it for special handling
+					const abilityName = match[1]?.toLowerCase();
+					modifiers.push({
+						type,
+						value: 0,
+						note: sourceName,
+						abilityMod: abilityName,
+						conditional: this._extractCondition(text, match.index),
+					});
+					continue;
+				}
+
+				if (sizeIncrease) {
+					// Counts as larger for carrying capacity
+					modifiers.push({
+						type,
+						value: 0,
+						note: sourceName,
+						sizeIncrease: true,
+						conditional: this._extractCondition(text, match.index),
+					});
+					continue;
+				}
+
+				if (maybeDouble && !match[1]) {
+					modifiers.push({type, value: 0, note: sourceName, multiplier: 2, conditional: this._extractCondition(text, match.index)});
+					continue;
+				}
+
+				if (maybeHalve && !match[1]) {
+					modifiers.push({type, value: 0, note: sourceName, multiplier: 0.5, conditional: this._extractCondition(text, match.index)});
+					continue;
+				}
+
+				if (setValue) {
+					// For senses, this sets the value directly (e.g., "gain darkvision 60 feet")
+					value = parseInt(match[1]);
+					modifiers.push({
+						type,
+						value,
+						note: sourceName,
+						setValue: true,
+						conditional: this._extractCondition(text, match.index),
+					});
+					continue;
+				}
+
+				if (signed) {
+					// Pattern has sign group and number group
+					if (match[2]) {
+						value = parseSignedValue(match, 1, 2);
+					} else if (match[1] && defaultPositive) {
+						// Optional sign, default positive
+						value = parseInt(match[1]);
+						if (match[0].includes("-") || match[0].includes("−")) value = -value;
+					} else if (match[1]) {
+						value = parseInt(match[1]);
+					}
+				} else if (positive) {
+					value = parseInt(match[1]);
+				} else if (negative) {
+					value = -parseInt(match[1]);
+				}
+
+				if (value !== undefined && !isNaN(value)) {
+					const mod = {
+						type,
+						value,
+						note: sourceName,
+						conditional: this._extractCondition(text, match.index),
+					};
+					if (perLevel) mod.perLevel = true;
+					modifiers.push(mod);
+				}
+			}
+		});
+	}
+
+	/**
+	 * Extract conditional context around a match (e.g., "while raging", "when wearing heavy armor")
+	 */
+	static _extractCondition (text, matchIndex) {
+		// Look at surrounding context
+		const start = Math.max(0, matchIndex - 100);
+		const end = Math.min(text.length, matchIndex + 100);
+		const context = text.substring(start, end).toLowerCase();
+
+		// Common conditional phrases
+		const conditions = [
+			/while\s+(?:you\s+are\s+)?(raging|concentrating|wearing|wielding|attuned|in\s+(?:dim\s+light|darkness)|bloodied|prone|grappled|restrained)/i,
+			/when\s+(?:you\s+are\s+)?(wearing|wielding|in\s+(?:dim\s+light|darkness)|hit\s+by)/i,
+			/if\s+you\s+(are|have|wear|wield|aren't|don't)/i,
+			/against\s+(aberrations|beasts|celestials|constructs|dragons|elementals|fey|fiends|giants|monstrosities|oozes|plants|undead|(?:creatures?\s+)?(?:that\s+)?(?:can't\s+see\s+you|you\s+can\s+see))/i,
+			/within\s+\d+\s*(?:feet|ft\.?)\s*of/i,
+			/in\s+(?:bright\s+light|dim\s+light|darkness)/i,
+			// "while not wearing armor" or "while you are not wearing armor"
+			/(?:only\s+)?(?:while|when)\s+(?:you\s+are\s+)?(?:not\s+)?(?:wearing|in)\s+(?:light|medium|heavy)\s+armor/i,
+			/(?:only\s+)?(?:while|when)\s+(?:you\s+are\s+)?(?:not\s+)?wearing\s+(?:a\s+)?(?:shield|armor)/i,
+			/(?:only\s+)?(?:while|when)\s+(?:you\s+are\s+)?(?:not\s+)?(?:incapacitated|unconscious|prone|restrained|grappled|charmed|frightened|poisoned|blinded|deafened|stunned|paralyzed|petrified)/i,
+			/(?:at\s+the\s+)?(?:start|end)\s+of\s+(?:your|each|the)\s+turn/i,
+			/(?:once|twice)\s+per\s+(?:turn|round|short\s+rest|long\s+rest)/i,
+			/(?:for|during)\s+(?:the\s+)?(?:first|next)\s+(?:\d+\s+)?(?:round|minute|hour)/i,
+			/until\s+(?:the\s+)?(?:start|end)\s+of\s+your\s+next\s+turn/i,
+		];
+
+		for (const pattern of conditions) {
+			const match = context.match(pattern);
+			if (match) {
+				return match[0].trim();
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Check if text likely contains modifiers worth parsing
+	 */
+	static hasModifiers (text) {
+		if (!text) return false;
+		const plainText = text.replace(/<[^>]*>/g, " ").toLowerCase();
+		return /[+\-−]\s*\d+\s*(bonus\s*)?(to|on|feet|ft)/i.test(plainText) ||
+			/(?:ac|armor\s*class|saving\s*throws?|attack\s*rolls?|damage|speed|initiative|hit\s*points?|darkvision)\s*(?:increase|decrease|bonus|penalty|is\s*(?:increased|reduced))/i.test(plainText) ||
+			/(?:strength|dexterity|constitution|intelligence|wisdom|charisma)(?:\s*score)?\s*(?:increase|decrease)/i.test(plainText) ||
+			/gain(?:s)?\s*(?:darkvision|blindsight|tremorsense|truesight)/i.test(plainText) ||
+			/proficien(?:cy|t)\s*(?:in|with)/i.test(plainText) ||
+			/(?:ac|armor\s*class)\s+(?:equals?|is)\s+\d+/i.test(plainText) ||
+			/natural\s+armor/i.test(plainText);
+	}
+}
+
+// Make available globally
+globalThis.FeatureModifierParser = FeatureModifierParser;
+
 class CharacterSheetState {
 	constructor () {
 		this._data = this._getDefaultState();
@@ -470,6 +1112,9 @@ class CharacterSheetState {
 				itemBonus: 0, // Bonus from non-armor/shield magic items
 			},
 
+			// AC formulas from features (natural armor, unarmored defense, etc.)
+			acFormulas: [],
+
 			// Item bonuses from equipped/attuned magic items
 			itemBonuses: {
 				ac: 0,
@@ -486,6 +1131,14 @@ class CharacterSheetState {
 				swim: null,
 				climb: null,
 				burrow: null,
+			},
+
+			// Senses (base values, before feature bonuses)
+			senses: {
+				darkvision: 0,
+				blindsight: 0,
+				tremorsense: 0,
+				truesight: 0,
 			},
 
 			// Spellcasting
@@ -558,7 +1211,7 @@ class CharacterSheetState {
 			customModifiers: {
 				ac: 0,
 				initiative: 0,
-				speed: 0,
+				speed: {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0}, // Movement type bonuses
 				savingThrows: {}, // {str: 2, dex: 1, ...}
 				skills: {}, // {athletics: 2, stealth: -1, ...}
 				attackBonus: 0,
@@ -566,12 +1219,20 @@ class CharacterSheetState {
 				spellDc: 0,
 				spellAttack: 0,
 				abilityChecks: {}, // {str: 1, dex: 2, ...} - raw ability checks
+				abilityScores: {}, // {str: 2, dex: 1, ...} - ability score bonuses
+				hp: 0, // Hit point maximum bonus
+				hpPerLevel: 0, // HP bonus per character level
+				proficiencyBonus: 0, // Proficiency bonus modifier
+				senses: {darkvision: 0, blindsight: 0, tremorsense: 0, truesight: 0}, // Sense ranges (set values)
+				carryCapacity: 0, // Carry capacity bonus
+				carryCapacityMultiplier: 1, // Carry capacity multiplier (e.g., 2 for doubled)
 			},
 
 			// Named modifiers list (for detailed tracking with sources/notes)
-			// Each modifier: {id, name, type, value, note, enabled}
-			// type: "ac", "initiative", "speed", "attack", "damage", "spellDc", "spellAttack", 
-			//       "save:all", "save:str", "skill:all", "skill:stealth", "check:all", "check:str"
+			// Each modifier: {id, name, type, value, note, enabled, sourceFeatureId?}
+			// type: "ac", "initiative", "speed:walk", "speed:fly", "attack", "damage", "spellDc", "spellAttack", 
+			//       "save:all", "save:str", "skill:all", "skill:stealth", "check:all", "check:str",
+			//       "ability:str", "hp", "sense:darkvision", "carryCapacity", "proficiencyBonus"
 			namedModifiers: [],
 
 			// Sheet settings/options
@@ -606,16 +1267,25 @@ class CharacterSheetState {
 		this._data.hp = {...this._getDefaultState().hp, ...this._data.hp};
 		this._data.deathSaves = {...this._getDefaultState().deathSaves, ...this._data.deathSaves};
 		this._data.speed = {...this._getDefaultState().speed, ...this._data.speed};
+		this._data.senses = {...this._getDefaultState().senses, ...this._data.senses};
 		this._data.spellcasting = {...this._getDefaultState().spellcasting, ...this._data.spellcasting};
 		this._data.currency = {...this._getDefaultState().currency, ...this._data.currency};
 		this._data.notes = {...this._getDefaultState().notes, ...this._data.notes};
 		this._data.appearance = {...this._getDefaultState().appearance, ...this._data.appearance};
 		this._data.ac = {...this._getDefaultState().ac, ...this._data.ac};
 		this._data.customModifiers = {...this._getDefaultState().customModifiers, ...this._data.customModifiers};
+		// Ensure nested customModifiers objects exist
+		this._data.customModifiers.speed = {...this._getDefaultState().customModifiers.speed, ...this._data.customModifiers.speed};
+		this._data.customModifiers.senses = {...this._getDefaultState().customModifiers.senses, ...this._data.customModifiers.senses};
 		
 		// Ensure namedModifiers array exists
 		if (!Array.isArray(this._data.namedModifiers)) {
 			this._data.namedModifiers = [];
+		}
+
+		// Ensure acFormulas array exists
+		if (!Array.isArray(this._data.acFormulas)) {
+			this._data.acFormulas = [];
 		}
 
 		// Migrate features: infer featureType for old saves that don't have it
@@ -733,7 +1403,70 @@ class CharacterSheetState {
 
 	getProficiencyBonus () {
 		const level = this.getTotalLevel();
-		return Math.floor((level - 1) / 4) + 2;
+		const baseProfBonus = Math.floor((level - 1) / 4) + 2;
+		return baseProfBonus + (this._data.customModifiers.proficiencyBonus || 0);
+	}
+	// #endregion
+
+	// #region Senses
+	/**
+	 * Get all senses for this character
+	 * @returns {object} Object with sense names and ranges
+	 */
+	getSenses () {
+		const senseMods = this._data.customModifiers.senses || {};
+		const baseSenses = this._data.senses || {};
+		return {
+			darkvision: Math.max(baseSenses.darkvision || 0, senseMods.darkvision || 0),
+			blindsight: Math.max(baseSenses.blindsight || 0, senseMods.blindsight || 0),
+			tremorsense: Math.max(baseSenses.tremorsense || 0, senseMods.tremorsense || 0),
+			truesight: Math.max(baseSenses.truesight || 0, senseMods.truesight || 0),
+		};
+	}
+
+	/**
+	 * Get a specific sense range
+	 * @param {string} sense - The sense name (darkvision, blindsight, etc.)
+	 * @returns {number} The range in feet
+	 */
+	getSense (sense) {
+		const senseMods = this._data.customModifiers.senses || {};
+		const baseSenses = this._data.senses || {};
+		return Math.max(baseSenses[sense] || 0, senseMods[sense] || 0);
+	}
+
+	/**
+	 * Set a base sense value
+	 * @param {string} sense - The sense name
+	 * @param {number} range - The range in feet
+	 */
+	setSense (sense, range) {
+		if (!this._data.senses) this._data.senses = {};
+		this._data.senses[sense] = range;
+	}
+
+	/**
+	 * Get passive perception (10 + perception modifier)
+	 * @returns {number} Passive perception score
+	 */
+	getPassivePerception () {
+		return 10 + this.getSkillMod("perception");
+	}
+
+	/**
+	 * Get passive investigation (10 + investigation modifier)
+	 * @returns {number} Passive investigation score
+	 */
+	getPassiveInvestigation () {
+		return 10 + this.getSkillMod("investigation");
+	}
+
+	/**
+	 * Get passive insight (10 + insight modifier)
+	 * @returns {number} Passive insight score
+	 */
+	getPassiveInsight () {
+		return 10 + this.getSkillMod("insight");
 	}
 	// #endregion
 
@@ -747,7 +1480,10 @@ class CharacterSheetState {
 	}
 
 	getAbilityScore (ability) {
-		return (this._data.abilities[ability] || 10) + (this._data.abilityBonuses[ability] || 0);
+		const base = this._data.abilities[ability] || 10;
+		const racialBonus = this._data.abilityBonuses[ability] || 0;
+		const featureBonus = this._data.customModifiers.abilityScores?.[ability] || 0;
+		return base + racialBonus + featureBonus;
 	}
 
 	// Alias for compatibility
@@ -764,7 +1500,9 @@ class CharacterSheetState {
 	}
 
 	getAbilityBonus (ability) {
-		return this._data.abilityBonuses[ability] || 0;
+		const racialBonus = this._data.abilityBonuses[ability] || 0;
+		const featureBonus = this._data.customModifiers.abilityScores?.[ability] || 0;
+		return racialBonus + featureBonus;
 	}
 	// #endregion
 
@@ -799,6 +1537,13 @@ class CharacterSheetState {
 				}
 			}
 		});
+
+		// Add flat HP bonus from features/items
+		hp += this._data.customModifiers.hp || 0;
+
+		// Add per-level HP bonus from features (like Tough feat)
+		const totalLevel = this.getTotalLevel() || 1;
+		hp += (this._data.customModifiers.hpPerLevel || 0) * totalLevel;
 
 		return Math.max(1, hp);
 	}
@@ -1159,8 +1904,12 @@ class CharacterSheetState {
 		let ac = this._data.ac.base;
 		const dexMod = this.getAbilityMod("dex");
 
-		// Check for Unarmored Defense class features
+		// Check for Unarmored Defense class features (built-in support for Barbarian/Monk)
 		const hasUnarmoredDefense = this._hasUnarmoredDefense();
+
+		// Check for AC formulas from features (natural armor, homebrew unarmored defense, etc.)
+		const acFormulas = this._data.acFormulas || [];
+		const bestAcFormula = this._getBestAcFormula(acFormulas, dexMod);
 
 		// If wearing armor, use armor AC calculation
 		if (this._data.ac.armor) {
@@ -1172,18 +1921,31 @@ class CharacterSheetState {
 				ac += Math.min(2, dexMod);
 			}
 			// Heavy armor: no DEX bonus
-		} else if (hasUnarmoredDefense) {
-			// Unarmored Defense calculation based on class
-			ac = this._calculateUnarmoredDefenseAc();
+
+			// Natural armor that doesn't add DEX might still be better (e.g., Tortle's 17)
+			if (bestAcFormula && bestAcFormula.ac > ac && bestAcFormula.formula.noDex) {
+				ac = bestAcFormula.ac;
+			}
+		} else if (hasUnarmoredDefense || bestAcFormula) {
+			// Use the best unarmored AC option
+			const classUnarmoredAc = hasUnarmoredDefense ? this._calculateUnarmoredDefenseAc() : 0;
+			const formulaAc = bestAcFormula?.ac || 0;
+			const standardAc = 10 + dexMod;
+
+			ac = Math.max(classUnarmoredAc, formulaAc, standardAc);
 		} else {
 			// Standard unarmored: 10 + DEX
 			ac = 10 + dexMod;
 		}
 
-		// Shield (only add if not using Monk unarmored defense which doesn't work with shields)
+		// Shield (only add if not using a formula that forbids it, like Monk unarmored defense)
 		if (this._data.ac.shield) {
 			const isMonkUnarmored = !this._data.ac.armor && this._hasMonkUnarmoredDefense();
-			if (!isMonkUnarmored) {
+			// Check if current AC formula forbids shields
+			const formulaForbidsShield = bestAcFormula?.formula?.formulaType === "unarmoredDefense" && 
+				bestAcFormula.ac > (10 + dexMod); // Only matters if we're using the formula
+			
+			if (!isMonkUnarmored && !formulaForbidsShield) {
 				// Base shield bonus is 2, plus any magic bonus
 				const baseShieldBonus = 2;
 				const magicBonus = (typeof this._data.ac.shield === "object") ? (this._data.ac.shield.bonus || 0) : 0;
@@ -1204,6 +1966,43 @@ class CharacterSheetState {
 		});
 
 		return ac;
+	}
+
+	/**
+	 * Get the best AC formula from available formulas
+	 * @param {Array} formulas - AC formula objects from features
+	 * @param {number} dexMod - Dexterity modifier
+	 * @returns {object|null} Best formula with calculated AC, or null
+	 */
+	_getBestAcFormula (formulas, dexMod) {
+		if (!formulas?.length) return null;
+
+		let best = null;
+		let bestAc = 0;
+
+		formulas.forEach(formula => {
+			// Skip conditional formulas that aren't active
+			if (formula.conditional) return; // For now, skip conditional AC formulas
+
+			let ac = formula.base || 10;
+
+			// Add DEX modifier if formula uses it
+			if (formula.addDex && !formula.noDex) {
+				ac += dexMod;
+			}
+
+			// Add second ability modifier (for unarmored defense style formulas)
+			if (formula.secondAbility) {
+				ac += this.getAbilityMod(formula.secondAbility);
+			}
+
+			if (ac > bestAc) {
+				bestAc = ac;
+				best = {formula, ac};
+			}
+		});
+
+		return best;
 	}
 
 	_hasUnarmoredDefense () {
@@ -1253,13 +2052,19 @@ class CharacterSheetState {
 
 	// #region Speed
 	getSpeed () {
-		const walk = (this._data.speed.walk || 30) + (this._data.customModifiers.speed || 0);
+		const speedMods = this._data.customModifiers.speed || {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
+		const walk = (this._data.speed.walk || 30) + (speedMods.walk || 0);
 		const parts = [`${walk} ft.`];
 
-		if (this._data.speed.fly) parts.push(`fly ${this._data.speed.fly} ft.`);
-		if (this._data.speed.swim) parts.push(`swim ${this._data.speed.swim} ft.`);
-		if (this._data.speed.climb) parts.push(`climb ${this._data.speed.climb} ft.`);
-		if (this._data.speed.burrow) parts.push(`burrow ${this._data.speed.burrow} ft.`);
+		const fly = (this._data.speed.fly || 0) + (speedMods.fly || 0);
+		const swim = (this._data.speed.swim || 0) + (speedMods.swim || 0);
+		const climb = (this._data.speed.climb || 0) + (speedMods.climb || 0);
+		const burrow = (this._data.speed.burrow || 0) + (speedMods.burrow || 0);
+
+		if (fly > 0) parts.push(`fly ${fly} ft.`);
+		if (swim > 0) parts.push(`swim ${swim} ft.`);
+		if (climb > 0) parts.push(`climb ${climb} ft.`);
+		if (burrow > 0) parts.push(`burrow ${burrow} ft.`);
 
 		return parts.join(", ");
 	}
@@ -1269,7 +2074,15 @@ class CharacterSheetState {
 	}
 
 	getWalkSpeed () {
-		return (this._data.speed.walk || 30) + (this._data.customModifiers.speed || 0);
+		const speedMods = this._data.customModifiers.speed || {walk: 0};
+		return (this._data.speed.walk || 30) + (speedMods.walk || 0);
+	}
+
+	getSpeedByType (type) {
+		const speedMods = this._data.customModifiers.speed || {};
+		const base = this._data.speed[type] || 0;
+		const bonus = speedMods[type] || 0;
+		return base + bonus;
 	}
 	// #endregion
 
@@ -2097,7 +2910,10 @@ class CharacterSheetState {
 	}
 
 	getCarryingCapacity () {
-		return this.getAbilityScore("str") * 15;
+		const baseCapacity = this.getAbilityScore("str") * 15;
+		const flatBonus = this._data.customModifiers.carryCapacity || 0;
+		const multiplier = this._data.customModifiers.carryCapacityMultiplier || 1;
+		return (baseCapacity + flatBonus) * multiplier;
 	}
 	// #endregion
 
@@ -2452,6 +3268,151 @@ class CharacterSheetState {
 
 		// Check if this feature grants spells (innate or known)
 		this._processFeatureSpells(feature, featureData.id);
+
+		// Check if this feature grants modifiers to rolls, AC, etc.
+		this._processFeatureModifiers(feature, featureData.id);
+	}
+
+	/**
+	 * Process modifiers granted by a feature (AC bonuses, save bonuses, etc.)
+	 * @param {object} feature - Feature data
+	 * @param {string} featureId - ID of the feature in state
+	 */
+	_processFeatureModifiers (feature, featureId) {
+		if (!feature.description) return;
+
+		const modifiers = FeatureModifierParser.parseModifiers(feature.description, feature.name);
+		if (!modifiers.length) return;
+
+		// Determine feature type for special handling
+		const isRacialFeature = feature.featureType === "Species" || feature.featureType === "Subrace" || 
+			feature.featureType === "Race" || feature.featureType === "Racial";
+
+		modifiers.forEach(mod => {
+			// ===================
+			// Handle Proficiency Grants
+			// ===================
+			if (mod.isProficiency && mod.type.startsWith("proficiency:")) {
+				const parts = mod.type.split(":");
+				const profType = parts[1]; // skill, save, armor, weapon, tool
+				const profTarget = parts[2]; // skillname, ability, armortype, weaponname, toolname
+
+				if (profType === "skill") {
+					const currentLevel = this.getSkillProficiency(profTarget);
+					if (mod.value > currentLevel) {
+						this.setSkillProficiency(profTarget, mod.value);
+						console.log(`[CharSheet State] Set ${profTarget} proficiency to ${mod.value === 2 ? "expertise" : "proficient"} from "${feature.name}"`);
+					}
+				} else if (profType === "save") {
+					if (!this._data.saveProficiencies.includes(profTarget)) {
+						this.addSaveProficiency(profTarget);
+						console.log(`[CharSheet State] Added ${profTarget} save proficiency from "${feature.name}"`);
+					}
+				} else if (profType === "armor") {
+					const armorName = profTarget.replace(/armor/gi, " armor").replace(/shields/gi, "shields").trim().toTitleCase();
+					if (!this._data.armorProficiencies.some(a => a.toLowerCase() === armorName.toLowerCase())) {
+						this.addArmorProficiency(armorName);
+						console.log(`[CharSheet State] Added ${armorName} proficiency from "${feature.name}"`);
+					}
+				} else if (profType === "weapon") {
+					const weaponName = profTarget.replace(/weapons/gi, " weapons").trim().toTitleCase();
+					if (!this._data.weaponProficiencies.some(w => w.toLowerCase() === weaponName.toLowerCase())) {
+						this.addWeaponProficiency(weaponName);
+						console.log(`[CharSheet State] Added ${weaponName} proficiency from "${feature.name}"`);
+					}
+				} else if (profType === "tool") {
+					const toolName = profTarget.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/tools/gi, " tools").replace(/kit/gi, " kit").trim().toTitleCase();
+					if (!this._data.toolProficiencies.some(t => t.toLowerCase().includes(profTarget.toLowerCase().substring(0, 6)))) {
+						this.addToolProficiency(toolName);
+						console.log(`[CharSheet State] Added ${toolName} proficiency from "${feature.name}"`);
+					}
+				}
+				return; // Don't create a named modifier for proficiency grants
+			}
+
+			// ===================
+			// Handle AC Formulas (Natural Armor, Unarmored Defense)
+			// ===================
+			if (mod.type === "acFormula" && mod.acFormula) {
+				// Store AC formula for use in getAc()
+				if (!this._data.acFormulas) this._data.acFormulas = [];
+				this._data.acFormulas.push({
+					...mod.acFormula,
+					sourceName: feature.name,
+					sourceFeatureId: featureId,
+					conditional: mod.conditional,
+					featureType: feature.featureType,
+				});
+				console.log(`[CharSheet State] Added AC formula from "${feature.name}": base ${mod.acFormula.base}${mod.acFormula.addDex ? " + DEX" : ""}${mod.acFormula.secondAbility ? ` + ${mod.acFormula.secondAbility.toUpperCase()}` : ""}`);
+				return; // Don't create a named modifier for AC formulas
+			}
+
+			// Special handling: Racial/species senses should set base values, not create modifiers
+			if (isRacialFeature && mod.type.startsWith("sense:") && mod.setValue) {
+				const senseType = mod.type.split(":")[1];
+				const currentValue = this._data.senses?.[senseType] || 0;
+				if (mod.value > currentValue) {
+					this.setSense(senseType, mod.value);
+					console.log(`[CharSheet State] Set base ${senseType} to ${mod.value} from "${feature.name}"`);
+				}
+				return; // Don't create a named modifier for racial senses
+			}
+
+			// Special handling: Racial/species speed bonuses should modify base speed, not create modifiers
+			// (This is for text like "Your speed is 35 feet" - absolute values from race)
+			// But increases/decreases should still be modifiers
+			if (isRacialFeature && mod.type.startsWith("speed:") && mod.setValue) {
+				const speedType = mod.type.split(":")[1];
+				this.setSpeed(speedType, mod.value);
+				console.log(`[CharSheet State] Set base ${speedType} speed to ${mod.value} from "${feature.name}"`);
+				return; // Don't create a named modifier for racial base speed
+			}
+
+			// Build modifier name
+			let modName = feature.name;
+			if (mod.conditional) {
+				modName = `${feature.name}: ${mod.conditional}`;
+			}
+
+			// Format value for display
+			let displayValue = mod.value;
+			if (mod.setValue) {
+				displayValue = `= ${mod.value}`; // e.g., "= 60" for darkvision
+			} else if (mod.multiplier) {
+				displayValue = `×${mod.multiplier}`; // e.g., "×2" for doubled carry capacity
+			} else if (mod.perLevel) {
+				displayValue = `${mod.value > 0 ? "+" : ""}${mod.value}/level`;
+			} else if (mod.sizeIncrease) {
+				displayValue = "+1 size";
+			}
+
+			// Build note
+			let note = `From ${feature.name}`;
+			if (mod.conditional) note += ` - ${mod.conditional}`;
+			if (mod.perLevel) note += " (per character level)";
+			if (mod.setValue) note += " (sets value)";
+
+			const modifierData = {
+				name: modName,
+				type: mod.type,
+				value: mod.value,
+				note,
+				enabled: !mod.conditional, // Conditional modifiers start disabled
+				sourceFeatureId: featureId,
+			};
+
+			// Preserve special properties for calculations
+			if (mod.setValue) modifierData.setValue = true;
+			if (mod.perLevel) modifierData.perLevel = true;
+			if (mod.multiplier) modifierData.multiplier = mod.multiplier;
+			if (mod.sizeIncrease) modifierData.sizeIncrease = true;
+			if (mod.abilityMod) modifierData.abilityMod = mod.abilityMod;
+
+			this.addNamedModifier(modifierData);
+
+			const valueStr = mod.setValue ? `=${mod.value}` : (mod.value >= 0 ? `+${mod.value}` : `${mod.value}`);
+			console.log(`[CharSheet State] ${mod.conditional ? "Conditional" : "Auto-added"} modifier from "${feature.name}": ${mod.type} ${valueStr}${mod.conditional ? ` (${mod.conditional})` : ""}`);
+		});
 	}
 
 	/**
@@ -2520,6 +3481,8 @@ class CharacterSheetState {
 			this._data.attacks = this._data.attacks.filter(a => a.featureId !== feature.id && a.sourceFeature !== feature.name);
 			// Remove associated innate spells
 			this.removeInnateSpellsByFeature(feature.name);
+			// Remove associated modifiers
+			this.removeModifiersByFeature(feature.id);
 		}
 
 		// Remove the feature
@@ -2590,6 +3553,9 @@ class CharacterSheetState {
 
 			// Process spells granted by this feat
 			this._processFeatureSpells(featData, featData.id);
+
+			// Process modifiers granted by this feat
+			this._processFeatureModifiers(featData, featData.id);
 		}
 	}
 
@@ -2604,6 +3570,8 @@ class CharacterSheetState {
 			this._data.resources = this._data.resources.filter(r => r.featId !== feat.id && r.name !== feat.name);
 			// Remove associated innate spells
 			this.removeInnateSpellsByFeature(feat.name);
+			// Remove associated modifiers
+			this.removeModifiersByFeature(feat.id);
 		}
 
 		// Remove the feat
@@ -2930,6 +3898,19 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Remove all named modifiers associated with a feature
+	 * @param {string} featureId - The source feature ID
+	 */
+	removeModifiersByFeature (featureId) {
+		if (!featureId) return;
+		const hadModifiers = this._data.namedModifiers.some(m => m.sourceFeatureId === featureId);
+		this._data.namedModifiers = this._data.namedModifiers.filter(m => m.sourceFeatureId !== featureId);
+		if (hadModifiers) {
+			this._recalculateCustomModifiers();
+		}
+	}
+
+	/**
 	 * Toggle a named modifier's enabled state
 	 * @param {string} id - The modifier ID
 	 * @returns {boolean} The new enabled state
@@ -2953,7 +3934,7 @@ class CharacterSheetState {
 		const cm = this._data.customModifiers;
 		cm.ac = 0;
 		cm.initiative = 0;
-		cm.speed = 0;
+		cm.speed = {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
 		cm.attackBonus = 0;
 		cm.damageBonus = 0;
 		cm.spellDc = 0;
@@ -2961,20 +3942,50 @@ class CharacterSheetState {
 		cm.savingThrows = {};
 		cm.skills = {};
 		cm.abilityChecks = {};
+		cm.abilityScores = {};
+		cm.hp = 0;
+		cm.hpPerLevel = 0;
+		cm.proficiencyBonus = 0;
+		cm.senses = {darkvision: 0, blindsight: 0, tremorsense: 0, truesight: 0};
+		cm.carryCapacity = 0;
+		cm.carryCapacityMultiplier = 1;
 
 		// Sum up enabled modifiers
 		this._data.namedModifiers.forEach(mod => {
 			if (!mod.enabled) return;
-			const value = mod.value || 0;
+			
+			let value = mod.value || 0;
+			
+			// Handle per-level modifiers
+			if (mod.perLevel) {
+				const totalLevel = this.getTotalLevel() || 1;
+				value = value * totalLevel;
+			}
 
 			switch (mod.type) {
 				case "ac": cm.ac += value; break;
 				case "initiative": cm.initiative += value; break;
-				case "speed": cm.speed += value; break;
 				case "attack": cm.attackBonus += value; break;
 				case "damage": cm.damageBonus += value; break;
 				case "spellDc": cm.spellDc += value; break;
 				case "spellAttack": cm.spellAttack += value; break;
+				case "hp": 
+					if (mod.perLevel) {
+						cm.hpPerLevel += mod.value || 0;
+					} else {
+						cm.hp += value;
+					}
+					break;
+				case "proficiencyBonus": cm.proficiencyBonus += value; break;
+				case "carryCapacity":
+					if (mod.multiplier) {
+						cm.carryCapacityMultiplier *= mod.multiplier;
+					} else if (mod.sizeIncrease) {
+						cm.carryCapacityMultiplier *= 2; // Each size category doubles capacity
+					} else {
+						cm.carryCapacity += value;
+					}
+					break;
 				case "save:all":
 					Parser.ABIL_ABVS.forEach(abl => {
 						cm.savingThrows[abl] = (cm.savingThrows[abl] || 0) + value;
@@ -3004,10 +4015,33 @@ class CharacterSheetState {
 					else if (mod.type.startsWith("skill:")) {
 						const skill = mod.type.split(":")[1];
 						if (skill === "all") {
-							// "all" will be handled specially in getSkillMod
 							cm.skills["_all"] = (cm.skills["_all"] || 0) + value;
 						} else {
 							cm.skills[skill] = (cm.skills[skill] || 0) + value;
+						}
+					}
+					// Handle speed:walk, speed:fly, etc.
+					else if (mod.type.startsWith("speed:")) {
+						const speedType = mod.type.split(":")[1];
+						if (cm.speed[speedType] !== undefined) {
+							cm.speed[speedType] += value;
+						}
+					}
+					// Handle ability:str, ability:dex, etc.
+					else if (mod.type.startsWith("ability:")) {
+						const abl = mod.type.split(":")[1];
+						cm.abilityScores[abl] = (cm.abilityScores[abl] || 0) + value;
+					}
+					// Handle sense:darkvision, sense:blindsight, etc.
+					else if (mod.type.startsWith("sense:")) {
+						const sense = mod.type.split(":")[1];
+						if (cm.senses[sense] !== undefined) {
+							if (mod.setValue) {
+								// Set value takes the maximum
+								cm.senses[sense] = Math.max(cm.senses[sense], value);
+							} else {
+								cm.senses[sense] += value;
+							}
 						}
 					}
 					break;
@@ -3055,17 +4089,26 @@ class CharacterSheetState {
 	/**
 	 * Get total custom modifier for a type (for display purposes)
 	 * @param {string} type - The modifier type
-	 * @returns {number} The total modifier value
+	 * @returns {number|object} The total modifier value (or object for complex types like speed)
 	 */
 	getCustomModifier (type) {
 		switch (type) {
 			case "ac": return this._data.customModifiers.ac || 0;
 			case "initiative": return this._data.customModifiers.initiative || 0;
-			case "speed": return this._data.customModifiers.speed || 0;
+			case "speed": return this._data.customModifiers.speed?.walk || 0;
+			case "speed:walk": return this._data.customModifiers.speed?.walk || 0;
+			case "speed:fly": return this._data.customModifiers.speed?.fly || 0;
+			case "speed:swim": return this._data.customModifiers.speed?.swim || 0;
+			case "speed:climb": return this._data.customModifiers.speed?.climb || 0;
+			case "speed:burrow": return this._data.customModifiers.speed?.burrow || 0;
 			case "attack": return this._data.customModifiers.attackBonus || 0;
 			case "damage": return this._data.customModifiers.damageBonus || 0;
 			case "spellDc": return this._data.customModifiers.spellDc || 0;
 			case "spellAttack": return this._data.customModifiers.spellAttack || 0;
+			case "hp": return this._data.customModifiers.hp || 0;
+			case "hpPerLevel": return this._data.customModifiers.hpPerLevel || 0;
+			case "proficiencyBonus": return this._data.customModifiers.proficiencyBonus || 0;
+			case "carryCapacity": return this._data.customModifiers.carryCapacity || 0;
 			default:
 				if (type.startsWith("save:")) {
 					const abl = type.split(":")[1];
@@ -3078,6 +4121,14 @@ class CharacterSheetState {
 				if (type.startsWith("check:")) {
 					const abl = type.split(":")[1];
 					return this.getAbilityCheckCustomMod(abl);
+				}
+				if (type.startsWith("ability:")) {
+					const abl = type.split(":")[1];
+					return this._data.customModifiers.abilityScores?.[abl] || 0;
+				}
+				if (type.startsWith("sense:")) {
+					const sense = type.split(":")[1];
+					return this._data.customModifiers.senses?.[sense] || 0;
 				}
 				return 0;
 		}
