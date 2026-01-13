@@ -1447,21 +1447,36 @@ class CharacterSheetPage {
 				const $row = $(`
 					<div class="charsheet__resource-row" data-resource-id="exertion">
 						<span class="charsheet__resource-name">Exertion</span>
-						<div class="charsheet__resource-uses">
-							<input type="number" class="form-control form-control--minimal charsheet__resource-current" 
-								value="${exertionCurrent}" min="0" max="${exertionMax}">
+						<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(Short)</span>
+						<div class="charsheet__resource-uses ml-auto">
+							<button class="ve-btn ve-btn-xs ve-btn-danger mr-2 charsheet__exertion-use-btn" ${exertionCurrent <= 0 ? "disabled" : ""}>Use</button>
+							<span class="charsheet__resource-current">${exertionCurrent}</span>
 							<span class="charsheet__resource-max">/ ${exertionMax}</span>
+							<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__exertion-restore-btn" ${exertionCurrent >= exertionMax ? "disabled" : ""}>+</button>
 						</div>
 					</div>
 				`);
 
-				$row.find("input").on("change", (e) => {
-					const newValue = Math.max(0, Math.min(exertionMax, parseInt(e.target.value) || 0));
-					this._state.setExertionCurrent(newValue);
-					this._saveCurrentCharacter();
-					// Also update Features tab and Combat tab displays
-					if (this._features) this._features._renderResources();
-					if (this._combat) this._combat._updateExertionDisplay();
+				$row.find(".charsheet__exertion-use-btn").on("click", () => {
+					const current = this._state.getExertionCurrent() || 0;
+					if (current > 0) {
+						this._state.setExertionCurrent(current - 1);
+						this._saveCurrentCharacter();
+						this._renderResources();
+						if (this._features) this._features._renderResources();
+						if (this._combat) this._combat._updateExertionDisplay();
+					}
+				});
+
+				$row.find(".charsheet__exertion-restore-btn").on("click", () => {
+					const current = this._state.getExertionCurrent() || 0;
+					if (current < exertionMax) {
+						this._state.setExertionCurrent(current + 1);
+						this._saveCurrentCharacter();
+						this._renderResources();
+						if (this._features) this._features._renderResources();
+						if (this._combat) this._combat._updateExertionDisplay();
+					}
 				});
 
 				$container.append($row);
@@ -1475,19 +1490,34 @@ class CharacterSheetPage {
 
 		resources.forEach(resource => {
 			const $row = $(`
-				<div class="charsheet__resource-row">
+				<div class="charsheet__resource-row" data-resource-id="${resource.id}">
 					<span class="charsheet__resource-name">${resource.name}</span>
-					<div class="charsheet__resource-uses">
-						<input type="number" class="form-control form-control--minimal charsheet__resource-current" 
-							value="${resource.current}" min="0" max="${resource.max}">
+					<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(${resource.recharge === "short" ? "Short" : "Long"})</span>
+					<div class="charsheet__resource-uses ml-auto">
+						<button class="ve-btn ve-btn-xs ve-btn-danger mr-2 charsheet__resource-use-btn" ${resource.current <= 0 ? "disabled" : ""}>Use</button>
+						<span class="charsheet__resource-current">${resource.current}</span>
 						<span class="charsheet__resource-max">/ ${resource.max}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__resource-restore-btn" ${resource.current >= resource.max ? "disabled" : ""}>+</button>
 					</div>
 				</div>
 			`);
 
-			$row.find("input").on("change", (e) => {
-				this._state.setResourceCurrent(resource.id, parseInt(e.target.value) || 0);
-				this._saveCurrentCharacter();
+			$row.find(".charsheet__resource-use-btn").on("click", () => {
+				if (resource.current > 0) {
+					this._state.setResourceCurrent(resource.id, resource.current - 1);
+					this._saveCurrentCharacter();
+					this._renderResources();
+					if (this._features) this._features._renderResources();
+				}
+			});
+
+			$row.find(".charsheet__resource-restore-btn").on("click", () => {
+				if (resource.current < resource.max) {
+					this._state.setResourceCurrent(resource.id, resource.current + 1);
+					this._saveCurrentCharacter();
+					this._renderResources();
+					if (this._features) this._features._renderResources();
+				}
 			});
 
 			$container.append($row);
