@@ -581,6 +581,9 @@ class CharacterSheetFeatures {
 			return;
 		}
 
+		// Render calculated class statistics (Sneak Attack, Ki DC, etc.) at the top
+		this._renderCalculatedStats($container);
+
 		// Helper to create feature link - always display feature name
 		const getFeatureHtml = (feature) => {
 			let featureNameHtml = feature.name;
@@ -742,6 +745,148 @@ class CharacterSheetFeatures {
 				$container.append(`<div class="ve-muted ve-small text-center">View all ${features.length} features in Features tab</div>`);
 			}
 		}
+	}
+
+	/**
+	 * Render calculated class statistics (Sneak Attack dice, Ki Save DC, etc.)
+	 */
+	_renderCalculatedStats ($container) {
+		const calculations = this._state.getFeatureCalculations();
+		if (!calculations || Object.keys(calculations).length === 0) return;
+
+		const stats = [];
+
+		// Format each calculation for display
+		if (calculations.sneakAttack) {
+			stats.push({
+				label: "Sneak Attack",
+				value: calculations.sneakAttack.dice,
+				title: `Average damage: ${calculations.sneakAttack.avgDamage}`,
+			});
+		}
+
+		if (calculations.kiSaveDc) {
+			stats.push({
+				label: "Ki Save DC",
+				value: calculations.kiSaveDc,
+				title: "8 + Proficiency + Wisdom modifier",
+			});
+		}
+
+		if (calculations.focusSaveDc) {
+			stats.push({
+				label: "Focus Save DC",
+				value: calculations.focusSaveDc,
+				title: "8 + Proficiency + Dexterity or Wisdom modifier (highest)",
+			});
+		}
+
+		if (calculations.martialArtsDie) {
+			stats.push({
+				label: "Martial Arts",
+				value: calculations.martialArtsDie,
+				title: "Unarmed strike damage die",
+			});
+		}
+
+		if (calculations.rageDamage) {
+			stats.push({
+				label: "Rage Damage",
+				value: `+${calculations.rageDamage}`,
+				title: "Bonus damage while raging",
+			});
+		}
+
+		if (calculations.brutalCritical) {
+			stats.push({
+				label: "Brutal Critical",
+				value: `+${calculations.brutalCritical}d`,
+				title: "Extra weapon dice on critical hits",
+			});
+		}
+
+		if (calculations.auraRange) {
+			stats.push({
+				label: "Aura Range",
+				value: `${calculations.auraRange} ft`,
+				title: "Range of paladin auras",
+			});
+		}
+
+		if (calculations.superiorityDie) {
+			stats.push({
+				label: "Superiority Die",
+				value: calculations.superiorityDie,
+				title: "Battle Master maneuver die",
+			});
+		}
+
+		if (calculations.maneuverSaveDc) {
+			stats.push({
+				label: "Maneuver DC",
+				value: calculations.maneuverSaveDc,
+				title: "8 + Proficiency + Strength or Dexterity modifier (your choice)",
+			});
+		}
+
+		if (calculations.bardicInspirationDie) {
+			stats.push({
+				label: "Bardic Inspiration",
+				value: calculations.bardicInspirationDie,
+				title: "Bardic Inspiration die",
+			});
+		}
+
+		if (calculations.eldritchBlastBeams) {
+			stats.push({
+				label: "Eldritch Blast",
+				value: `${calculations.eldritchBlastBeams} beam${calculations.eldritchBlastBeams > 1 ? "s" : ""}`,
+				title: "Number of Eldritch Blast beams",
+			});
+		}
+
+		if (calculations.channelDivinityDc) {
+			stats.push({
+				label: "Channel Divinity DC",
+				value: calculations.channelDivinityDc,
+				title: "8 + Proficiency + Wisdom or Charisma modifier",
+			});
+		}
+
+		if (calculations.favoredFoeDamage) {
+			stats.push({
+				label: "Favored Foe",
+				value: calculations.favoredFoeDamage,
+				title: "Extra damage against marked creature",
+			});
+		}
+
+		if (calculations.combatMethodDc) {
+			stats.push({
+				label: "Combat Method DC",
+				value: calculations.combatMethodDc,
+				title: "8 + Proficiency + Strength or Dexterity modifier",
+			});
+		}
+
+		// Only render if we have stats to show
+		if (stats.length === 0) return;
+
+		const $statsContainer = $(`<div class="charsheet__calculated-stats mb-2"></div>`);
+		$statsContainer.append(`<div class="ve-small ve-muted mb-1"><strong>Class Statistics</strong></div>`);
+
+		const $statsGrid = $(`<div class="charsheet__stats-grid"></div>`);
+		stats.forEach(stat => {
+			$statsGrid.append(`
+				<div class="charsheet__stat-item" title="${stat.title}">
+					<span class="charsheet__calc-stat-label">${stat.label}:</span>
+					<span class="charsheet__calc-stat-value">${stat.value}</span>
+				</div>
+			`);
+		});
+
+		$statsContainer.append($statsGrid);
+		$container.append($statsContainer);
 	}
 
 	/**
