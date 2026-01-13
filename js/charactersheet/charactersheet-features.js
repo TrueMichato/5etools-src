@@ -1002,42 +1002,45 @@ class CharacterSheetFeatures {
 			
 			const exertionMax = this._state.getExertionMax() || 0;
 			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
-			const exertionUsed = exertionMax - exertionCurrent;
 			
-			console.log("[CharSheet Features] Exertion display: max=", exertionMax, "current=", exertionCurrent, "used=", exertionUsed);
+			console.log("[CharSheet Features] Exertion display: max=", exertionMax, "current=", exertionCurrent);
 
 			if (exertionMax > 0) {
 				const $exertion = $(`
-					<div class="charsheet__resource" data-resource-id="exertion">
-						<div class="charsheet__resource-header">
-							<span class="charsheet__resource-name">Exertion</span>
-							<span class="charsheet__resource-recharge ve-muted ve-small">Short Rest</span>
-						</div>
-						<div class="charsheet__resource-pips">
-							${Array(exertionMax).fill(0).map((_, i) => `<span class="charsheet__resource-pip charsheet__resource-pip--exertion ${i < exertionUsed ? "used" : ""}" data-pip="${i}"></span>`).join("")}
+					<div class="charsheet__resource-row" data-resource-id="exertion">
+						<span class="charsheet__resource-name">Exertion</span>
+						<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(Short)</span>
+						<div class="charsheet__resource-uses ml-auto">
+							<button class="ve-btn ve-btn-xs ve-btn-danger mr-2 charsheet__exertion-use-btn" ${exertionCurrent <= 0 ? "disabled" : ""}>Use</button>
+							<span class="charsheet__resource-current">${exertionCurrent}</span>
+							<span class="charsheet__resource-max">/ ${exertionMax}</span>
+							<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__exertion-restore-btn" ${exertionCurrent >= exertionMax ? "disabled" : ""}>+</button>
 						</div>
 					</div>
 				`);
 
-				// Allow clicking pips to toggle exertion
-				$exertion.find(".charsheet__resource-pip--exertion").on("click", (e) => {
-					const pipIndex = $(e.currentTarget).data("pip");
+				// Use button - decrease exertion by 1
+				$exertion.find(".charsheet__exertion-use-btn").on("click", () => {
+					const current = this._state.getExertionCurrent() || 0;
+					if (current > 0) {
+						this._state.setExertionCurrent(current - 1);
+						this._renderResources();
+						if (this._page?._combat) {
+							this._page._combat._updateExertionDisplay();
+						}
+					}
+				});
+
+				// Restore button - increase exertion by 1
+				$exertion.find(".charsheet__exertion-restore-btn").on("click", () => {
 					const current = this._state.getExertionCurrent() || 0;
 					const max = this._state.getExertionMax() || 0;
-					// If clicking a used pip, restore up to that point
-					// If clicking an available pip, use down to that point
-					const used = max - current;
-					if (pipIndex < used) {
-						// Restore: set current to (max - pipIndex)
-						this._state.setExertionCurrent(max - pipIndex);
-					} else {
-						// Use: set current to (max - pipIndex - 1)
-						this._state.setExertionCurrent(max - pipIndex - 1);
-					}
-					this._renderResources();
-					// Also update combat tab display
-					if (this._page?._combat) {
-						this._page._combat._updateExertionDisplay();
+					if (current < max) {
+						this._state.setExertionCurrent(current + 1);
+						this._renderResources();
+						if (this._page?._combat) {
+							this._page._combat._updateExertionDisplay();
+						}
 					}
 				});
 
@@ -1051,21 +1054,36 @@ class CharacterSheetFeatures {
 		}
 
 		resources.forEach(resource => {
-			const used = resource.max - resource.current;
-
-			const $resource = $(`
-				<div class="charsheet__resource" data-resource-id="${resource.id}">
-					<div class="charsheet__resource-header">
-						<span class="charsheet__resource-name">${resource.name}</span>
-						<span class="charsheet__resource-recharge ve-muted ve-small">${resource.recharge === "short" ? "Short Rest" : "Long Rest"}</span>
-					</div>
-					<div class="charsheet__resource-pips">
-						${Array(resource.max).fill(0).map((_, i) => `<span class="charsheet__resource-pip ${i < used ? "used" : ""}"></span>`).join("")}
+			const $row = $(`
+				<div class="charsheet__resource-row" data-resource-id="${resource.id}">
+					<span class="charsheet__resource-name">${resource.name}</span>
+					<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(${resource.recharge === "short" ? "Short" : "Long"})</span>
+					<div class="charsheet__resource-uses ml-auto">
+						<button class="ve-btn ve-btn-xs ve-btn-danger mr-2 charsheet__resource-use-btn" ${resource.current <= 0 ? "disabled" : ""}>Use</button>
+						<span class="charsheet__resource-current">${resource.current}</span>
+						<span class="charsheet__resource-max">/ ${resource.max}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__resource-restore-btn" ${resource.current >= resource.max ? "disabled" : ""}>+</button>
 					</div>
 				</div>
 			`);
 
-			$container.append($resource);
+			// Use button - decrease current by 1
+			$row.find(".charsheet__resource-use-btn").on("click", () => {
+				if (resource.current > 0) {
+					this._state.setResourceCurrent(resource.id, resource.current - 1);
+					this._renderResources();
+				}
+			});
+
+			// Restore button - increase current by 1
+			$row.find(".charsheet__resource-restore-btn").on("click", () => {
+				if (resource.current < resource.max) {
+					this._state.setResourceCurrent(resource.id, resource.current + 1);
+					this._renderResources();
+				}
+			});
+
+			$container.append($row);
 		});
 	}
 
