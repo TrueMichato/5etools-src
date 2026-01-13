@@ -685,6 +685,9 @@ class CharacterSheetSpells {
 
 		$container.empty();
 
+		// Render innate spells first (from features/feats)
+		this._renderInnateSpells($container);
+
 		const spells = this._state.getSpells();
 		console.log("[CharSheet Spells] _renderSpellList: spells count", spells.length, spells);
 
@@ -738,9 +741,144 @@ class CharacterSheetSpells {
 			$container.append($group);
 		});
 
-		if (!filtered.length) {
+		const innateSpells = this._state.getInnateSpells();
+		if (!filtered.length && !innateSpells.length) {
 			$container.append(`<p class="ve-muted text-center">No spells</p>`);
 		}
+	}
+
+	/**
+	 * Render innate spells section (from features/feats)
+	 */
+	_renderInnateSpells ($container) {
+		const innateSpells = this._state.getInnateSpells();
+		if (!innateSpells.length) return;
+
+		// Apply filter
+		let filtered = innateSpells;
+		if (this._spellFilter) {
+			filtered = filtered.filter(s => s.name.toLowerCase().includes(this._spellFilter));
+		}
+
+		if (!filtered.length) return;
+
+		const $group = $(`
+			<div class="charsheet__spell-group charsheet__spell-group--innate">
+				<h5 class="charsheet__spell-group-header">
+					<span class="glyphicon glyphicon-star text-warning mr-1"></span>
+					Innate Spellcasting
+				</h5>
+				<div class="charsheet__spell-group-list"></div>
+			</div>
+		`);
+
+		const $list = $group.find(".charsheet__spell-group-list");
+
+		filtered.sort((a, b) => a.name.localeCompare(b.name)).forEach(spell => {
+			const $item = this._renderInnateSpellItem(spell);
+			$list.append($item);
+		});
+
+		$container.append($group);
+	}
+
+	/**
+	 * Render a single innate spell item
+	 */
+	_renderInnateSpellItem (spell) {
+		const spellId = spell.id;
+
+		// Create hover link for spell name
+		let spellLink = spell.name;
+		try {
+			if (this._page?.getHoverLink) {
+				spellLink = this._page.getHoverLink(
+					UrlUtil.PG_SPELLS,
+					spell.name,
+					spell.source || Parser.SRC_XPHB,
+				);
+			}
+		} catch (e) {
+			// Fall back to plain name
+		}
+
+		// Build usage info
+		let usageInfo;
+		if (spell.atWill) {
+			usageInfo = '<span class="badge badge-success">At Will</span>';
+		} else if (spell.uses) {
+			const usedPips = spell.uses.max - spell.uses.current;
+			const pipsHtml = Array.from({length: spell.uses.max}, (_, i) => 
+				`<span class="charsheet__innate-pip ${i < usedPips ? "used" : ""}" data-spell-id="${spellId}"></span>`,
+			).join("");
+			usageInfo = `<span class="charsheet__innate-uses">${pipsHtml}</span>`;
+		} else {
+			usageInfo = '<span class="badge badge-secondary">1/day</span>';
+		}
+
+		const sourceInfo = spell.sourceFeature 
+			? `<span class="ve-muted ve-small">(${spell.sourceFeature})</span>` 
+			: "";
+
+		const $item = $(`
+			<div class="charsheet__spell-item charsheet__spell-item--innate" data-innate-spell-id="${spellId}">
+				<div class="charsheet__spell-item-main">
+					<span class="charsheet__spell-item-name">${spellLink}</span>
+					${sourceInfo}
+				</div>
+				<div class="charsheet__spell-item-actions">
+					${usageInfo}
+					${!spell.atWill ? `
+						<button class="ve-btn ve-btn-sm ve-btn-primary charsheet__innate-cast" title="Cast">
+							<span class="glyphicon glyphicon-flash"></span>
+						</button>
+					` : ""}
+					<button class="ve-btn ve-btn-sm ve-btn-default charsheet__spell-info" title="Info">
+						<span class="glyphicon glyphicon-info-sign"></span>
+					</button>
+				</div>
+			</div>
+		`);
+
+		// Bind cast button
+		$item.find(".charsheet__innate-cast").on("click", () => {
+			this._castInnateSpell(spellId);
+		});
+
+		// Bind pip clicks to restore uses
+		$item.find(".charsheet__innate-pip").on("click", (e) => {
+			const $pip = $(e.currentTarget);
+			if ($pip.hasClass("used")) {
+				// Restore one use
+				spell.uses.current = Math.min(spell.uses.current + 1, spell.uses.max);
+				this._renderSpellList();
+			}
+		});
+
+		return $item;
+	}
+
+	/**
+	 * Cast an innate spell (use one charge)
+	 */
+	_castInnateSpell (spellId) {
+		const spell = this._state.getInnateSpells().find(s => s.id === spellId);
+		if (!spell) return;
+
+		if (spell.atWill) {
+			// At-will spells can always be cast
+			JqueryUtil.doToast({type: "success", content: `Cast ${spell.name} (at will)`});
+			return;
+		}
+
+		if (!spell.uses || spell.uses.current <= 0) {
+			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${spell.name}`});
+			return;
+		}
+
+		this._state.useInnateSpell(spellId);
+		JqueryUtil.doToast({type: "success", content: `Cast ${spell.name} (${spell.uses.current}/${spell.uses.max} remaining)`});
+		this._renderSpellList();
 	}
 
 	_renderSpellItem (spell) {

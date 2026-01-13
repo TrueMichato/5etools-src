@@ -122,6 +122,283 @@ class FeatureUsesParser {
 // Make available globally
 globalThis.FeatureUsesParser = FeatureUsesParser;
 
+/**
+ * Utility to parse feature text and extract natural weapon information
+ * Works with both official and homebrew content
+ */
+class NaturalWeaponParser {
+	/**
+	 * Parse feature text to extract natural weapon information
+	 * @param {string} text - The feature description text (can include HTML)
+	 * @param {string} featureName - Name of the feature (e.g., "Talons", "Bite", "Claws")
+	 * @returns {object|null} - Attack object or null if not a natural weapon
+	 */
+	static parseNaturalWeapon (text, featureName) {
+		if (!text) return null;
+
+		// Strip HTML tags for easier parsing, but preserve structure
+		const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
+
+		// Check if this describes a natural weapon or unarmed strike enhancement
+		const isNaturalWeapon = /natural\s*weapon|unarmed\s*strike|melee\s*weapon\s*attack/i.test(plainText);
+		if (!isNaturalWeapon) return null;
+
+		// Extract damage die (e.g., "1d4", "1d6", "2d6")
+		const damageMatch = text.match(/\{@damage\s*(\d+d\d+)\}/i) || text.match(/(\d+d\d+)/i);
+		const damage = damageMatch ? damageMatch[1] : "1d4";
+
+		// Extract damage type - common natural weapon types
+		const damageTypeMap = {
+			slashing: /slashing/i,
+			piercing: /piercing/i,
+			bludgeoning: /bludgeoning/i,
+			necrotic: /necrotic/i,
+			poison: /poison/i,
+			acid: /acid/i,
+		};
+
+		let damageType = "bludgeoning"; // Default
+		for (const [type, regex] of Object.entries(damageTypeMap)) {
+			if (regex.test(plainText)) {
+				damageType = type;
+				break;
+			}
+		}
+
+		// Determine ability modifier to use
+		// Default is Strength, but some features specify Constitution, Dex, or spellcasting ability
+		let abilityMod = "str";
+		if (/constitution\s*modifier/i.test(plainText)) {
+			abilityMod = "con";
+		} else if (/dexterity\s*modifier/i.test(plainText)) {
+			abilityMod = "dex";
+		} else if (/spellcasting\s*ability/i.test(plainText)) {
+			abilityMod = "spellcasting"; // Will need special handling
+		} else if (/finesse/i.test(plainText)) {
+			abilityMod = "finesse"; // Can use STR or DEX
+		}
+
+		// Determine weapon name from feature name
+		const weaponNames = {
+			talons: "Talons",
+			claws: "Claws",
+			bite: "Bite",
+			fangs: "Fangs",
+			hooves: "Hooves",
+			horns: "Horns",
+			tusks: "Tusks",
+			tail: "Tail",
+			sting: "Sting",
+			tentacle: "Tentacle",
+			slam: "Slam",
+			fist: "Fist",
+		};
+
+		let weaponName = featureName;
+		const featureNameLower = featureName.toLowerCase();
+		for (const [key, name] of Object.entries(weaponNames)) {
+			if (featureNameLower.includes(key) || plainText.includes(key)) {
+				weaponName = name;
+				break;
+			}
+		}
+
+		// Check for special properties
+		const properties = [];
+		if (/reach/i.test(plainText)) properties.push("Reach");
+		if (/light/i.test(plainText)) properties.push("Light");
+
+		return {
+			name: weaponName,
+			isMelee: true,
+			isNaturalWeapon: true,
+			abilityMod,
+			damage,
+			damageType,
+			damageBonus: 0,
+			attackBonus: 0,
+			range: "5 ft",
+			properties,
+			sourceFeature: featureName, // Track which feature this came from
+		};
+	}
+
+	/**
+	 * Check if feature text describes a natural weapon
+	 */
+	static isNaturalWeapon (text) {
+		if (!text) return false;
+		const plainText = text.replace(/<[^>]*>/g, " ").toLowerCase();
+		return /natural\s*weapon|unarmed\s*strike.*(?:deal|damage)|melee\s*weapon\s*attack/i.test(plainText) &&
+			/\d+d\d+/i.test(plainText);
+	}
+}
+
+// Make available globally
+globalThis.NaturalWeaponParser = NaturalWeaponParser;
+
+/**
+ * Utility to parse feature text and extract spell grants
+ * Works with both structured additionalSpells data and text parsing for homebrew
+ */
+class SpellGrantParser {
+	/**
+	 * Parse additionalSpells structure from official data
+	 * @param {Array} additionalSpells - The additionalSpells array from feature/feat data
+	 * @param {string} featureName - Name of the feature granting spells
+	 * @returns {Array} Array of spell objects with casting info
+	 */
+	static parseAdditionalSpells (additionalSpells, featureName) {
+		if (!additionalSpells?.length) return [];
+
+		const spells = [];
+
+		additionalSpells.forEach(spellBlock => {
+			// Handle innate spells (at-will or limited uses)
+			if (spellBlock.innate) {
+				const innate = spellBlock.innate._ || spellBlock.innate;
+				
+				// At-will spells (array format)
+				if (Array.isArray(innate)) {
+					innate.forEach(spellRef => {
+						if (typeof spellRef === "string") {
+							spells.push(this._parseSpellRef(spellRef, {
+								innate: true,
+								atWill: true,
+								sourceFeature: featureName,
+							}));
+						}
+					});
+				}
+
+				// Daily use spells
+				if (innate.daily) {
+					Object.entries(innate.daily).forEach(([uses, spellRefs]) => {
+						// Parse uses like "1e" (1 each), "2" (2 total), etc.
+						const usesNum = parseInt(uses);
+						const isEach = uses.endsWith("e");
+						
+						(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
+							if (typeof spellRef === "string") {
+								spells.push(this._parseSpellRef(spellRef, {
+									innate: true,
+									uses: usesNum,
+									usesEach: isEach,
+									recharge: "long",
+									sourceFeature: featureName,
+								}));
+							} else if (spellRef?.choose) {
+								// Choice required - mark for UI
+								spells.push({
+									requiresChoice: true,
+									choiceFilter: spellRef.choose,
+									innate: true,
+									uses: usesNum,
+									usesEach: isEach,
+									recharge: "long",
+									sourceFeature: featureName,
+								});
+							}
+						});
+					});
+				}
+			}
+
+			// Handle known/prepared spells
+			if (spellBlock.known || spellBlock.prepared) {
+				const spellList = spellBlock.known || spellBlock.prepared;
+				(Array.isArray(spellList) ? spellList : []).forEach(spellRef => {
+					if (typeof spellRef === "string") {
+						spells.push(this._parseSpellRef(spellRef, {
+							prepared: !!spellBlock.prepared,
+							sourceFeature: featureName,
+						}));
+					}
+				});
+			}
+		});
+
+		return spells.filter(s => s && (s.name || s.requiresChoice));
+	}
+
+	/**
+	 * Parse a spell reference string like "misty step" or "mage armor|xphb"
+	 */
+	static _parseSpellRef (spellRef, additionalProps = {}) {
+		if (!spellRef || typeof spellRef !== "string") return null;
+		
+		const [name, source] = spellRef.split("|");
+		return {
+			name: name.toTitleCase(),
+			source: source?.toUpperCase() || Parser.SRC_PHB,
+			...additionalProps,
+		};
+	}
+
+	/**
+	 * Parse spell references from feature description text
+	 * Fallback for when additionalSpells is not available
+	 */
+	static parseSpellsFromText (text, featureName) {
+		if (!text) return [];
+
+		const spells = [];
+		
+		// Look for {@spell SpellName} or {@spell SpellName|Source} references
+		const spellPattern = /\{@spell\s+([^}|]+)(?:\|([^}]+))?\}/gi;
+		let match;
+
+		while ((match = spellPattern.exec(text)) !== null) {
+			const spellName = match[1].trim();
+			const source = match[2]?.trim()?.toUpperCase() || Parser.SRC_PHB;
+
+			// Try to determine casting type from context
+			const contextBefore = text.substring(Math.max(0, match.index - 100), match.index).toLowerCase();
+			const contextAfter = text.substring(match.index, Math.min(text.length, match.index + 200)).toLowerCase();
+			const context = contextBefore + contextAfter;
+
+			const isAtWill = /at will|at-will|without expending/i.test(context);
+			const isOnce = /once|one time/i.test(context) && /rest|dawn|day/i.test(context);
+			const recharge = /short rest/i.test(context) ? "short" : (/long rest|dawn|day/i.test(context) ? "long" : null);
+
+			spells.push({
+				name: spellName.toTitleCase(),
+				source,
+				innate: isAtWill || isOnce,
+				atWill: isAtWill,
+				uses: isOnce ? 1 : (isAtWill ? null : undefined),
+				recharge: recharge,
+				sourceFeature: featureName,
+			});
+		}
+
+		// Deduplicate by name
+		const uniqueSpells = [];
+		const seen = new Set();
+		spells.forEach(s => {
+			const key = `${s.name}|${s.source}`.toLowerCase();
+			if (!seen.has(key)) {
+				seen.add(key);
+				uniqueSpells.push(s);
+			}
+		});
+
+		return uniqueSpells;
+	}
+
+	/**
+	 * Check if text mentions spell granting
+	 */
+	static grantsSpells (text) {
+		if (!text) return false;
+		return /\{@spell/i.test(text) && 
+			(/can cast|learn|know|at will|without expending|gain access/i.test(text));
+	}
+}
+
+// Make available globally
+globalThis.SpellGrantParser = SpellGrantParser;
+
 class CharacterSheetState {
 	constructor () {
 		this._data = this._getDefaultState();
@@ -218,6 +495,7 @@ class CharacterSheetState {
 				pactSlots: {current: 0, max: 0, level: 0},
 				spellsKnown: [], // [{name, source, prepared: bool}]
 				cantripsKnown: [],
+				innateSpells: [], // [{name, source, uses: {current, max}, atWill: bool, sourceFeature}]
 			},
 
 			// Inventory
@@ -1496,6 +1774,79 @@ class CharacterSheetState {
 		});
 	}
 
+	// Innate spell management
+	getInnateSpells () { 
+		return [...(this._data.spellcasting.innateSpells || [])]; 
+	}
+
+	addInnateSpell (spell) {
+		if (!this._data.spellcasting.innateSpells) {
+			this._data.spellcasting.innateSpells = [];
+		}
+
+		// Check if already exists
+		const existing = this._data.spellcasting.innateSpells.find(
+			s => s.name === spell.name && s.source === spell.source,
+		);
+		if (existing) return;
+
+		const innateSpell = {
+			id: CryptUtil.uid(),
+			name: spell.name,
+			source: spell.source || Parser.SRC_PHB,
+			level: spell.level,
+			atWill: spell.atWill || false,
+			sourceFeature: spell.sourceFeature,
+		};
+
+		// Add uses tracking if not at-will
+		if (!spell.atWill && spell.uses) {
+			innateSpell.uses = {
+				current: spell.uses,
+				max: spell.uses,
+			};
+			innateSpell.recharge = spell.recharge || "long";
+		}
+
+		this._data.spellcasting.innateSpells.push(innateSpell);
+		console.log(`[CharSheet State] Added innate spell: ${spell.name} (from ${spell.sourceFeature})`);
+	}
+
+	removeInnateSpell (spellIdOrName, source) {
+		if (!this._data.spellcasting.innateSpells) return;
+		this._data.spellcasting.innateSpells = this._data.spellcasting.innateSpells.filter(s => {
+			if (s.id === spellIdOrName) return false;
+			if (s.name === spellIdOrName && s.source === source) return false;
+			return true;
+		});
+	}
+
+	removeInnateSpellsByFeature (featureName) {
+		if (!this._data.spellcasting.innateSpells) return;
+		this._data.spellcasting.innateSpells = this._data.spellcasting.innateSpells.filter(
+			s => s.sourceFeature !== featureName,
+		);
+	}
+
+	useInnateSpell (spellId) {
+		if (!this._data.spellcasting.innateSpells) return;
+		const spell = this._data.spellcasting.innateSpells.find(s => s.id === spellId);
+		if (spell?.uses && spell.uses.current > 0) {
+			spell.uses.current--;
+		}
+	}
+
+	restoreInnateSpells (restType = "long") {
+		if (!this._data.spellcasting.innateSpells) return;
+		this._data.spellcasting.innateSpells.forEach(spell => {
+			if (spell.uses && spell.recharge) {
+				if (restType === "long" || (restType === "short" && spell.recharge === "short")) {
+					spell.uses.current = spell.uses.max;
+				}
+			}
+		});
+	}
+
 	setSpellPrepared (spellIdOrName, sourceOrPrepared, prepared) {
 		// Support both (id, prepared) and (name, source, prepared) signatures
 		let spell;
@@ -1510,6 +1861,126 @@ class CharacterSheetState {
 			);
 		}
 		if (spell) spell.prepared = prepared;
+	}
+	// #endregion
+
+	// #region Feature DCs and Dice
+	/**
+	 * Get calculated values for class features (save DCs, damage dice, etc.)
+	 * These are computed based on class, level, and ability scores
+	 * @returns {object} - Feature calculated values
+	 */
+	getFeatureCalculations () {
+		const classes = this._data.classes || [];
+		const profBonus = this.getProficiencyBonus();
+		const exhaustionPenalty = this._getExhaustionDcPenalty();
+		const calculations = {};
+
+		classes.forEach(cls => {
+			const className = cls.name;
+			const level = cls.level || 1;
+
+			switch (className) {
+				case "Rogue": {
+					// Sneak Attack: 1d6 at level 1, +1d6 every 2 levels (rounded up)
+					const sneakDice = Math.ceil(level / 2);
+					calculations.sneakAttack = {
+						dice: `${sneakDice}d6`,
+						avgDamage: Math.floor(sneakDice * 3.5),
+					};
+					break;
+				}
+				case "Monk": {
+					// Ki/Focus Save DC: 8 + prof + WIS
+					const kiDc = 8 + profBonus + this.getAbilityMod("wis") - exhaustionPenalty;
+					// Martial Arts die progression
+					const martialArtsDice = level >= 17 ? "1d12" : level >= 11 ? "1d10" : level >= 5 ? "1d8" : "1d6";
+					calculations.kiSaveDc = kiDc;
+					calculations.focusSaveDc = kiDc; // 2024 PHB name
+					calculations.martialArtsDie = martialArtsDice;
+					calculations.unarmedDamage = martialArtsDice;
+					break;
+				}
+				case "Barbarian": {
+					// Rage damage bonus
+					const rageDamage = level >= 16 ? 4 : level >= 9 ? 3 : 2;
+					calculations.rageDamage = `+${rageDamage}`;
+					// Brutal Critical dice (levels 9, 13, 17)
+					const brutalDice = level >= 17 ? 3 : level >= 13 ? 2 : level >= 9 ? 1 : 0;
+					if (brutalDice > 0) {
+						calculations.brutalCritical = `+${brutalDice} dice`;
+					}
+					break;
+				}
+				case "Paladin": {
+					// Divine Sense, Channel Divinity, Lay on Hands already handled as resources
+					// Aura range
+					const auraRange = level >= 18 ? 30 : level >= 10 ? 10 : 0;
+					if (auraRange > 0) {
+						calculations.auraRange = `${auraRange} ft`;
+					}
+					break;
+				}
+				case "Fighter": {
+					// Superiority dice (Battle Master) - check subclass
+					if (cls.subclass?.name === "Battle Master" || cls.subclass?.shortName === "Battle Master") {
+						const superiorityDice = level >= 18 ? "1d12" : level >= 10 ? "1d10" : "1d8";
+						const maneuverDc = 8 + profBonus + Math.max(this.getAbilityMod("str"), this.getAbilityMod("dex")) - exhaustionPenalty;
+						calculations.superiorityDie = superiorityDice;
+						calculations.maneuverSaveDc = maneuverDc;
+					}
+					break;
+				}
+				case "Warlock": {
+					// Eldritch Blast beams
+					const beams = level >= 17 ? 4 : level >= 11 ? 3 : level >= 5 ? 2 : 1;
+					calculations.eldritchBlastBeams = beams;
+					break;
+				}
+				case "Sorcerer": {
+					// Metamagic - handled by resources
+					break;
+				}
+				case "Cleric":
+				case "Druid": {
+					// Channel Divinity DC is spell save DC
+					calculations.channelDivinityDc = this.getSpellSaveDc();
+					break;
+				}
+				case "Bard": {
+					// Bardic Inspiration die
+					const inspirationDie = level >= 15 ? "1d12" : level >= 10 ? "1d10" : level >= 5 ? "1d8" : "1d6";
+					calculations.bardicInspirationDie = inspirationDie;
+					break;
+				}
+				case "Ranger": {
+					// Favored Foe damage (if using Tasha's optional feature)
+					const favoredFoeDamage = level >= 14 ? "1d8" : level >= 6 ? "1d6" : "1d4";
+					calculations.favoredFoeDamage = favoredFoeDamage;
+					break;
+				}
+			}
+		});
+
+		// Combat Methods DC (Thelemar homebrew)
+		if (this.usesCombatSystem?.()) {
+			// Combat Method DC: 8 + prof + STR or DEX (whichever is used for attack)
+			const strMod = this.getAbilityMod("str");
+			const dexMod = this.getAbilityMod("dex");
+			calculations.combatMethodDc = 8 + profBonus + Math.max(strMod, dexMod) - exhaustionPenalty;
+		}
+
+		return calculations;
+	}
+
+	/**
+	 * Get a specific calculated value for display
+	 * @param {string} key - The calculation key (e.g., "sneakAttack", "kiSaveDc")
+	 * @returns {*} The calculated value or null
+	 */
+	getFeatureCalculation (key) {
+		const calculations = this.getFeatureCalculations();
+		return calculations[key] ?? null;
 	}
 	// #endregion
 
@@ -1960,6 +2431,80 @@ class CharacterSheetState {
 				console.log(`[CharSheet State] Auto-added resource for "${feature.name}":`, uses);
 			}
 		}
+
+		// Check if this feature grants a natural weapon and auto-add as attack
+		if (feature.description && NaturalWeaponParser.isNaturalWeapon(feature.description)) {
+			const naturalWeapon = NaturalWeaponParser.parseNaturalWeapon(feature.description, feature.name);
+			if (naturalWeapon) {
+				// Check if attack already exists
+				const existingAttack = this._data.attacks.find(a => 
+					a.name === naturalWeapon.name || a.sourceFeature === feature.name,
+				);
+				if (!existingAttack) {
+					this.addAttack({
+						...naturalWeapon,
+						featureId: featureData.id, // Link to feature for cleanup
+					});
+					console.log(`[CharSheet State] Auto-added natural weapon attack for "${feature.name}":`, naturalWeapon);
+				}
+			}
+		}
+
+		// Check if this feature grants spells (innate or known)
+		this._processFeatureSpells(feature, featureData.id);
+	}
+
+	/**
+	 * Process spells granted by a feature
+	 * @param {object} feature - Feature data (may have additionalSpells property or description)
+	 * @param {string} featureId - ID of the feature in state
+	 */
+	_processFeatureSpells (feature, featureId) {
+		let spells = [];
+
+		// First try structured additionalSpells data (from official content)
+		if (feature.additionalSpells) {
+			spells = SpellGrantParser.parseAdditionalSpells(feature.additionalSpells, feature.name);
+		} 
+		// Fall back to parsing from description (for homebrew or missing data)
+		else if (feature.description && SpellGrantParser.grantsSpells(feature.description)) {
+			spells = SpellGrantParser.parseSpellsFromText(feature.description, feature.name);
+		}
+
+		if (!spells.length) return;
+
+		spells.forEach(spell => {
+			// Skip choice-required spells (would need UI for selection)
+			if (spell.requiresChoice) {
+				console.log(`[CharSheet State] Spell choice required for "${feature.name}":`, spell.choiceFilter);
+				// Could add to a pending choices list for UI
+				return;
+			}
+
+			// Add as innate spell if marked as such
+			if (spell.innate) {
+				this.addInnateSpell({
+					name: spell.name,
+					source: spell.source,
+					level: spell.level,
+					atWill: spell.atWill,
+					uses: spell.uses,
+					recharge: spell.recharge || "long",
+					sourceFeature: feature.name,
+				});
+			} 
+			// Otherwise add as known spell
+			else {
+				this.addSpell({
+					name: spell.name,
+					source: spell.source,
+					level: spell.level || 1,
+					prepared: spell.prepared,
+				});
+			}
+		});
+
+		console.log(`[CharSheet State] Processed ${spells.length} spells from "${feature.name}"`);
 	}
 
 	removeFeature (featureIdOrName, source) {
@@ -1971,6 +2516,10 @@ class CharacterSheetState {
 		// Remove associated resource if it was auto-added
 		if (feature) {
 			this._data.resources = this._data.resources.filter(r => r.featureId !== feature.id && r.name !== feature.name);
+			// Remove associated attack if it was auto-added (natural weapon)
+			this._data.attacks = this._data.attacks.filter(a => a.featureId !== feature.id && a.sourceFeature !== feature.name);
+			// Remove associated innate spells
+			this.removeInnateSpellsByFeature(feature.name);
 		}
 
 		// Remove the feature
@@ -2013,6 +2562,7 @@ class CharacterSheetState {
 				name: feat.name,
 				source: feat.source,
 				description: feat.description,
+				additionalSpells: feat.additionalSpells, // Preserve for spell processing
 			};
 
 			// Add uses if detected
@@ -2037,6 +2587,9 @@ class CharacterSheetState {
 			}
 
 			this._data.feats.push(featData);
+
+			// Process spells granted by this feat
+			this._processFeatureSpells(featData, featData.id);
 		}
 	}
 
@@ -2049,6 +2602,8 @@ class CharacterSheetState {
 		// Remove associated resource if it was auto-added
 		if (feat) {
 			this._data.resources = this._data.resources.filter(r => r.featId !== feat.id && r.name !== feat.name);
+			// Remove associated innate spells
+			this.removeInnateSpellsByFeature(feat.name);
 		}
 
 		// Remove the feat
@@ -2539,6 +3094,9 @@ class CharacterSheetState {
 			this._data.spellcasting.pactSlots.current = this._data.spellcasting.pactSlots.max;
 		}
 
+		// Recover short rest innate spells
+		this.restoreInnateSpells("short");
+
 		// Recover exertion (Thelemar: recovers on short rest)
 		this.restoreExertion();
 	}
@@ -2559,6 +3117,9 @@ class CharacterSheetState {
 		// Recover all resources
 		this.recoverResources("long");
 		this.recoverResources("dawn");
+
+		// Recover all innate spells
+		this.restoreInnateSpells("long");
 
 		// Reduce exhaustion by 1 level (if any) - applies to both 2014 and 2024 rules
 		if (this._data.exhaustion > 0) {

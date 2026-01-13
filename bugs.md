@@ -33,13 +33,22 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] resources section doesn't update when features that add resources are added/removed (e.g adding/removing a feature that gives a resource doesn't update the resources display until page refresh)
 - [x] resources don't have a use button and don't recover on rests
 - [x] not all resources from features are added to resources section automatically (some features that give resources are not detected and added)
-- [] sneak attack die, save DCs for non spell related features (combat methods, monk ki features, etc) not calculated/displayed
+- [x] sneak attack die, save DCs for non spell related features (combat methods, monk ki features, etc) not calculated/displayed
 
 ### Combat
-- [] natural weapons features (like claws, bite, etc) not added to attacks automatically
+- [x] natural weapons features (like claws, bite, etc) not added to attacks automatically
 
 ### Spells
 - [] features giving spells or spell choice (like warlock invocations, fey-touched feat, etc) not adding spells automatically and not giving choice UI.
+
+### Classes
+- [] monks give both ki points and focus points
+- [] rangers give favoured enemy even on rangers without it like TGTT
+
+### Multiclassing
+- [] spell slots not calculated correctly with multiclassing 
+- [] choosing a class in multiclassing is not visually clear which class is being chosen
+- [] level 1 choices for multiclassing not given (like fighting style for fighter,  invocations for warlock, etc)
 
 ## Old Bugs
 
