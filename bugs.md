@@ -32,12 +32,14 @@ This file is used to track known bugs in the 5etools character sheet code.
 ### Overview 
 - [x] resources section doesn't update when features that add resources are added/removed (e.g adding/removing a feature that gives a resource doesn't update the resources display until page refresh)
 - [x] resources don't have a use button and don't recover on rests
-- [] not all resources from features are added to resources section automatically (some features that give resources are not detected and added)
+- [x] not all resources from features are added to resources section automatically (some features that give resources are not detected and added)
 - [] sneak attack die, save DCs for non spell related features (combat methods, monk ki features, etc) not calculated/displayed
 
 ### Combat
 - [] natural weapons features (like claws, bite, etc) not added to attacks automatically
 
+### Spells
+- [] features giving spells or spell choice (like warlock invocations, fey-touched feat, etc) not adding spells automatically and not giving choice UI.
 
 ## Old Bugs
 
