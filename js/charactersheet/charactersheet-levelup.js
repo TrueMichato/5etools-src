@@ -1949,23 +1949,33 @@ class CharacterSheetLevelUp {
 	}
 
 	_updateClassResources (classEntry, newLevel, classData) {
-		// Class resource definitions - same as in builder
+		// Fallback class resource definitions for features with non-parseable descriptions
+		// Most resources are auto-detected by addFeature(), this handles edge cases
 		const resourceDefs = {
-			"Barbarian": [{name: "Rage", maxByLevel: [2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 999], recharge: "long"}],
-			"Monk": [{name: "Ki Points", maxByLevel: level => level >= 2 ? level : 0, recharge: "short"}],
-			"Sorcerer": [{name: "Sorcery Points", maxByLevel: level => level >= 2 ? level : 0, recharge: "long"}],
-			"Fighter": [{name: "Second Wind", maxByLevel: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], recharge: "short"}],
-			"Cleric": [{name: "Channel Divinity", maxByLevel: [0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], recharge: "short"}],
-			"Paladin": [
-				{name: "Lay on Hands", maxByLevel: level => level * 5, recharge: "long"},
-				{name: "Channel Divinity", maxByLevel: [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], recharge: "short"},
+			"Barbarian": [
+				{name: "Rage", maxByLevel: [2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 999], recharge: "long"},
 			],
-			"Bard": [{name: "Bardic Inspiration", maxByLevel: () => Math.max(1, this._state.getAbilityMod("cha")), recharge: "short"}],
-			"Druid": [{name: "Wild Shape", maxByLevel: [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], recharge: "short"}],
+			"Monk": [
+				{name: "Ki Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
+				{name: "Focus Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"}, // 2024 PHB name
+			],
+			"Sorcerer": [
+				{name: "Sorcery Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "long"},
+			],
+			"Paladin": [
+				{name: "Lay on Hands", maxByLevel: lvl => lvl * 5, recharge: "long"},
+			],
+			"Bard": [
+				{name: "Bardic Inspiration", maxByLevel: () => Math.max(1, this._state.getAbilityMod("cha")), recharge: newLevel >= 5 ? "short" : "long"},
+			],
 		};
 
 		const classResourceDefs = resourceDefs[classData.name];
-		if (!classResourceDefs) return;
+		if (!classResourceDefs) {
+			// No fallback resources, but recalculate any auto-detected resources
+			this._state.recalculateResourceMaximums();
+			return;
+		}
 
 		const currentResources = this._state.getResources();
 
@@ -1999,6 +2009,9 @@ class CharacterSheetLevelUp {
 				});
 			}
 		});
+
+		// Also recalculate auto-detected resources (based on proficiency bonus, ability mods, etc.)
+		this._state.recalculateResourceMaximums();
 	}
 
 	_updateSpellSlots (classEntry, newLevel, classData) {

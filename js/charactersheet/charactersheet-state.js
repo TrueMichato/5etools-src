@@ -2,6 +2,126 @@
  * Character Sheet State Management
  * Manages all character data and provides computed values
  */
+
+/**
+ * Utility to parse feature text and extract limited-use information
+ * Works with both official and homebrew content
+ */
+class FeatureUsesParser {
+	/**
+	 * Parse feature text to extract uses information
+	 * @param {string} text - The feature description text (can include HTML)
+	 * @param {function} getAbilityMod - Function to get ability modifier by ability name
+	 * @param {function} getProfBonus - Function to get proficiency bonus
+	 * @returns {object|null} - {max: number, recharge: "short"|"long"} or null if no uses found
+	 */
+	static parseUses (text, getAbilityMod, getProfBonus) {
+		if (!text) return null;
+
+		// Strip HTML tags for easier parsing
+		const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
+
+		let uses = null;
+		let recharge = null;
+
+		// Determine recharge type first
+		if (/short or long rest|short rest/i.test(plainText)) {
+			recharge = "short";
+		} else if (/long rest|dawn|dusk|midnight/i.test(plainText)) {
+			recharge = "long";
+		}
+
+		// If no recharge mentioned, not a limited use feature
+		if (!recharge) return null;
+
+		// Pattern: "X times" or "X uses"
+		const timesMatch = plainText.match(/(\d+)\s*(?:times?|uses?)/);
+		if (timesMatch) {
+			uses = parseInt(timesMatch[1]);
+		}
+
+		// Pattern: "once" = 1 use
+		if (!uses && /\bonce\b/.test(plainText)) {
+			uses = 1;
+		}
+
+		// Pattern: "twice" = 2 uses
+		if (!uses && /\btwice\b/.test(plainText)) {
+			uses = 2;
+		}
+
+		// Pattern: "a number of times equal to your proficiency bonus"
+		if (!uses && /(?:times|uses)?\s*equal\s*to\s*(?:your\s*)?proficiency\s*bonus/i.test(plainText)) {
+			uses = getProfBonus ? getProfBonus() : 2;
+		}
+
+		// Pattern: "a number of times equal to X your proficiency bonus" (e.g., "twice your proficiency bonus")
+		const profMultMatch = plainText.match(/(\w+)\s*(?:times\s*)?your\s*proficiency\s*bonus/);
+		if (!uses && profMultMatch) {
+			const multiplierWord = profMultMatch[1];
+			const multipliers = {twice: 2, three: 3, four: 4, five: 5, half: 0.5};
+			const mult = multipliers[multiplierWord];
+			if (mult) {
+				uses = Math.floor((getProfBonus ? getProfBonus() : 2) * mult);
+			}
+		}
+
+		// Pattern: "equal to your [ability] modifier"
+		const abilityModMatch = plainText.match(/(?:times|uses)?\s*equal\s*to\s*(?:your\s*)?(\w+)\s*modifier/i);
+		if (!uses && abilityModMatch && getAbilityMod) {
+			const abilityMap = {
+				strength: "str", str: "str",
+				dexterity: "dex", dex: "dex",
+				constitution: "con", con: "con",
+				intelligence: "int", int: "int",
+				wisdom: "wis", wis: "wis",
+				charisma: "cha", cha: "cha",
+			};
+			const ability = abilityMap[abilityModMatch[1].toLowerCase()];
+			if (ability) {
+				uses = Math.max(1, getAbilityMod(ability));
+			}
+		}
+
+		// Pattern: "1 + your [ability] modifier"
+		const onePlusAbilityMatch = plainText.match(/1\s*\+\s*(?:your\s*)?(\w+)\s*modifier/i);
+		if (!uses && onePlusAbilityMatch && getAbilityMod) {
+			const abilityMap = {
+				strength: "str", str: "str",
+				dexterity: "dex", dex: "dex",
+				constitution: "con", con: "con",
+				intelligence: "int", int: "int",
+				wisdom: "wis", wis: "wis",
+				charisma: "cha", cha: "cha",
+			};
+			const ability = abilityMap[onePlusAbilityMatch[1].toLowerCase()];
+			if (ability) {
+				uses = 1 + getAbilityMod(ability);
+			}
+		}
+
+		// If we found uses and recharge, return the result
+		if (uses && uses > 0 && recharge) {
+			return {max: uses, recharge};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Check if text indicates this feature has limited uses (even if we can't parse exact number)
+	 */
+	static hasLimitedUses (text) {
+		if (!text) return false;
+		const plainText = text.replace(/<[^>]*>/g, " ").toLowerCase();
+		return /(?:times?|uses?|once|twice).*(?:rest|dawn|dusk)/i.test(plainText) ||
+			/(?:regain|recover).*(?:expended|all|uses)/i.test(plainText);
+	}
+}
+
+// Make available globally
+globalThis.FeatureUsesParser = FeatureUsesParser;
+
 class CharacterSheetState {
 	constructor () {
 		this._data = this._getDefaultState();
@@ -1727,6 +1847,50 @@ class CharacterSheetState {
 			}
 		});
 	}
+
+	/**
+	 * Recalculate resource maximums based on current ability scores and level
+	 * Called when ability scores change or on level up
+	 */
+	recalculateResourceMaximums () {
+		const features = this.getFeatures();
+		const feats = this.getFeats();
+
+		// Recalculate for each feature with uses
+		[...features, ...feats].forEach(item => {
+			if (!item.description) return;
+
+			const getAbilityMod = (ability) => this.getAbilityMod(ability);
+			const getProfBonus = () => this.getProficiencyBonus();
+			const newUses = FeatureUsesParser.parseUses(item.description, getAbilityMod, getProfBonus);
+
+			if (newUses) {
+				// Update feature/feat uses
+				const dataItem = item.featureType 
+					? this._data.features.find(f => f.id === item.id)
+					: this._data.feats.find(f => f.id === item.id);
+
+				if (dataItem?.uses && dataItem.uses.max !== newUses.max) {
+					const diff = newUses.max - dataItem.uses.max;
+					dataItem.uses.max = newUses.max;
+					// Increase current if max increased (don't decrease)
+					if (diff > 0) {
+						dataItem.uses.current = Math.min(dataItem.uses.current + diff, newUses.max);
+					}
+				}
+
+				// Update associated resource
+				const resource = this._data.resources.find(r => r.name === item.name);
+				if (resource && resource.max !== newUses.max) {
+					const diff = newUses.max - resource.max;
+					resource.max = newUses.max;
+					if (diff > 0) {
+						resource.current = Math.min(resource.current + diff, newUses.max);
+					}
+				}
+			}
+		});
+	}
 	// #endregion
 
 	// #region Features
@@ -1755,14 +1919,61 @@ class CharacterSheetState {
 			return;
 		}
 
-		this._data.features.push({
+		// Auto-extract uses from feature description if not already provided
+		let uses = feature.uses;
+		if (!uses && feature.description) {
+			const getAbilityMod = (ability) => this.getAbilityMod(ability);
+			const getProfBonus = () => this.getProficiencyBonus();
+			uses = FeatureUsesParser.parseUses(feature.description, getAbilityMod, getProfBonus);
+			if (uses) {
+				console.log(`[CharSheet State] Auto-detected uses for "${feature.name}":`, uses);
+			}
+		}
+
+		const featureData = {
 			id: CryptUtil.uid(),
 			...feature,
-		});
+		};
+
+		// Add uses if detected
+		if (uses) {
+			featureData.uses = {
+				current: uses.max,
+				max: uses.max,
+				recharge: uses.recharge,
+			};
+		}
+
+		this._data.features.push(featureData);
+
+		// Also add to resources section for easy tracking
+		if (uses && uses.max > 0) {
+			// Check if resource already exists
+			const existingResource = this._data.resources.find(r => r.name === feature.name);
+			if (!existingResource) {
+				this.addResource({
+					name: feature.name,
+					max: uses.max,
+					recharge: uses.recharge,
+					featureId: featureData.id, // Link to feature
+				});
+				console.log(`[CharSheet State] Auto-added resource for "${feature.name}":`, uses);
+			}
+		}
 	}
 
 	removeFeature (featureIdOrName, source) {
-		// Support both ID-based and name/source removal
+		// Find the feature first to get its id
+		const feature = this._data.features.find(f => 
+			f.id === featureIdOrName || (f.name === featureIdOrName && f.source === source),
+		);
+
+		// Remove associated resource if it was auto-added
+		if (feature) {
+			this._data.resources = this._data.resources.filter(r => r.featureId !== feature.id && r.name !== feature.name);
+		}
+
+		// Remove the feature
 		this._data.features = this._data.features.filter(f => {
 			if (f.id === featureIdOrName) return false;
 			if (f.name === featureIdOrName && f.source === source) return false;
@@ -1786,17 +1997,61 @@ class CharacterSheetState {
 
 	addFeat (feat) {
 		if (!this._data.feats.find(f => f.name === feat.name && f.source === feat.source)) {
-			this._data.feats.push({
+			// Auto-extract uses from feat description
+			let uses = feat.uses;
+			if (!uses && feat.description) {
+				const getAbilityMod = (ability) => this.getAbilityMod(ability);
+				const getProfBonus = () => this.getProficiencyBonus();
+				uses = FeatureUsesParser.parseUses(feat.description, getAbilityMod, getProfBonus);
+				if (uses) {
+					console.log(`[CharSheet State] Auto-detected uses for feat "${feat.name}":`, uses);
+				}
+			}
+
+			const featData = {
 				id: CryptUtil.uid(),
 				name: feat.name,
 				source: feat.source,
 				description: feat.description,
-			});
+			};
+
+			// Add uses if detected
+			if (uses) {
+				featData.uses = {
+					current: uses.max,
+					max: uses.max,
+					recharge: uses.recharge,
+				};
+
+				// Also add to resources section
+				const existingResource = this._data.resources.find(r => r.name === feat.name);
+				if (!existingResource) {
+					this.addResource({
+						name: feat.name,
+						max: uses.max,
+						recharge: uses.recharge,
+						featId: featData.id,
+					});
+					console.log(`[CharSheet State] Auto-added resource for feat "${feat.name}":`, uses);
+				}
+			}
+
+			this._data.feats.push(featData);
 		}
 	}
 
 	removeFeat (featIdOrName, source) {
-		// Support both ID-based and name/source removal
+		// Find the feat first to get its id
+		const feat = this._data.feats.find(f => 
+			f.id === featIdOrName || (f.name === featIdOrName && f.source === source),
+		);
+
+		// Remove associated resource if it was auto-added
+		if (feat) {
+			this._data.resources = this._data.resources.filter(r => r.featId !== feat.id && r.name !== feat.name);
+		}
+
+		// Remove the feat
 		this._data.feats = this._data.feats.filter(f => {
 			if (f.id === featIdOrName) return false;
 			if (f.name === featIdOrName && f.source === source) return false;

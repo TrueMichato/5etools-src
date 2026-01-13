@@ -1065,21 +1065,41 @@ class CharacterSheetBuilder {
 	}
 
 	_addClassResources (cls, level) {
-		// Add class-specific resources based on class and level
+		// Fallback class-specific resources for features that don't have parseable descriptions
+		// The auto-detection in addFeature() handles most cases, but some features have
+		// complex or non-standard descriptions that need explicit handling
+		const profBonus = () => Math.ceil(level / 4) + 1;
 		const resources = {
-			"Barbarian": [{name: "Rage", maxByLevel: [2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 999], recharge: "long"}],
-			"Monk": [{name: "Ki Points", maxByLevel: level => level >= 2 ? level : 0, recharge: "short"}],
-			"Sorcerer": [{name: "Sorcery Points", maxByLevel: level => level >= 2 ? level : 0, recharge: "long"}],
-			"Fighter": [{name: "Second Wind", maxByLevel: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], recharge: "short"}],
-			"Cleric": [{name: "Channel Divinity", maxByLevel: [0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], recharge: "short"}],
-			"Paladin": [{name: "Lay on Hands", maxByLevel: level => level * 5, recharge: "long"}, {name: "Channel Divinity", maxByLevel: [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], recharge: "short"}],
-			"Bard": [{name: "Bardic Inspiration", maxByLevel: level => Math.max(1, this._state.getAbilityMod("cha")), recharge: level >= 5 ? "short" : "long"}],
-			"Druid": [{name: "Wild Shape", maxByLevel: [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], recharge: "short"}],
+			"Barbarian": [
+				{name: "Rage", maxByLevel: [2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 999], recharge: "long"},
+			],
+			"Monk": [
+				// Ki/Focus Points - level-based, not parseable from text
+				{name: "Ki Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
+				{name: "Focus Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"}, // 2024 PHB name
+			],
+			"Sorcerer": [
+				{name: "Sorcery Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "long"},
+			],
+			"Paladin": [
+				// Lay on Hands pool = 5 * level, not parseable
+				{name: "Lay on Hands", maxByLevel: lvl => lvl * 5, recharge: "long"},
+			],
+			"Bard": [
+				// Bardic Inspiration uses = CHA mod, recharge changes at level 5
+				{name: "Bardic Inspiration", maxByLevel: () => Math.max(1, this._state.getAbilityMod("cha")), recharge: level >= 5 ? "short" : "long"},
+			],
 		};
 
 		const classResources = resources[cls.name];
 		if (classResources) {
+			const existingResources = this._state.getResources();
 			classResources.forEach(resource => {
+				// Skip if resource was already auto-added by feature detection
+				if (existingResources.find(r => r.name === resource.name)) {
+					return;
+				}
+
 				let max;
 				if (typeof resource.maxByLevel === "function") {
 					max = resource.maxByLevel(level);
