@@ -19,11 +19,16 @@ This file is used to track known bugs in the 5etools character sheet code.
 ## Known Bugs
 
 ### Character Builder
-- [] some races with subraces don't show subrace selection in the builder
+- [x] some races with subraces don't show subrace selection in the builder (fixed: races now processed through Renderer.race.mergeSubraces() to get _baseName/_baseSource properties for proper subrace grouping, and 2024 races with _versions are now expanded and grouped properly)
+- [x] races that give spells (like high elf, tiefling, etc) not adding spells automatically and not giving choice UI. (fixed: _applyRacialSpells() processes additionalSpells at char creation, _updateRacialSpells() adds spells at each level-up. Handles both known spells and innate spells with uses/recharge. Supports subrace-specific spell blocks. Spell choices not yet implemented)
+- [x] races that give proficiencies (like half-orc, etc) not adding proficiencies automatically and not giving choice UI. (fixed: Added _renderRacialProficiencyChoices() UI for skill/tool choices with checkboxes. Fixed proficiencies already worked, now choose options also work. Validates required choices before advancing step.)
+- [x] hover links for @subclassFeature tags showing "Failed to load references" error (fixed: Added _pPreCacheClassFeatures() to pre-cache classFeature and subclassFeature in DataLoader during page init, so hover links work properly)
+
 
 ### Features
-- [] many features that are useable (specialties, combat methods, invocations, metamagic, maneuvers, etc) not selectable during level up or character creation, not given choice UI, or not added correctly
-- combat methods looked at as resource (the resource is exertion)
+- [] many features that are useable (specialties, combat methods, invocations, metamagic, maneuvers, etc) not selectable during level up or character creation, not given choice UI, or not added correctly. Need to make sure that the solution to this is general and will work for unforeseen similar features in the future.
+- [] combat methods looked at as resource (the resource is exertion)
+- [] some race features added as resources (like lineage) instead of just being applied
 
 ### Overview 
 - [] states that require activation and then stay active (like rage, concentration, stance, etc) not tracked  or managed, and their effects not applied to rolls or stats.

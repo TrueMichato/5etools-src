@@ -115,6 +115,7 @@ class CharacterSheetPage {
 	async _pLoadData () {
 		// Load all necessary data in parallel
 		// Note: Using loadRawJSON for classes to get classFeature and subclassFeature arrays
+		// Also pre-cache class/subclass features in DataLoader so hover links work properly
 		const [races, classes, backgrounds, spells, items, feats, optFeatures, skills, conditionsData, languagesData, prereleaseData, brewData] = await Promise.all([
 			DataUtil.race.loadJSON(),
 			DataUtil.class.loadRawJSON(),
@@ -132,7 +133,9 @@ class CharacterSheetPage {
 		]);
 
 		// Base site data
-		this._races = races.race || [];
+		// Merge subraces into races to get _baseName, _baseSource properties for subrace grouping
+		// Also expand _versions for 2024 races that use version system instead of subraces
+		this._races = this._processRaceData(races.race || []);
 		this._classes = classes.class || [];
 		this._subclasses = classes.subclass || [];
 		this._classFeatures = classes.classFeature || [];
@@ -146,6 +149,10 @@ class CharacterSheetPage {
 		this._skillsData = skills.skill || [];
 		this._conditionsData = conditionsData.condition || [];
 		this._languagesData = languagesData.language || [];
+
+		// Pre-cache class/subclass features in DataLoader so hover links work properly
+		// This runs in parallel with the data processing below
+		this._pPreCacheClassFeatures();
 
 		// Merge prerelease/homebrew data
 		this._mergeBrewData(prereleaseData);
@@ -174,15 +181,86 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Pre-cache class and subclass features in DataLoader
+	 * This ensures hover links for @classFeature and @subclassFeature work properly
+	 * Runs in parallel and doesn't block page initialization
+	 */
+	async _pPreCacheClassFeatures () {
+		try {
+			await Promise.all([
+				DataLoader.pCacheAndGetAllSite("classFeature"),
+				DataLoader.pCacheAndGetAllSite("subclassFeature"),
+				DataLoader.pCacheAndGetAllPrerelease("classFeature"),
+				DataLoader.pCacheAndGetAllPrerelease("subclassFeature"),
+				DataLoader.pCacheAndGetAllBrew("classFeature"),
+				DataLoader.pCacheAndGetAllBrew("subclassFeature"),
+			]);
+		} catch (e) {
+			// Non-critical - just means some hover links may not work
+			console.warn("[CharSheet] Failed to pre-cache class features for hovers:", e);
+		}
+	}
+
+	/**
+	 * Process race data by merging subraces and expanding _versions
+	 * For 2024 races (XPHB), races may use _versions instead of subraces
+	 * @param {Array} rawRaces - Raw race array from data file
+	 * @returns {Array} Processed race array with _baseName/_baseSource set appropriately
+	 */
+	_processRaceData (rawRaces) {
+		const out = [];
+		
+		for (const race of rawRaces) {
+			// First, check if this race has _versions that need expansion
+			const hasVersions = race._versions?.length > 0;
+			let expandedVersions = [];
+			
+			if (hasVersions) {
+				try {
+					// Expand versions using DataUtil - this creates full entity copies with modifications
+					expandedVersions = DataUtil.generic.getVersions(
+						{...race, __prop: "race"},
+						{isExternalApplicationIdentityOnly: false}
+					);
+					
+					// Set _baseName/_baseSource on versions so they group with the base race
+					for (const version of expandedVersions) {
+						version._baseName = race.name;
+						version._baseSource = race.source;
+						version.__prop = "race";
+					}
+				} catch (e) {
+					console.warn("[CharSheet] Failed to expand race versions for:", race.name, e);
+				}
+			}
+			
+			// Merge subraces using the standard method
+			// This handles traditional subraces and sets _baseName/_baseSource
+			// Only add base race entries if there are subraces OR versions
+			const hasSubraces = race.subraces?.length > 0;
+			const mergedSubraces = Renderer.race.mergeSubraces([race], {isAddBaseRaces: hasSubraces || expandedVersions.length > 0});
+			out.push(...mergedSubraces);
+			
+			// Add expanded versions
+			if (expandedVersions.length) {
+				out.push(...expandedVersions);
+			}
+		}
+		
+		return out;
+	}
+
+	/**
 	 * Merge homebrew/prerelease data into the main data arrays
 	 * @param {Object} brewData - The processed brew data object
 	 */
 	_mergeBrewData (brewData) {
 		if (!brewData) return;
 
-		// Races
+		// Races - process with same logic as site races (mergeSubraces + expand _versions)
 		if (brewData.race?.length) {
-			this._races = [...this._races, ...MiscUtil.copyFast(brewData.race)];
+			const processedBrewRaces = this._processRaceData(MiscUtil.copyFast(brewData.race));
+			this._races = [...this._races, ...processedBrewRaces];
 		}
 
 		// Classes
