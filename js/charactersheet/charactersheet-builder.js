@@ -26,6 +26,8 @@ class CharacterSheetBuilder {
 		this._selectedLanguages = []; // For background language choices
 		this._selectedFeatureOptions = {}; // For class/subclass features with embedded options (like Specialties)
 		this._selectedCombatTraditions = []; // For combat tradition proficiency choices (Thelemar homebrew)
+		this._selectedRacialSkills = []; // For racial skill proficiency choices (e.g., Elf)
+		this._selectedRacialTools = []; // For racial tool proficiency choices (e.g., Dwarf)
 
 		this._init();
 	}
@@ -229,6 +231,22 @@ class CharacterSheetBuilder {
 				if (!this._selectedRace) {
 					JqueryUtil.doToast({type: "warning", content: "Please select a species."});
 					return false;
+				}
+				// Validate racial skill proficiency choices
+				if (this._selectedRace.skillProficiencies) {
+					const requiredSkillCount = this._getRacialSkillChoiceCount(this._selectedRace);
+					if (requiredSkillCount > 0 && this._selectedRacialSkills.length < requiredSkillCount) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${requiredSkillCount} racial skill proficienc${requiredSkillCount > 1 ? "ies" : "y"}.`});
+						return false;
+					}
+				}
+				// Validate racial tool proficiency choices
+				if (this._selectedRace.toolProficiencies) {
+					const requiredToolCount = this._getRacialToolChoiceCount(this._selectedRace);
+					if (requiredToolCount > 0 && this._selectedRacialTools.length < requiredToolCount) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${requiredToolCount} racial tool proficienc${requiredToolCount > 1 ? "ies" : "y"}.`});
+						return false;
+					}
 				}
 				return true;
 
@@ -574,6 +592,14 @@ class CharacterSheetBuilder {
 			});
 		}
 
+		// Apply selected racial skill proficiency choices
+		if (this._selectedRacialSkills.length) {
+			this._selectedRacialSkills.forEach(skill => {
+				const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+				this._state.setSkillProficiency(skillKey, 1);
+			});
+		}
+
 		// Armor proficiencies from race (e.g., Mountain Dwarf)
 		if (this._selectedRace.armorProficiencies) {
 			this._selectedRace.armorProficiencies.forEach(armorProf => {
@@ -626,6 +652,16 @@ class CharacterSheetBuilder {
 			});
 		}
 
+		// Apply selected racial tool proficiency choices
+		if (this._selectedRacialTools.length) {
+			this._selectedRacialTools.forEach(tool => {
+				this._state.addToolProficiency(tool.toTitleCase());
+			});
+		}
+
+		// Racial spells (like High Elf cantrip, Tiefling spells, etc.)
+		this._applyRacialSpells();
+
 		// Add racial features
 		if (this._selectedRace.entries) {
 			this._addFeatureEntries(this._selectedRace.entries, this._selectedRace.source, "Species");
@@ -634,6 +670,245 @@ class CharacterSheetBuilder {
 		if (this._selectedSubrace?.entries) {
 			this._addFeatureEntries(this._selectedSubrace.entries, this._selectedSubrace.source, "Subrace");
 		}
+	}
+
+	/**
+	 * Apply racial spells from additionalSpells property
+	 * Handles both known spells and innate spellcasting
+	 */
+	_applyRacialSpells () {
+		const race = this._selectedRace;
+		if (!race?.additionalSpells?.length) return;
+
+		const allSpells = this._page.getSpells();
+		const raceName = race.name;
+		const subraceName = race._subraceName || this._selectedSubrace?.name;
+
+		console.log("[CharSheet Builder] Processing racial spells for:", raceName, subraceName ? `(${subraceName})` : "");
+
+		race.additionalSpells.forEach(spellBlock => {
+			// Check if this spell block is subrace-specific
+			if (spellBlock.name) {
+				// This spell block is for a specific subrace - only apply if it matches
+				if (!subraceName || spellBlock.name.toLowerCase() !== subraceName.toLowerCase()) {
+					return;
+				}
+			}
+
+			// Get the spellcasting ability
+			let spellAbility = null;
+			if (spellBlock.ability) {
+				if (typeof spellBlock.ability === "string") {
+					spellAbility = spellBlock.ability;
+				} else if (spellBlock.ability.choose) {
+					// Default to first option for now - UI choice can be added later
+					spellAbility = spellBlock.ability.choose[0];
+				}
+			}
+
+			// Process "known" spells - these are added to the character's spell list
+			if (spellBlock.known) {
+				Object.entries(spellBlock.known).forEach(([levelStr, spellsAtLevel]) => {
+					const charLevel = parseInt(levelStr);
+					// Only add spells available at level 1 during character creation
+					if (charLevel > 1) return;
+
+					this._processSpellList(spellsAtLevel, allSpells, raceName, spellAbility, false);
+				});
+			}
+
+			// Process "innate" spells - these are racial abilities with limited uses
+			if (spellBlock.innate) {
+				Object.entries(spellBlock.innate).forEach(([levelStr, spellConfig]) => {
+					const charLevel = parseInt(levelStr);
+					// Only add spells available at level 1 during character creation
+					if (charLevel > 1) return;
+
+					// Innate spells can be at-will or daily uses
+					if (typeof spellConfig === "object") {
+						// Handle daily/rest structure
+						if (spellConfig.daily) {
+							Object.entries(spellConfig.daily).forEach(([uses, spellList]) => {
+								this._processInnateSpells(spellList, allSpells, raceName, spellAbility, parseInt(uses), "long");
+							});
+						}
+						if (spellConfig.rest) {
+							Object.entries(spellConfig.rest).forEach(([uses, spellList]) => {
+								this._processInnateSpells(spellList, allSpells, raceName, spellAbility, parseInt(uses), "short");
+							});
+						}
+						// Direct spell array (at-will)
+						if (Array.isArray(spellConfig)) {
+							this._processInnateSpells(spellConfig, allSpells, raceName, spellAbility, 0, null);
+						}
+					} else if (Array.isArray(spellConfig)) {
+						// Direct array = at-will
+						this._processInnateSpells(spellConfig, allSpells, raceName, spellAbility, 0, null);
+					}
+				});
+			}
+		});
+	}
+
+	/**
+	 * Process a list of spells and add them as known spells
+	 */
+	_processSpellList (spellList, allSpells, sourceName, spellAbility, isAlwaysPrepared) {
+		if (!Array.isArray(spellList)) {
+			// Handle choice objects like {"choose": "level=0|class=Wizard"}
+			if (typeof spellList === "object") {
+				if (spellList.choose) {
+					// This requires UI - store for later handling
+					console.log("[CharSheet Builder] Spell choice required:", spellList.choose);
+					// For now, skip choices - they'll need a picker UI
+					return;
+				}
+				// Handle "_" key which contains an array
+				if (spellList._) {
+					this._processSpellList(spellList._, allSpells, sourceName, spellAbility, isAlwaysPrepared);
+				}
+			}
+			return;
+		}
+
+		spellList.forEach(spellRef => {
+			const spellData = this._resolveSpellReference(spellRef, allSpells);
+			if (spellData) {
+				this._addRacialSpell(spellData, sourceName, isAlwaysPrepared);
+			}
+		});
+	}
+
+	/**
+	 * Process innate spells with uses/recharge
+	 */
+	_processInnateSpells (spellList, allSpells, sourceName, spellAbility, uses, recharge) {
+		if (!Array.isArray(spellList)) return;
+
+		spellList.forEach(spellRef => {
+			const spellData = this._resolveSpellReference(spellRef, allSpells);
+			if (spellData) {
+				const atWill = uses === 0;
+				this._state.addInnateSpell({
+					name: spellData.name,
+					source: spellData.source,
+					level: spellData.level,
+					atWill: atWill,
+					uses: atWill ? null : uses,
+					recharge: recharge,
+					sourceFeature: sourceName,
+				});
+				console.log(`[CharSheet Builder] Added innate spell: ${spellData.name} (${atWill ? "at-will" : `${uses}/rest`})`);
+			}
+		});
+	}
+
+	/**
+	 * Resolve a spell reference (name|source or name|source#c for cantrips) to full spell data
+	 */
+	_resolveSpellReference (spellRef, allSpells) {
+		if (typeof spellRef !== "string") {
+			// Handle choice objects
+			if (spellRef?.choose) {
+				console.log("[CharSheet Builder] Spell choice required:", spellRef.choose);
+				return null;
+			}
+			return null;
+		}
+
+		// Parse "spell name|source" or "spell name|source#c" format
+		// #c suffix indicates cantrip
+		let spellName = spellRef;
+		let source = null;
+		const isCantrip = spellRef.includes("#c");
+
+		// Remove #c suffix if present
+		spellName = spellName.replace(/#c$/, "");
+
+		// Split by | to get source
+		const parts = spellName.split("|");
+		spellName = parts[0].toLowerCase();
+		if (parts.length > 1) {
+			source = parts[1].toUpperCase();
+		}
+
+		// Find the spell in the spell list
+		const spell = allSpells.find(s => {
+			const nameMatch = s.name.toLowerCase() === spellName;
+			if (!nameMatch) return false;
+			if (source) return s.source === source;
+			return true;
+		});
+
+		if (!spell) {
+			console.warn(`[CharSheet Builder] Could not find spell: ${spellRef}`);
+			return null;
+		}
+
+		return spell;
+	}
+
+	/**
+	 * Add a racial spell to the character's spell list
+	 */
+	_addRacialSpell (spellData, sourceName, isAlwaysPrepared) {
+		const spell = {
+			name: spellData.name,
+			source: spellData.source,
+			level: spellData.level,
+			school: spellData.school,
+			prepared: spellData.level === 0 || isAlwaysPrepared, // Cantrips always prepared
+			ritual: spellData.ritual || false,
+			concentration: spellData.concentration || false,
+			castingTime: this._getSpellCastingTime(spellData),
+			range: this._getSpellRange(spellData),
+			components: this._getSpellComponents(spellData),
+			duration: this._getSpellDuration(spellData),
+		};
+
+		this._state.addSpell(spell);
+		console.log(`[CharSheet Builder] Added racial spell: ${spellData.name} (from ${sourceName})`);
+	}
+
+	// Helper methods for spell data formatting
+	_getSpellCastingTime (spell) {
+		if (!spell.time?.length) return "";
+		const time = spell.time[0];
+		return `${time.number} ${time.unit}`;
+	}
+
+	_getSpellRange (spell) {
+		if (!spell.range) return "";
+		const range = spell.range;
+		if (range.type === "point") {
+			if (range.distance?.type === "self") return "Self";
+			if (range.distance?.type === "touch") return "Touch";
+			return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
+		}
+		return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
+	}
+
+	_getSpellComponents (spell) {
+		if (!spell.components) return "";
+		const parts = [];
+		if (spell.components.v) parts.push("V");
+		if (spell.components.s) parts.push("S");
+		if (spell.components.m) {
+			const mText = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
+			parts.push(mText ? `M (${mText})` : "M");
+		}
+		return parts.join(", ");
+	}
+
+	_getSpellDuration (spell) {
+		if (!spell.duration?.length) return "";
+		const dur = spell.duration[0];
+		if (dur.type === "instant") return "Instantaneous";
+		if (dur.type === "permanent") return "Until dispelled";
+		if (dur.concentration) {
+			return `Concentration, up to ${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
+		}
+		return `${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
 	}
 
 	_applyClassFeatures () {
@@ -1408,6 +1683,10 @@ class CharacterSheetBuilder {
 					$list.find(".charsheet__builder-list-item").removeClass("active");
 					$item.addClass("active");
 					
+					// Reset racial proficiency selections when race group changes
+					this._selectedRacialSkills = [];
+					this._selectedRacialTools = [];
+					
 					if (hasSubraces) {
 						// Show subrace selection in preview
 						this._selectedRace = null;
@@ -1489,10 +1768,16 @@ class CharacterSheetBuilder {
 				this._selectedRace = selectedSubrace;
 				// Don't set _selectedSubrace for merged races - all subrace data is already in the race object
 				this._selectedSubrace = null;
+				// Reset racial proficiency selections when race changes
+				this._selectedRacialSkills = [];
+				this._selectedRacialTools = [];
 				this._renderSubraceDetails($detailsContainer, selectedSubrace, group.baseName);
 			} else {
 				this._selectedRace = null;
 				this._selectedSubrace = null;
+				// Reset racial proficiency selections
+				this._selectedRacialSkills = [];
+				this._selectedRacialTools = [];
 				$detailsContainer.empty();
 			}
 		});
@@ -1576,7 +1861,229 @@ class CharacterSheetBuilder {
 			$details.append($traits);
 		}
 
+		// Racial proficiency choices (skills, tools)
+		const $profChoices = this._renderRacialProficiencyChoices(race);
+		if ($profChoices) {
+			$details.append($profChoices);
+		}
+
 		$container.append($details);
+	}
+
+	/**
+	 * Render UI for racial proficiency choices (skills and tools)
+	 * @param {Object} race - The race data
+	 * @returns {jQuery|null} - jQuery element containing proficiency choices, or null if none
+	 */
+	_renderRacialProficiencyChoices (race) {
+		const $container = $(`<div class="charsheet__builder-racial-proficiencies mt-3"></div>`);
+		let hasChoices = false;
+
+		// Skill proficiency choices
+		if (race.skillProficiencies) {
+			race.skillProficiencies.forEach((skillProf, profIdx) => {
+				if (skillProf.choose) {
+					hasChoices = true;
+					const chooseFrom = skillProf.choose.from || [];
+					const chooseCount = skillProf.choose.count || 1;
+
+					if (chooseFrom.length > 0) {
+						const $section = this._renderRacialSkillChoice(chooseFrom, chooseCount, profIdx);
+						$container.append($section);
+					}
+				}
+				if (skillProf.any) {
+					hasChoices = true;
+					const anyCount = skillProf.any;
+					const $section = this._renderRacialSkillChoice(null, anyCount, profIdx);
+					$container.append($section);
+				}
+			});
+		}
+
+		// Tool proficiency choices
+		if (race.toolProficiencies) {
+			race.toolProficiencies.forEach((toolProf, profIdx) => {
+				if (toolProf.choose) {
+					hasChoices = true;
+					const chooseFrom = toolProf.choose.from || [];
+					const chooseCount = toolProf.choose.count || 1;
+
+					if (chooseFrom.length > 0) {
+						const $section = this._renderRacialToolChoice(chooseFrom, chooseCount, profIdx);
+						$container.append($section);
+					}
+				}
+				if (toolProf.any) {
+					hasChoices = true;
+					const anyCount = toolProf.any;
+					const $section = this._renderRacialToolChoice(null, anyCount, profIdx);
+					$container.append($section);
+				}
+			});
+		}
+
+		return hasChoices ? $container : null;
+	}
+
+	/**
+	 * Render skill choice UI for racial proficiencies
+	 * @param {string[]|null} skills - Array of skill names to choose from, or null for any skill
+	 * @param {number} count - Number of skills to choose
+	 * @param {number} profIdx - Index for tracking multiple choice sections
+	 * @returns {jQuery} - jQuery element
+	 */
+	_renderRacialSkillChoice (skills, count, profIdx) {
+		const allSkills = Parser.SKILL_TO_ATB_ABV ? Object.keys(Parser.SKILL_TO_ATB_ABV).map(s => s.toTitleCase()) : [
+			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+			"History", "Insight", "Intimidation", "Investigation", "Medicine",
+			"Nature", "Perception", "Performance", "Persuasion", "Religion",
+			"Sleight of Hand", "Stealth", "Survival",
+		];
+
+		const availableSkills = skills ? skills.map(s => s.toTitleCase()) : allSkills;
+		const label = skills ? `Choose ${count} skill${count > 1 ? "s" : ""} from:` : `Choose any ${count} skill${count > 1 ? "s" : ""}:`;
+
+		const $section = $(`
+			<div class="charsheet__builder-racial-skill-selection mt-2">
+				<p><strong>Racial Skills:</strong> ${label}</p>
+				<div class="charsheet__builder-skill-checkboxes"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-skill-count">${this._selectedRacialSkills.length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $checkboxes = $section.find(".charsheet__builder-skill-checkboxes");
+
+		availableSkills.forEach(skill => {
+			const isSelected = this._selectedRacialSkills.includes(skill);
+			const $label = $(`
+				<label class="charsheet__builder-skill-checkbox mr-3 mb-1">
+					<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
+					${skill}
+				</label>
+			`);
+
+			$label.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedRacialSkills.length < count) {
+						this._selectedRacialSkills.push(skill);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} skill${count > 1 ? "s" : ""}.`});
+					}
+				} else {
+					this._selectedRacialSkills = this._selectedRacialSkills.filter(s => s !== skill);
+				}
+				$section.find(".racial-skill-count").text(this._selectedRacialSkills.length);
+			});
+
+			$checkboxes.append($label);
+		});
+
+		return $section;
+	}
+
+	/**
+	 * Render tool choice UI for racial proficiencies
+	 * @param {string[]|null} tools - Array of tool names to choose from, or null for any tool
+	 * @param {number} count - Number of tools to choose
+	 * @param {number} profIdx - Index for tracking multiple choice sections
+	 * @returns {jQuery} - jQuery element
+	 */
+	_renderRacialToolChoice (tools, count, profIdx) {
+		// Common tools list - used when "any" is specified
+		const allTools = [
+			"Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies",
+			"Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools",
+			"Cook's Utensils", "Glassblower's Tools", "Jeweler's Tools",
+			"Leatherworker's Tools", "Mason's Tools", "Painter's Supplies",
+			"Potter's Tools", "Smith's Tools", "Tinker's Tools",
+			"Weaver's Tools", "Woodcarver's Tools", "Disguise Kit",
+			"Forgery Kit", "Gaming Set", "Herbalism Kit",
+			"Musical Instrument", "Navigator's Tools", "Poisoner's Kit",
+			"Thieves' Tools",
+		];
+
+		const availableTools = tools ? tools.map(t => t.toTitleCase()) : allTools;
+		const label = tools ? `Choose ${count} tool${count > 1 ? "s" : ""} from:` : `Choose any ${count} tool${count > 1 ? "s" : ""}:`;
+
+		const $section = $(`
+			<div class="charsheet__builder-racial-tool-selection mt-2">
+				<p><strong>Racial Tools:</strong> ${label}</p>
+				<div class="charsheet__builder-tool-checkboxes"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-tool-count">${this._selectedRacialTools.length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $checkboxes = $section.find(".charsheet__builder-tool-checkboxes");
+
+		availableTools.forEach(tool => {
+			const isSelected = this._selectedRacialTools.includes(tool);
+			const $label = $(`
+				<label class="charsheet__builder-tool-checkbox mr-3 mb-1">
+					<input type="checkbox" value="${tool}" ${isSelected ? "checked" : ""}>
+					${tool}
+				</label>
+			`);
+
+			$label.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedRacialTools.length < count) {
+						this._selectedRacialTools.push(tool);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} tool${count > 1 ? "s" : ""}.`});
+					}
+				} else {
+					this._selectedRacialTools = this._selectedRacialTools.filter(t => t !== tool);
+				}
+				$section.find(".racial-tool-count").text(this._selectedRacialTools.length);
+			});
+
+			$checkboxes.append($label);
+		});
+
+		return $section;
+	}
+
+	/**
+	 * Get the total number of skill choices required by a race
+	 * @param {Object} race - The race data
+	 * @returns {number} - Total number of skill choices required
+	 */
+	_getRacialSkillChoiceCount (race) {
+		let count = 0;
+		if (race.skillProficiencies) {
+			race.skillProficiencies.forEach(skillProf => {
+				if (skillProf.choose) {
+					count += skillProf.choose.count || 1;
+				}
+				if (skillProf.any) {
+					count += skillProf.any;
+				}
+			});
+		}
+		return count;
+	}
+
+	/**
+	 * Get the total number of tool choices required by a race
+	 * @param {Object} race - The race data
+	 * @returns {number} - Total number of tool choices required
+	 */
+	_getRacialToolChoiceCount (race) {
+		let count = 0;
+		if (race.toolProficiencies) {
+			race.toolProficiencies.forEach(toolProf => {
+				if (toolProf.choose) {
+					count += toolProf.choose.count || 1;
+				}
+				if (toolProf.any) {
+					count += toolProf.any;
+				}
+			});
+		}
+		return count;
 	}
 
 	_renderRacePreview ($preview, race) {
@@ -1624,6 +2131,12 @@ class CharacterSheetBuilder {
 				}
 			});
 			$content.append($traits);
+		}
+
+		// Racial proficiency choices (skills, tools)
+		const $profChoices = this._renderRacialProficiencyChoices(race);
+		if ($profChoices) {
+			$content.append($profChoices);
 		}
 
 		// Subraces

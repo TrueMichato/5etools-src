@@ -1902,6 +1902,9 @@ class CharacterSheetLevelUp {
 		// Update spell slots if applicable
 		this._updateSpellSlots(classEntry, newLevel, classData);
 
+		// Check for racial spells at the new character level
+		this._updateRacialSpells();
+
 		// Save and re-render
 		await this._page.saveCharacter();
 		this._page.renderCharacter();
@@ -2130,6 +2133,202 @@ class CharacterSheetLevelUp {
 		// Fighter/Rogue get limited casting via subclass
 
 		return {};
+	}
+
+	/**
+	 * Check for and add racial spells at the current character level
+	 * Called after level-up to grant spells from racial features (e.g., Tiefling, High Elf)
+	 */
+	_updateRacialSpells () {
+		const race = this._state.getRace();
+		if (!race?.additionalSpells?.length) return;
+
+		const totalLevel = this._state.getTotalLevel();
+		const allSpells = this._page.getSpells();
+		const raceName = race.name;
+		const subraceName = race._subraceName || race.subrace;
+
+		console.log(`[LevelUp] Checking racial spells for level ${totalLevel}: ${raceName} ${subraceName ? `(${subraceName})` : ""}`);
+
+		race.additionalSpells.forEach(spellBlock => {
+			// Check if this spell block is subrace-specific
+			if (spellBlock.name) {
+				// This spell block is for a specific subrace - only apply if it matches
+				if (!subraceName || spellBlock.name.toLowerCase() !== subraceName.toLowerCase()) {
+					return;
+				}
+			}
+
+			// Process "known" spells at this level
+			if (spellBlock.known) {
+				Object.entries(spellBlock.known).forEach(([levelStr, spellsAtLevel]) => {
+					const charLevel = parseInt(levelStr);
+					// Only add spells for this exact level (don't re-add lower level spells)
+					if (charLevel !== totalLevel) return;
+
+					this._processRacialSpellList(spellsAtLevel, allSpells, raceName);
+				});
+			}
+
+			// Process "innate" spells at this level
+			if (spellBlock.innate) {
+				Object.entries(spellBlock.innate).forEach(([levelStr, spellConfig]) => {
+					const charLevel = parseInt(levelStr);
+					// Only add spells for this exact level
+					if (charLevel !== totalLevel) return;
+
+					if (typeof spellConfig === "object") {
+						if (spellConfig.daily) {
+							Object.entries(spellConfig.daily).forEach(([uses, spellList]) => {
+								this._processRacialInnateSpells(spellList, allSpells, raceName, parseInt(uses), "long");
+							});
+						}
+						if (spellConfig.rest) {
+							Object.entries(spellConfig.rest).forEach(([uses, spellList]) => {
+								this._processRacialInnateSpells(spellList, allSpells, raceName, parseInt(uses), "short");
+							});
+						}
+						if (Array.isArray(spellConfig)) {
+							this._processRacialInnateSpells(spellConfig, allSpells, raceName, 0, null);
+						}
+					} else if (Array.isArray(spellConfig)) {
+						this._processRacialInnateSpells(spellConfig, allSpells, raceName, 0, null);
+					}
+				});
+			}
+		});
+	}
+
+	/**
+	 * Process a list of spells and add them as known spells
+	 */
+	_processRacialSpellList (spellList, allSpells, sourceName) {
+		if (!Array.isArray(spellList)) {
+			if (typeof spellList === "object" && spellList._) {
+				this._processRacialSpellList(spellList._, allSpells, sourceName);
+			}
+			return;
+		}
+
+		spellList.forEach(spellRef => {
+			const spellData = this._resolveSpellReference(spellRef, allSpells);
+			if (spellData) {
+				// Check if spell already known
+				const existing = this._state.getSpells().find(s => 
+					s.name === spellData.name && s.source === spellData.source
+				);
+				if (existing) return;
+
+				this._state.addSpell({
+					name: spellData.name,
+					source: spellData.source,
+					level: spellData.level,
+					school: spellData.school,
+					prepared: spellData.level === 0, // Cantrips always prepared
+					ritual: spellData.ritual || false,
+					concentration: spellData.concentration || false,
+					castingTime: this._getSpellCastingTime(spellData),
+					range: this._getSpellRange(spellData),
+					components: this._getSpellComponents(spellData),
+					duration: this._getSpellDuration(spellData),
+				});
+				console.log(`[LevelUp] Added racial spell: ${spellData.name}`);
+			}
+		});
+	}
+
+	/**
+	 * Process innate spells with uses/recharge
+	 */
+	_processRacialInnateSpells (spellList, allSpells, sourceName, uses, recharge) {
+		if (!Array.isArray(spellList)) return;
+
+		spellList.forEach(spellRef => {
+			const spellData = this._resolveSpellReference(spellRef, allSpells);
+			if (spellData) {
+				// Check if innate spell already exists
+				const existing = this._state.getInnateSpells().find(s => 
+					s.name === spellData.name && s.source === spellData.source
+				);
+				if (existing) return;
+
+				const atWill = uses === 0;
+				this._state.addInnateSpell({
+					name: spellData.name,
+					source: spellData.source,
+					level: spellData.level,
+					atWill: atWill,
+					uses: atWill ? null : uses,
+					recharge: recharge,
+					sourceFeature: sourceName,
+				});
+				console.log(`[LevelUp] Added innate spell: ${spellData.name} (${atWill ? "at-will" : `${uses}/rest`})`);
+			}
+		});
+	}
+
+	/**
+	 * Resolve a spell reference to full spell data
+	 */
+	_resolveSpellReference (spellRef, allSpells) {
+		if (typeof spellRef !== "string") return null;
+
+		let spellName = spellRef.replace(/#c$/, "");
+		let source = null;
+
+		const parts = spellName.split("|");
+		spellName = parts[0].toLowerCase();
+		if (parts.length > 1) {
+			source = parts[1].toUpperCase();
+		}
+
+		return allSpells.find(s => {
+			const nameMatch = s.name.toLowerCase() === spellName;
+			if (!nameMatch) return false;
+			if (source) return s.source === source;
+			return true;
+		});
+	}
+
+	// Spell data formatting helpers
+	_getSpellCastingTime (spell) {
+		if (!spell.time?.length) return "";
+		const time = spell.time[0];
+		return `${time.number} ${time.unit}`;
+	}
+
+	_getSpellRange (spell) {
+		if (!spell.range) return "";
+		const range = spell.range;
+		if (range.type === "point") {
+			if (range.distance?.type === "self") return "Self";
+			if (range.distance?.type === "touch") return "Touch";
+			return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
+		}
+		return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
+	}
+
+	_getSpellComponents (spell) {
+		if (!spell.components) return "";
+		const parts = [];
+		if (spell.components.v) parts.push("V");
+		if (spell.components.s) parts.push("S");
+		if (spell.components.m) {
+			const mText = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
+			parts.push(mText ? `M (${mText})` : "M");
+		}
+		return parts.join(", ");
+	}
+
+	_getSpellDuration (spell) {
+		if (!spell.duration?.length) return "";
+		const dur = spell.duration[0];
+		if (dur.type === "instant") return "Instantaneous";
+		if (dur.type === "permanent") return "Until dispelled";
+		if (dur.concentration) {
+			return `Concentration, up to ${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
+		}
+		return `${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
 	}
 
 	/**
