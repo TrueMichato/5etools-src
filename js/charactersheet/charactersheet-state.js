@@ -3207,8 +3207,10 @@ class CharacterSheetState {
 		}
 
 		// Auto-extract uses from feature description if not already provided
+		// Skip use detection for meta-features that describe resource systems rather than having their own uses
+		const isMetaFeature = this._isResourceSystemFeature(feature);
 		let uses = feature.uses;
-		if (!uses && feature.description) {
+		if (!uses && feature.description && !isMetaFeature) {
 			const getAbilityMod = (ability) => this.getAbilityMod(ability);
 			const getProfBonus = () => this.getProficiencyBonus();
 			uses = FeatureUsesParser.parseUses(feature.description, getAbilityMod, getProfBonus);
@@ -3271,6 +3273,47 @@ class CharacterSheetState {
 
 		// Check if this feature grants modifiers to rolls, AC, etc.
 		this._processFeatureModifiers(feature, featureData.id);
+	}
+
+	/**
+	 * Check if a feature is a "meta-feature" that describes a resource system
+	 * (like Combat Methods, Ki, etc.) rather than having its own uses.
+	 * These should not have uses auto-detected from their description.
+	 * @param {object} feature - Feature data
+	 * @returns {boolean} True if this is a resource system description feature
+	 */
+	_isResourceSystemFeature (feature) {
+		const name = feature.name?.toLowerCase() || "";
+		
+		// Features that describe resource systems (exertion, ki, etc.)
+		// These mention "short rest" or "long rest" but the rest is for the resource, not the feature itself
+		const resourceSystemFeatures = [
+			"combat methods",      // Thelemar homebrew - describes exertion system
+			"ki",                  // Monk - describes ki points
+			"focus points",        // Some homebrew - describes focus point system
+			"exertion",            // Thelemar homebrew - the exertion pool itself
+			"sorcery points",      // Sorcerer - describes sorcery point system
+			"superiority dice",    // Battle Master - describes superiority dice
+			"psionic power",       // Psi features - describes psionic power dice
+		];
+
+		// Check if the feature name matches any resource system feature
+		if (resourceSystemFeatures.some(rsf => name.includes(rsf))) {
+			return true;
+		}
+
+		// Also check if description explicitly mentions "exertion" as the resource
+		// This catches custom combat method features
+		if (feature.description) {
+			const desc = feature.description.toLowerCase();
+			// If it talks about spending exertion, it's using the exertion system, not its own uses
+			if (/spend(?:ing)?\s+(?:\d+\s+)?exertion/i.test(desc) && 
+				/(?:recover|regain|refresh).*exertion.*(?:short|long)\s*rest/i.test(desc)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
