@@ -318,7 +318,12 @@ class CharacterSheetCombat {
 		// Calculate total attack bonus
 		const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
 		const profBonus = this._state.getProficiencyBonus();
-		const totalBonus = abilityMod + profBonus + (attack.attackBonus || 0);
+		
+		// Get attack modifiers from named modifiers (from features like Battle Tactics, magic items, etc.)
+		const attackModifiers = this._state.getNamedModifiersByType("attack");
+		const featureAttackBonus = attackModifiers.reduce((sum, mod) => sum + (mod.value || 0), 0);
+		
+		const totalBonus = abilityMod + profBonus + (attack.attackBonus || 0) + featureAttackBonus;
 
 		// Roll d20 with advantage/disadvantage support
 		const rollResult = this._page.rollD20({event});
@@ -359,9 +364,32 @@ class CharacterSheetCombat {
 		// Parse damage dice
 		const damageRoll = this._parseDamage(attack.damage, isCrit);
 		const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
-		const totalBonus = abilityMod + (attack.damageBonus || 0);
+		
+		// Get damage modifiers from named modifiers (from features, magic items, etc.)
+		const damageModifiers = this._state.getNamedModifiersByType("damage");
+		const featureDamageBonus = damageModifiers.reduce((sum, mod) => sum + (mod.value || 0), 0);
+		
+		// Check if attack uses strength and if rage is active (for rage damage)
+		let rageBonus = 0;
+		const isMeleeStrengthAttack = (attack.abilityMod === "str" || !attack.abilityMod) && 
+			!attack.isRanged && !attack.isSpell;
+		if (this._state.isStateTypeActive?.("rage")) {
+			rageBonus = this._state.getRageDamageBonus?.(
+				!attack.isRanged && !attack.isSpell, // isMelee
+				attack.abilityMod || "str",
+			) || 0;
+		}
+		
+		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus;
 
 		const total = damageRoll.total + totalBonus;
+
+		// Build subtitle with breakdown
+		let subtitle = `${attack.damage}${isCrit ? " (crit)" : ""} + ${abilityMod} (${attack.abilityMod || "STR"})`;
+		if (attack.damageBonus) subtitle += ` + ${attack.damageBonus} (weapon)`;
+		if (featureDamageBonus) subtitle += ` + ${featureDamageBonus} (features)`;
+		if (rageBonus) subtitle += ` + ${rageBonus} (rage)`;
+		subtitle += ` ${attack.damageType}`;
 
 		// Show result
 		this._page.showDiceResult({
@@ -369,7 +397,7 @@ class CharacterSheetCombat {
 			roll: damageRoll.total,
 			modifier: totalBonus,
 			total,
-			subtitle: `${attack.damage}${isCrit ? " (crit)" : ""} + ${totalBonus} ${attack.damageType}`,
+			subtitle,
 		});
 	}
 

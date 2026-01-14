@@ -1304,12 +1304,29 @@ class CharacterSheetBuilder {
 						parentFeature: featureKey.split("_")[0],
 					});
 				} else if (opt.type === "optionalfeature" && opt.ref) {
-					// Handle optional feature options
+					// Handle optional feature options (like specialties from TGTT)
 					const allOptFeatures = this._page.getOptionalFeatures();
+					
+					// Debug: Check what sources are available
+					const sourceSet = new Set(allOptFeatures.map(f => f.source));
+					console.log(`[CharSheet Builder] Looking for "${opt.name}" source "${opt.source}" in ${allOptFeatures.length} optionalfeatures. Available sources:`, [...sourceSet]);
+					
 					const fullOpt = allOptFeatures.find(f => 
 						f.name === opt.name && 
 						(f.source === opt.source || !opt.source),
 					);
+					
+					// Debug logging
+					if (!fullOpt) {
+						// Try to find similar names to help debug
+						const similar = allOptFeatures.filter(f => f.name.toLowerCase().includes(opt.name.toLowerCase().substring(0, 5)));
+						console.warn(`[CharSheet Builder] Could not find optional feature "${opt.name}" (source: ${opt.source}). Similar names found:`, similar.map(f => `${f.name}|${f.source}`).join(", "));
+					} else {
+						console.log(`[CharSheet Builder] Found optional feature "${opt.name}" with ${fullOpt.entries?.length || 0} entries`);
+					}
+					
+					const description = fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "";
+					
 					this._state.addFeature({
 						name: opt.name,
 						source: opt.source || fullOpt?.source,
@@ -1318,7 +1335,7 @@ class CharacterSheetBuilder {
 						classSource: this._selectedClass?.source,
 						featureType: "Optional Feature",
 						entries: fullOpt?.entries,
-						description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
+						description: description,
 						isFeatureOption: true,
 						parentFeature: featureKey.split("_")[0],
 					});

@@ -52,7 +52,84 @@ This file is used to track known bugs in the 5etools character sheet code.
   Total specialty coverage improved from 46% to 63% (118/187 specialties). Remaining 37% are mostly active abilities (tracked as usable features) or roleplay/utility features without stat impacts.)
 
 ### Overview 
-- [] states that require activation and then stay active (like rage, concentration, stance, etc) not tracked  or managed, and their effects not applied to rolls or stats.
+- [x] states that require activation and then stay active (like rage, concentration, stance, etc) not tracked or managed, and their effects not applied to rolls or stats.
+  **FIXED**: Implemented Active States system for tracking toggled states like Rage, Concentration, Wild Shape, Dodge, etc.
+  
+  **Data Structures** (charactersheet-state.js):
+  - Added `activeStates: []` array to track active state instances
+  - Added `concentrating: null` field to track current concentration
+  - Added static `ACTIVE_STATE_TYPES` defining state templates:
+    - Rage: advantage on STR checks/saves, resistance to B/P/S damage, +rage damage on melee STR attacks
+    - Concentration: tracks spell being concentrated on
+    - Wild Shape: placeholder for beast form transformation
+    - Defensive Stance: +2 AC, disadvantage on attacks
+    - Dodge: disadvantage on attacks against, advantage on DEX saves
+    - Prone: attack disadvantages and advantages against
+
+  **Management Methods**:
+  - `getActiveStates()`, `getActiveState(id)`, `isStateActive(typeId)`
+  - `addActiveState(typeId, options)`, `activateState(typeId, options)`, `deactivateState(typeId)`
+  - `toggleActiveState(stateId)`, `removeActiveState(stateId)`
+  - `getActiveStateEffects()` - returns all effects from active states
+  - `hasAdvantageFromStates(rollType)`, `hasDisadvantageFromStates(rollType)`
+  - `getBonusFromStates(target)`, `hasResistanceFromStates(damageType)`
+  - `getRageDamageBonus(isMelee, abilityUsed)` - rage damage on melee STR attacks
+  - `getConcentration()`, `setConcentration(spellName, level)`, `breakConcentration()`, `isConcentrating()`
+  - `clearStatesOnRest(restType)` - clears states on short/long rest
+
+  **Integration with Rolls** (charactersheet.js):
+  - `_rollAbilityCheck()` - applies advantage from states (e.g., Rage on STR checks)
+  - `_rollSavingThrow()` - applies advantage from states (e.g., Rage on STR saves, Dodge on DEX saves)
+  - `_rollAttack()` - applies advantage/disadvantage, adds rage damage bonus to melee STR attacks
+  - `getAc()` - adds bonus from states (e.g., Defensive Stance +2 AC)
+
+  **UI**:
+  - Added "Active States" section in charactersheet.html after Resources
+  - `_renderActiveStates()` displays active states with toggle/remove buttons
+  - Quick activation buttons for Rage and Dodge
+  - Rage button automatically spends Rage resource when activating
+  - States clear automatically on rest
+
+  **Condition Effects Integration**:
+  - Added static `CONDITION_EFFECTS` defining all standard 5e conditions with their mechanical effects:
+    - Blinded: disadvantage on attacks, advantage against, auto-fail sight checks
+    - Charmed: roleplay notes
+    - Deafened: auto-fail hearing checks
+    - Frightened: disadvantage on attacks and checks (while source visible)
+    - Grappled: speed set to 0
+    - Incapacitated: no actions/reactions
+    - Invisible: advantage on attacks, disadvantage against
+    - Paralyzed: incapacitated, auto-fail STR/DEX saves, advantage against, crits
+    - Petrified: incapacitated, resistance to all damage, immune to poison
+    - Poisoned: disadvantage on attacks and ability checks
+    - Prone: disadvantage on attacks, melee against has advantage, ranged has disadvantage
+    - Restrained: speed 0, disadvantage on attacks/DEX saves, advantage against
+    - Stunned: incapacitated, auto-fail STR/DEX saves, advantage against
+    - Unconscious: incapacitated, auto-fail saves, advantage against, crits
+    - Slowed (2024): speed halved, -2 AC/DEX saves
+  - Added `registerCustomCondition()` for homebrew conditions
+  - When conditions are added, they automatically create active state entries
+  - Conditions now show icons and tooltips with effect descriptions
+  - `hasAdvantageFromStates()` and `hasDisadvantageFromStates()` now handle generic "check" and "save" targets
+  - Added `hasAutoFailFromConditions()`, `isIncapacitated()`, `getSpeedMultiplierFromConditions()`
+
+  **Homebrew Condition Parsing**:
+  - Added `parseConditionFromEntries()` static method that parses condition text to extract mechanical effects
+  - Added `registerHomebrewConditions()` static method to register an array of homebrew conditions
+  - Added `_flattenEntriesToText()` to convert nested 5etools entry structures to plain text
+  - Added `_getConditionIcon()` to auto-assign appropriate icons based on condition names
+  - Updated `_mergeBrewData()` in charactersheet.js to automatically parse and register homebrew conditions
+  - Supports extracting these effect types from condition text:
+    - Speed modifications: "Speed 0", "speed is 0", "halved speed", "spend 1 extra foot"
+    - Attack advantage/disadvantage: "advantage on attack rolls", "your attack rolls have disadvantage"
+    - Attacks against: "attack rolls against you have advantage/disadvantage"
+    - Saving throw disadvantage: for all saves or specific abilities (DEX/STR/CON/INT/WIS/CHA)
+    - Auto-fail saves: "automatically fail Strength Saving Throw"
+    - Ability check failures: "automatically fails any ability check that requires sight"
+    - Incapacitated detection: "can't take actions or reactions"
+    - Resistance: "resistance to all damage"
+    - Notes: movement restrictions, concentration broken, limited activity, speechless
+  - TGTT homebrew conditions now auto-register with effects: Dazed, Choked, Slowed, Hidden, Undetected, modified Grappled/Restrained/Petrified/Stunned
 
 ### Combat
 - [] unarmed strikes not added automatically as attacks, specially for monks
