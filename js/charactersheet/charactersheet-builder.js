@@ -133,6 +133,31 @@ class CharacterSheetBuilder {
 				if (entry.entries) {
 					searchEntries(entry.entries);
 				}
+				
+				// Check for features that reference another feature's options via {@classFeature ...}
+				if (typeof entry === "string") {
+					const refMatch = entry.match(/\{@classFeature\s+([^}]+)\}/);
+					if (refMatch && /another|additional|gain/i.test(entry)) {
+						const refParts = refMatch[1].split("|");
+						const refFeatureName = refParts[0];
+						const refClassName = refParts[1];
+						const refSource = refParts[2];
+						const refLevel = parseInt(refParts[3]) || 1;
+						
+						const referencedFeature = this._getClassFeatureData(refFeatureName, refClassName, refSource, refLevel);
+						if (referencedFeature) {
+							const refResults = this._findFeatureOptions(referencedFeature, characterLevel);
+							for (const refResult of refResults) {
+								results.push({
+									count: 1,
+									options: refResult.options,
+									featureName: feature.name,
+									referencedFrom: refMatch[1],
+								});
+							}
+						}
+					}
+				}
 			}
 		};
 		
