@@ -996,6 +996,393 @@ class FeatureModifierParser {
 		}
 
 		// ===================
+		// CARRYING CAPACITY DOUBLED
+		// ===================
+		// "Your carrying capacity is doubled"
+		if (/carrying\s+capacity\s+is\s+doubled/gi.test(plainText)) {
+			modifiers.push({
+				type: "carryCapacity",
+				value: 2,
+				note: sourceName,
+				multiplier: true,
+			});
+		}
+
+		// ===================
+		// JUMP DISTANCE DOUBLED
+		// ===================
+		// "your jump distance is doubled"
+		if (/jump\s+distance\s+(?:is\s+)?doubled/gi.test(plainText)) {
+			modifiers.push({
+				type: "movement:jumpDistance",
+				value: 2,
+				note: sourceName,
+				multiplier: true,
+				conditional: this._extractCondition(plainText, 0),
+			});
+		}
+
+		// ===================
+		// TRAVEL PACE BONUSES
+		// ===================
+		// "travel 1 mile per hour faster" / "travel pace is increased by X feet per hour"
+		const travelMatch = plainText.match(/travel\s+(\d+)\s*(?:mile|feet|ft)s?\s+(?:per\s+hour\s+)?faster/gi);
+		if (travelMatch) {
+			const milesMatch = plainText.match(/travel\s+(\d+)\s*miles?\s+(?:per\s+hour\s+)?faster/i);
+			if (milesMatch) {
+				modifiers.push({
+					type: "travel:paceBonus",
+					value: parseInt(milesMatch[1]),
+					note: sourceName,
+					unit: "miles",
+				});
+			}
+		}
+		// "travel pace is increased by X feet per hour"
+		const paceMatch = plainText.match(/travel\s+pace\s+is\s+increased\s+by\s+(\d+)\s*(?:feet|ft)/i);
+		if (paceMatch) {
+			modifiers.push({
+				type: "travel:paceBonus",
+				value: parseInt(paceMatch[1]),
+				note: sourceName,
+				unit: "feet",
+			});
+		}
+
+		// ===================
+		// NO TRAVEL PENALTIES
+		// ===================
+		// "don't take the -5 penalty to your passive Perception score" when traveling at fast pace
+		if (/travel\s+at\s+a\s+fast\s+pace.*don.?t\s+take\s+the\s+-?\d+\s+penalty/gi.test(plainText) ||
+			/don.?t\s+take\s+the\s+-?\d+\s+penalty.*fast\s+pace/gi.test(plainText)) {
+			modifiers.push({
+				type: "travel:fastPace",
+				value: 0,
+				note: sourceName,
+				removesPenalty: true,
+			});
+		}
+
+		// ===================
+		// USE DIFFERENT ABILITY MODIFIER
+		// ===================
+		// "use your Dexterity modifier instead of your Strength modifier for Athletics checks"
+		// "use your Strength modifier instead of your Dexterity modifier for Acrobatics checks"
+		const abilitySwapPatterns = [
+			// For skill checks
+			{pattern: /use\s+(?:your\s+)?(\w+)\s+modifier\s+instead\s+of\s+(?:your\s+)?(\w+)\s+(?:modifier\s+)?for\s+(?:the\s+)?(?:\w+\s*\((?:{@skill\s*)?)?(\w+)/gi},
+			// For ability checks
+			{pattern: /use\s+(?:your\s+)?(\w+)\s+modifier\s+instead\s+of\s+(?:your\s+)?(\w+)\s+(?:modifier\s+)?for\s+(\w+)\s+(?:ability\s+)?checks/gi},
+		];
+		abilitySwapPatterns.forEach(({pattern}) => {
+			let match;
+			while ((match = pattern.exec(plainText)) !== null) {
+				const newAbility = match[1].toLowerCase().substring(0, 3);
+				const oldAbility = match[2].toLowerCase().substring(0, 3);
+				const skillOrCheck = match[3].toLowerCase().replace(/}?\)?$/, "");
+				modifiers.push({
+					type: `abilitySwap:${skillOrCheck}`,
+					value: 0,
+					note: sourceName,
+					newAbility,
+					oldAbility,
+				});
+			}
+		});
+
+		// ===================
+		// ADD ABILITY MODIFIER TO CHECKS/SAVES/DAMAGE
+		// ===================
+		// "Add your Wisdom modifier to any saving throw against being charmed"
+		// "add your Wisdom modifier to Perception checks"
+		// "You add your Wisdom modifier to the damage you deal with any cleric cantrip"
+		const addModPatterns = [
+			// Add modifier to saving throw
+			{pattern: /add\s+(?:your\s+)?(\w+)\s+modifier\s+to\s+(?:any\s+)?(?:saving\s+throws?)(?:\s+against\s+([^.]+))?/gi, type: "save"},
+			// Add modifier to skill/ability checks
+			{pattern: /add\s+(?:your\s+)?(\w+)\s+modifier\s+to\s+(?:\w+\s*\((?:{@skill\s*)?)?(\w+)(?:\}?\))?\s*checks?/gi, type: "check"},
+			// Add modifier to damage with cantrips
+			{pattern: /add\s+(?:your\s+)?(\w+)\s+modifier\s+to\s+the\s+damage\s+(?:you\s+deal\s+)?(?:with\s+)?(?:any\s+)?(?:\w+\s+)?cantrips?/gi, type: "cantripDamage"},
+		];
+		addModPatterns.forEach(({pattern, type}) => {
+			let match;
+			while ((match = pattern.exec(plainText)) !== null) {
+				const ability = match[1].toLowerCase().substring(0, 3);
+				const target = match[2] ? match[2].toLowerCase().replace(/}?\)?$/, "") : null;
+				modifiers.push({
+					type: type === "save" ? "save:all" : type === "cantripDamage" ? "damage:cantrip" : `skill:${target}`,
+					value: 0,
+					note: sourceName,
+					addAbilityMod: ability,
+					conditional: type === "save" && target ? `against ${target}` : undefined,
+				});
+			}
+		});
+
+		// ===================
+		// SEE NORMALLY IN DARKNESS (SUPERIOR DARKVISION)
+		// ===================
+		// "You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet"
+		const devilSightMatch = plainText.match(/see\s+normally\s+in\s+darkness,?\s+(?:both\s+)?magical\s+and\s+nonmagical,?\s+to\s+a\s+distance\s+of\s+(\d+)\s*(?:feet|ft)/i);
+		if (devilSightMatch) {
+			modifiers.push({
+				type: "sense:devilSight",
+				value: parseInt(devilSightMatch[1]),
+				note: sourceName,
+				seesInMagicalDarkness: true,
+			});
+		}
+
+		// ===================
+		// ADD DICE TO SKILL CHECKS
+		// ===================
+		// "add a d10 to your Dexterity (Acrobatics) checks"
+		// "add a {@dice d10} to your Dexterity ({@skill Acrobatics}) checks"
+		const diceSkillPattern = /add\s+(?:a\s+)?(?:(?:roll\s+of\s+)?(?:your\s+)?)?(?:{@dice\s*)?d(\d+)\}?\s+to\s+(?:your\s+)?(?:\w+\s*\((?:{@skill\s*)?)?(\w+)(?:\}?\))?\s*checks?/gi;
+		let diceMatch;
+		while ((diceMatch = diceSkillPattern.exec(plainText)) !== null) {
+			const dieSize = parseInt(diceMatch[1]);
+			const skill = diceMatch[2].toLowerCase().replace(/}?\)?$/, "");
+			modifiers.push({
+				type: `skill:${skill}`,
+				value: 0,
+				note: sourceName,
+				bonusDie: `d${dieSize}`,
+			});
+		}
+
+		// ===================
+		// ADD DICE TO TOOL CHECKS
+		// ===================
+		// "add a d10 to checks made with thieves' tools"
+		const diceToolPattern = /add\s+(?:a\s+)?(?:{@dice\s*)?d(\d+)\}?\s+to\s+checks?\s+(?:made\s+)?with\s+(?:the\s+)?([^.]+?)(?:\s+tools?)?(?:\.|,|$)/gi;
+		let diceToolMatch;
+		while ((diceToolMatch = diceToolPattern.exec(plainText)) !== null) {
+			const dieSize = parseInt(diceToolMatch[1]);
+			const tool = diceToolMatch[2].toLowerCase().trim().replace(/'/g, "").replace(/\s+/g, "");
+			modifiers.push({
+				type: `tool:${tool}`,
+				value: 0,
+				note: sourceName,
+				bonusDie: `d${dieSize}`,
+			});
+		}
+
+		// ===================
+		// JUMP DISTANCE INCREASES
+		// ===================
+		// "jump distance increases by 15 feet vertically"
+		// "Your jump distance increases by X feet"
+		const jumpPatterns = [
+			{pattern: /(?:your\s+)?(?:vertical\s+)?jump\s+distance\s+(?:increases?|is\s+increased)\s+by\s+(\d+)\s*(?:feet|ft)/gi, type: "vertical"},
+			{pattern: /(?:your\s+)?(?:horizontal\s+)?(?:long\s+)?jump\s+distance\s+(?:increases?|is\s+increased)\s+by\s+(\d+)\s*(?:feet|ft)/gi, type: "horizontal"},
+			{pattern: /jump\s+distance\s+increases?\s+by\s+(\d+)\s*(?:feet|ft)\s+vertically/gi, type: "vertical"},
+			{pattern: /jump\s+distance\s+increases?\s+by\s+(\d+)\s*(?:feet|ft)\s+horizontally/gi, type: "horizontal"},
+			// "Your jump distance increases by 15 feet vertically, and 30 feet horizontally" - handled by both patterns
+		];
+		jumpPatterns.forEach(({pattern, type}) => {
+			let match;
+			while ((match = pattern.exec(plainText)) !== null) {
+				modifiers.push({
+					type: type === "vertical" ? "movement:jumpVertical" : "movement:jumpHorizontal",
+					value: parseInt(match[1]),
+					note: sourceName,
+				});
+			}
+		});
+
+		// ===================
+		// EXHAUSTION IMMUNITY/REDUCTION
+		// ===================
+		// "You ignore the first level of exhaustion you would gain each day"
+		if (/ignore\s+(?:the\s+)?(?:first\s+)?(?:level\s+of\s+)?exhaustion/gi.test(plainText)) {
+			modifiers.push({
+				type: "exhaustion:immunity",
+				value: 1, // ignores 1 level
+				note: sourceName,
+			});
+		}
+
+		// ===================
+		// EXPERTISE DIE
+		// ===================
+		// "gain an expertise die on Deception checks"
+		const expertiseDiePattern = /(?:gain|have)\s+(?:an?\s+)?expertise\s+die\s+on\s+(?:\w+\s*\((?:{@skill\s*)?)?(\w+)(?:\}?\))?\s*(?:checks?)?/gi;
+		let expertiseDieMatch;
+		while ((expertiseDieMatch = expertiseDiePattern.exec(plainText)) !== null) {
+			const skill = expertiseDieMatch[1].toLowerCase().replace(/}?\)?$/, "");
+			modifiers.push({
+				type: `skill:${skill}`,
+				value: 0,
+				note: sourceName,
+				expertiseDie: true,
+			});
+		}
+
+		// ===================
+		// FLAT TRACKING BONUS
+		// ===================
+		// "gain a +10 bonus to subsequent checks to track that creature"
+		const trackingBonusMatch = plainText.match(/(?:gain|have)\s+(?:a\s+)?([+\-−])?(\d+)\s+bonus\s+to\s+(?:subsequent\s+)?checks?\s+to\s+track/i);
+		if (trackingBonusMatch) {
+			const sign = trackingBonusMatch[1];
+			const value = parseInt(trackingBonusMatch[2]);
+			modifiers.push({
+				type: "skill:survival",
+				value: (sign === "-" || sign === "−") ? -value : value,
+				note: sourceName,
+				conditional: "when tracking a creature you've found",
+			});
+		}
+
+		// ===================
+		// EXTRA CANTRIPS KNOWN
+		// ===================
+		// "You know one extra cantrip from the Cleric spell list"
+		if (/(?:you\s+)?(?:learn|know)\s+(?:one|an?|\d+)\s+(?:extra|additional)\s+cantrips?\s+from/gi.test(plainText)) {
+			const countMatch = plainText.match(/(?:learn|know)\s+(one|an?|\d+)\s+(?:extra|additional)\s+cantrips?/i);
+			let count = 1;
+			if (countMatch) {
+				if (/^\d+$/.test(countMatch[1])) count = parseInt(countMatch[1]);
+				else if (countMatch[1].toLowerCase() === "two") count = 2;
+			}
+			modifiers.push({
+				type: "spellsKnown:cantrips",
+				value: count,
+				note: sourceName,
+			});
+		}
+
+		// ===================
+		// ADVANTAGE ON INITIATIVE
+		// ===================
+		// "You have advantage on initiative rolls"
+		if (/advantage\s+on\s+initiative\s*(?:rolls?)?/gi.test(plainText)) {
+			modifiers.push({
+				type: "initiative",
+				value: 0,
+				note: sourceName,
+				advantage: true,
+			});
+		}
+
+		// ===================
+		// ADD MARTIAL ARTS DIE TO CHECKS
+		// ===================
+		// "add a roll of your Martial Arts die to the check"
+		const martialArtsCheckPattern = /add\s+(?:a\s+)?(?:roll\s+of\s+)?(?:your\s+)?(?:martial\s+arts?\s+die|martial\s+die)\s+to\s+(?:the\s+)?(?:(\w+)\s*\((?:{@skill\s*)?)?(\w+)?(?:\}?\))?\s*checks?/gi;
+		let martialMatch;
+		while ((martialMatch = martialArtsCheckPattern.exec(plainText)) !== null) {
+			const skill = (martialMatch[2] || martialMatch[1] || "").toLowerCase().replace(/}?\)?$/, "");
+			if (skill) {
+				modifiers.push({
+					type: `skill:${skill}`,
+					value: 0,
+					note: sourceName,
+					bonusDie: "martial",
+				});
+			}
+		}
+
+		// ===================
+		// GAIN X RESOURCE POINTS
+		// ===================
+		// "You gain an additional 2 exertion points"
+		const resourcePatterns = [
+			{pattern: /(?:you\s+)?gain\s+(?:an?\s+)?(?:additional|extra)\s+(\d+)\s+(exertion|focus|ki|sorcery)\s+points?/gi, resource: true},
+			{pattern: /(?:additional|extra)\s+(\d+)\s+(exertion|focus|ki|sorcery)\s+points?/gi, resource: true},
+		];
+		resourcePatterns.forEach(({pattern}) => {
+			let match;
+			while ((match = pattern.exec(plainText)) !== null) {
+				const count = parseInt(match[1]);
+				const resourceType = match[2].toLowerCase();
+				modifiers.push({
+					type: `resource:${resourceType}`,
+					value: count,
+					note: sourceName,
+				});
+			}
+		});
+
+		// ===================
+		// GAIN FOCUS/RESOURCE ON INITIATIVE
+		// ===================
+		// "When you roll initiative, you gain 1 Focus Point"
+		const initResourceMatch = plainText.match(/when\s+you\s+roll\s+initiative,?\s+(?:you\s+)?gain\s+(\d+)\s+(focus|ki|exertion|sorcery)\s+points?/i);
+		if (initResourceMatch) {
+			modifiers.push({
+				type: `initiative:${initResourceMatch[2].toLowerCase()}`,
+				value: parseInt(initResourceMatch[1]),
+				note: sourceName,
+				onInitiative: true,
+			});
+		}
+
+		// ===================
+		// FORCED MARCH HOURS INCREASE
+		// ===================
+		// "Increase hours you can travel before forced-march saves by your proficiency bonus"
+		if (/(?:increase|adds?)\s+(?:the\s+)?(?:number\s+of\s+)?hours?\s+(?:you\s+can\s+)?travel.*(?:forced.?march|before\s+(?:forced|march))/gi.test(plainText)) {
+			modifiers.push({
+				type: "travel:forcedMarchHours",
+				value: 0,
+				note: sourceName,
+				proficiencyBonus: true,
+			});
+		}
+
+		// ===================
+		// CLIMB/WALL WALK SPEEDS (without ability check)
+		// ===================
+		// "You can move up, down, and across vertical surfaces at half your speed without an ability check"
+		// "move across vertical surfaces" without falling
+		if (/(?:move|climb)\s+(?:up,?\s+down,?\s+and\s+)?(?:across\s+)?vertical\s+surfaces?\s+(?:at\s+(?:half\s+)?your\s+speed\s+)?without\s+(?:an?\s+)?(?:ability\s+)?check/gi.test(plainText)) {
+			modifiers.push({
+				type: "speed:climbNoCheck",
+				value: 0,
+				note: sourceName,
+				noCheckRequired: true,
+			});
+		}
+
+		// ===================
+		// ADVANTAGE ON SPECIFIC SKILL CHECKS (Deception/Intimidation to imitate)
+		// ===================
+		// "You have advantage on Charisma (Deception) and Charisma (Intimidation) checks to imitate"
+		const specificAdvantagePatterns = [
+			{pattern: /advantage\s+on\s+charisma\s*\((?:{@skill\s*)?deception\}?\)\s*(?:and\s+charisma\s*\((?:{@skill\s*)?intimidation\}?\)\s*)?checks?\s+to\s+imitate/gi, skills: ["deception", "intimidation"], condition: "to imitate creatures"},
+			{pattern: /advantage\s+on\s+(?:\w+\s*\((?:{@skill\s*)?)?deception\}?\)\s*checks?\s+to\s+(?:lie|deceive|bluff)/gi, skills: ["deception"], condition: "when lying"},
+		];
+		specificAdvantagePatterns.forEach(({pattern, skills, condition}) => {
+			if (pattern.test(plainText)) {
+				skills.forEach(skill => {
+					modifiers.push({
+						type: `skill:${skill}`,
+						value: 0,
+						note: sourceName,
+						advantage: true,
+						conditional: condition,
+					});
+				});
+			}
+		});
+
+		// ===================
+		// DIFFICULT TERRAIN IN SPECIFIC ENVIRONMENTS
+		// ===================
+		// "Moving through difficult terrain in swamps, bogs, or mud costs you no extra movement"
+		if (/moving\s+through\s+(?:nonmagical\s+)?difficult\s+terrain\s+in\s+\w+[^.]+costs?\s+(?:you\s+)?no\s+extra\s+movement/gi.test(plainText)) {
+			modifiers.push({
+				type: "movement:difficultTerrain",
+				value: 0,
+				note: sourceName,
+				ignore: true,
+				conditional: "in specific terrain types",
+			});
+		}
+
+		// ===================
 		// NATURAL ARMOR / CUSTOM AC FORMULAS
 		// ===================
 		// "your AC equals 13 + your Dexterity modifier" (Lizardfolk, Tortle, etc.)
