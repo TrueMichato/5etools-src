@@ -83,6 +83,34 @@ class CharacterSheetLevelUp {
 					if (options.length > 0) {
 						results.push({count, options, featureName: feature.name});
 					}
+				} else if (typeof entry === "string") {
+					// Check for features that reference another feature's options
+					// Pattern: "{@classFeature FeatureName|ClassName|Source|Level}" in text like
+					// "You gain another specialty of your choice from the {@classFeature Specialties|Fighter|TGTT|1}."
+					const refMatch = entry.match(/\{@classFeature\s+([^}]+)\}/);
+					if (refMatch && /another|additional|gain/i.test(entry)) {
+						const refParts = refMatch[1].split("|");
+						const refFeatureName = refParts[0];
+						const refClassName = refParts[1];
+						const refSource = refParts[2];
+						const refLevel = parseInt(refParts[3]) || 1;
+						
+						// Look up the referenced feature
+						const referencedFeature = this._getClassFeatureByRef(refFeatureName, refClassName, refSource, refLevel);
+						if (referencedFeature) {
+							// Get options from the referenced feature
+							const refResults = this._findFeatureOptions(referencedFeature, characterLevel);
+							for (const refResult of refResults) {
+								// Use count of 1 for "gain another" features
+								results.push({
+									count: 1,
+									options: refResult.options,
+									featureName: feature.name,
+									referencedFrom: refMatch[1],
+								});
+							}
+						}
+					}
 				}
 				
 				// Recursively search nested entries
@@ -94,6 +122,25 @@ class CharacterSheetLevelUp {
 		
 		searchEntries(feature.entries);
 		return results;
+	}
+
+	/**
+	 * Look up a class feature by reference parts
+	 */
+	_getClassFeatureByRef (featureName, className, source, level) {
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length) return null;
+		
+		return classFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.level !== level) return false;
+			// Be flexible with source matching
+			if (source && f.source && f.source !== source) {
+				return false;
+			}
+			return true;
+		});
 	}
 
 	/**

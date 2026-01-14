@@ -12,9 +12,12 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] need to support toggling proficiency/expertise/half proficiency on skills manually (fixed: click on the proficiency dot next to any skill to cycle through none → proficient → expertise → none)
 - [x] need to support Thelemar exhaustion rules (-1 to all rolls and DCs per level, max 10 before death) (fixed: added "Thelemar Rules" option in exhaustion dropdown)
 - [x] need to support various features giving modifiers to rolls, damage, AC, stats, skills etc (e.g magic items, class features, racial features, etc) (fixed: FeatureModifierParser auto-detects modifiers from feature descriptions including: AC, saving throws, attack/damage rolls, spell DC/attack, initiative, skills, ability checks, ability scores, speed (all types), senses (darkvision/blindsight/etc), HP, carry capacity, proficiency bonus. Supports both +X and -X, "increases/decreases by X" phrasings. Conditional modifiers (while raging, against undead, etc) are added as toggleable named modifiers)
+- [] need to support custom background creation in builder
+- [] need to supoprt Tasha's ASI rules for races in builder
 - [] need to support custom AC formulas from features (like natural armor, unarmored defense, etc)
 - [] need to add more friendly UI for understanding the sheet functions (e.g tooltips, help buttons, rolling with adv/disadv, changing skill abilities or proficiency, etc)
 - [] need to improve UI greatly, currently very basic and not user friendly
+- [] need to allow for some color customization (e.g dark mode, custom background colors, etc)
 - [] need to support mobile devices better (bigger buttons, less clicks, altternative ways to do things that require hover or shift/ctrl keys)
 
 
@@ -26,6 +29,7 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] races that give proficiencies (like half-orc, etc) not adding proficiencies automatically and not giving choice UI. (fixed: Added _renderRacialProficiencyChoices() UI for skill/tool choices with checkboxes. Fixed proficiencies already worked, now choose options also work. Validates required choices before advancing step.)
 - [x] hover links for @subclassFeature tags showing "Failed to load references" error (fixed: Added _pPreCacheClassFeatures() to pre-cache classFeature and subclassFeature in DataLoader during page init, so hover links work properly)
 - [] Some race abilities (Charge, Aggressive, etc) not added correctly or not working as intended.
+- [] In Abilitied in builder - the placeholder 10 are returned to the score list.
 
 
 ### Features
@@ -33,7 +37,8 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] combat method feature (the meta feature that gives a class access to combat methods) looked at as resource (the resource is exertion) (fixed: Added _isResourceSystemFeature() check in addFeature() to skip use detection for meta-features that describe resource systems like Combat Methods, Ki, Sorcery Points, etc. These features mention "short rest" or "long rest" but that's for the resource pool, not the feature itself.)
 <!-- - [] SOme features that give additional combat traditions or methods (thelemar homebrew) not adding them correctly or not giving choice UI. -->
 - [x] some race features added as resources (like elf lineage) instead of just being applied (fixed: Enhanced _isResourceSystemFeature() to detect spell-granting racial features like "Elven Lineage", "Infernal Legacy", "Wind Caller", etc. These features describe spell uses, not their own uses. Actual usable abilities like "Healing Hands" or "Celestial Revelation" are correctly still tracked as resources.)
-- [] Specialties don't give their benefits many times (thelemar homebrew)
+- [x] Specialties don't give their benefits many times (thelemar homebrew) (fixed: Enhanced _findFeatureOptions() in both charactersheet-builder.js and charactersheet-levelup.js to detect {@classFeature} references in feature text. Higher-level Specialty features (5th, 9th, 13th, 17th level) reference the level 1 feature via text like "gain another specialty from the {@classFeature Specialties|Fighter|TGTT|1}". Now these references are followed and the options from the referenced feature are used.)
+- [x] Many specialty benefits (thelemar homebrew) not applied and don't affect rolls or stats, not reflected in overview. (fixed: Enhanced FeatureModifierParser to detect: 1) "swimming/climbing speed equal to walking speed" - creates equalToWalk modifier that dynamically matches walking speed, 2) "darkvision/tremorsense/blindsight with a range of X feet" pattern, 3) healer's kit and other tool proficiencies, 4) senses from class features now properly set values not just racial features, 5) improvised weapons proficiency, 6) combined "proficiency with martial weapons and heavy/medium armor" patterns, 7) advantage on saving throws with conditions (knocked prone, extreme heat/cold, drowning, charmed/frightened/poisoned), 8) advantage on ability checks with conditions (prone, secure structure, harvest plants), 9) advantage on specific skill checks like Wisdom (Survival), 10) bonus to skill checks equal to proficiency bonus with multiple pattern variations, 11) difficult terrain immunity patterns, 12) disadvantage removal patterns, 13) save proficiency from features with multi-ability support like "Intelligence and Wisdom saving throws")
 
 ### Overview 
 - [] states that require activation and then stay active (like rage, concentration, stance, etc) not tracked  or managed, and their effects not applied to rolls or stats.
@@ -56,6 +61,10 @@ This file is used to track known bugs in the 5etools character sheet code.
 
 ### General
 - [] rolls go from 0 to number of sides instead of 1 to number of sides (e.g d20 roll can be 0)
+
+### UI
+ - [] in specialties choices in builder it's not quite clear which box is for which feature. Spacing a bit off.
+
 
 ## Old Bugs
 
