@@ -471,7 +471,7 @@ class FeatureModifierParser {
 		});
 
 		// ===================
-		// ATTACK ROLLS
+		// ATTACK ROLLS (includes "to hit" phrasing common in D&D)
 		// ===================
 		const attackPatterns = [
 			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*(?:weapon\s*)?attack\s*rolls?/gi, signed: true},
@@ -479,6 +479,10 @@ class FeatureModifierParser {
 			{pattern: /attack\s*rolls?\s*(?:decrease|penalty|are\s*reduced)\s*by\s*(\d+)/gi, negative: true},
 			{pattern: /(?:bonus|penalty)\s*of\s*([+\-−])?(\d+)\s*to\s*(?:weapon\s*)?attack\s*rolls?/gi, signed: true, defaultPositive: true},
 			{pattern: /gain(?:s)?\s*(?:a\s*)?([+\-−])?(\d+)\s*(?:bonus\s*)?to\s*(?:weapon\s*)?attack\s*rolls?/gi, signed: true, defaultPositive: true},
+			// "to hit" patterns (common D&D phrasing)
+			{pattern: /([+\-−])(\d+)\s*(?:bonus\s*)?to\s*hit/gi, signed: true},
+			{pattern: /(?:bonus|penalty)\s*of\s*([+\-−])?(\d+)\s*to\s*hit/gi, signed: true, defaultPositive: true},
+			{pattern: /gain(?:s)?\s*(?:a\s*)?([+\-−])?(\d+)\s*(?:bonus\s*)?to\s*hit/gi, signed: true, defaultPositive: true},
 		];
 		this._applyPatterns(plainText, attackPatterns, "attack", sourceName, modifiers, parseSignedValue);
 
@@ -1790,6 +1794,13 @@ class CharacterSheetState {
 			//       "ability:str", "hp", "sense:darkvision", "carryCapacity", "proficiencyBonus"
 			namedModifiers: [],
 
+			// Active states (e.g., Rage, Concentration, Wild Shape, etc.)
+			// Each state: {id, name, active, sourceFeatureId, resourceId?, effects: [{type, value, ...}], duration?, icon?}
+			activeStates: [],
+
+			// Concentration tracking
+			concentrating: null, // {spellName, spellLevel, startTime?} or null
+
 			// Sheet settings/options
 			settings: {
 				exhaustionRules: "2024", // "2024" or "2014"
@@ -1841,6 +1852,11 @@ class CharacterSheetState {
 		// Ensure acFormulas array exists
 		if (!Array.isArray(this._data.acFormulas)) {
 			this._data.acFormulas = [];
+		}
+
+		// Ensure activeStates array exists
+		if (!Array.isArray(this._data.activeStates)) {
+			this._data.activeStates = [];
 		}
 
 		// Migrate features: infer featureType for old saves that don't have it
@@ -2514,6 +2530,9 @@ class CharacterSheetState {
 
 		// Custom bonuses
 		ac += this._data.customModifiers.ac || 0;
+
+		// Active state bonuses (e.g., Defensive Stance)
+		ac += this.getBonusFromStates("ac");
 
 		// Other bonuses
 		this._data.ac.bonuses.forEach(bonus => {
@@ -3293,7 +3312,7 @@ class CharacterSheetState {
 				case "Barbarian": {
 					// Rage damage bonus
 					const rageDamage = level >= 16 ? 4 : level >= 9 ? 3 : 2;
-					calculations.rageDamage = `+${rageDamage}`;
+					calculations.rageDamage = rageDamage;
 					// Brutal Critical dice (levels 9, 13, 17)
 					const brutalDice = level >= 17 ? 3 : level >= 13 ? 2 : level >= 9 ? 1 : 0;
 					if (brutalDice > 0) {
@@ -3584,23 +3603,153 @@ class CharacterSheetState {
 	// #region Conditions
 	getConditions () { return [...this._data.conditions]; }
 
+	/**
+	 * Add a condition and apply its effects
+	 * @param {string} condition - The condition name
+	 */
 	addCondition (condition) {
 		if (!this._data.conditions.includes(condition)) {
 			this._data.conditions.push(condition);
+			this._applyConditionEffects(condition);
 		}
 	}
 
+	/**
+	 * Remove a condition and its effects
+	 * @param {string} condition - The condition name
+	 */
 	removeCondition (condition) {
 		this._data.conditions = this._data.conditions.filter(c => c !== condition);
+		this._removeConditionEffects(condition);
 	}
 
 	clearConditions () {
+		// Remove all condition effects first
+		for (const condition of this._data.conditions) {
+			this._removeConditionEffects(condition);
+		}
 		this._data.conditions = [];
 	}
 
 	setConditions (conditions) {
+		// Remove old condition effects
+		for (const condition of this._data.conditions) {
+			if (!conditions.includes(condition)) {
+				this._removeConditionEffects(condition);
+			}
+		}
+		// Add new condition effects
+		for (const condition of conditions) {
+			if (!this._data.conditions.includes(condition)) {
+				this._applyConditionEffects(condition);
+			}
+		}
 		this._data.conditions = [...conditions];
 	}
+
+	/**
+	 * Check if character has a specific condition
+	 * @param {string} condition - The condition name
+	 * @returns {boolean}
+	 */
+	hasCondition (condition) {
+		const condKey = condition.toLowerCase();
+		return this._data.conditions.some(c => c.toLowerCase() === condKey);
+	}
+
+	/**
+	 * Apply effects for a condition by creating an active state
+	 * @param {string} condition - The condition name
+	 */
+	_applyConditionEffects (condition) {
+		const condDef = CharacterSheetState.getConditionEffects(condition);
+		if (!condDef) {
+			// Unknown condition - just track it without effects
+			console.log(`Unknown condition "${condition}" - no effects defined`);
+			return;
+		}
+
+		// Create an active state for this condition
+		const condKey = `condition_${condition.toLowerCase().replace(/\s+/g, "_")}`;
+		
+		// Add to active states with the condition's effects
+		const state = {
+			id: `${condKey}_${Date.now()}`,
+			stateTypeId: condKey,
+			name: condDef.name || condition,
+			icon: condDef.icon || "❓",
+			active: true,
+			activatedAt: Date.now(),
+			isCondition: true, // Mark as condition-derived state
+			conditionName: condition,
+			customEffects: condDef.effects,
+		};
+
+		this._data.activeStates.push(state);
+	}
+
+	/**
+	 * Remove effects for a condition by deactivating its active state
+	 * @param {string} condition - The condition name
+	 */
+	_removeConditionEffects (condition) {
+		// Find and remove the active state for this condition
+		const condKey = condition.toLowerCase().replace(/\s+/g, "_");
+		const stateIndex = this._data.activeStates.findIndex(
+			s => s.isCondition && s.conditionName?.toLowerCase().replace(/\s+/g, "_") === condKey
+		);
+		if (stateIndex !== -1) {
+			this._data.activeStates.splice(stateIndex, 1);
+		}
+	}
+
+	/**
+	 * Get all condition-based active states
+	 * @returns {Array} Array of condition states
+	 */
+	getConditionStates () {
+		return this._data.activeStates.filter(s => s.isCondition);
+	}
+
+	/**
+	 * Check if character has a condition effect that auto-fails a check type
+	 * @param {string} checkType - The check type (e.g., "save:str", "check:sight")
+	 * @returns {boolean}
+	 */
+	hasAutoFailFromConditions (checkType) {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => e.type === "autoFail" && e.target === checkType);
+	}
+
+	/**
+	 * Check if character is incapacitated from conditions
+	 * @returns {boolean}
+	 */
+	isIncapacitated () {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => e.type === "incapacitated" && e.value);
+	}
+
+	/**
+	 * Get speed modifier from conditions (0 if speed is set to 0, otherwise 1)
+	 * @returns {number} Speed multiplier (0 or 1, or fractional for slowed)
+	 */
+	getSpeedMultiplierFromConditions () {
+		const effects = this.getActiveStateEffects();
+		
+		// Check if speed is set to 0 by any condition
+		const speedZero = effects.some(e => e.type === "setSpeed" && e.value === 0);
+		if (speedZero) return 0;
+		
+		// Check for speed multiplier effects (like Slowed)
+		let multiplier = 1;
+		effects.filter(e => e.type === "speedMultiplier").forEach(e => {
+			multiplier *= e.value;
+		});
+		
+		return multiplier;
+	}
+
 	// #endregion
 
 	// #region Exhaustion
@@ -3928,9 +4077,14 @@ class CharacterSheetState {
 	 * @param {string} featureId - ID of the feature in state
 	 */
 	_processFeatureModifiers (feature, featureId) {
-		if (!feature.description) return;
+		if (!feature.description) {
+			console.log(`[CharSheet State] Feature "${feature.name}" has no description, skipping modifier parsing`);
+			return;
+		}
 
+		console.log(`[CharSheet State] Parsing modifiers for "${feature.name}", description length: ${feature.description.length}`);
 		const modifiers = FeatureModifierParser.parseModifiers(feature.description, feature.name);
+		console.log(`[CharSheet State] Found ${modifiers.length} modifiers for "${feature.name}":`, modifiers.map(m => m.type).join(", "));
 		if (!modifiers.length) return;
 
 		// Determine feature type for special handling
@@ -4823,8 +4977,953 @@ class CharacterSheetState {
 	}
 	// #endregion
 
+	// #region Active States (Rage, Concentration, Wild Shape, etc.)
+
+	/**
+	 * State type definitions with their effects
+	 * Each state defines what effects it provides when active
+	 */
+	static ACTIVE_STATE_TYPES = {
+		rage: {
+			id: "rage",
+			name: "Rage",
+			icon: "💢",
+			description: "Advantage on Strength checks/saves, resistance to B/P/S damage, +rage damage bonus",
+			effects: [
+				{type: "advantage", target: "check:str"},
+				{type: "advantage", target: "save:str"},
+				{type: "resistance", target: "damage:bludgeoning"},
+				{type: "resistance", target: "damage:piercing"},
+				{type: "resistance", target: "damage:slashing"},
+				{type: "rageDamage", target: "melee:str"}, // Uses calculated rage damage
+			],
+			duration: "1 minute",
+			endConditions: ["No attack or damage taken for 1 turn", "Knocked unconscious", "Ended as bonus action"],
+			resourceId: null, // Will be linked to the Rage resource
+		},
+		concentration: {
+			id: "concentration",
+			name: "Concentrating",
+			icon: "🔮",
+			description: "Concentrating on a spell",
+			effects: [],
+			duration: "Spell duration",
+			endConditions: ["Cast another concentration spell", "Take damage (CON save)", "Incapacitated", "Killed"],
+		},
+		wildShape: {
+			id: "wildShape",
+			name: "Wild Shape",
+			icon: "🐺",
+			description: "Transformed into a beast form",
+			effects: [
+				{type: "replaceStats", targets: ["str", "dex", "con"]}, // Beast's physical stats
+				{type: "replaceHp", target: "tempHp"}, // Beast's HP as temp HP
+				{type: "replaceAc", target: "naturalArmor"}, // Beast's AC
+			],
+			duration: "Hours based on druid level",
+			endConditions: ["Drop to 0 HP", "Ended as bonus action", "Duration expires"],
+			resourceId: null, // Will be linked to Wild Shape resource
+		},
+		defensiveStance: {
+			id: "defensiveStance",
+			name: "Defensive Stance",
+			icon: "🛡️",
+			description: "Fighting defensively for improved AC",
+			effects: [
+				{type: "bonus", target: "ac", value: 2},
+				{type: "disadvantage", target: "attack"},
+			],
+			duration: "Until end of turn",
+		},
+		dodge: {
+			id: "dodge",
+			name: "Dodging",
+			icon: "💨",
+			description: "Taking the Dodge action",
+			effects: [
+				{type: "disadvantage", target: "attacksAgainst"}, // Attacks against you have disadvantage
+				{type: "advantage", target: "save:dex"},
+			],
+			duration: "Until start of next turn",
+		},
+		prone: {
+			id: "prone",
+			name: "Prone",
+			icon: "⬇️",
+			description: "You are lying on the ground",
+			effects: [
+				{type: "disadvantage", target: "attack"},
+				{type: "advantage", target: "meleeAttacksAgainst"}, // Melee attacks against you have advantage
+				{type: "disadvantage", target: "rangedAttacksAgainst"}, // Ranged attacks against you have disadvantage
+			],
+			duration: "Until you stand up",
+		},
+	};
+
+	/**
+	 * Standard D&D 5e condition definitions with their mechanical effects
+	 * These are automatically applied when a condition is added to the character
+	 */
+	static CONDITION_EFFECTS = {
+		blinded: {
+			name: "Blinded",
+			icon: "👁️‍🗨️",
+			description: "Can't see, auto-fail sight checks, attacks have disadvantage, attacks against have advantage",
+			effects: [
+				{type: "disadvantage", target: "attack"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "autoFail", target: "check:sight"}, // Auto-fail any check requiring sight
+			],
+		},
+		charmed: {
+			name: "Charmed",
+			icon: "💕",
+			description: "Can't attack the charmer, charmer has advantage on social checks",
+			effects: [
+				// Charmed is mostly roleplay/situational, limited mechanical effects trackable here
+				{type: "note", value: "Cannot attack or target charmer with harmful effects"},
+			],
+		},
+		deafened: {
+			name: "Deafened",
+			icon: "🔇",
+			description: "Can't hear, auto-fail hearing checks",
+			effects: [
+				{type: "autoFail", target: "check:hearing"},
+			],
+		},
+		frightened: {
+			name: "Frightened",
+			icon: "😨",
+			description: "Disadvantage on ability checks and attacks while source of fear is in sight",
+			effects: [
+				{type: "disadvantage", target: "attack", condition: "while source visible"},
+				{type: "disadvantage", target: "check", condition: "while source visible"},
+				{type: "note", value: "Can't willingly move closer to source of fear"},
+			],
+		},
+		grappled: {
+			name: "Grappled",
+			icon: "🤜",
+			description: "Speed becomes 0, can't benefit from speed bonuses",
+			effects: [
+				{type: "setSpeed", target: "all", value: 0},
+			],
+		},
+		incapacitated: {
+			name: "Incapacitated",
+			icon: "💫",
+			description: "Can't take actions or reactions",
+			effects: [
+				{type: "note", value: "Cannot take actions or reactions"},
+			],
+		},
+		invisible: {
+			name: "Invisible",
+			icon: "👻",
+			description: "Attacks have advantage, attacks against have disadvantage",
+			effects: [
+				{type: "advantage", target: "attack"},
+				{type: "disadvantage", target: "attacksAgainst"},
+			],
+		},
+		paralyzed: {
+			name: "Paralyzed",
+			icon: "⚡",
+			description: "Incapacitated, can't move or speak, auto-fail STR/DEX saves, attacks against have advantage, crits within 5ft",
+			effects: [
+				{type: "incapacitated", value: true},
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "autoFail", target: "save:str"},
+				{type: "autoFail", target: "save:dex"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "note", value: "Hits within 5 feet are critical hits"},
+			],
+		},
+		petrified: {
+			name: "Petrified",
+			icon: "🪨",
+			description: "Transformed to stone, incapacitated, unaware, resistance to all damage, immune to poison/disease",
+			effects: [
+				{type: "incapacitated", value: true},
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "autoFail", target: "save:str"},
+				{type: "autoFail", target: "save:dex"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "resistance", target: "damage:all"},
+				{type: "immunity", target: "damage:poison"},
+				{type: "note", value: "Immune to poison and disease, unaware of surroundings"},
+			],
+		},
+		poisoned: {
+			name: "Poisoned",
+			icon: "🤢",
+			description: "Disadvantage on attack rolls and ability checks",
+			effects: [
+				{type: "disadvantage", target: "attack"},
+				{type: "disadvantage", target: "check"},
+			],
+		},
+		prone: {
+			name: "Prone",
+			icon: "⬇️",
+			description: "Disadvantage on attacks, melee attacks against have advantage, ranged attacks against have disadvantage",
+			effects: [
+				{type: "disadvantage", target: "attack"},
+				{type: "advantage", target: "meleeAttacksAgainst"},
+				{type: "disadvantage", target: "rangedAttacksAgainst"},
+				{type: "note", value: "Crawling costs extra movement, standing up costs half speed"},
+			],
+		},
+		restrained: {
+			name: "Restrained",
+			icon: "🔗",
+			description: "Speed 0, attacks have disadvantage, attacks against have advantage, disadvantage on DEX saves",
+			effects: [
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "disadvantage", target: "attack"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "disadvantage", target: "save:dex"},
+			],
+		},
+		stunned: {
+			name: "Stunned",
+			icon: "💥",
+			description: "Incapacitated, can't move, can speak only falteringly, auto-fail STR/DEX saves, attacks against have advantage",
+			effects: [
+				{type: "incapacitated", value: true},
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "autoFail", target: "save:str"},
+				{type: "autoFail", target: "save:dex"},
+				{type: "advantage", target: "attacksAgainst"},
+			],
+		},
+		unconscious: {
+			name: "Unconscious",
+			icon: "💤",
+			description: "Incapacitated, can't move or speak, unaware, drop held items, fall prone, auto-fail STR/DEX saves, attacks have advantage, crits within 5ft",
+			effects: [
+				{type: "incapacitated", value: true},
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "autoFail", target: "save:str"},
+				{type: "autoFail", target: "save:dex"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "note", value: "Hits within 5 feet are critical hits, falls prone"},
+			],
+		},
+		// Additional common conditions
+		exhaustion: {
+			name: "Exhaustion",
+			icon: "😩",
+			description: "Exhaustion is tracked separately with levels",
+			effects: [], // Handled by the exhaustion system
+		},
+		// 2024 specific conditions
+		slowed: {
+			name: "Slowed",
+			icon: "🐢",
+			description: "Speed halved, -2 to AC and DEX saves, can't use reactions",
+			effects: [
+				{type: "speedMultiplier", target: "all", value: 0.5},
+				{type: "bonus", target: "ac", value: -2},
+				{type: "bonus", target: "save:dex", value: -2},
+				{type: "note", value: "Cannot use reactions"},
+			],
+		},
+		// Custom/Homebrew condition placeholder
+		// Homebrew conditions can be added dynamically
+	};
+
+	/**
+	 * Custom/homebrew condition definitions
+	 * These are added at runtime from homebrew sources
+	 */
+	static _customConditions = {};
+
+	/**
+	 * Register a custom/homebrew condition
+	 * @param {string} name - The condition name
+	 * @param {object} definition - The condition definition with effects
+	 */
+	static registerCustomCondition (name, definition) {
+		const key = name.toLowerCase().replace(/\s+/g, "_");
+		CharacterSheetState._customConditions[key] = {
+			name: definition.name || name,
+			icon: definition.icon || "❓",
+			description: definition.description || "",
+			effects: definition.effects || [],
+			source: definition.source || "homebrew",
+		};
+	}
+
+	/**
+	 * Parse a condition's entries to extract mechanical effects
+	 * @param {object} condition - The condition data with name, entries, etc.
+	 * @returns {object} Parsed condition definition with effects
+	 */
+	static parseConditionFromEntries (condition) {
+		const effects = [];
+		const notes = [];
+		
+		// Flatten entries to get all text
+		const allText = CharacterSheetState._flattenEntriesToText(condition.entries || []);
+		const textLower = allText.toLowerCase();
+		
+		// Pattern matching for common mechanical effects
+		
+		// Speed 0
+		if (/speed\s*(?:is\s*)?0|your speed is 0/i.test(allText)) {
+			effects.push({type: "setSpeed", target: "all", value: 0});
+		}
+		// Speed halved / movement costs extra
+		if (/speed\s*(?:is\s*)?halved|half(?:ed)?\s*speed|spend\s*1\s*extra\s*foot/i.test(allText)) {
+			effects.push({type: "speedMultiplier", target: "all", value: 0.5});
+		}
+		
+		// Advantage on attacks (for the creature with the condition, e.g., hidden)
+		if (/you\s*(?:gain|have)\s*advantage\s*on\s*(?:attack|attack\s*roll)/i.test(allText)) {
+			effects.push({type: "advantage", target: "attack"});
+		}
+		// Disadvantage on attack rolls (by the creature with the condition)
+		if (/(?:your\s*)?attack\s*rolls?\s*have\s*disadvantage|disadvantage\s*on\s*(?:your\s*)?attack\s*rolls?|have\s*disadvantage\s*on\s*attack\s*rolls/i.test(allText)) {
+			effects.push({type: "disadvantage", target: "attack"});
+		}
+		
+		// Disadvantage on ability checks
+		if (/disadvantage\s*on\s*(?:all\s*)?ability\s*checks|ability\s*checks[^.]*have\s*disadvantage/i.test(allText)) {
+			effects.push({type: "disadvantage", target: "check"});
+		}
+		
+		// Combined: Disadvantage on attack rolls AND ability checks (Poisoned, Frightened)
+		if (/disadvantage\s*on\s*attack\s*rolls?\s*and\s*ability\s*checks/i.test(allText)) {
+			// Already added attack disadvantage above, just ensure we have check disadvantage
+			if (!effects.find(e => e.type === "disadvantage" && e.target === "check")) {
+				effects.push({type: "disadvantage", target: "check"});
+			}
+		}
+		
+		// Attack rolls against you have advantage
+		if (/attack\s*rolls?\s*against\s*(?:you|the\s*creature)\s*have\s*advantage/i.test(allText)) {
+			effects.push({type: "advantage", target: "attacksAgainst"});
+		}
+		// Attack rolls against you have disadvantage
+		if (/attack\s*rolls?\s*against\s*(?:you|the\s*creature)\s*have\s*disadvantage/i.test(allText)) {
+			effects.push({type: "disadvantage", target: "attacksAgainst"});
+		}
+		
+		// Saving throw disadvantage
+		const savingThrowDisadvPatterns = [
+			{pattern: /disadvantage\s*on\s*(?:all\s*)?(?:ability\s*)?saving\s*throws?/i, target: "save"},
+			{pattern: /disadvantage\s*on\s*dexterity\s*saving\s*throws?/i, target: "save:dex"},
+			{pattern: /disadvantage\s*on\s*strength\s*saving\s*throws?/i, target: "save:str"},
+			{pattern: /disadvantage\s*on\s*constitution\s*saving\s*throws?/i, target: "save:con"},
+			{pattern: /disadvantage\s*on\s*intelligence\s*saving\s*throws?/i, target: "save:int"},
+			{pattern: /disadvantage\s*on\s*wisdom\s*saving\s*throws?/i, target: "save:wis"},
+			{pattern: /disadvantage\s*on\s*charisma\s*saving\s*throws?/i, target: "save:cha"},
+			// Constitution saves for concentration (TGTT Poisoned)
+			{pattern: /disadvantage\s*on\s*constitution\s*saving\s*throws?\s*to\s*maintain\s*concentration/i, target: "save:con:concentration"},
+		];
+		for (const {pattern, target} of savingThrowDisadvPatterns) {
+			if (pattern.test(allText)) {
+				effects.push({type: "disadvantage", target});
+			}
+		}
+		
+		// Auto-fail saving throws
+		if (/automatically\s*fails?\s*strength\s*(?:and\s*dexterity\s*)?saving\s*throws?/i.test(allText)) {
+			effects.push({type: "autoFail", target: "save:str"});
+			if (/and\s*dexterity/i.test(allText)) {
+				effects.push({type: "autoFail", target: "save:dex"});
+			}
+		}
+		if (/automatically\s*fails?\s*dexterity\s*(?:and\s*strength\s*)?saving\s*throws?/i.test(allText)) {
+			effects.push({type: "autoFail", target: "save:dex"});
+			if (/and\s*strength/i.test(allText)) {
+				effects.push({type: "autoFail", target: "save:str"});
+			}
+		}
+		if (/automatically\s*fail\s*strength\s*saving\s*throw\s*and\s*dexterity\s*saving\s*throw/i.test(allText)) {
+			effects.push({type: "autoFail", target: "save:str"});
+			effects.push({type: "autoFail", target: "save:dex"});
+		}
+		
+		// Ability check failures
+		if (/automatically\s*fails?\s*(?:any\s*)?ability\s*checks?\s*that\s*require/i.test(allText)) {
+			if (/sight/i.test(allText)) {
+				effects.push({type: "autoFail", target: "check:sight"});
+			}
+		}
+		
+		// Incapacitated (includes note)
+		if (/incapacitated|can'?t\s*take\s*(?:any\s*)?actions?\s*or\s*reactions/i.test(allText)) {
+			effects.push({type: "incapacitated", value: true});
+		}
+		
+		// Resistance to all damage
+		if (/resistance\s*to\s*all\s*damage/i.test(allText)) {
+			effects.push({type: "resistance", target: "all"});
+		}
+		
+		// Immunity to conditions (like Poisoned)
+		const conditionImmunityMatch = allText.match(/immunity\s*to\s*(?:the\s*)?(?:@condition\s*)?(\w+)\s*condition/i);
+		if (conditionImmunityMatch) {
+			effects.push({type: "conditionImmunity", target: conditionImmunityMatch[1].toLowerCase()});
+			notes.push(`Immune to ${conditionImmunityMatch[1]} condition`);
+		}
+		
+		// Immunity to damage types
+		if (/immunity\s*to\s*poison(?:ed)?\s*damage|poison\s*immunity/i.test(allText)) {
+			effects.push({type: "immunity", target: "poison"});
+		}
+		
+		// Can't move
+		if (/can'?t\s*move|you\s*can'?t\s*move|unable\s*to\s*move/i.test(allText)) {
+			notes.push("Cannot move");
+		}
+		
+		// Concentration broken
+		if (/concentration\s*(?:is\s*)?broken|your\s*concentration\s*is\s*broken/i.test(allText)) {
+			notes.push("Concentration is broken");
+		}
+		
+		// Limited activity (Dazed-like)
+		if (/can\s*(?:move|take)\s*(?:or|one)\s*(?:action|move)[^.]*not\s*both/i.test(allText)) {
+			notes.push("Move or Action, not both");
+		}
+		
+		// Can't take bonus action or reaction (often with Dazed)
+		if (/can'?t\s*take\s*a\s*bonus\s*action/i.test(allText)) {
+			notes.push("No Bonus Actions");
+		}
+		if (/can'?t\s*take\s*(?:a\s*)?reaction/i.test(allText) && !/actions?\s*or\s*reactions/i.test(allText)) {
+			notes.push("No Reactions");
+		}
+		
+		// Can't speak or speechless
+		if (/can'?t\s*speak|speechless/i.test(allText)) {
+			notes.push("Cannot speak");
+		}
+		
+		// Speech limited/faltering (Choked, Stunned)
+		if (/speak\s*only\s*falteringly|faltering\s*speech/i.test(allText)) {
+			notes.push("Speech is faltering");
+		}
+		
+		// TGTT Somatic Constraint - concentration check for somatic spells
+		if (/somatic\s*constraint|spell\s*with\s*(?:a\s*)?somatic\s*component[^.]*concentration\s*check/i.test(allText)) {
+			effects.push({type: "somaticConstraint", value: "check"});
+			notes.push("Somatic spells require concentration check");
+		}
+		
+		// TGTT Somatic Ban - can't cast somatic spells
+		if (/somatic\s*ban|spell\s*with\s*(?:a\s*)?somatic\s*component[^.]*automatically\s*disrupted/i.test(allText)) {
+			effects.push({type: "somaticConstraint", value: "banned"});
+			notes.push("Somatic spells automatically fail");
+		}
+		
+		// TGTT Verbal component restriction (Choked - Cough)
+		if (/verbal\s*component[^.]*concentration\s*check|cough[^.]*verbal/i.test(allText)) {
+			effects.push({type: "verbalConstraint", value: "check"});
+			notes.push("Verbal spells require concentration check");
+		}
+		
+		// Breath/suffocation effects (Choked - Short Breath)
+		if (/hold\s*(?:your\s*)?breath\s*(?:for\s*)?half|short\s*breath/i.test(allText)) {
+			notes.push("Breath holding halved");
+		}
+		
+		// Can't use reactions (separate from incapacitated)
+		if (/can'?t\s*use\s*reactions/i.test(allText)) {
+			notes.push("Cannot use reactions");
+		}
+		
+		// Add any notes as effect entries
+		for (const note of notes) {
+			effects.push({type: "note", value: note});
+		}
+		
+		// Generate an icon based on condition name patterns
+		const icon = CharacterSheetState._getConditionIcon(condition.name);
+		
+		return {
+			name: condition.name,
+			icon,
+			description: CharacterSheetState._getConditionDescription(allText),
+			effects,
+			source: condition.source || "homebrew",
+		};
+	}
+
+	/**
+	 * Get an appropriate icon for a condition based on its name
+	 * @param {string} name - The condition name
+	 * @returns {string} An emoji icon
+	 */
+	static _getConditionIcon (name) {
+		const nameLower = name.toLowerCase();
+		const iconMap = {
+			"exhaustion": "😩", "exhausted": "😩",
+			"slowed": "🐢", "slow": "🐢",
+			"hidden": "👁️", "invisible": "👻",
+			"undetected": "❓",
+			"stunned": "💫", "stun": "💫",
+			"dazed": "😵", "confused": "😵",
+			"choked": "😤", "suffocating": "😤",
+			"grappled": "🤼", "grabbed": "🤼",
+			"restrained": "⛓️", "bound": "⛓️",
+			"petrified": "🗿", "stone": "🗿",
+			"poisoned": "🤢", "poison": "🤢",
+			"frightened": "😨", "fear": "😨",
+			"charmed": "💕", "charm": "💕",
+			"paralyzed": "⚡", "paralysis": "⚡",
+			"blinded": "🙈", "blind": "🙈",
+			"deafened": "🙉", "deaf": "🙉",
+			"unconscious": "💤", "unconsciousness": "💤",
+			"prone": "⬇️",
+			"incapacitated": "🚫",
+		};
+		
+		for (const [key, emoji] of Object.entries(iconMap)) {
+			if (nameLower.includes(key)) return emoji;
+		}
+		return "❓";
+	}
+
+	/**
+	 * Extract a brief description from condition text
+	 * @param {string} text - The full condition text
+	 * @returns {string} A brief description
+	 */
+	static _getConditionDescription (text) {
+		// Get first sentence or first 100 chars
+		const firstSentence = text.split(/[.!?]/)[0];
+		if (firstSentence.length <= 100) return firstSentence.trim();
+		return firstSentence.substring(0, 97).trim() + "...";
+	}
+
+	/**
+	 * Flatten condition entries to plain text for parsing
+	 * @param {Array|string|object} entries - The entries array, string, or object
+	 * @returns {string} Flattened text
+	 */
+	static _flattenEntriesToText (entries) {
+		if (!entries) return "";
+		if (typeof entries === "string") return entries;
+		if (!Array.isArray(entries)) {
+			// Handle objects with entries or items properties
+			const obj = /** @type {object} */ (entries);
+			if (obj.entries) return CharacterSheetState._flattenEntriesToText(obj.entries);
+			if (obj.items) return CharacterSheetState._flattenEntriesToText(obj.items);
+			return "";
+		}
+		
+		return entries.map(entry => {
+			if (typeof entry === "string") {
+				// Strip 5etools formatting tags like {@b text}, {@condition name}, etc.
+				return entry.replace(/\{@\w+\s+([^}|]+)(?:\|[^}]*)?\}/g, "$1");
+			}
+			if (typeof entry === "object" && entry !== null) {
+				if (entry.entries) return CharacterSheetState._flattenEntriesToText(entry.entries);
+				if (entry.items) return CharacterSheetState._flattenEntriesToText(entry.items);
+			}
+			return "";
+		}).join(" ");
+	}
+
+	/**
+	 * Register homebrew conditions from an array of condition data
+	 * @param {Array} conditions - Array of condition objects from homebrew
+	 */
+	static registerHomebrewConditions (conditions) {
+		if (!conditions || !Array.isArray(conditions)) return;
+		
+		for (const condition of conditions) {
+			// Skip conditions that are already in the standard list
+			const key = condition.name.toLowerCase().replace(/\s+/g, "_");
+			if (CharacterSheetState.CONDITION_EFFECTS[key]) {
+				// Could potentially merge/override, but for now skip
+				continue;
+			}
+			
+			// Parse the condition entries to extract effects
+			const parsed = CharacterSheetState.parseConditionFromEntries(condition);
+			CharacterSheetState.registerCustomCondition(condition.name, parsed);
+		}
+	}
+
+	/**
+	 * Get condition effects by name (checks both standard and custom)
+	 * @param {string} conditionName - The condition name
+	 * @returns {object|null} The condition definition or null
+	 */
+	static getConditionEffects (conditionName) {
+		const key = conditionName.toLowerCase().replace(/\s+/g, "_");
+		return CharacterSheetState.CONDITION_EFFECTS[key] 
+			|| CharacterSheetState._customConditions[key] 
+			|| null;
+	}
+
+	/**
+	 * Get all active states
+	 * @returns {Array} Array of active state objects
+	 */
+	getActiveStates () {
+		return [...this._data.activeStates];
+	}
+
+	/**
+	 * Get a specific active state by ID
+	 * @param {string} stateId - The state ID to find
+	 * @returns {object|null} The active state or null
+	 */
+	getActiveState (stateId) {
+		return this._data.activeStates.find(s => s.id === stateId) || null;
+	}
+
+	/**
+	 * Check if a state is currently active
+	 * @param {string} stateId - The state ID to check
+	 * @returns {boolean} True if the state is active
+	 */
+	isStateActive (stateId) {
+		return this._data.activeStates.some(s => s.id === stateId && s.active);
+	}
+
+	/**
+	 * Check if a state TYPE is currently active (e.g., "rage", "concentration")
+	 * @param {string} stateTypeId - The state type ID to check
+	 * @returns {boolean} True if a state of this type is active
+	 */
+	isStateTypeActive (stateTypeId) {
+		return this._data.activeStates.some(s => s.stateTypeId === stateTypeId && s.active);
+	}
+
+	/**
+	 * Add a new active state
+	 * @param {string} stateTypeId - The state type ID from ACTIVE_STATE_TYPES
+	 * @param {object} options - Additional options for this state instance
+	 * @returns {string} The unique ID of the new state
+	 */
+	addActiveState (stateTypeId, options = {}) {
+		const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
+		if (!stateType) {
+			console.warn(`Unknown active state type: ${stateTypeId}`);
+			return null;
+		}
+
+		// Check if this state type is already active (for exclusive states like Rage)
+		const existing = this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
+		if (existing) {
+			// Reactivate existing state
+			existing.active = true;
+			existing.activatedAt = Date.now();
+			return existing.id;
+		}
+
+		const state = {
+			id: `${stateTypeId}_${Date.now()}`,
+			stateTypeId: stateTypeId,
+			name: options.name || stateType.name,
+			icon: options.icon || stateType.icon,
+			active: true,
+			activatedAt: Date.now(),
+			sourceFeatureId: options.sourceFeatureId || null,
+			resourceId: options.resourceId || stateType.resourceId,
+			// For states with variable effects (like Wild Shape with beast stats)
+			customEffects: options.customEffects || null,
+			// For concentration
+			spellName: options.spellName || null,
+			spellLevel: options.spellLevel || null,
+			// For Wild Shape
+			beastData: options.beastData || null,
+		};
+
+		this._data.activeStates.push(state);
+		return state.id;
+	}
+
+	/**
+	 * Toggle an active state on/off
+	 * @param {string} stateId - The unique state instance ID
+	 * @returns {boolean} The new active status
+	 */
+	toggleActiveState (stateId) {
+		const state = this._data.activeStates.find(s => s.id === stateId);
+		if (state) {
+			state.active = !state.active;
+			if (state.active) {
+				state.activatedAt = Date.now();
+			}
+			return state.active;
+		}
+		return false;
+	}
+
+	/**
+	 * Activate a state by type ID (creates if not exists)
+	 * @param {string} stateTypeId - The state type ID
+	 * @param {object} options - Options to pass to addActiveState
+	 * @returns {string} The state instance ID
+	 */
+	activateState (stateTypeId, options = {}) {
+		const existing = this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
+		if (existing) {
+			existing.active = true;
+			existing.activatedAt = Date.now();
+			return existing.id;
+		}
+		return this.addActiveState(stateTypeId, options);
+	}
+
+	/**
+	 * Deactivate a state by type ID
+	 * @param {string} stateTypeId - The state type ID
+	 */
+	deactivateState (stateTypeId) {
+		const state = this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
+		if (state) {
+			state.active = false;
+		}
+	}
+
+	/**
+	 * Remove an active state entirely
+	 * @param {string} stateId - The unique state instance ID
+	 */
+	removeActiveState (stateId) {
+		const index = this._data.activeStates.findIndex(s => s.id === stateId);
+		if (index !== -1) {
+			this._data.activeStates.splice(index, 1);
+		}
+	}
+
+	/**
+	 * Get all effects from currently active states
+	 * @returns {Array} Array of effect objects with state context
+	 */
+	getActiveStateEffects () {
+		const effects = [];
+		for (const state of this._data.activeStates) {
+			if (!state.active) continue;
+
+			// For condition-derived states, use customEffects directly
+			if (state.isCondition) {
+				const stateEffects = state.customEffects || [];
+				for (const effect of stateEffects) {
+					effects.push({
+						...effect,
+						stateId: state.id,
+						stateName: state.name,
+						stateIcon: state.icon,
+						isCondition: true,
+						conditionName: state.conditionName,
+					});
+				}
+				continue;
+			}
+
+			// For regular states, look up the state type
+			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
+			if (!stateType) continue;
+
+			// Use custom effects if provided, otherwise use default effects
+			const stateEffects = state.customEffects || stateType.effects;
+
+			for (const effect of stateEffects) {
+				effects.push({
+					...effect,
+					stateId: state.id,
+					stateName: state.name,
+					stateIcon: state.icon,
+				});
+			}
+		}
+		return effects;
+	}
+
+	/**
+	 * Check if character has advantage on a specific roll type from active states
+	 * @param {string} rollType - The roll type (e.g., "check:str", "save:dex", "attack")
+	 * @returns {boolean} True if advantage applies
+	 */
+	hasAdvantageFromStates (rollType) {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => {
+			if (e.type !== "advantage") return false;
+			// Exact match
+			if (e.target === rollType) return true;
+			// Generic "check" applies to all ability checks (check:str, check:dex, etc.)
+			if (e.target === "check" && rollType.startsWith("check:")) return true;
+			// Generic "save" applies to all saving throws
+			if (e.target === "save" && rollType.startsWith("save:")) return true;
+			return false;
+		});
+	}
+
+	/**
+	 * Check if character has disadvantage on a specific roll type from active states
+	 * @param {string} rollType - The roll type
+	 * @returns {boolean} True if disadvantage applies
+	 */
+	hasDisadvantageFromStates (rollType) {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => {
+			if (e.type !== "disadvantage") return false;
+			// Exact match
+			if (e.target === rollType) return true;
+			// Generic "check" applies to all ability checks
+			if (e.target === "check" && rollType.startsWith("check:")) return true;
+			// Generic "save" applies to all saving throws  
+			if (e.target === "save" && rollType.startsWith("save:")) return true;
+			return false;
+		});
+	}
+
+	/**
+	 * Get bonus to a specific stat from active states
+	 * @param {string} target - The target (e.g., "ac", "attack", "damage")
+	 * @returns {number} The total bonus
+	 */
+	getBonusFromStates (target) {
+		const effects = this.getActiveStateEffects();
+		return effects
+			.filter(e => e.type === "bonus" && e.target === target)
+			.reduce((sum, e) => sum + (e.value || 0), 0);
+	}
+
+	/**
+	 * Check if character has resistance to a damage type from active states
+	 * @param {string} damageType - The damage type (e.g., "bludgeoning", "fire")
+	 * @returns {boolean} True if resistant
+	 */
+	hasResistanceFromStates (damageType) {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => e.type === "resistance" && e.target === `damage:${damageType}`);
+	}
+
+	/**
+	 * Check if Rage damage bonus applies to this attack
+	 * @param {boolean} isMelee - Whether this is a melee attack
+	 * @param {string} abilityUsed - The ability used for the attack
+	 * @returns {number} The rage damage bonus if applicable, 0 otherwise
+	 */
+	getRageDamageBonus (isMelee, abilityUsed) {
+		// Check if rage state is active using the new method
+		if (!this.isStateTypeActive("rage")) {
+			return 0;
+		}
+		// Rage damage applies to melee attacks using Strength
+		if (isMelee && abilityUsed === "str") {
+			// Use getFeatureCalculation to get the properly computed rage damage
+			const rageDmg = this.getFeatureCalculation("rageDamage");
+			if (rageDmg == null) return 2; // Default rage damage if not calculated
+			if (typeof rageDmg === "string") {
+				return parseInt(rageDmg.replace("+", "")) || 2;
+			}
+			return rageDmg || 2;
+		}
+		return 0;
+	}
+
+	// --- Concentration Management ---
+
+	/**
+	 * Get current concentration info
+	 * @returns {object|null} The concentration info or null
+	 */
+	getConcentration () {
+		return this._data.concentrating;
+	}
+
+	/**
+	 * Start concentrating on a spell
+	 * @param {string} spellName - The spell name
+	 * @param {number} spellLevel - The spell level
+	 */
+	setConcentration (spellName, spellLevel = 0) {
+		// End any existing concentration
+		if (this._data.concentrating) {
+			this.breakConcentration();
+		}
+
+		this._data.concentrating = {
+			spellName,
+			spellLevel,
+			startedAt: Date.now(),
+		};
+
+		// Also add as an active state
+		this.activateState("concentration", {
+			name: `Concentrating: ${spellName}`,
+			spellName,
+			spellLevel,
+		});
+	}
+
+	/**
+	 * Break concentration (spell ends)
+	 */
+	breakConcentration () {
+		this._data.concentrating = null;
+
+		// Remove concentration active state
+		const concState = this._data.activeStates.find(s => s.stateTypeId === "concentration");
+		if (concState) {
+			this.removeActiveState(concState.id);
+		}
+	}
+
+	/**
+	 * Check if currently concentrating
+	 * @returns {boolean}
+	 */
+	isConcentrating () {
+		return this._data.concentrating !== null;
+	}
+
+	/**
+	 * Get concentration save DC for damage taken
+	 * @param {number} damageTaken - The amount of damage taken
+	 * @returns {number} The DC for the concentration save
+	 */
+	getConcentrationSaveDC (damageTaken) {
+		return Math.max(10, Math.floor(damageTaken / 2));
+	}
+
+	// --- Rest Integration for Active States ---
+
+	/**
+	 * Clear states that end on rest
+	 * @param {string} restType - "short" or "long"
+	 */
+	clearStatesOnRest (restType) {
+		// Rage ends on rest
+		this.deactivateState("rage");
+
+		// Concentration ends on rest
+		if (this._data.concentrating) {
+			this.breakConcentration();
+		}
+
+		// Clear most combat states
+		const combatStates = ["defensiveStance", "dodge", "prone"];
+		for (const stateType of combatStates) {
+			this.deactivateState(stateType);
+		}
+
+		// Wild Shape typically persists but can be cleared on long rest if desired
+		if (restType === "long") {
+			this.deactivateState("wildShape");
+		}
+	}
+
+	// #endregion
+
 	// #region Rest
 	onShortRest () {
+		// Clear active states that end on rest
+		this.clearStatesOnRest("short");
+
 		// Recover short rest resources
 		this.recoverResources("short");
 
@@ -4841,6 +5940,9 @@ class CharacterSheetState {
 	}
 
 	onLongRest () {
+		// Clear active states that end on rest
+		this.clearStatesOnRest("long");
+
 		// Recover all HP
 		this._data.hp.current = this.getMaxHp();
 

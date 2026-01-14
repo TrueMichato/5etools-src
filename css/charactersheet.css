@@ -749,6 +749,12 @@
 	margin-right: 0.25rem;
 	margin-bottom: 0.25rem;
 	font-size: 0.8rem;
+	cursor: help;
+}
+
+.charsheet__condition-icon {
+	margin-right: 0.35rem;
+	font-size: 1rem;
 }
 
 .charsheet__condition-remove {
@@ -879,6 +885,62 @@
 
 .charsheet__resource-pip--used {
 	background: var(--rgb-link);
+}
+
+/* Active States (Rage, Concentration, etc.) */
+.charsheet__active-states-list {
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+.charsheet__state-row {
+	display: flex;
+	align-items: center;
+	padding: 0.5rem;
+	background: var(--rgb-bg);
+	border: 1px solid var(--rgb-border-grey);
+	border-radius: 4px;
+	margin-bottom: 0.5rem;
+	transition: all 0.2s ease;
+}
+
+.charsheet__state-row.charsheet__state--active {
+	background: rgba(var(--rgb-link-rgb), 0.15);
+	border-color: var(--rgb-link);
+	box-shadow: 0 0 8px rgba(var(--rgb-link-rgb), 0.3);
+}
+
+.charsheet__state-row.charsheet__state--inactive {
+	opacity: 0.6;
+	background: var(--rgb-bg-alt);
+}
+
+.charsheet__state-icon {
+	font-size: 1.2rem;
+	margin-right: 0.5rem;
+}
+
+.charsheet__state-name {
+	flex: 1;
+	font-weight: 600;
+	font-size: 0.85rem;
+}
+
+.charsheet__state-status {
+	font-style: italic;
+}
+
+.charsheet__state-controls {
+	display: flex;
+	align-items: center;
+}
+
+.charsheet__state-quick-activate {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	padding-top: 0.5rem;
+	border-top: 1px solid var(--rgb-border-grey);
 }
 
 /* Proficiencies */

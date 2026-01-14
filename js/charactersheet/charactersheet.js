@@ -316,7 +316,10 @@ class CharacterSheetPage {
 
 		// Conditions/diseases
 		if (brewData.condition?.length) {
-			this._conditionsData = [...this._conditionsData, ...MiscUtil.copyFast(brewData.condition)];
+			const brewConditions = MiscUtil.copyFast(brewData.condition);
+			this._conditionsData = [...this._conditionsData, ...brewConditions];
+			// Register homebrew conditions with their effects
+			CharacterSheetState.registerHomebrewConditions(brewConditions);
 		}
 	}
 
@@ -677,6 +680,7 @@ class CharacterSheetPage {
 		this._renderConditions();
 		this._renderExhaustion();
 		this._renderResources();
+		this._renderActiveStates();
 		this._renderAttacks();
 		this._renderQuickSpells();
 		this._renderAbilitiesDetailed();
@@ -1242,19 +1246,50 @@ class CharacterSheetPage {
 
 		const conditions = this._state.getConditions();
 		conditions.forEach(condition => {
+			// Get condition effects for tooltip
+			const condDef = CharacterSheetState.getConditionEffects(condition);
+			const icon = condDef?.icon || "❓";
+			const description = condDef?.description || "Unknown condition";
+			
+			// Build effect list for tooltip
+			let effectsHtml = "";
+			if (condDef?.effects?.length) {
+				const effectList = condDef.effects.map(e => {
+					if (e.type === "advantage") return `• Advantage on ${e.target}`;
+					if (e.type === "disadvantage") return `• Disadvantage on ${e.target}`;
+					if (e.type === "autoFail") return `• Auto-fail ${e.target}`;
+					if (e.type === "setSpeed") return `• Speed set to ${e.value}`;
+					if (e.type === "resistance") return `• Resistance to ${e.target}`;
+					if (e.type === "bonus") return `• ${e.value >= 0 ? "+" : ""}${e.value} to ${e.target}`;
+					if (e.type === "note") return `• ${e.value}`;
+					return null;
+				}).filter(Boolean);
+				if (effectList.length) {
+					effectsHtml = `<div class="mt-1 ve-small">${effectList.join("<br>")}</div>`;
+				}
+			}
+			
 			// Use instance method for proper homebrew source lookup
 			const conditionLink = this.getConditionLink(condition);
 			const $badge = $(`
-				<span class="charsheet__condition-badge">
+				<span class="charsheet__condition-badge" title="${description}">
+					<span class="charsheet__condition-icon">${icon}</span>
 					${conditionLink}
 					<span class="charsheet__condition-remove glyphicon glyphicon-remove"></span>
 				</span>
 			`);
 
+			// Add tooltip with effects
+			if (effectsHtml) {
+				$badge.attr("data-tippy-content", `<strong>${condDef?.name || condition}</strong>: ${description}${effectsHtml}`);
+			}
+
 			$badge.find(".charsheet__condition-remove").on("click", () => {
 				this._state.removeCondition(condition);
 				this._saveCurrentCharacter();
 				this._renderConditions();
+				this._renderActiveStates(); // Also update active states since conditions create states
+				this._renderCharacter(); // Re-render to apply effects
 			});
 
 			$container.append($badge);
@@ -1600,6 +1635,108 @@ class CharacterSheetPage {
 
 			$container.append($row);
 		});
+	}
+
+	_renderActiveStates () {
+		const $container = $("#charsheet-active-states");
+		$container.empty();
+
+		const activeStates = this._state.getActiveStates();
+		const concentration = this._state.getConcentration();
+		
+		// Filter out condition-derived states (they're shown in the Conditions section)
+		const nonConditionStates = activeStates.filter(s => !s.isCondition);
+
+		if (!nonConditionStates.length && !concentration) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No active states</div>`);
+			return;
+		}
+
+		// Render each active state (excluding condition-derived ones)
+		nonConditionStates.forEach(state => {
+			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
+			const activeClass = state.active ? "charsheet__state--active" : "charsheet__state--inactive";
+			const toggleText = state.active ? "End" : "Activate";
+			const toggleBtnClass = state.active ? "ve-btn-warning" : "ve-btn-success";
+			
+			const $row = $(`
+				<div class="charsheet__state-row ${activeClass}" data-state-id="${state.id}">
+					<span class="charsheet__state-icon">${state.icon || "⚡"}</span>
+					<span class="charsheet__state-name">${state.name}</span>
+					<span class="charsheet__state-status ve-muted ve-small ml-2">${state.active ? "(Active)" : "(Ended)"}</span>
+					<div class="charsheet__state-controls ml-auto">
+						<button class="ve-btn ve-btn-xs ${toggleBtnClass} mr-2 charsheet__state-toggle-btn">${toggleText}</button>
+						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__state-remove-btn" title="Remove state">×</button>
+					</div>
+				</div>
+			`);
+
+			// Toggle state on/off
+			$row.find(".charsheet__state-toggle-btn").on("click", () => {
+				this._state.toggleActiveState(state.id);
+				this._saveCurrentCharacter();
+				this._renderActiveStates();
+				this._renderCharacter(); // Re-render to show state effects
+			});
+
+			// Remove state entirely
+			$row.find(".charsheet__state-remove-btn").on("click", () => {
+				this._state.removeActiveState(state.id);
+				this._saveCurrentCharacter();
+				this._renderActiveStates();
+				this._renderCharacter();
+			});
+
+			$container.append($row);
+		});
+
+		// Add buttons for quick state activation
+		const $quickActivate = $(`
+			<div class="charsheet__state-quick-activate mt-2">
+				<button class="ve-btn ve-btn-xs ve-btn-default mr-1 charsheet__activate-rage-btn" title="Enter Rage">💢 Rage</button>
+				<button class="ve-btn ve-btn-xs ve-btn-default mr-1 charsheet__activate-dodge-btn" title="Dodge Action">💨 Dodge</button>
+			</div>
+		`);
+
+		// Rage button - only show if character has Rage resource
+		const resources = this._state.getResources();
+		const hasRage = resources.some(r => r.name.toLowerCase() === "rage" || r.name.toLowerCase() === "rages");
+		const isRaging = this._state.isStateActive("rage") || nonConditionStates.some(s => s.stateTypeId === "rage" && s.active);
+		
+		$quickActivate.find(".charsheet__activate-rage-btn").toggle(hasRage).on("click", () => {
+			if (isRaging) {
+				// End rage
+				this._state.deactivateState("rage");
+			} else {
+				// Start rage (also uses a rage resource)
+				const rageResource = resources.find(r => r.name.toLowerCase() === "rage" || r.name.toLowerCase() === "rages");
+				if (rageResource && rageResource.current > 0) {
+					this._state.setResourceCurrent(rageResource.id, rageResource.current - 1);
+					this._state.activateState("rage", {resourceId: rageResource.id});
+				} else {
+					this._state.activateState("rage"); // Activate without spending resource (manual mode)
+				}
+			}
+			this._saveCurrentCharacter();
+			this._renderResources();
+			this._renderActiveStates();
+			this._renderCharacter();
+		});
+
+		// Dodge button
+		$quickActivate.find(".charsheet__activate-dodge-btn").on("click", () => {
+			const isDodging = this._state.isStateActive("dodge") || nonConditionStates.some(s => s.stateTypeId === "dodge" && s.active);
+			if (isDodging) {
+				this._state.deactivateState("dodge");
+			} else {
+				this._state.activateState("dodge");
+			}
+			this._saveCurrentCharacter();
+			this._renderActiveStates();
+			this._renderCharacter();
+		});
+
+		$container.append($quickActivate);
 	}
 
 	_renderAttacks () {
@@ -2152,15 +2289,38 @@ class CharacterSheetPage {
 		return "";
 	}
 
+	/**
+	 * Get label for active state effects on a roll
+	 * @param {boolean} hasAdvantage - Whether advantage applies from states
+	 * @param {boolean} hasDisadvantage - Whether disadvantage applies from states
+	 * @returns {string} Label like " [Rage]" or ""
+	 */
+	_getActiveStateEffectLabel (hasAdvantage, hasDisadvantage) {
+		if (hasAdvantage && hasDisadvantage) {
+			return " [States: Adv+Disadv cancel]";
+		}
+		// We could list specific state names here in the future
+		return "";
+	}
+
 	_rollAbilityCheck (ability, event) {
 		const mod = this._state.getAbilityMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const rollResult = this._rollD20({event});
+		
+		// Check for advantage/disadvantage from active states (e.g., Rage gives advantage on STR checks)
+		let mode;
+		const hasAdvantage = this._state.hasAdvantageFromStates(`check:${ability}`);
+		const hasDisadvantage = this._state.hasDisadvantageFromStates(`check:${ability}`);
+		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
+		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
+		
+		const rollResult = this._rollD20({event, mode});
 		const total = rollResult.roll + mod - exhaustionPenalty;
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
+		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
 		this._showDiceResult(
-			`${Parser.attAbvToFull(ability)} Check${this._getModeLabel(rollResult.mode)}`,
+			`${Parser.attAbvToFull(ability)} Check${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 		);
@@ -2169,12 +2329,22 @@ class CharacterSheetPage {
 	_rollSavingThrow (ability, event) {
 		const mod = this._state.getSaveMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const rollResult = this._rollD20({event});
+		
+		// Check for advantage/disadvantage from active states (e.g., Rage gives advantage on STR saves)
+		let mode;
+		const hasAdvantage = this._state.hasAdvantageFromStates(`save:${ability}`);
+		const hasDisadvantage = this._state.hasDisadvantageFromStates(`save:${ability}`);
+		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
+		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
+		// If both, they cancel out - use normal (event can still override)
+		
+		const rollResult = this._rollD20({event, mode});
 		const total = rollResult.roll + mod - exhaustionPenalty;
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
+		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
 		this._showDiceResult(
-			`${Parser.attAbvToFull(ability)} Save${this._getModeLabel(rollResult.mode)}`,
+			`${Parser.attAbvToFull(ability)} Save${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 		);
@@ -2299,7 +2469,15 @@ class CharacterSheetPage {
 
 	_rollAttack (attack, event) {
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const rollResult = this._rollD20({event});
+		
+		// Check for advantage/disadvantage from active states
+		let mode;
+		const hasAdvantage = this._state.hasAdvantageFromStates("attack");
+		const hasDisadvantage = this._state.hasDisadvantageFromStates("attack");
+		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
+		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
+		
+		const rollResult = this._rollD20({event, mode});
 		const attackTotal = rollResult.roll + attack.attackBonus - exhaustionPenalty;
 
 		// Check for crit/fumble
@@ -2314,14 +2492,36 @@ class CharacterSheetPage {
 		}
 
 		// Parse and roll damage
+		let damageRoll = attack.damage;
+		
+		// Check for rage damage bonus on melee STR attacks
+		const isMelee = attack.type === "melee" || attack.range === "melee" || 
+			(attack.range && !attack.range.includes("/"));
+		const abilityUsed = attack.ability || (attack.attackBonus !== undefined ? "str" : null); // Default to STR for melee
+		const rageDamage = this._state.getRageDamageBonus(isMelee, abilityUsed);
+		
+		// Add any bonus damage from active states
+		const stateBonusDamage = this._state.getBonusFromStates("damage");
+		const totalBonusDamage = rageDamage + stateBonusDamage;
+		
+		let damageStr = attack.damage;
+		if (totalBonusDamage > 0) {
+			damageStr = `${attack.damage} + ${totalBonusDamage}`;
+		}
+		
 		const damageResult = Renderer.dice.parseRandomise2(attack.damage);
+		const totalDamage = damageResult + totalBonusDamage;
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
+		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
+		const rageDamageStr = rageDamage > 0 ? ` + ${rageDamage} (rage)` : "";
+		const stateDamageStr = stateBonusDamage > 0 ? ` + ${stateBonusDamage} (states)` : "";
+		
 		this._showDiceResult(
-			`${attack.name}${this._getModeLabel(rollResult.mode)}`,
+			`${attack.name}${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			attackTotal,
 			`Attack: ${this._formatD20Breakdown(rollResult, attack.attackBonus, exhaustionStr)}
-			 Damage: ${attack.damage} = ${damageResult}`,
+			 Damage: ${attack.damage} = ${damageResult}${rageDamageStr}${stateDamageStr}${totalBonusDamage > 0 ? ` → ${totalDamage}` : ""}`,
 			resultClass,
 			resultNote,
 		);
