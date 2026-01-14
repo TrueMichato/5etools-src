@@ -3277,7 +3277,8 @@ class CharacterSheetState {
 
 	/**
 	 * Check if a feature is a "meta-feature" that describes a resource system
-	 * (like Combat Methods, Ki, etc.) rather than having its own uses.
+	 * (like Combat Methods, Ki, etc.) or grants spells with their own uses,
+	 * rather than having its own uses.
 	 * These should not have uses auto-detected from their description.
 	 * @param {object} feature - Feature data
 	 * @returns {boolean} True if this is a resource system description feature
@@ -3302,13 +3303,42 @@ class CharacterSheetState {
 			return true;
 		}
 
-		// Also check if description explicitly mentions "exertion" as the resource
-		// This catches custom combat method features
+		// Racial/subclass features that grant spells with uses - the feature itself isn't usable
+		// Examples: "Elven Lineage" (choose lineage, get spells), "Infernal Legacy", etc.
+		// These are NOT the same as features like "Healing Hands" which IS an action you take
+		const spellGrantingFeatureNames = [
+			"lineage",             // Elven Lineage, Drow Lineage, etc. - grants spells at levels
+			"legacy",              // Infernal Legacy, Abyssal Legacy, etc. - grants spells
+			"innate spellcasting", // General innate spellcasting trait
+		];
+		
+		if (spellGrantingFeatureNames.some(sgf => name.includes(sgf))) {
+			return true;
+		}
+
 		if (feature.description) {
 			const desc = feature.description.toLowerCase();
+			
 			// If it talks about spending exertion, it's using the exertion system, not its own uses
 			if (/spend(?:ing)?\s+(?:\d+\s+)?exertion/i.test(desc) && 
 				/(?:recover|regain|refresh).*exertion.*(?:short|long)\s*rest/i.test(desc)) {
+				return true;
+			}
+
+			// Features that grant spells at multiple character levels (like Elven Lineage, Infernal Legacy)
+			// Pattern: "When you reach character level X" or "at Xth level, you learn/gain"
+			// These grant spells at progression, not abilities you activate
+			if (/when you reach (?:character )?level|at \d+(?:st|nd|rd|th) level/i.test(desc) && 
+				/learn|gain|know.*(?:spell|cantrip)/i.test(desc) &&
+				/cast.*(?:once|without a spell slot)/i.test(desc)) {
+				return true;
+			}
+
+			// Features where the primary purpose is granting a spell list (not an action)
+			// Pattern: "Starting at X level, you can cast the [spell] spell"
+			// Combined with "you can also cast the spell using any spell slots" (indicates it's a spell grant)
+			if (/starting at \d+(?:st|nd|rd|th) level.*you can cast/i.test(desc) &&
+				/cast.*using any spell slots/i.test(desc)) {
 				return true;
 			}
 		}
