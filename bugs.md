@@ -12,6 +12,8 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] need to support toggling proficiency/expertise/half proficiency on skills manually (fixed: click on the proficiency dot next to any skill to cycle through none → proficient → expertise → none)
 - [x] need to support Thelemar exhaustion rules (-1 to all rolls and DCs per level, max 10 before death) (fixed: added "Thelemar Rules" option in exhaustion dropdown)
 - [x] need to support various features giving modifiers to rolls, damage, AC, stats, skills etc (e.g magic items, class features, racial features, etc) (fixed: FeatureModifierParser auto-detects modifiers from feature descriptions including: AC, saving throws, attack/damage rolls, spell DC/attack, initiative, skills, ability checks, ability scores, speed (all types), senses (darkvision/blindsight/etc), HP, carry capacity, proficiency bonus. Supports both +X and -X, "increases/decreases by X" phrasings. Conditional modifiers (while raging, against undead, etc) are added as toggleable named modifiers)
+- [] need to support custom AC formulas from features (like natural armor, unarmored defense, etc)
+- [] need to add more friendly UI for understanding the sheet functions (e.g tooltips, help buttons, rolling with adv/disadv, changing skill abilities or proficiency, etc)
 - [] need to improve UI greatly, currently very basic and not user friendly
 - [] need to support mobile devices better (bigger buttons, less clicks, altternative ways to do things that require hover or shift/ctrl keys)
 
@@ -19,11 +21,19 @@ This file is used to track known bugs in the 5etools character sheet code.
 ## Known Bugs
 
 ### Character Builder
-- [] some races with subraces don't show subrace selection in the builder
+- [x] some races with subraces don't show subrace selection in the builder (fixed: races now processed through Renderer.race.mergeSubraces() to get _baseName/_baseSource properties for proper subrace grouping, and 2024 races with _versions are now expanded and grouped properly)
+- [x] races that give spells (like high elf, tiefling, etc) not adding spells automatically and not giving choice UI. (fixed: _applyRacialSpells() processes additionalSpells at char creation, _updateRacialSpells() adds spells at each level-up. Handles both known spells and innate spells with uses/recharge. Supports subrace-specific spell blocks. Spell choices not yet implemented)
+- [x] races that give proficiencies (like half-orc, etc) not adding proficiencies automatically and not giving choice UI. (fixed: Added _renderRacialProficiencyChoices() UI for skill/tool choices with checkboxes. Fixed proficiencies already worked, now choose options also work. Validates required choices before advancing step.)
+- [x] hover links for @subclassFeature tags showing "Failed to load references" error (fixed: Added _pPreCacheClassFeatures() to pre-cache classFeature and subclassFeature in DataLoader during page init, so hover links work properly)
+- [] Some race abilities (Charge, Aggressive, etc) not added correctly or not working as intended.
+
 
 ### Features
-- [] many features that are useable (specialties, combat methods, invocations, metamagic, maneuvers, etc) not selectable during level up or character creation, not given choice UI, or not added correctly
-- combat methods looked at as resource (the resource is exertion)
+- [x] many features that are useable (specialties and combat methods (from thelemar), invocations, metamagic, maneuvers, homebrew, etc) not selectable during level up or character creation, not given choice UI, or not added correctly. (fixed: Added _validateOptionalFeatureSelections() and _validateFeatureOptionSelections() validation in step 2 (class) to enforce selection of required optional features like invocations, metamagic, combat methods before advancing. Also validates feature options like Specialties. Level-up already had validation in place.)
+- [x] combat method feature (the meta feature that gives a class access to combat methods) looked at as resource (the resource is exertion) (fixed: Added _isResourceSystemFeature() check in addFeature() to skip use detection for meta-features that describe resource systems like Combat Methods, Ki, Sorcery Points, etc. These features mention "short rest" or "long rest" but that's for the resource pool, not the feature itself.)
+<!-- - [] SOme features that give additional combat traditions or methods (thelemar homebrew) not adding them correctly or not giving choice UI. -->
+- [x] some race features added as resources (like elf lineage) instead of just being applied (fixed: Enhanced _isResourceSystemFeature() to detect spell-granting racial features like "Elven Lineage", "Infernal Legacy", "Wind Caller", etc. These features describe spell uses, not their own uses. Actual usable abilities like "Healing Hands" or "Celestial Revelation" are correctly still tracked as resources.)
+- [] Specialties don't give their benefits many times (thelemar homebrew)
 
 ### Overview 
 - [] states that require activation and then stay active (like rage, concentration, stance, etc) not tracked  or managed, and their effects not applied to rolls or stats.
