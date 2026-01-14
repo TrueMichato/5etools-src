@@ -284,6 +284,20 @@ class CharacterSheetBuilder {
 						return false;
 					}
 				}
+				// Validate optional feature selection (invocations, metamagic, combat methods, etc.)
+				if (this._selectedClass.optionalfeatureProgression?.length) {
+					const optFeatValidation = this._validateOptionalFeatureSelections(this._selectedClass);
+					if (!optFeatValidation.valid) {
+						JqueryUtil.doToast({type: "warning", content: optFeatValidation.message});
+						return false;
+					}
+				}
+				// Validate feature options selection (specialties, etc.)
+				const featureOptionsValidation = this._validateFeatureOptionSelections(this._selectedClass, 1);
+				if (!featureOptionsValidation.valid) {
+					JqueryUtil.doToast({type: "warning", content: featureOptionsValidation.message});
+					return false;
+				}
 				return true;
 
 			case 3: // Abilities
@@ -2632,6 +2646,132 @@ class CharacterSheetBuilder {
 		}
 
 		return $section;
+	}
+
+	/**
+	 * Validate that all required optional features have been selected
+	 * @param {Object} cls - Class data
+	 * @returns {{valid: boolean, message: string}}
+	 */
+	_validateOptionalFeatureSelections (cls) {
+		if (!cls.optionalfeatureProgression?.length) return {valid: true, message: ""};
+
+		for (const optFeatProg of cls.optionalfeatureProgression) {
+			// Get count at level 1
+			let requiredCount = 0;
+			if (Array.isArray(optFeatProg.progression)) {
+				requiredCount = optFeatProg.progression[0] || 0;
+			} else if (typeof optFeatProg.progression === "object") {
+				requiredCount = optFeatProg.progression["1"] || 0;
+			}
+
+			if (requiredCount === 0) continue;
+
+			const featureTypes = optFeatProg.featureType || [];
+			const featureKey = featureTypes.join("_");
+			const name = optFeatProg.name || featureTypes.join(", ");
+
+			// Check for Combat Methods - also need traditions selected
+			const isCombatMethods = featureTypes.some(ft => ft.startsWith("CTM:"));
+			if (isCombatMethods) {
+				// Validate traditions are selected (default 2)
+				const traditionCount = 2;
+				if (!this._selectedCombatTraditions || this._selectedCombatTraditions.length < traditionCount) {
+					return {valid: false, message: `Please select ${traditionCount} combat traditions.`};
+				}
+			}
+
+			// Check selected count
+			const selected = this._selectedOptionalFeatures[featureKey] || [];
+			if (selected.length < requiredCount) {
+				return {valid: false, message: `Please select ${requiredCount} ${name}.`};
+			}
+		}
+
+		return {valid: true, message: ""};
+	}
+
+	/**
+	 * Validate that all required feature options have been selected (specialties, etc.)
+	 * @param {Object} cls - Class data
+	 * @param {number} level - Character level
+	 * @returns {{valid: boolean, message: string}}
+	 */
+	_validateFeatureOptionSelections (cls, level) {
+		// Get features at this level that have options
+		const featureOptionsRequired = this._getFeatureOptionsAtLevel(cls, level);
+		
+		for (const {featureKey, count, name} of featureOptionsRequired) {
+			const selected = this._selectedFeatureOptions[featureKey] || [];
+			if (selected.length < count) {
+				return {valid: false, message: `Please select ${count} option${count > 1 ? "s" : ""} for ${name}.`};
+			}
+		}
+
+		return {valid: true, message: ""};
+	}
+
+	/**
+	 * Get feature options required at a specific level
+	 * Uses same key format as _renderClassFeatureOptions: ${featureName}_${featureSource}
+	 * @param {Object} cls - Class data  
+	 * @param {number} level - Character level
+	 * @returns {Array<{featureKey: string, count: number, name: string}>}
+	 */
+	_getFeatureOptionsAtLevel (cls, level) {
+		const result = [];
+		
+		// Get level features
+		let levelFeatures = [];
+		if (cls.classFeatures && cls.classFeatures.length > 0) {
+			if (Array.isArray(cls.classFeatures[level - 1])) {
+				levelFeatures = cls.classFeatures[level - 1];
+			} else if (!Array.isArray(cls.classFeatures[0])) {
+				// Flat format - filter by level
+				levelFeatures = cls.classFeatures.filter(f => {
+					if (typeof f === "string") {
+						const parts = f.split("|");
+						return parts[3] === String(level) || parts.length < 4;
+					} else if (typeof f === "object" && f.classFeature) {
+						const parts = f.classFeature.split("|");
+						return parts[3] === String(level) || parts.length < 4;
+					}
+					return false;
+				});
+			}
+		}
+
+		for (const featureRef of levelFeatures) {
+			let featureName, featureSource;
+			if (typeof featureRef === "string") {
+				const parts = featureRef.split("|");
+				featureName = parts[0];
+				featureSource = parts[2] || cls.source;
+			} else if (typeof featureRef === "object" && featureRef.classFeature) {
+				const parts = featureRef.classFeature.split("|");
+				featureName = parts[0];
+				featureSource = parts[2] || cls.source;
+			} else {
+				continue;
+			}
+
+			// Look up the full feature data
+			const fullFeature = this._getClassFeatureData(featureName, cls.name, featureSource, level);
+			if (!fullFeature) continue;
+
+			// Check for embedded options
+			const featureOptions = this._findFeatureOptions(fullFeature, level);
+			for (const optionGroup of featureOptions) {
+				result.push({
+					// Use same key format as _renderClassFeatureOptions
+					featureKey: `${fullFeature.name}_${fullFeature.source}`,
+					count: optionGroup.count,
+					name: fullFeature.name,
+				});
+			}
+		}
+
+		return result;
 	}
 
 	/**
