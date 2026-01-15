@@ -132,9 +132,11 @@ This file is used to track known bugs in the 5etools character sheet code.
   - TGTT homebrew conditions now auto-register with effects: Dazed, Choked, Slowed, Hidden, Undetected, modified Grappled/Restrained/Petrified/Stunned
 
 ### Combat
-- [] unarmed strikes not added automatically as attacks, specially for monks
+- [x] unarmed strikes not added automatically as attacks, specially for monks (fixed: Added ensureUnarmedStrike() method that automatically adds Unarmed Strike attack for all characters. For non-monks, deals 1+STR bludgeoning. For monks, uses Martial Arts die progression (1d6→1d8→1d10→1d12) and can use DEX (finesse). Called when: class is added/removed, character is loaded, level-up is applied. Combat UI shows "Monk" badge for monk unarmed strikes.)
 - [] resources and active features not displayed in combat UI
 - [] Condition resistances and immunities not displayed in combat UI
+- [] need to add more combat effects from features and conditions (like advantage/disadvantage, resistances, bonuses, etc)
+- [] race abilities like aggressive, charge, etc not added to combat UI automatically
 
 ### Spells
 - [] features giving spells or spell choice (like warlock invocations, fey-touched feat, etc) not adding spells automatically and not giving choice UI.

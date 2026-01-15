@@ -1739,6 +1739,9 @@ class CharacterSheetLevelUp {
 				targetClass.subclass = selectedSubclass;
 			}
 		}
+		
+		// Update unarmed strike (monk martial arts die progression)
+		this._state.ensureUnarmedStrike();
 
 		// Apply ASI or feat
 		if (selectedFeat) {

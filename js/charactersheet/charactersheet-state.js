@@ -1890,6 +1890,9 @@ class CharacterSheetState {
 		
 		// Migrate modifiers: re-process modifiers that may be missing special flags
 		this._migrateModifiers();
+		
+		// Ensure unarmed strike exists for all characters
+		this.ensureUnarmedStrike();
 	}
 	
 	/**
@@ -2029,12 +2032,16 @@ class CharacterSheetState {
 		}
 		this._recalculateMaxHp();
 		this._recalculateHitDice();
+		// Ensure unarmed strike is added/updated (especially for monks)
+		this.ensureUnarmedStrike();
 	}
 
 	removeClass (className, source) {
 		this._data.classes = this._data.classes.filter(c => !(c.name === className && c.source === source));
 		this._recalculateMaxHp();
 		this._recalculateHitDice();
+		// Re-check unarmed strike in case monk was removed
+		this.ensureUnarmedStrike();
 	}
 
 	getClasses () { return this._data.classes; }
@@ -3669,6 +3676,63 @@ class CharacterSheetState {
 
 	// #region Attacks
 	getAttacks () { return [...this._data.attacks]; }
+
+	/**
+	 * Ensure the character has an unarmed strike attack.
+	 * For Monks, this uses their Martial Arts die and can use DEX.
+	 * For everyone else, it's 1 + STR bludgeoning damage.
+	 */
+	ensureUnarmedStrike () {
+		// Check if unarmed strike already exists
+		const existingUnarmed = this._data.attacks.find(a => 
+			a.name === "Unarmed Strike" || a.isUnarmedStrike,
+		);
+		
+		// Get monk level (if any)
+		const monkClass = this._data.classes.find(c => c.name === "Monk");
+		const monkLevel = monkClass?.level || 0;
+		
+		// Determine damage die - monks get martial arts progression
+		let damageDie;
+		let canUseDex = false;
+		if (monkLevel > 0) {
+			damageDie = monkLevel >= 17 ? "1d12" : monkLevel >= 11 ? "1d10" : monkLevel >= 5 ? "1d8" : "1d6";
+			canUseDex = true; // Monks can use DEX for unarmed strikes
+		} else {
+			damageDie = "1"; // Non-monks deal 1 + STR
+		}
+		
+		if (existingUnarmed) {
+			// Update existing unarmed strike if monk level changed
+			existingUnarmed.damage = damageDie;
+			existingUnarmed.abilityMod = canUseDex ? "finesse" : "str";
+			existingUnarmed.isMonkWeapon = monkLevel > 0;
+		} else {
+			// Add new unarmed strike
+			this.addAttack({
+				name: "Unarmed Strike",
+				isMelee: true,
+				isUnarmedStrike: true,
+				isNaturalWeapon: false,
+				abilityMod: canUseDex ? "finesse" : "str",
+				damage: damageDie,
+				damageType: "bludgeoning",
+				damageBonus: 0,
+				attackBonus: 0,
+				range: "5 ft",
+				properties: monkLevel > 0 ? ["Monk Weapon"] : [],
+				isMonkWeapon: monkLevel > 0,
+			});
+		}
+	}
+
+	/**
+	 * Get the unarmed strike attack, creating it if it doesn't exist
+	 */
+	getUnarmedStrike () {
+		this.ensureUnarmedStrike();
+		return this._data.attacks.find(a => a.isUnarmedStrike);
+	}
 
 	addAttack (attack) {
 		this._data.attacks.push({
