@@ -28,8 +28,8 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] races that give spells (like high elf, tiefling, etc) not adding spells automatically and not giving choice UI. (fixed: _applyRacialSpells() processes additionalSpells at char creation, _updateRacialSpells() adds spells at each level-up. Handles both known spells and innate spells with uses/recharge. Supports subrace-specific spell blocks. Spell choices not yet implemented)
 - [x] races that give proficiencies (like half-orc, etc) not adding proficiencies automatically and not giving choice UI. (fixed: Added _renderRacialProficiencyChoices() UI for skill/tool choices with checkboxes. Fixed proficiencies already worked, now choose options also work. Validates required choices before advancing step.)
 - [x] hover links for @subclassFeature tags showing "Failed to load references" error (fixed: Added _pPreCacheClassFeatures() to pre-cache classFeature and subclassFeature in DataLoader during page init, so hover links work properly)
-- [] Some race abilities (Charge, Aggressive, etc) not added correctly or not working as intended.
-- [] In Abilitied in builder - the placeholder 10 are returned to the score list.
+- [x] Some race abilities (Charge, Aggressive, etc) not added correctly or not working as intended. (fixed: Enhanced isImportantFeature() to check both name AND description for keywords. Added race-relevant keywords: "charge", "aggressive", "natural weapon", "unarmed strike", "breath weapon", "fey ancestry", "relentless endurance". Fixed NaturalWeaponParser regex to handle plural "natural melee weapons" for Hooves-type abilities. Added activatable patterns to detect features that use action economy.)
+- [x] In Abilities in builder - the placeholder 10 are returned to the score list. (fixed: Changed initial _abilityScores from {str: 10, ...} to {str: null, ...} to match standard array mode. Added validation to only return valid standard array scores [15, 14, 13, 12, 10, 8] to the pool, preventing invalid scores from being added.)
 
 
 ### Features

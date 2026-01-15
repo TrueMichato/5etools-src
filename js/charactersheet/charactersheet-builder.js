@@ -15,7 +15,9 @@ class CharacterSheetBuilder {
 		this._selectedSubclass = null;
 		this._selectedBackground = null;
 		this._abilityMethod = "standard";
-		this._abilityScores = {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10};
+		// Initialize with null for standard array mode (user must assign scores)
+		this._abilityScores = {str: null, dex: null, con: null, int: null, wis: null, cha: null};
+		this._standardArrayPool = [15, 14, 13, 12, 10, 8]; // Initialize pool for standard array
 		this._pointBuyRemaining = 27;
 		this._selectedSkills = []; // For class skill proficiency choices
 		this._selectedExpertise = []; // For class expertise choices (Rogue, Bard)
@@ -3852,13 +3854,15 @@ class CharacterSheetBuilder {
 		// Add click handlers to ability dropzones
 		$container.find(".charsheet__builder-ability-dropzone").on("click", (e) => {
 			const abl = $(e.target).data("ability");
+			// Valid standard array scores that can be returned to pool
+			const STANDARD_ARRAY_SCORES = [15, 14, 13, 12, 10, 8];
 
 			if (this._selectedStandardScore != null) {
 				// Assign the selected score to this ability
 				const oldScore = this._abilityScores[abl];
 
-				// If this ability already had a score, put it back in the pool
-				if (oldScore != null) {
+				// If this ability already had a valid standard array score, put it back in the pool
+				if (oldScore != null && STANDARD_ARRAY_SCORES.includes(oldScore)) {
 					this._standardArrayPool.push(oldScore);
 					this._standardArrayPool.sort((a, b) => b - a);
 				}
@@ -3872,9 +3876,11 @@ class CharacterSheetBuilder {
 				this._selectedStandardScore = null;
 				this._renderAbilityInputs();
 			} else if (this._abilityScores[abl] != null) {
-				// Clicking an assigned ability with no selection - return to pool
-				this._standardArrayPool.push(this._abilityScores[abl]);
-				this._standardArrayPool.sort((a, b) => b - a);
+				// Clicking an assigned ability with no selection - return to pool (only if valid score)
+				if (STANDARD_ARRAY_SCORES.includes(this._abilityScores[abl])) {
+					this._standardArrayPool.push(this._abilityScores[abl]);
+					this._standardArrayPool.sort((a, b) => b - a);
+				}
 				this._abilityScores[abl] = null;
 				this._renderAbilityInputs();
 			}

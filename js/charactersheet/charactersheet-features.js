@@ -661,6 +661,23 @@ class CharacterSheetFeatures {
 			"bardic inspiration", "cunning action", "uncanny dodge", "evasion",
 			"metamagic", "sorcery points", "ki", "smite", "spellcasting",
 			"fighting style", "extra attack", "eldritch invocation",
+			"charge", "aggressive", "natural weapon", "unarmed strike",
+			"breath weapon", "fey ancestry", "relentless endurance",
+		];
+
+		// Patterns that indicate activatable abilities (action economy)
+		const activatablePatterns = [
+			/\bas an action\b/i,
+			/\buse your action\b/i,
+			/\btake the .* action\b/i,
+			/\bas a bonus action\b/i,
+			/\buse a bonus action\b/i,
+			/\bas a reaction\b/i,
+			/\buse your reaction\b/i,
+			/\bwhen you .* you can\b/i,
+			/\bonce per .* rest\b/i,
+			/\bonce on each of your turns\b/i,
+			/\byou can use this .* a number of times\b/i,
 		];
 
 		const isImportantFeature = (feature) => {
@@ -668,9 +685,19 @@ class CharacterSheetFeatures {
 			if (feature.uses && feature.uses.max > 0) return true;
 			// Explicitly marked important
 			if (feature.important) return true;
-			// Key features by name
-			const nameLower = feature.name.toLowerCase();
-			return importantKeywords.some(keyword => nameLower.includes(keyword));
+			// Key features by name OR description
+			const nameLower = feature.name?.toLowerCase() || "";
+			const descLower = feature.description?.toLowerCase() || "";
+			
+			// Check keyword matches
+			if (importantKeywords.some(keyword => 
+				nameLower.includes(keyword) || descLower.includes(keyword),
+			)) return true;
+			
+			// Check activatable patterns (features that require actions/reactions)
+			if (activatablePatterns.some(pattern => pattern.test(descLower))) return true;
+			
+			return false;
 		};
 
 		// Get important features grouped by type
