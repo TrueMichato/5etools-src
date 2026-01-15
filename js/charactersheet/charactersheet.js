@@ -2325,7 +2325,7 @@ class CharacterSheetPage {
 		const conMod = this._state.getAbilityMod("con");
 		const dieSize = parseInt(dieType.substring(1));
 
-		const roll = RollerUtil.roll(dieSize);
+		const roll = RollerUtil.randomise(dieSize);
 		const healing = Math.max(1, roll + conMod);
 
 		// Apply healing
@@ -2347,7 +2347,7 @@ class CharacterSheetPage {
 	}
 
 	async _onDeathSave () {
-		const roll = RollerUtil.roll(20);
+		const roll = RollerUtil.randomise(20);
 		let result = "";
 
 		if (roll === 20) {
@@ -2525,8 +2525,8 @@ class CharacterSheetPage {
 		}
 		mode = mode || "normal";
 
-		const roll1 = RollerUtil.roll(20);
-		const roll2 = RollerUtil.roll(20);
+		const roll1 = RollerUtil.randomise(20);
+		const roll2 = RollerUtil.randomise(20);
 
 		let roll;
 		if (mode === "advantage") {
@@ -2813,7 +2813,7 @@ class CharacterSheetPage {
 	rollDice (num, sides) {
 		let total = 0;
 		for (let i = 0; i < num; i++) {
-			total += RollerUtil.roll(sides);
+			total += RollerUtil.randomise(sides);
 		}
 		return total;
 	}

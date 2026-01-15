@@ -295,8 +295,8 @@ class CharacterSheetBuilder {
 						return false;
 					}
 				}
-				// Validate expertise selection if class has expertise at level 1
-				const expertiseInfo = this._getClassExpertiseInfo(this._selectedClass, 1);
+				// Validate expertise selection if class has expertise at early levels (1-2)
+				const expertiseInfo = this._getClassExpertiseInfoEarlyLevels(this._selectedClass);
 				if (expertiseInfo && expertiseInfo.count > 0) {
 					if (this._selectedExpertise.length < expertiseInfo.count) {
 						JqueryUtil.doToast({type: "warning", content: `Please select ${expertiseInfo.count} skills for expertise.`});
@@ -1526,8 +1526,8 @@ class CharacterSheetBuilder {
 			],
 			"Monk": [
 				// Ki/Focus Points - level-based, not parseable from text
-				{name: "Ki Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
-				{name: "Focus Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"}, // 2024 PHB name
+				// Use "Focus Points" for 2024 (XPHB) monks, "Ki Points" for 2014 (PHB) monks
+				{name: "__MONK_RESOURCE__", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
 			],
 			"Sorcerer": [
 				{name: "Sorcery Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "long"},
@@ -1546,8 +1546,21 @@ class CharacterSheetBuilder {
 		if (classResources) {
 			const existingResources = this._state.getResources();
 			classResources.forEach(resource => {
-				// Skip if resource was already auto-added by feature detection
-				if (existingResources.find(r => r.name === resource.name)) {
+				// Resolve special placeholder for monk Ki/Focus Points
+				let resourceName = resource.name;
+				if (resourceName === "__MONK_RESOURCE__") {
+					// Use "Focus Points" for 2024 (XPHB) monks, "Ki Points" for 2014 monks
+					const is2024 = cls.source === "XPHB" || this._selectedClass?.source === "XPHB";
+					resourceName = is2024 ? "Focus Points" : "Ki Points";
+				}
+				
+				// Skip if resource was already auto-added (check both Ki and Focus for monks)
+				const isMonkResource = resourceName === "Ki Points" || resourceName === "Focus Points";
+				if (isMonkResource) {
+					if (existingResources.find(r => r.name === "Ki Points" || r.name === "Focus Points")) {
+						return;
+					}
+				} else if (existingResources.find(r => r.name === resourceName)) {
 					return;
 				}
 
@@ -1562,7 +1575,7 @@ class CharacterSheetBuilder {
 
 				if (max > 0) {
 					this._state.addResource({
-						name: resource.name,
+						name: resourceName,
 						max,
 						recharge: resource.recharge,
 					});
@@ -2376,8 +2389,8 @@ class CharacterSheetBuilder {
 			$content.append($skillSection);
 		}
 
-		// Expertise selection (for Rogue at level 1, etc.)
-		const expertiseInfo = this._getClassExpertiseInfo(cls, 1);
+		// Expertise selection (for classes with early expertise: Rogue level 1, Ranger level 1-2, etc.)
+		const expertiseInfo = this._getClassExpertiseInfoEarlyLevels(cls);
 		if (expertiseInfo && expertiseInfo.count > 0) {
 			const $expertiseSection = this._renderExpertiseSelection(cls, expertiseInfo);
 			$content.append($expertiseSection);
@@ -2490,7 +2503,7 @@ class CharacterSheetBuilder {
 	 * Update expertise section when skills change
 	 */
 	_updateExpertiseSection (cls) {
-		const expertiseInfo = this._getClassExpertiseInfo(cls, 1);
+		const expertiseInfo = this._getClassExpertiseInfoEarlyLevels(cls);
 		if (!expertiseInfo || expertiseInfo.count === 0) return;
 		
 		const $container = $(".charsheet__builder-expertise-selection");
@@ -2499,6 +2512,59 @@ class CharacterSheetBuilder {
 		// Replace with new section
 		const $newSection = this._renderExpertiseSelection(cls, expertiseInfo);
 		$container.replaceWith($newSection);
+	}
+
+	/**
+	 * Get expertise info from class features at early levels (1-2)
+	 * Some classes get expertise at level 1 (Rogue), others at level 2 (XPHB Ranger).
+	 * This checks both levels during character creation.
+	 * @param {Object} cls - Class data
+	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
+	 */
+	_getClassExpertiseInfoEarlyLevels (cls) {
+		// Check levels 1 and 2 for expertise-granting features
+		for (const level of [1, 2]) {
+			const expertiseInfo = this._getClassExpertiseInfo(cls, level);
+			if (expertiseInfo) return expertiseInfo;
+		}
+		
+		// Fallback: For homebrew classes, check feature entries directly for expertise text
+		// This handles cases where feature reference matching fails
+		return this._getClassExpertiseInfoFromEntries(cls);
+	}
+
+	/**
+	 * Get expertise info by directly scanning feature entries (fallback for homebrew)
+	 * @param {Object} cls - Class data
+	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
+	 */
+	_getClassExpertiseInfoFromEntries (cls) {
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length) return null;
+
+		// Find all features for this class at levels 1-2
+		const earlyFeatures = classFeatures.filter(f => {
+			if (f.className !== cls.name) return false;
+			if (f.level > 2) return false;
+			// For homebrew, classSource might not match exactly - be lenient
+			return true;
+		});
+
+		// Check each feature's entries for expertise-granting text
+		for (const feature of earlyFeatures) {
+			if (!feature.entries?.length) continue;
+			
+			// Check if this feature or any of its sub-entries grant expertise
+			const expertiseInfo = this._findExpertiseInEntries(feature.entries);
+			if (expertiseInfo) return expertiseInfo;
+			
+			// Also check the top-level entries directly
+			if (this._entryGrantsExpertise(feature.entries)) {
+				return this._parseExpertiseEntries(feature.entries);
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -2558,7 +2624,8 @@ class CharacterSheetBuilder {
 
 	/**
 	 * Extract expertise info from a feature reference
-	 * @param {string} featureRef - Feature reference string like "Expertise|Rogue|XPHB|1"
+	 * @param {string} featureRef - Feature reference string like "Expertise|Rogue|XPHB|1" or "Deft Explorer|Ranger||1|TCE"
+	 * Format: FeatureName|ClassName|ClassSource|Level|FeatureSource
 	 * @param {Array} allFeatures - All loaded class features
 	 * @param {Object} cls - Class data for context
 	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
@@ -2567,15 +2634,20 @@ class CharacterSheetBuilder {
 		const parts = featureRef.split("|");
 		const featureName = parts[0];
 		const className = parts[1] || cls.name;
-		const featureSource = parts[2] || cls.source;
+		const classSource = parts[2] || cls.source || Parser.SRC_PHB;
 		const featureLevel = parseInt(parts[3]) || 1;
+		// Feature source is at position 4 if present, otherwise defaults to class source
+		const featureSource = parts[4] || classSource;
 
 		// Find the actual feature data
 		const featureData = allFeatures.find(f => {
 			if (f.name !== featureName) return false;
 			if (f.className !== className) return false;
 			if (f.level !== featureLevel) return false;
-			// Match source - feature source or class source
+			// Match class source
+			const fClassSource = f.classSource || Parser.SRC_PHB;
+			if (classSource && fClassSource !== classSource) return false;
+			// Match feature source
 			if (featureSource && f.source && f.source !== featureSource) return false;
 			return true;
 		});
@@ -2599,8 +2671,12 @@ class CharacterSheetBuilder {
 	_findExpertiseInEntries (entries) {
 		for (const entry of entries) {
 			if (typeof entry === "object" && entry.type === "entries") {
-				// Check if this is an "Expertise" sub-entry
+				// Check if this sub-entry's name is "Expertise"
 				if (entry.name === "Expertise") {
+					return this._parseExpertiseEntries(entry.entries || []);
+				}
+				// Check if this sub-entry's TEXT grants expertise (e.g., "proficiency bonus is doubled")
+				if (this._entryGrantsExpertise(entry.entries || [])) {
 					return this._parseExpertiseEntries(entry.entries || []);
 				}
 				// Recursively check nested entries
@@ -2611,6 +2687,22 @@ class CharacterSheetBuilder {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Check if entries text indicates an expertise grant
+	 * @param {Array} entries - Feature entries to check
+	 * @returns {boolean}
+	 */
+	_entryGrantsExpertise (entries) {
+		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
+		// Check for common expertise-granting patterns:
+		// - "proficiency bonus is doubled" (TCE wording)
+		// - "gain expertise" (XPHB wording)
+		// - "double your proficiency bonus" (alternate wording)
+		return entriesText.includes("proficiency bonus is doubled")
+			|| entriesText.includes("gain expertise")
+			|| entriesText.includes("double your proficiency bonus");
 	}
 
 	/**
