@@ -140,7 +140,8 @@ class NaturalWeaponParser {
 		const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
 
 		// Check if this describes a natural weapon or unarmed strike enhancement
-		const isNaturalWeapon = /natural\s*weapon|unarmed\s*strike|melee\s*weapon\s*attack/i.test(plainText);
+		// Handle both singular "natural weapon" and plural "natural weapons"/"natural melee weapons"
+		const isNaturalWeapon = /natural\s*(?:melee\s*)?weapons?|unarmed\s*strike|melee\s*weapon\s*attack/i.test(plainText);
 		if (!isNaturalWeapon) return null;
 
 		// Extract damage die (e.g., "1d4", "1d6", "2d6")
@@ -229,7 +230,8 @@ class NaturalWeaponParser {
 	static isNaturalWeapon (text) {
 		if (!text) return false;
 		const plainText = text.replace(/<[^>]*>/g, " ").toLowerCase();
-		return /natural\s*weapon|unarmed\s*strike.*(?:deal|damage)|melee\s*weapon\s*attack/i.test(plainText) &&
+		// Handle both singular and plural forms: "natural weapon", "natural weapons", "natural melee weapons"
+		return /natural\s*(?:melee\s*)?weapons?|unarmed\s*strike.*(?:deal|damage)|melee\s*weapon\s*attack/i.test(plainText) &&
 			/\d+d\d+/i.test(plainText);
 	}
 }
@@ -5436,11 +5438,6 @@ class CharacterSheetState {
 		// Can't be moved or knocked prone (note-based)
 		if (/resist.{0,30}(?:moved|knocked|pushed)/i.test(text) || /can't be (?:moved|knocked|pushed)/i.test(text)) {
 			effects.push({type: "note", value: "Resistant to forced movement"});
-		}
-		
-		// Debug logging
-		if (effects.length > 0) {
-			console.log(`[CharSheet State] parseEffectsFromDescription found ${effects.length} effects:`, effects);
 		}
 		
 		return effects;

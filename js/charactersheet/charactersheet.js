@@ -1987,14 +1987,6 @@ class CharacterSheetPage {
 			? CharacterSheetState.parseEffectsFromDescription(feature.description)
 			: null;
 		
-		// Debug logging for effect parsing
-		console.log(`[CharSheet] Activating ${feature.name} as ${stateTypeId}:`, {
-			shouldParseEffects,
-			isGeneric: stateType?.isGeneric,
-			description: feature.description?.substring(0, 200),
-			parsedEffects,
-		});
-		
 		// Activate the state
 		if (stateTypeId === "custom" || !CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId]) {
 			// Custom activatable - create a generic state
