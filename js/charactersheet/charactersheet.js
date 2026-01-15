@@ -1576,6 +1576,7 @@ class CharacterSheetPage {
 						this._state.setExertionCurrent(current - 1);
 						this._saveCurrentCharacter();
 						this._renderResources();
+						this._renderActiveStates(); // Refresh active states to update Activate button states
 						if (this._features) this._features._renderResources();
 						if (this._combat) this._combat._updateExertionDisplay();
 					}
@@ -1587,6 +1588,7 @@ class CharacterSheetPage {
 						this._state.setExertionCurrent(current + 1);
 						this._saveCurrentCharacter();
 						this._renderResources();
+						this._renderActiveStates(); // Refresh active states to update Activate button states
 						if (this._features) this._features._renderResources();
 						if (this._combat) this._combat._updateExertionDisplay();
 					}
@@ -1620,6 +1622,7 @@ class CharacterSheetPage {
 					this._state.setResourceCurrent(resource.id, resource.current - 1);
 					this._saveCurrentCharacter();
 					this._renderResources();
+					this._renderActiveStates(); // Refresh active states to update Activate button states
 					if (this._features) this._features._renderResources();
 				}
 			});
@@ -1629,6 +1632,7 @@ class CharacterSheetPage {
 					this._state.setResourceCurrent(resource.id, resource.current + 1);
 					this._saveCurrentCharacter();
 					this._renderResources();
+					this._renderActiveStates(); // Refresh active states to update Activate button states
 					if (this._features) this._features._renderResources();
 				}
 			});
@@ -1642,91 +1646,168 @@ class CharacterSheetPage {
 		$container.empty();
 
 		const activeStates = this._state.getActiveStates();
+		const activatableFeatures = this._state.getActivatableFeatures();
 		const concentration = this._state.getConcentration();
 		
 		// Filter out condition-derived states (they're shown in the Conditions section)
 		const nonConditionStates = activeStates.filter(s => !s.isCondition);
+		
+		// Get currently active state type IDs
+		const activeStateTypeIds = new Set(nonConditionStates.filter(s => s.active).map(s => s.stateTypeId));
 
-		if (!nonConditionStates.length && !concentration) {
-			$container.html(`<div class="ve-muted ve-text-center py-2">No active states</div>`);
-			return;
+		// === Section 1: Currently Active States ===
+		const hasActiveStates = nonConditionStates.some(s => s.active) || concentration;
+		
+		if (hasActiveStates) {
+			const $activeSection = $(`<div class="charsheet__active-states-section mb-3">
+				<div class="charsheet__section-subtitle ve-flex-v-center mb-1">
+					<span class="ve-small ve-bold text-success">● Currently Active</span>
+				</div>
+			</div>`);
+			
+			// Render active states
+			nonConditionStates.filter(s => s.active).forEach(state => {
+				const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
+				const $row = this._renderActiveStateRow(state, stateType, true);
+				$activeSection.append($row);
+			});
+			
+			// Show concentration if active
+			if (concentration) {
+				const $concRow = $(`
+					<div class="charsheet__state-row charsheet__state--active">
+						<span class="charsheet__state-icon">🔮</span>
+						<span class="charsheet__state-name">Concentrating: ${concentration.spellName || "Unknown"}</span>
+						<div class="charsheet__state-controls ml-auto">
+							<button class="ve-btn ve-btn-xs ve-btn-warning charsheet__end-concentration-btn">End</button>
+						</div>
+					</div>
+				`);
+				$concRow.find(".charsheet__end-concentration-btn").on("click", () => {
+					this._state.breakConcentration();
+					this._saveCurrentCharacter();
+					this._renderActiveStates();
+				});
+				$activeSection.append($concRow);
+			}
+			
+			$container.append($activeSection);
 		}
 
-		// Render each active state (excluding condition-derived ones)
-		nonConditionStates.forEach(state => {
-			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
-			const activeClass = state.active ? "charsheet__state--active" : "charsheet__state--inactive";
-			const toggleText = state.active ? "End" : "Activate";
-			const toggleBtnClass = state.active ? "ve-btn-warning" : "ve-btn-success";
-			
-			const $row = $(`
-				<div class="charsheet__state-row ${activeClass}" data-state-id="${state.id}">
-					<span class="charsheet__state-icon">${state.icon || "⚡"}</span>
-					<span class="charsheet__state-name">${state.name}</span>
-					<span class="charsheet__state-status ve-muted ve-small ml-2">${state.active ? "(Active)" : "(Ended)"}</span>
-					<div class="charsheet__state-controls ml-auto">
-						<button class="ve-btn ve-btn-xs ${toggleBtnClass} mr-2 charsheet__state-toggle-btn">${toggleText}</button>
-						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__state-remove-btn" title="Remove state">×</button>
-					</div>
-				</div>
-			`);
-
-			// Toggle state on/off
-			$row.find(".charsheet__state-toggle-btn").on("click", () => {
-				this._state.toggleActiveState(state.id);
-				this._saveCurrentCharacter();
-				this._renderActiveStates();
-				this._renderCharacter(); // Re-render to show state effects
-			});
-
-			// Remove state entirely
-			$row.find(".charsheet__state-remove-btn").on("click", () => {
-				this._state.removeActiveState(state.id);
-				this._saveCurrentCharacter();
-				this._renderActiveStates();
-				this._renderCharacter();
-			});
-
-			$container.append($row);
-		});
-
-		// Add buttons for quick state activation
-		const $quickActivate = $(`
-			<div class="charsheet__state-quick-activate mt-2">
-				<button class="ve-btn ve-btn-xs ve-btn-default mr-1 charsheet__activate-rage-btn" title="Enter Rage">💢 Rage</button>
-				<button class="ve-btn ve-btn-xs ve-btn-default mr-1 charsheet__activate-dodge-btn" title="Dodge Action">💨 Dodge</button>
-			</div>
-		`);
-
-		// Rage button - only show if character has Rage resource
-		const resources = this._state.getResources();
-		const hasRage = resources.some(r => r.name.toLowerCase() === "rage" || r.name.toLowerCase() === "rages");
-		const isRaging = this._state.isStateActive("rage") || nonConditionStates.some(s => s.stateTypeId === "rage" && s.active);
+		// === Section 2: Available Activatable Features ===
+		// Show features that can be activated but aren't currently active
+		const availableFeatures = activatableFeatures.filter(af => !af.isActive);
 		
-		$quickActivate.find(".charsheet__activate-rage-btn").toggle(hasRage).on("click", () => {
-			if (isRaging) {
-				// End rage
-				this._state.deactivateState("rage");
+		if (availableFeatures.length > 0 || !hasActiveStates) {
+			const $availableSection = $(`<div class="charsheet__activatable-section">
+				<div class="charsheet__section-subtitle ve-flex-v-center mb-1">
+					<span class="ve-small ve-muted">Available to Activate</span>
+				</div>
+			</div>`);
+			
+			if (availableFeatures.length === 0) {
+				$availableSection.append(`<div class="ve-muted ve-small ve-text-center py-1">No activatable features</div>`);
 			} else {
-				// Start rage (also uses a rage resource)
-				const rageResource = resources.find(r => r.name.toLowerCase() === "rage" || r.name.toLowerCase() === "rages");
-				if (rageResource && rageResource.current > 0) {
-					this._state.setResourceCurrent(rageResource.id, rageResource.current - 1);
-					this._state.activateState("rage", {resourceId: rageResource.id});
-				} else {
-					this._state.activateState("rage"); // Activate without spending resource (manual mode)
-				}
+				availableFeatures.forEach(({feature, activationInfo, resource, stateTypeId}) => {
+					const stateType = activationInfo.stateType || CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
+					const icon = stateType?.icon || "⚡";
+					// Use resource cost from description detection, or resource object, or default
+					const resourceCost = resource?.cost || activationInfo.exertionCost || stateType?.resourceCost || 1;
+					const hasResourceAvailable = !resource || resource.current >= resourceCost;
+					
+					// Get activation action type
+					const activationAction = activationInfo.activationAction || stateType?.activationAction;
+					const actionLabel = this._getActionLabel(activationAction);
+					
+					// Create hoverable feature name link
+					const featureNameHtml = this._getFeatureHoverLink(feature);
+					
+					const $row = $(`
+						<div class="charsheet__activatable-row ve-flex-v-center py-1 px-2 mb-1 rounded" 
+							style="background: var(--rgb-bg-alt, #f8f9fa);">
+							<span class="charsheet__state-icon mr-2">${icon}</span>
+							<div class="ve-flex-col flex-grow-1" style="min-width: 0;">
+								<span class="charsheet__state-name">${featureNameHtml}</span>
+							</div>
+							<div class="charsheet__state-controls ml-auto ve-flex-v-center">
+								${actionLabel ? `<span class="ve-small ve-muted mr-1">${actionLabel}</span>` : ""}
+								<button class="ve-btn ve-btn-xs ve-btn-success charsheet__activate-btn" 
+									${!hasResourceAvailable ? 'disabled title="No uses remaining"' : ''}>
+									Activate${resourceCost > 0 && resource ? ` (${resourceCost})` : ""}
+								</button>
+							</div>
+						</div>
+					`);
+					
+					$row.find(".charsheet__activate-btn").on("click", () => {
+						this._activateFeatureState(feature, stateTypeId, stateType, resource, resourceCost);
+					});
+					
+					$availableSection.append($row);
+				});
 			}
-			this._saveCurrentCharacter();
-			this._renderResources();
-			this._renderActiveStates();
-			this._renderCharacter();
-		});
+			
+			$container.append($availableSection);
+		}
 
-		// Dodge button
-		$quickActivate.find(".charsheet__activate-dodge-btn").on("click", () => {
-			const isDodging = this._state.isStateActive("dodge") || nonConditionStates.some(s => s.stateTypeId === "dodge" && s.active);
-			if (isDodging) {
+		// === Section 3: Inactive/Ended States (can be removed) ===
+		const endedStates = nonConditionStates.filter(s => !s.active);
+		if (endedStates.length > 0) {
+			const $endedSection = $(`<div class="charsheet__ended-states-section mt-2">
+				<div class="charsheet__section-subtitle ve-flex-v-center mb-1">
+					<span class="ve-small ve-muted">Ended (click to remove)</span>
+				</div>
+			</div>`);
+			
+			endedStates.forEach(state => {
+				const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
+				const $row = $(`
+					<div class="charsheet__state-row charsheet__state--inactive ve-small py-1">
+						<span class="charsheet__state-icon">${state.icon || stateType?.icon || "⚡"}</span>
+						<span class="charsheet__state-name ve-muted">${state.name}</span>
+						<div class="charsheet__state-controls ml-auto">
+							<button class="ve-btn ve-btn-xs ve-btn-default charsheet__reactivate-btn mr-1" title="Reactivate">↻</button>
+							<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__remove-btn" title="Remove">×</button>
+						</div>
+					</div>
+				`);
+				
+				$row.find(".charsheet__reactivate-btn").on("click", () => {
+					this._state.activateState(state.stateTypeId);
+					this._saveCurrentCharacter();
+					this._renderActiveStates();
+					this._renderCharacter();
+				});
+				
+				$row.find(".charsheet__remove-btn").on("click", () => {
+					this._state.removeActiveState(state.id);
+					this._saveCurrentCharacter();
+					this._renderActiveStates();
+				});
+				
+				$endedSection.append($row);
+			});
+			
+			$container.append($endedSection);
+		}
+
+		// === Section 4: Quick Actions (Dodge, etc.) ===
+		// Check if character has Reckless Attack (barbarian level 2+)
+		const barbarianClass = this._state._data.classes?.find(c => c.name?.toLowerCase() === "barbarian");
+		const hasRecklessAttack = barbarianClass && barbarianClass.level >= 2;
+		
+		const $quickActions = $(`<div class="charsheet__quick-actions mt-2 pt-2 border-top">
+			<span class="ve-small ve-muted mr-2">Quick:</span>
+			<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("dodge") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-dodge-btn">
+				💨 ${activeStateTypeIds.has("dodge") ? "End Dodge" : "Dodge"}
+			</button>
+			${hasRecklessAttack ? `<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("recklessAttack") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-reckless-btn">
+				⚡ ${activeStateTypeIds.has("recklessAttack") ? "End Reckless" : "Reckless"}
+			</button>` : ""}
+		</div>`);
+		
+		$quickActions.find(".charsheet__toggle-dodge-btn").on("click", () => {
+			if (this._state.isStateTypeActive("dodge")) {
 				this._state.deactivateState("dodge");
 			} else {
 				this._state.activateState("dodge");
@@ -1735,8 +1816,213 @@ class CharacterSheetPage {
 			this._renderActiveStates();
 			this._renderCharacter();
 		});
+		
+		if (hasRecklessAttack) {
+			$quickActions.find(".charsheet__toggle-reckless-btn").on("click", () => {
+				if (this._state.isStateTypeActive("recklessAttack")) {
+					this._state.deactivateState("recklessAttack");
+				} else {
+					this._state.activateState("recklessAttack");
+				}
+				this._saveCurrentCharacter();
+				this._renderActiveStates();
+				this._renderCharacter();
+			});
+		}
+		
+		$container.append($quickActions);
+	}
 
-		$container.append($quickActivate);
+	/**
+	 * Get a short label for an activation action type
+	 */
+	_getActionLabel (actionType) {
+		switch (actionType) {
+			case "bonus": return "🎯 Bonus";
+			case "action": return "⚔️ Action";
+			case "reaction": return "↩️ Reaction";
+			case "free": return "✨ Free";
+			default: return "";
+		}
+	}
+
+	/**
+	 * Create a hover link for an activatable feature
+	 * @param {object} feature - The feature object
+	 * @returns {string} HTML string with hover attributes
+	 */
+	_getFeatureHoverLink (feature) {
+		try {
+			// Class features - link to class feature page
+			if (feature.featureType === "Class" && feature.className) {
+				const storedClass = this._state.getClasses().find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
+				const classSource = feature.classSource || feature.source || storedClass?.source || Parser.SRC_XPHB;
+				
+				const hashInput = {
+					name: feature.name,
+					className: feature.className,
+					classSource: classSource,
+					level: feature.level || 1,
+					source: feature.source || Parser.SRC_XPHB,
+				};
+				if (feature.subclassName || feature.isSubclassFeature) {
+					hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
+					hashInput.subclassSource = feature.subclassSource || storedClass?.subclass?.source || feature.source || Parser.SRC_XPHB;
+				}
+				const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASS_SUBCLASS_FEATURES](hashInput);
+				return this.getHoverLink(UrlUtil.PG_CLASS_SUBCLASS_FEATURES, feature.name, feature.source || Parser.SRC_XPHB, hash);
+			}
+			// Optional features (invocations, combat methods, etc.)
+			if (feature.featureType === "Optional Feature" || feature.optionalfeatureType) {
+				return this.getHoverLink(UrlUtil.PG_OPT_FEATURES, feature.name, feature.source || Parser.SRC_XPHB);
+			}
+			// Species/Race features
+			if (feature.featureType === "Species" || feature.featureType === "Race") {
+				const race = this._state.getRace();
+				if (race) {
+					const hash = UrlUtil.encodeForHash([race.name, race.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
+					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_RACES, source: race.source || Parser.SRC_XPHB, hash});
+					return `<a href="${UrlUtil.PG_RACES}#${hash}" ${hoverAttrs}>${feature.name}</a>`;
+				}
+			}
+			// Background features
+			if (feature.featureType === "Background") {
+				const background = this._state.getBackground();
+				if (background) {
+					const hash = UrlUtil.encodeForHash([background.name, background.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
+					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BACKGROUNDS, source: background.source || Parser.SRC_XPHB, hash});
+					return `<a href="${UrlUtil.PG_BACKGROUNDS}#${hash}" ${hoverAttrs}>${feature.name}</a>`;
+				}
+			}
+		} catch (e) {
+			console.warn("[CharSheet] Error creating feature hover link:", e);
+		}
+		// Fallback: plain name
+		return feature.name;
+	}
+
+	/**
+	 * Strip HTML tags and 5etools formatting from text for clean display
+	 */
+	_stripHtmlTags (text) {
+		if (!text) return "";
+		return text
+			// Remove 5etools {@tag content} formatting
+			.replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, "$1")
+			// Remove HTML tags
+			.replace(/<[^>]*>/g, "")
+			// Decode HTML entities
+			.replace(/&quot;/g, '"')
+			.replace(/&amp;/g, "&")
+			.replace(/&lt;/g, "<")
+			.replace(/&gt;/g, ">")
+			.replace(/&#39;/g, "'")
+			// Clean up extra whitespace
+			.replace(/\s+/g, " ")
+			.trim();
+	}
+
+	/**
+	 * Render a single active state row
+	 */
+	_renderActiveStateRow (state, stateType, isActive) {
+		const activeClass = isActive ? "charsheet__state--active" : "charsheet__state--inactive";
+		const icon = state.icon || stateType?.icon || "⚡";
+		
+		// Try to create hoverable name by finding the source feature
+		let nameHtml = state.name;
+		if (state.sourceFeatureId) {
+			const feature = this._state.getFeatures().find(f => f.id === state.sourceFeatureId);
+			if (feature) {
+				nameHtml = this._getFeatureHoverLink(feature);
+			}
+		}
+		
+		const $row = $(`
+			<div class="charsheet__state-row ${activeClass} ve-flex-v-center py-2 px-2 mb-1 rounded" 
+				style="background: ${isActive ? "rgba(40, 167, 69, 0.1)" : "transparent"}; border: 1px solid ${isActive ? "var(--bs-success, #28a745)" : "transparent"};">
+				<span class="charsheet__state-icon mr-2" style="font-size: 1.2em;">${icon}</span>
+				<span class="charsheet__state-name ve-bold">${nameHtml}</span>
+				<div class="charsheet__state-controls ml-auto">
+					<button class="ve-btn ve-btn-xs ve-btn-warning charsheet__end-state-btn">End</button>
+				</div>
+			</div>
+		`);
+
+		$row.find(".charsheet__end-state-btn").on("click", () => {
+			this._state.deactivateState(state.stateTypeId);
+			this._saveCurrentCharacter();
+			this._renderActiveStates();
+			this._renderCharacter();
+		});
+
+		return $row;
+	}
+
+	/**
+	 * Activate a feature's state, deducting resource cost if applicable
+	 */
+	_activateFeatureState (feature, stateTypeId, stateType, resource, resourceCost) {
+		// Use passed cost, or fall back to state type default
+		const cost = resourceCost || stateType?.resourceCost || 1;
+		
+		// Deduct resource cost if applicable
+		if (resource && resource.current >= cost) {
+			// Special handling for Exertion (tracked separately)
+			if (resource.isExertion) {
+				this._state.setExertionCurrent(resource.current - cost);
+			} else {
+				this._state.setResourceCurrent(resource.id, resource.current - cost);
+			}
+		}
+		
+		// Determine if we need to parse effects from description
+		// Parse effects for: custom states, generic state types (like combatStance), or state types with empty effects
+		const shouldParseEffects = stateTypeId === "custom" || 
+			!CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId] ||
+			stateType?.isGeneric || 
+			(stateType?.effects && stateType.effects.length === 0);
+		
+		const parsedEffects = shouldParseEffects 
+			? CharacterSheetState.parseEffectsFromDescription(feature.description)
+			: null;
+		
+		// Debug logging for effect parsing
+		console.log(`[CharSheet] Activating ${feature.name} as ${stateTypeId}:`, {
+			shouldParseEffects,
+			isGeneric: stateType?.isGeneric,
+			description: feature.description?.substring(0, 200),
+			parsedEffects,
+		});
+		
+		// Activate the state
+		if (stateTypeId === "custom" || !CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId]) {
+			// Custom activatable - create a generic state
+			this._state.addActiveState("custom", {
+				name: feature.name,
+				icon: "⚡",
+				sourceFeatureId: feature.id,
+				description: feature.description,
+				customEffects: parsedEffects?.length > 0 ? parsedEffects : null,
+			});
+		} else {
+			// For known state types, pass feature info but only use parsed effects for generic types
+			const customData = {
+				sourceFeatureId: feature.id,
+				resourceId: resource?.id,
+				name: feature.name,
+				description: feature.description,
+				// Only use parsed effects for generic state types (like combatStance)
+				// Non-generic types (like recklessAttack, rage) use their predefined effects
+				customEffects: shouldParseEffects && parsedEffects?.length > 0 ? parsedEffects : null,
+			};
+			this._state.activateState(stateTypeId, customData);
+		}
+		
+		this._saveCurrentCharacter();
+		this._renderResources();
+		this._renderActiveStates();
+		this._renderCharacter();
 	}
 
 	_renderAttacks () {
@@ -2470,10 +2756,17 @@ class CharacterSheetPage {
 	_rollAttack (attack, event) {
 		const exhaustionPenalty = this._getExhaustionPenalty();
 		
-		// Check for advantage/disadvantage from active states
+		// Determine attack type for advantage/disadvantage matching
+		// Build specific attack type like "attack:melee:str" for proper matching with effects
+		const isMelee = attack.isMelee || attack.type === "melee" || attack.range === "melee" || 
+			(attack.range && !attack.range.includes("/"));
+		const abilityUsed = attack.abilityMod || attack.ability || (isMelee ? "str" : "dex");
+		const attackType = `attack:${isMelee ? "melee" : "ranged"}:${abilityUsed}`;
+		
+		// Check for advantage/disadvantage from active states using specific attack type
 		let mode;
-		const hasAdvantage = this._state.hasAdvantageFromStates("attack");
-		const hasDisadvantage = this._state.hasDisadvantageFromStates("attack");
+		const hasAdvantage = this._state.hasAdvantageFromStates(attackType);
+		const hasDisadvantage = this._state.hasDisadvantageFromStates(attackType);
 		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
 		
@@ -2494,10 +2787,7 @@ class CharacterSheetPage {
 		// Parse and roll damage
 		let damageRoll = attack.damage;
 		
-		// Check for rage damage bonus on melee STR attacks
-		const isMelee = attack.type === "melee" || attack.range === "melee" || 
-			(attack.range && !attack.range.includes("/"));
-		const abilityUsed = attack.ability || (attack.attackBonus !== undefined ? "str" : null); // Default to STR for melee
+		// Check for rage damage bonus on melee STR attacks (using isMelee/abilityUsed computed above)
 		const rageDamage = this._state.getRageDamageBonus(isMelee, abilityUsed);
 		
 		// Add any bonus damage from active states

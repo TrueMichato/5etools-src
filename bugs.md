@@ -133,9 +133,12 @@ This file is used to track known bugs in the 5etools character sheet code.
 
 ### Combat
 - [] unarmed strikes not added automatically as attacks, specially for monks
+- [] resources and active features not displayed in combat UI
+- [] Condition resistances and immunities not displayed in combat UI
 
 ### Spells
 - [] features giving spells or spell choice (like warlock invocations, fey-touched feat, etc) not adding spells automatically and not giving choice UI.
+- [] need to add spell-casting UI that would check constraints before casting (like from conditions)
 
 ### Classes
 - [] monks give both ki points and focus points

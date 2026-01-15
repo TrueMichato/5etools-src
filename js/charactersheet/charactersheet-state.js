@@ -416,6 +416,11 @@ class FeatureModifierParser {
 
 		const modifiers = [];
 		const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+		
+		// Debug: Log the plaintext for proficiency bonus features
+		if (/proficiency\s*bonus/i.test(plainText)) {
+			console.log(`[FeatureModifierParser] Checking "${sourceName}" for proficiency bonus patterns. PlainText:`, plainText.substring(0, 200));
+		}
 
 		// Helper to parse signed number from various formats
 		const parseSignedValue = (match, signGroup, numGroup) => {
@@ -658,6 +663,13 @@ class FeatureModifierParser {
 				{pattern: new RegExp(`${skill}\\s*(?:checks?|rolls?)?\\s*(?:increase|bonus)\\s*(?:by|of)\\s*([+\\-−])?(\\d+)`, "gi"), signed: true, defaultPositive: true},
 				{pattern: new RegExp(`${skill}\\s*(?:checks?|rolls?)?\\s*(?:decrease|penalty)\\s*by\\s*(\\d+)`, "gi"), negative: true},
 				{pattern: new RegExp(`(?:bonus|penalty)\\s*of\\s*([+\\-−])?(\\d+)\\s*to\\s*(?:your\\s*)?${skill}\\s*(?:checks?|rolls?)?`, "gi"), signed: true, defaultPositive: true},
+				// "bonus to X checks equal to your proficiency bonus" patterns
+				// Pattern 1: "bonus to Charisma (Intimidation) checks equal to your proficiency bonus"
+				{pattern: new RegExp(`(?:gain\\s*(?:a\\s*)?)?bonus\\s*to\\s*(?:your\\s*)?(?:\\w+\\s*\\(?\\s*)?${skill}(?:\\s*\\))?\\s*(?:checks?)?\\s*equal\\s*to\\s*(?:your\\s*)?proficiency\\s*bonus`, "gi"), proficiencyBonus: true},
+				// Pattern 2: "bonus equal to proficiency bonus to/on X checks" 
+				{pattern: new RegExp(`(?:gain\\s*(?:a\\s*)?)?bonus\\s*(?:equal\\s*to\\s*(?:your\\s*)?proficiency\\s*bonus)\\s*(?:to|on)\\s*(?:your\\s*)?(?:\\w+\\s*\\(?\\s*)?${skill}(?:\\s*\\))?\\s*(?:checks?)?`, "gi"), proficiencyBonus: true},
+				// Pattern 3: Simpler pattern - "bonus ... to ... {skill} ... equal to ... proficiency bonus"
+				{pattern: new RegExp(`bonus\\s+[^.]*?${skill}[^.]*?equal\\s+to\\s+(?:your\\s+)?proficiency\\s+bonus`, "gi"), proficiencyBonus: true},
 			];
 			this._applyPatterns(plainText, skillPatterns, `skill:${skillKey}`, sourceName, modifiers, parseSignedValue);
 		});
@@ -1447,10 +1459,22 @@ class FeatureModifierParser {
 	 * Helper to apply multiple patterns and extract modifiers
 	 */
 	static _applyPatterns (text, patterns, type, sourceName, modifiers, parseSignedValue) {
-		patterns.forEach(({pattern, signed, positive, negative, defaultPositive, setValue, perLevel, sizeIncrease, maybeDouble, maybeHalve, abilityMod, equalToWalk}) => {
+		patterns.forEach(({pattern, signed, positive, negative, defaultPositive, setValue, perLevel, sizeIncrease, maybeDouble, maybeHalve, abilityMod, equalToWalk, proficiencyBonus}) => {
 			let match;
 			while ((match = pattern.exec(text)) !== null) {
 				let value;
+
+				if (proficiencyBonus) {
+					// "bonus equal to your proficiency bonus" - mark for special handling
+					modifiers.push({
+						type,
+						value: 0,
+						note: sourceName,
+						proficiencyBonus: true,
+						conditional: this._extractCondition(text, match.index),
+					});
+					continue;
+				}
 
 				if (abilityMod) {
 					// Special case: "add your X modifier to initiative"
@@ -1861,6 +1885,58 @@ class CharacterSheetState {
 
 		// Migrate features: infer featureType for old saves that don't have it
 		this._migrateFeatures();
+		
+		// Migrate modifiers: re-process modifiers that may be missing special flags
+		this._migrateModifiers();
+	}
+	
+	/**
+	 * Migrate old modifier data to include special flags
+	 * This re-parses feature descriptions to extract proficiencyBonus, abilityMod, etc.
+	 */
+	_migrateModifiers () {
+		if (!this._data.namedModifiers?.length) return;
+		if (!this._data.features?.length) return;
+		
+		// Check if migration is needed (look for modifiers with notes mentioning proficiency but no flag)
+		const needsMigration = this._data.namedModifiers.some(mod => 
+			mod.note?.toLowerCase().includes("proficiency bonus") && !mod.proficiencyBonus
+		);
+		
+		if (!needsMigration) return;
+		
+		console.log("[CharSheet State] Migrating modifiers to add special flags...");
+		
+		// For each feature that has associated modifiers, re-parse and update flags
+		this._data.features.forEach(feature => {
+			if (!feature.description) return;
+			
+			// Find modifiers from this feature
+			const featureModifiers = this._data.namedModifiers.filter(m => 
+				m.sourceFeatureId === feature.id || m.note?.includes(`From ${feature.name}`)
+			);
+			
+			if (!featureModifiers.length) return;
+			
+			// Re-parse the feature to get the correct flags
+			const parsedModifiers = FeatureModifierParser.parseModifiers(feature.description, feature.name);
+			
+			// Update each existing modifier with the correct flags
+			featureModifiers.forEach(existingMod => {
+				// Find a matching parsed modifier by type
+				const parsedMod = parsedModifiers.find(p => p.type === existingMod.type);
+				if (parsedMod) {
+					if (parsedMod.proficiencyBonus && !existingMod.proficiencyBonus) {
+						existingMod.proficiencyBonus = true;
+						console.log(`[CharSheet State] Added proficiencyBonus flag to "${existingMod.name}"`);
+					}
+					if (parsedMod.abilityMod && !existingMod.abilityMod) {
+						existingMod.abilityMod = parsedMod.abilityMod;
+						console.log(`[CharSheet State] Added abilityMod flag to "${existingMod.name}"`);
+					}
+				}
+			});
+		});
 	}
 
 	_migrateFeatures () {
@@ -2417,8 +2493,62 @@ class CharacterSheetState {
 		const custom = this.getSkillCustomMod(skill);
 		// Add item bonuses (ability check bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.abilityCheck || 0;
+		
+		// Get feature modifiers from named modifiers (from features like "Mark of the Wilderness")
+		const featureBonus = this._getSkillFeatureBonus(skill);
 
-		return mod + profBonus + custom + itemBonus;
+		return mod + profBonus + custom + itemBonus + featureBonus;
+	}
+
+	/**
+	 * Get total bonus to a skill from named modifiers (features, abilities, etc.) AND active states
+	 * @param {string} skill - The skill key
+	 * @returns {number} The total feature bonus
+	 */
+	_getSkillFeatureBonus (skill) {
+		console.log(`[CharSheet State] _getSkillFeatureBonus called for skill: "${skill}"`);
+		const skillModifiers = this.getNamedModifiersByType(`skill:${skill}`);
+		console.log(`[CharSheet State] Found ${skillModifiers.length} modifiers for skill:${skill}:`, skillModifiers);
+		let total = 0;
+		
+		skillModifiers.forEach(mod => {
+			if (mod.proficiencyBonus) {
+				// "bonus equal to your proficiency bonus"
+				const prof = this.getProficiencyBonus();
+				console.log(`[CharSheet State] Adding proficiency bonus (${prof}) from ${mod.name}`);
+				total += prof;
+			} else if (mod.abilityMod) {
+				// "add your X modifier"
+				const ablMod = this.getAbilityMod(mod.abilityMod);
+				console.log(`[CharSheet State] Adding ${mod.abilityMod} modifier (${ablMod}) from ${mod.name}`);
+				total += ablMod;
+			} else {
+				console.log(`[CharSheet State] Adding value ${mod.value} from ${mod.name}`);
+				total += mod.value || 0;
+			}
+		});
+		
+		// Also check active state effects for skill bonuses
+		// Map skill to ability for check:ability:skill format
+		const skillToAbility = {
+			athletics: "str",
+			acrobatics: "dex", sleightofhand: "dex", stealth: "dex",
+			arcana: "int", history: "int", investigation: "int", nature: "int", religion: "int",
+			animalhandling: "wis", insight: "wis", medicine: "wis", perception: "wis", survival: "wis",
+			deception: "cha", intimidation: "cha", performance: "cha", persuasion: "cha",
+			// Custom skills
+			cooking: "wis", culture: "int", endurance: "con", engineering: "int",
+			harvesting: "wis", linguistics: "int", might: "str",
+		};
+		const ability = skillToAbility[skill] || "int";
+		const stateBonus = this.getSkillBonusFromStates(skill, ability);
+		if (stateBonus > 0) {
+			console.log(`[CharSheet State] Adding ${stateBonus} from active states for ${skill}`);
+			total += stateBonus;
+		}
+		
+		console.log(`[CharSheet State] Total feature bonus for ${skill}: ${total}`);
+		return total;
 	}
 
 	/**
@@ -2627,7 +2757,8 @@ class CharacterSheetState {
 	// #region Speed
 	getSpeed () {
 		const speedMods = this._data.customModifiers.speed || {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
-		const walk = (this._data.speed.walk || 30) + (speedMods.walk || 0);
+		const stateBonus = this.getSpeedBonusFromStates();
+		const walk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus;
 		const parts = [`${walk} ft.`];
 
 		// Check for "equal to walk" modifiers for each speed type
@@ -2660,7 +2791,8 @@ class CharacterSheetState {
 
 	getWalkSpeed () {
 		const speedMods = this._data.customModifiers.speed || {walk: 0};
-		return (this._data.speed.walk || 30) + (speedMods.walk || 0);
+		const stateBonus = this.getSpeedBonusFromStates();
+		return (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus;
 	}
 
 	getSpeedByType (type) {
@@ -3750,6 +3882,19 @@ class CharacterSheetState {
 		return multiplier;
 	}
 
+	/**
+	 * Get flat speed bonus from active states (like combat stances)
+	 * @returns {number} Total speed bonus from active states
+	 */
+	getSpeedBonusFromStates () {
+		const effects = this.getActiveStateEffects();
+		let bonus = 0;
+		effects.filter(e => e.type === "bonus" && e.target === "speed").forEach(e => {
+			bonus += e.value || 0;
+		});
+		return bonus;
+	}
+
 	// #endregion
 
 	// #region Exhaustion
@@ -4705,14 +4850,30 @@ class CharacterSheetState {
 	 */
 	addNamedModifier (modifier) {
 		const id = CryptUtil.uid();
-		this._data.namedModifiers.push({
+		const newModifier = {
 			id,
 			name: modifier.name || "Custom Modifier",
 			type: modifier.type || "ac",
 			value: modifier.value || 0,
 			note: modifier.note || "",
 			enabled: modifier.enabled !== false,
-		});
+		};
+		
+		// Copy special properties that affect how the modifier is calculated
+		if (modifier.sourceFeatureId) newModifier.sourceFeatureId = modifier.sourceFeatureId;
+		if (modifier.setValue) newModifier.setValue = true;
+		if (modifier.perLevel) newModifier.perLevel = true;
+		if (modifier.multiplier) newModifier.multiplier = modifier.multiplier;
+		if (modifier.sizeIncrease) newModifier.sizeIncrease = true;
+		if (modifier.abilityMod) newModifier.abilityMod = modifier.abilityMod;
+		if (modifier.advantage) newModifier.advantage = true;
+		if (modifier.removeDisadvantage) newModifier.removeDisadvantage = true;
+		if (modifier.proficiencyBonus) newModifier.proficiencyBonus = true;
+		if (modifier.ignore) newModifier.ignore = true;
+		if (modifier.equalToWalk) newModifier.equalToWalk = true;
+		if (modifier.conditional) newModifier.conditional = modifier.conditional;
+		
+		this._data.namedModifiers.push(newModifier);
 		this._recalculateCustomModifiers();
 		return id;
 	}
@@ -4999,7 +5160,10 @@ class CharacterSheetState {
 			],
 			duration: "1 minute",
 			endConditions: ["No attack or damage taken for 1 turn", "Knocked unconscious", "Ended as bonus action"],
-			resourceId: null, // Will be linked to the Rage resource
+			resourceName: "Rage",
+			resourceCost: 1,
+			detectPatterns: ["^rage$", "enter.*rage", "you can.*rage"],
+			activationAction: "bonus",
 		},
 		concentration: {
 			id: "concentration",
@@ -5058,7 +5222,322 @@ class CharacterSheetState {
 			],
 			duration: "Until you stand up",
 		},
+		bladesong: {
+			id: "bladesong",
+			name: "Bladesong",
+			icon: "⚔️",
+			description: "Elven combat magic granting speed, agility, and focus",
+			effects: [
+				{type: "bonus", target: "ac", abilityMod: "int"}, // +INT to AC
+				{type: "bonus", target: "speed:walk", value: 10},
+				{type: "advantage", target: "skill:acrobatics"},
+				{type: "bonus", target: "concentration", abilityMod: "int"}, // +INT to concentration saves
+			],
+			duration: "1 minute",
+			endConditions: ["Incapacitated", "Don medium/heavy armor or shield", "Two-handed weapon attack"],
+			resourceName: "Bladesong",
+			detectPatterns: ["bladesong", "invoke.*bladesong"],
+			activationAction: "bonus",
+		},
+		combatStance: {
+			id: "combatStance",
+			name: "Combat Stance",
+			icon: "🥋",
+			description: "A combat method stance providing ongoing benefits",
+			effects: [], // Effects depend on specific stance
+			duration: "Until ended or different stance activated",
+			endConditions: ["Use bonus action to end", "Activate different stance", "Incapacitated"],
+			resourceName: "Exertion",
+			resourceCost: 1,
+			detectPatterns: [], // Detection handled by specific patterns in detectActivatableFeature
+			isGeneric: true, // Will be customized per feature
+			useFeatureDescription: true, // Show the actual feature description instead of generic
+			activationAction: "bonus",
+		},
+		patientDefense: {
+			id: "patientDefense",
+			name: "Patient Defense",
+			icon: "🧘",
+			description: "Taking the Dodge action as a bonus action",
+			effects: [
+				{type: "disadvantage", target: "attacksAgainst"},
+				{type: "advantage", target: "save:dex"},
+			],
+			duration: "Until start of next turn",
+			resourceName: "Ki Points",
+			resourceCost: 1,
+			detectPatterns: ["patient defense"],
+			activationAction: "bonus",
+		},
+		recklessAttack: {
+			id: "recklessAttack",
+			name: "Reckless Attack",
+			icon: "⚡",
+			description: "Advantage on melee attacks using STR, but attacks against you have advantage",
+			effects: [
+				{type: "advantage", target: "attack:melee:str"},
+				{type: "advantage", target: "attacksAgainst"},
+			],
+			duration: "This turn",
+			detectPatterns: ["reckless attack"],
+			requiresClass: "barbarian",
+			requiresClassLevel: 2,
+		},
 	};
+
+	/**
+	 * Parse effects from a feature description text
+	 * @param {string} description - The feature description
+	 * @returns {Array} Array of effect objects
+	 */
+	static parseEffectsFromDescription (description) {
+		if (!description) return [];
+		
+		const effects = [];
+		// Strip HTML tags and normalize whitespace for better pattern matching
+		const text = description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
+		
+		// Speed increases
+		const speedMatch = text.match(/(?:your )?speed increases? by (\d+) feet/i);
+		if (speedMatch) {
+			effects.push({type: "bonus", target: "speed", value: parseInt(speedMatch[1])});
+		}
+		
+		// Speed decreases
+		const speedDecMatch = text.match(/(?:your )?speed (?:decreases?|is reduced) by (\d+) feet/i);
+		if (speedDecMatch) {
+			effects.push({type: "bonus", target: "speed", value: -parseInt(speedDecMatch[1])});
+		}
+		
+		// AC bonuses - fixed value
+		const acMatch = text.match(/(?:gain|get|have) (?:a )?(?:\+)?(\d+) (?:bonus )?to (?:your )?(?:ac|armor class)/i);
+		if (acMatch) {
+			effects.push({type: "bonus", target: "ac", value: parseInt(acMatch[1])});
+		}
+		
+		// AC from ability mod
+		if (/add (?:your )?(?:constitution|con) modifier to (?:your )?(?:ac|armor class)/i.test(text)) {
+			effects.push({type: "bonus", target: "ac", abilityMod: "con"});
+		}
+		
+		// Attack bonuses
+		const attackBonusMatch = text.match(/(?:\+)?(\d+) (?:bonus )?to (?:attack|weapon attack|melee attack|ranged attack) rolls?/i);
+		if (attackBonusMatch) {
+			effects.push({type: "bonus", target: "attack", value: parseInt(attackBonusMatch[1])});
+		}
+		
+		// Damage bonuses - fixed value
+		const dmgBonusMatch = text.match(/(?:\+)?(\d+) (?:bonus |extra )?(?:damage|to damage rolls?)/i);
+		if (dmgBonusMatch) {
+			effects.push({type: "bonus", target: "damage", value: parseInt(dmgBonusMatch[1])});
+		}
+		
+		// Proficiency bonus to Strength (Athletics) checks
+		// Matches: "bonus to Strength (Athletics) checks equal to your proficiency bonus"
+		// Matches: "gain a bonus to Strength (Athletics) checks equal to your proficiency"
+		if (/(?:gain )?(?:a )?bonus to strength\s*\(?\s*athletics\s*\)?\s*checks?\s*equal to (?:your )?proficiency/i.test(text)) {
+			effects.push({type: "bonus", target: "check:str:athletics", useProficiency: true});
+		}
+		
+		// Proficiency bonus to saving throws against being moved/knocked prone
+		// Matches: "bonus equal to your proficiency bonus on saving throws made to resist being moved or knocked prone"
+		if (/bonus\s*(?:equal to (?:your )?proficiency(?: bonus)?)?.*saving throws?\s*(?:made )?to resist\s*(?:being )?(?:moved|knocked|pushed)/i.test(text)) {
+			effects.push({type: "bonus", target: "save:resist-movement", useProficiency: true, note: "Resist being moved/knocked prone"});
+		}
+		
+		// General proficiency bonus to saving throws
+		if (/bonus (?:equal to (?:your )?proficiency(?: bonus)?|to (?:your )?proficiency) on saving throws/i.test(text) ||
+			/bonus.*on saving throws.*equal to (?:your )?proficiency/i.test(text)) {
+			effects.push({type: "bonus", target: "save", useProficiency: true});
+		}
+		
+		// Advantage on attacks - general
+		if (/advantage on (?:all )?(?:melee )?(?:attack|weapon attack) rolls?/i.test(text)) {
+			effects.push({type: "advantage", target: "attack"});
+		}
+		// Advantage on melee attacks specifically
+		if (/advantage on melee (?:attack|weapon attack) rolls?/i.test(text) && !/advantage on all/i.test(text)) {
+			effects.push({type: "advantage", target: "attack:melee"});
+		}
+		// Advantage on ranged attacks
+		if (/advantage on ranged (?:attack|weapon attack) rolls?/i.test(text)) {
+			effects.push({type: "advantage", target: "attack:ranged"});
+		}
+		
+		// Advantage on saving throws
+		if (/advantage on (?:all )?(?:saving throws?|saves)/i.test(text)) {
+			effects.push({type: "advantage", target: "save"});
+		}
+		if (/advantage on strength (?:saving throws?|saves)/i.test(text)) {
+			effects.push({type: "advantage", target: "save:str"});
+		}
+		if (/advantage on dexterity (?:saving throws?|saves)/i.test(text)) {
+			effects.push({type: "advantage", target: "save:dex"});
+		}
+		if (/advantage on constitution (?:saving throws?|saves)/i.test(text)) {
+			effects.push({type: "advantage", target: "save:con"});
+		}
+		if (/advantage on intelligence (?:saving throws?|saves)/i.test(text)) {
+			effects.push({type: "advantage", target: "save:int"});
+		}
+		if (/advantage on wisdom (?:saving throws?|saves)/i.test(text)) {
+			effects.push({type: "advantage", target: "save:wis"});
+		}
+		if (/advantage on charisma (?:saving throws?|saves)/i.test(text)) {
+			effects.push({type: "advantage", target: "save:cha"});
+		}
+		
+		// Advantage on ability checks
+		if (/advantage on (?:strength|str) (?:\()?(?:athletics)?(?:\))? checks?/i.test(text)) {
+			effects.push({type: "advantage", target: "check:str"});
+		}
+		if (/advantage on (?:dexterity|dex) (?:\()?(?:acrobatics|stealth)?(?:\))? checks?/i.test(text)) {
+			effects.push({type: "advantage", target: "check:dex"});
+		}
+		if (/advantage on (?:constitution|con) checks?/i.test(text)) {
+			effects.push({type: "advantage", target: "check:con"});
+		}
+		if (/advantage on (?:intelligence|int) checks?/i.test(text)) {
+			effects.push({type: "advantage", target: "check:int"});
+		}
+		if (/advantage on (?:wisdom|wis) (?:\()?(?:perception)?(?:\))? checks?/i.test(text)) {
+			effects.push({type: "advantage", target: "check:wis"});
+		}
+		if (/advantage on (?:charisma|cha) checks?/i.test(text)) {
+			effects.push({type: "advantage", target: "check:cha"});
+		}
+		
+		// Damage resistance
+		const resistMatch = text.match(/resistance to (bludgeoning|piercing|slashing|fire|cold|lightning|thunder|poison|acid|necrotic|radiant|force|psychic)/i);
+		if (resistMatch) {
+			effects.push({type: "resistance", target: resistMatch[1].toLowerCase()});
+		}
+		if (/resistance to (?:bludgeoning, piercing, and slashing|nonmagical weapon)/i.test(text)) {
+			effects.push({type: "resistance", target: "bludgeoning"});
+			effects.push({type: "resistance", target: "piercing"});
+			effects.push({type: "resistance", target: "slashing"});
+		}
+		
+		// Attacks against have advantage (a penalty)
+		if (/attacks? against you (?:have|has|gain) advantage/i.test(text)) {
+			effects.push({type: "advantage", target: "attacksAgainst"});
+		}
+		
+		// Attacks against have disadvantage (a benefit)
+		if (/attacks? against you (?:have|has|gain) disadvantage/i.test(text)) {
+			effects.push({type: "disadvantage", target: "attacksAgainst"});
+		}
+		
+		// Ignore difficult terrain (note-based effect)
+		if (/ignore.{0,30}difficult terrain/i.test(text)) {
+			effects.push({type: "note", value: "Ignores difficult terrain"});
+		}
+		
+		// Can't be moved or knocked prone (note-based)
+		if (/resist.{0,30}(?:moved|knocked|pushed)/i.test(text) || /can't be (?:moved|knocked|pushed)/i.test(text)) {
+			effects.push({type: "note", value: "Resistant to forced movement"});
+		}
+		
+		// Debug logging
+		if (effects.length > 0) {
+			console.log(`[CharSheet State] parseEffectsFromDescription found ${effects.length} effects:`, effects);
+		}
+		
+		return effects;
+	}
+
+	/**
+	 * Detect activatable features from a feature's description
+	 * @param {object} feature - The feature object with name and description
+	 * @returns {object|null} Activation info if this feature is activatable
+	 */
+	static detectActivatableFeature (feature) {
+		if (!feature?.description) return null;
+		
+		const text = feature.description.toLowerCase();
+		const name = feature.name?.toLowerCase() || "";
+		
+		// Exclude non-activatable features that might match patterns
+		const excludedNames = [
+			"suggested characteristics",
+			"personality trait",
+			"personality traits", 
+			"ideal",
+			"bond",
+			"flaw",
+			"combat methods", // Meta ability describing combat system, not activatable
+			"exertion", // Resource description, not activatable
+			"combat traditions", // Meta description
+		];
+		if (excludedNames.includes(name)) return null;
+		
+		// Detect activation action type from description
+		let activationAction = null;
+		let exertionCost = null;
+		
+		// Check for exertion cost in description like "Bonus Action (1 Exertion Point)" or "(2 Exertion Points)"
+		const exertionMatch = text.match(/(\d+)\s*exertion\s*points?/i);
+		if (exertionMatch) {
+			exertionCost = parseInt(exertionMatch[1]);
+		}
+		
+		if (/as a bonus action|bonus action \(|use (?:a |your )?bonus action/i.test(text)) {
+			activationAction = "bonus";
+		} else if (/as an action|action \(|use (?:a |your )?action/i.test(text)) {
+			activationAction = "action";
+		} else if (/as a reaction|reaction \(/i.test(text)) {
+			activationAction = "reaction";
+		} else if (/no action required|free action/i.test(text)) {
+			activationAction = "free";
+		}
+		
+		// Check against known state types
+		for (const [stateTypeId, stateType] of Object.entries(this.ACTIVE_STATE_TYPES)) {
+			// Check name match
+			if (name === stateType.name.toLowerCase()) {
+				return {stateTypeId, stateType, matchedBy: "name", activationAction: activationAction || stateType.activationAction, exertionCost};
+			}
+			
+			// Check detect patterns
+			if (stateType.detectPatterns) {
+				for (const pattern of stateType.detectPatterns) {
+					if (new RegExp(pattern, "i").test(name) || new RegExp(pattern, "i").test(text)) {
+						return {stateTypeId, stateType, matchedBy: "pattern", activationAction: activationAction || stateType.activationAction, exertionCost};
+					}
+				}
+			}
+		}
+		
+		// Check for generic activation patterns - more specific patterns for actual activatable abilities
+		const activationPatterns = [
+			{pattern: /you can (?:use )?(?:a |your )?bonus action to (?:enter|start|activate|invoke)/i, action: "bonus"},
+			{pattern: /as a bonus action,? you (?:can )?(?:enter|start|activate|invoke)/i, action: "bonus"},
+			{pattern: /(?:enter|start|activate) (?:a |your )?rage/i, stateTypeId: "rage"},
+			{pattern: /invoke.*bladesong/i, stateTypeId: "bladesong"},
+			// More specific stance patterns - must be an actual stance ability, not meta description
+			{pattern: /this stance lasts until/i, stateTypeId: "combatStance"},
+			{pattern: /while in this stance/i, stateTypeId: "combatStance"},
+			{pattern: /you (?:enter|adopt) (?:a |an? \w+ )?stance/i, stateTypeId: "combatStance"},
+		];
+		
+		for (const {pattern, action, stateTypeId} of activationPatterns) {
+			if (pattern.test(text)) {
+				if (stateTypeId && this.ACTIVE_STATE_TYPES[stateTypeId]) {
+					return {stateTypeId, stateType: this.ACTIVE_STATE_TYPES[stateTypeId], matchedBy: "description", activationAction, exertionCost};
+				}
+				// Generic activatable feature
+				return {
+					stateTypeId: "custom",
+					isCustom: true,
+					activationAction: action || activationAction,
+					matchedBy: "description",
+					exertionCost,
+				};
+			}
+		}
+		
+		return null;
+	}
 
 	/**
 	 * Standard D&D 5e condition definitions with their mechanical effects
@@ -5564,6 +6043,85 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Get all activatable features from the character's features
+	 * These are features like Rage, Bladesong, Combat Stances that can be toggled on/off
+	 * @returns {Array} Array of {feature, activationInfo, resource} objects
+	 */
+	getActivatableFeatures () {
+		const activatables = [];
+		const resources = this.getResources();
+		
+		for (const feature of this._data.features) {
+			const activationInfo = CharacterSheetState.detectActivatableFeature(feature);
+			if (!activationInfo) continue;
+			
+			// Find associated resource if any
+			let resource = null;
+			const stateType = activationInfo.stateType;
+			
+			// Check for exertion cost from description first (e.g., "1 Exertion Point", "2 Exertion Points")
+			if (activationInfo.exertionCost) {
+				resource = {
+					id: "exertion",
+					name: "Exertion",
+					current: this.getExertionCurrent(),
+					max: this.getExertionMax(),
+					isExertion: true,
+					cost: activationInfo.exertionCost, // Use cost from description
+				};
+			} else if (stateType?.resourceName) {
+				// Special case: Exertion is tracked separately, not in resources array
+				if (stateType.resourceName.toLowerCase() === "exertion") {
+					resource = {
+						id: "exertion",
+						name: "Exertion",
+						current: this.getExertionCurrent(),
+						max: this.getExertionMax(),
+						isExertion: true,
+					};
+				} else {
+					resource = resources.find(r => 
+						r.name.toLowerCase() === stateType.resourceName.toLowerCase() ||
+						r.name.toLowerCase().includes(stateType.resourceName.toLowerCase())
+					);
+				}
+			}
+			// Also check if feature has its own resource (uses)
+			if (!resource && feature.uses) {
+				resource = resources.find(r => r.featureId === feature.id || r.name === feature.name);
+			}
+			
+			activatables.push({
+				feature,
+				activationInfo,
+				resource,
+				stateTypeId: activationInfo.stateTypeId,
+				isActive: activationInfo.stateTypeId !== "custom" 
+					? this.isStateTypeActive(activationInfo.stateTypeId)
+					: this._data.activeStates.some(s => s.sourceFeatureId === feature.id && s.active),
+			});
+		}
+		
+		// Also add class-specific activatables that may not be feature-based
+		// Check for Rage if barbarian
+		const hasBarbarian = this._data.classes?.some(c => c.name?.toLowerCase() === "barbarian");
+		if (hasBarbarian && !activatables.some(a => a.stateTypeId === "rage")) {
+			const rageResource = resources.find(r => r.name.toLowerCase() === "rage" || r.name.toLowerCase() === "rages");
+			if (rageResource) {
+				activatables.push({
+					feature: {name: "Rage", description: "Enter a battle rage"},
+					activationInfo: {stateTypeId: "rage", stateType: CharacterSheetState.ACTIVE_STATE_TYPES.rage},
+					resource: rageResource,
+					stateTypeId: "rage",
+					isActive: this.isStateTypeActive("rage"),
+				});
+			}
+		}
+		
+		return activatables;
+	}
+
+	/**
 	 * Get all active states
 	 * @returns {Array} Array of active state objects
 	 */
@@ -5600,35 +6158,45 @@ class CharacterSheetState {
 
 	/**
 	 * Add a new active state
-	 * @param {string} stateTypeId - The state type ID from ACTIVE_STATE_TYPES
+	 * @param {string} stateTypeId - The state type ID from ACTIVE_STATE_TYPES, or "custom" for custom states
 	 * @param {object} options - Additional options for this state instance
 	 * @returns {string} The unique ID of the new state
 	 */
 	addActiveState (stateTypeId, options = {}) {
 		const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
-		if (!stateType) {
+		
+		// Handle custom states that aren't in ACTIVE_STATE_TYPES
+		if (!stateType && stateTypeId !== "custom") {
 			console.warn(`Unknown active state type: ${stateTypeId}`);
 			return null;
 		}
 
 		// Check if this state type is already active (for exclusive states like Rage)
-		const existing = this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
+		// For custom states, check by sourceFeatureId instead
+		const existing = stateTypeId === "custom"
+			? this._data.activeStates.find(s => s.sourceFeatureId === options.sourceFeatureId)
+			: this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
 		if (existing) {
-			// Reactivate existing state
+			// Reactivate existing state and update any provided options
 			existing.active = true;
 			existing.activatedAt = Date.now();
+			if (options.name) existing.name = options.name;
+			if (options.description) existing.description = options.description;
+			if (options.sourceFeatureId) existing.sourceFeatureId = options.sourceFeatureId;
+			if (options.customEffects) existing.customEffects = options.customEffects;
 			return existing.id;
 		}
 
 		const state = {
 			id: `${stateTypeId}_${Date.now()}`,
 			stateTypeId: stateTypeId,
-			name: options.name || stateType.name,
-			icon: options.icon || stateType.icon,
+			name: options.name || stateType?.name || "Active State",
+			icon: options.icon || stateType?.icon || "⚡",
+			description: options.description || null, // Store feature description for display
 			active: true,
 			activatedAt: Date.now(),
 			sourceFeatureId: options.sourceFeatureId || null,
-			resourceId: options.resourceId || stateType.resourceId,
+			resourceId: options.resourceId || stateType?.resourceId,
 			// For states with variable effects (like Wild Shape with beast stats)
 			customEffects: options.customEffects || null,
 			// For concentration
@@ -5662,7 +6230,7 @@ class CharacterSheetState {
 	/**
 	 * Activate a state by type ID (creates if not exists)
 	 * @param {string} stateTypeId - The state type ID
-	 * @param {object} options - Options to pass to addActiveState
+	 * @param {object} options - Options to pass to addActiveState (name, description, customEffects, etc.)
 	 * @returns {string} The state instance ID
 	 */
 	activateState (stateTypeId, options = {}) {
@@ -5670,6 +6238,11 @@ class CharacterSheetState {
 		if (existing) {
 			existing.active = true;
 			existing.activatedAt = Date.now();
+			// Update name, description, and effects if provided (for combat stances with different features)
+			if (options.name) existing.name = options.name;
+			if (options.description) existing.description = options.description;
+			if (options.sourceFeatureId) existing.sourceFeatureId = options.sourceFeatureId;
+			if (options.customEffects) existing.customEffects = options.customEffects;
 			return existing.id;
 		}
 		return this.addActiveState(stateTypeId, options);
@@ -5724,10 +6297,10 @@ class CharacterSheetState {
 
 			// For regular states, look up the state type
 			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
-			if (!stateType) continue;
-
-			// Use custom effects if provided, otherwise use default effects
-			const stateEffects = state.customEffects || stateType.effects;
+			
+			// Use custom effects if provided, otherwise use state type's default effects
+			// For "custom" states without a stateType, only customEffects apply
+			const stateEffects = state.customEffects || stateType?.effects || [];
 
 			for (const effect of stateEffects) {
 				effects.push({
@@ -5743,7 +6316,7 @@ class CharacterSheetState {
 
 	/**
 	 * Check if character has advantage on a specific roll type from active states
-	 * @param {string} rollType - The roll type (e.g., "check:str", "save:dex", "attack")
+	 * @param {string} rollType - The roll type (e.g., "check:str", "save:dex", "attack", "attack:melee:str")
 	 * @returns {boolean} True if advantage applies
 	 */
 	hasAdvantageFromStates (rollType) {
@@ -5756,6 +6329,15 @@ class CharacterSheetState {
 			if (e.target === "check" && rollType.startsWith("check:")) return true;
 			// Generic "save" applies to all saving throws
 			if (e.target === "save" && rollType.startsWith("save:")) return true;
+			// Hierarchical attack matching:
+			// Effect target "attack:melee:str" should match query "attack:melee:str"
+			// Query "attack:melee:str" should also match effect "attack:melee" or "attack"
+			if (e.target.startsWith("attack") && rollType.startsWith("attack")) {
+				// Query is more specific than effect target - effect applies
+				if (rollType.startsWith(e.target)) return true;
+				// Effect is more specific than query - check if effect's conditions match
+				if (e.target.startsWith(rollType)) return true;
+			}
 			return false;
 		});
 	}
@@ -5775,6 +6357,11 @@ class CharacterSheetState {
 			if (e.target === "check" && rollType.startsWith("check:")) return true;
 			// Generic "save" applies to all saving throws  
 			if (e.target === "save" && rollType.startsWith("save:")) return true;
+			// Hierarchical attack matching (same logic as advantage)
+			if (e.target.startsWith("attack") && rollType.startsWith("attack")) {
+				if (rollType.startsWith(e.target)) return true;
+				if (e.target.startsWith(rollType)) return true;
+			}
 			return false;
 		});
 	}
@@ -5786,9 +6373,48 @@ class CharacterSheetState {
 	 */
 	getBonusFromStates (target) {
 		const effects = this.getActiveStateEffects();
-		return effects
+		let bonus = 0;
+		effects
 			.filter(e => e.type === "bonus" && e.target === target)
-			.reduce((sum, e) => sum + (e.value || 0), 0);
+			.forEach(e => {
+				if (e.useProficiency) {
+					bonus += this.getProficiencyBonus();
+				} else {
+					bonus += e.value || 0;
+				}
+			});
+		return bonus;
+	}
+
+	/**
+	 * Get bonus to a specific skill from active states
+	 * Handles hierarchical targets like "check:str:athletics" or "check:str"
+	 * @param {string} skill - The skill key (e.g., "athletics")
+	 * @param {string} ability - The ability associated with the skill (e.g., "str")
+	 * @returns {number} The total bonus from active states
+	 */
+	getSkillBonusFromStates (skill, ability) {
+		const effects = this.getActiveStateEffects();
+		let bonus = 0;
+		
+		effects.filter(e => e.type === "bonus").forEach(e => {
+			// Check for exact skill match: "check:str:athletics"
+			const exactTarget = `check:${ability}:${skill}`;
+			// Check for ability match: "check:str" applies to all STR checks
+			const abilityTarget = `check:${ability}`;
+			// Check for generic check match: "check" applies to all ability checks
+			const genericTarget = "check";
+			
+			if (e.target === exactTarget || e.target === abilityTarget || e.target === genericTarget) {
+				if (e.useProficiency) {
+					bonus += this.getProficiencyBonus();
+				} else {
+					bonus += e.value || 0;
+				}
+			}
+		});
+		
+		return bonus;
 	}
 
 	/**
