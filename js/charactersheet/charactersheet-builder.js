@@ -1470,7 +1470,15 @@ class CharacterSheetBuilder {
 		});
 
 		if (!result && featureName) {
-			console.log(`[CharSheet Builder] Could not find class feature: ${featureName} for ${className} level ${level} (source: ${source})`);
+			// Try to find similar features for debugging
+			const similar = classFeatures.filter(f => f.name === featureName);
+			if (similar.length) {
+				console.log(`[CharSheet Builder] Found ${similar.length} features named "${featureName}" but none match class "${className}" level ${level} source "${source}". Found:`, similar.map(f => `${f.className}|${f.source}|${f.level}`).join(", "));
+			} else {
+				console.log(`[CharSheet Builder] Could not find class feature: ${featureName} for ${className} level ${level} (source: ${source})`);
+			}
+		} else if (result) {
+			console.log(`[CharSheet Builder] Found class feature "${featureName}" with ${result.entries?.length || 0} entries`);
 		}
 		return result;
 	}

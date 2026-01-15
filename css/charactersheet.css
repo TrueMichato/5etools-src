@@ -889,7 +889,7 @@
 
 /* Active States (Rage, Concentration, etc.) */
 .charsheet__active-states-list {
-	max-height: 200px;
+	max-height: 300px;
 	overflow-y: auto;
 }
 
@@ -905,9 +905,9 @@
 }
 
 .charsheet__state-row.charsheet__state--active {
-	background: rgba(var(--rgb-link-rgb), 0.15);
-	border-color: var(--rgb-link);
-	box-shadow: 0 0 8px rgba(var(--rgb-link-rgb), 0.3);
+	background: rgba(40, 167, 69, 0.15);
+	border-color: #28a745;
+	box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
 }
 
 .charsheet__state-row.charsheet__state--inactive {
@@ -941,6 +941,43 @@
 	gap: 0.25rem;
 	padding-top: 0.5rem;
 	border-top: 1px solid var(--rgb-border-grey);
+}
+
+/* Active States Sections */
+.charsheet__active-states-section {
+	padding-bottom: 0.5rem;
+	border-bottom: 1px dashed var(--rgb-border-grey);
+}
+
+.charsheet__activatable-section {
+	padding: 0.5rem 0;
+}
+
+.charsheet__activatable-row {
+	display: flex;
+	align-items: center;
+	transition: background 0.2s ease;
+}
+
+.charsheet__activatable-row:hover {
+	background: var(--rgb-bg-alt) !important;
+}
+
+.charsheet__ended-states-section {
+	border-top: 1px dashed var(--rgb-border-grey);
+	padding-top: 0.5rem;
+}
+
+.charsheet__quick-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+}
+
+.charsheet__section-subtitle {
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
 }
 
 /* Proficiencies */
