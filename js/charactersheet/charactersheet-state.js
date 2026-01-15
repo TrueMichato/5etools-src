@@ -2570,6 +2570,20 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Check if the character has the Favored Foe or Favored Enemy feature
+	 * (Rangers from some homebrew sources like TGTT may not have this)
+	 */
+	hasFavoredFoe () {
+		return this._data.features.some(f => {
+			const nameLower = f.name?.toLowerCase() || "";
+			return nameLower.includes("favored foe") || 
+				nameLower.includes("favored enemy") ||
+				nameLower.includes("favourite foe") ||
+				nameLower.includes("favourite enemy");
+		});
+	}
+
+	/**
 	 * Add a custom skill
 	 * @param {string} name - The skill name
 	 * @param {string} ability - The associated ability (str, dex, con, int, wis, cha)
@@ -2764,10 +2778,36 @@ class CharacterSheetState {
 	// #endregion
 
 	// #region Speed
+	/**
+	 * Get monk's Unarmored Movement bonus if applicable
+	 * @returns {number} Speed bonus in feet (0 if not applicable)
+	 */
+	getUnarmoredMovementBonus () {
+		// Check for monk class
+		const monkClass = this._data.classes.find(c => c.name === "Monk");
+		if (!monkClass || monkClass.level < 2) return 0;
+		
+		// Check if wearing armor or shield
+		const equippedArmor = this._data.inventory.find(item => 
+			item.equipped && item.item?.type === "LA" || item.item?.type === "MA" || item.item?.type === "HA",
+		);
+		const equippedShield = this._data.inventory.find(item => 
+			item.equipped && item.item?.type === "S",
+		);
+		
+		// Bonus only applies when not wearing armor or shield
+		if (equippedArmor || equippedShield) return 0;
+		
+		// Calculate bonus based on monk level
+		const level = monkClass.level;
+		return level >= 18 ? 30 : level >= 14 ? 25 : level >= 10 ? 20 : level >= 6 ? 15 : 10;
+	}
+	
 	getSpeed () {
 		const speedMods = this._data.customModifiers.speed || {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
-		const walk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus;
+		const unarmoredBonus = this.getUnarmoredMovementBonus();
+		const walk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
 		const parts = [`${walk} ft.`];
 
 		// Check for "equal to walk" modifiers for each speed type
@@ -2801,7 +2841,8 @@ class CharacterSheetState {
 	getWalkSpeed () {
 		const speedMods = this._data.customModifiers.speed || {walk: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
-		return (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus;
+		const unarmoredBonus = this.getUnarmoredMovementBonus();
+		return (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
 	}
 
 	getSpeedByType (type) {
@@ -3448,6 +3489,11 @@ class CharacterSheetState {
 					calculations.focusSaveDc = kiDc; // 2024 PHB name
 					calculations.martialArtsDie = martialArtsDice;
 					calculations.unarmedDamage = martialArtsDice;
+					// Unarmored Movement bonus (level 2+, when not wearing armor/shield)
+					if (level >= 2) {
+						const unarmoredMovementBonus = level >= 18 ? 30 : level >= 14 ? 25 : level >= 10 ? 20 : level >= 6 ? 15 : 10;
+						calculations.unarmoredMovement = unarmoredMovementBonus;
+					}
 					break;
 				}
 				case "Barbarian": {
@@ -3503,9 +3549,12 @@ class CharacterSheetState {
 					break;
 				}
 				case "Ranger": {
-					// Favored Foe damage (if using Tasha's optional feature)
-					const favoredFoeDamage = level >= 14 ? "1d8" : level >= 6 ? "1d6" : "1d4";
-					calculations.favoredFoeDamage = favoredFoeDamage;
+					// Favored Foe damage - only if the ranger actually has this feature
+					// (Some homebrew rangers like TGTT don't have Favored Foe/Enemy)
+					if (this.hasFavoredFoe()) {
+						const favoredFoeDamage = level >= 14 ? "1d8" : level >= 6 ? "1d6" : "1d4";
+						calculations.favoredFoeDamage = favoredFoeDamage;
+					}
 					break;
 				}
 			}

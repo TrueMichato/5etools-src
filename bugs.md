@@ -143,9 +143,10 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [] need to add spell-casting UI that would check constraints before casting (like from conditions)
 
 ### Classes
-- [] monks give both ki points and focus points
-- [] monk's unarmored movement bonus not applied to speed
-- [] rangers give favoured enemy even on rangers without it like TGTT
+- [x] monks give both ki points and focus points (fixed: Changed from adding both resources to using a placeholder that resolves to either "Ki Points" (2014 PHB) or "Focus Points" (2024 XPHB) based on class source. Also added check to treat them as interchangeable when looking for existing resources, preventing duplicates.)
+- [x] monk's unarmored movement bonus not applied to speed (fixed: Added getUnarmoredMovementBonus() method that calculates the monk's speed bonus based on level (+10 at 2, +15 at 6, +20 at 10, +25 at 14, +30 at 18). Checks if wearing armor or shield (bonus only applies when unarmored). Integrated into getSpeed() and getWalkSpeed() calculations.)
+- [x] rangers give favoured enemy even on rangers without it like TGTT (fixed: Added hasFavoredFoe() method that checks if the character actually has a "Favored Foe" or "Favored Enemy" feature. The Ranger calculation in getClassCalculations() now only includes favoredFoeDamage if hasFavoredFoe() returns true. Homebrew rangers like TGTT that don't have this feature won't show it.)
+- [x] Deft Explorer not giving expertise choice.
 
 ### Multiclassing
 - [] spell slots not calculated correctly with multiclassing 
@@ -153,7 +154,9 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [] level 1 choices for multiclassing not given (like fighting style for fighter,  invocations for warlock, etc)
 
 ### General
-- [] rolls go from 0 to number of sides instead of 1 to number of sides (e.g d20 roll can be 0)
+- [x] rolls go from 0 to number of sides instead of 1 to number of sides (e.g d20 roll can be 0) (fixed: Changed from RollerUtil.roll(N) which returns 0 to N-1, to RollerUtil.randomise(N) which returns 1 to N. Fixed in: rollDice(), _rollD20(), _onDeathSave(), hit die rolls, and level-up HP rolls.)
+- [] Activated abilities not appliying their effects to rolls or stats
+
 
 ### UI
  - [] in specialties choices in builder it's not quite clear which box is for which feature. Spacing a bit off.

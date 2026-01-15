@@ -1881,7 +1881,7 @@ class CharacterSheetLevelUp {
 		const conMod = this._state.getAbilityMod("con");
 
 		if (hpMethod === "roll") {
-			const roll = RollerUtil.roll(hitDie);
+			const roll = RollerUtil.randomise(hitDie);
 			hpIncrease = Math.max(1, roll + conMod);
 			this._page.showDiceResult({
 				title: "HP Roll",
@@ -2023,8 +2023,8 @@ class CharacterSheetLevelUp {
 				{name: "Rage", maxByLevel: [2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 999], recharge: "long"},
 			],
 			"Monk": [
-				{name: "Ki Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
-				{name: "Focus Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"}, // 2024 PHB name
+				// Use placeholder - resolved below based on edition
+				{name: "__MONK_RESOURCE__", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
 			],
 			"Sorcerer": [
 				{name: "Sorcery Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "long"},
@@ -2047,6 +2047,14 @@ class CharacterSheetLevelUp {
 		const currentResources = this._state.getResources();
 
 		classResourceDefs.forEach(resourceDef => {
+			// Resolve special placeholder for monk Ki/Focus Points
+			let resourceName = resourceDef.name;
+			if (resourceName === "__MONK_RESOURCE__") {
+				// Use "Focus Points" for 2024 (XPHB) monks, "Ki Points" for 2014 monks
+				const is2024 = classEntry.source === "XPHB" || classData.source === "XPHB";
+				resourceName = is2024 ? "Focus Points" : "Ki Points";
+			}
+			
 			let newMax;
 			if (typeof resourceDef.maxByLevel === "function") {
 				newMax = resourceDef.maxByLevel(newLevel);
@@ -2056,8 +2064,14 @@ class CharacterSheetLevelUp {
 				newMax = resourceDef.maxByLevel;
 			}
 
-			// Find existing resource
-			const existingResource = currentResources.find(r => r.name === resourceDef.name);
+			// Find existing resource (check both Ki and Focus for monks - they're interchangeable)
+			const isMonkResource = resourceName === "Ki Points" || resourceName === "Focus Points";
+			let existingResource;
+			if (isMonkResource) {
+				existingResource = currentResources.find(r => r.name === "Ki Points" || r.name === "Focus Points");
+			} else {
+				existingResource = currentResources.find(r => r.name === resourceName);
+			}
 
 			if (existingResource) {
 				// Update max if it increased
@@ -2069,7 +2083,7 @@ class CharacterSheetLevelUp {
 			} else if (newMax > 0) {
 				// Add new resource
 				this._state.addResource({
-					name: resourceDef.name,
+					name: resourceName,
 					max: newMax,
 					current: newMax,
 					recharge: resourceDef.recharge,
