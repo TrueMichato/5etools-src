@@ -1290,6 +1290,10 @@ class CharacterSheetPage {
 				this._renderConditions();
 				this._renderActiveStates(); // Also update active states since conditions create states
 				this._renderCharacter(); // Re-render to apply effects
+				// Sync combat tab
+				this._combat?.renderCombatConditions?.();
+				this._combat?.renderCombatEffects?.();
+				this._combat?.renderCombatDefenses?.();
 			});
 
 			$container.append($badge);
@@ -1831,6 +1835,11 @@ class CharacterSheetPage {
 		}
 		
 		$container.append($quickActions);
+		
+		// Sync combat tab's active states, defenses, and effects display
+		this._combat?.renderCombatStates?.();
+		this._combat?.renderCombatDefenses?.();
+		this._combat?.renderCombatEffects?.();
 	}
 
 	/**
@@ -2472,6 +2481,12 @@ class CharacterSheetPage {
 		this._state.addCondition(selected);
 		this._saveCurrentCharacter();
 		this._renderConditions();
+		this._renderActiveStates();
+		this._renderCharacter();
+		// Sync combat tab
+		this._combat?.renderCombatConditions?.();
+		this._combat?.renderCombatEffects?.();
+		this._combat?.renderCombatDefenses?.();
 	}
 	// #endregion
 

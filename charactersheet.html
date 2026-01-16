@@ -510,6 +510,14 @@
 								<!-- Combat-relevant spells (cantrips + prepared attack spells) -->
 							</div>
 						</div>
+
+						<!-- Combat Abilities (race/class/feat abilities with action economy) -->
+						<div class="charsheet__section mt-3" id="charsheet-combat-actions-section">
+							<h4 class="charsheet__section-title">Combat Abilities</h4>
+							<div class="charsheet__combat-actions-list" id="charsheet-combat-actions">
+								<div class="ve-muted ve-text-center py-2">No combat abilities</div>
+							</div>
+						</div>
 					</div>
 					<div class="ve-flex-col charsheet__col-half">
 						<div class="charsheet__section">
@@ -527,6 +535,48 @@
 									<span class="charsheet__defense-label">Vulnerabilities:</span>
 									<span class="charsheet__defense-value" id="charsheet-vulnerabilities">—</span>
 								</div>
+							</div>
+						</div>
+
+						<!-- Active Conditions -->
+						<div class="charsheet__section">
+							<h4 class="charsheet__section-title">
+								Conditions
+								<button class="btn btn-xs btn-primary ml-2" id="charsheet-combat-add-condition" title="Add Condition">
+									<span class="glyphicon glyphicon-plus"></span>
+								</button>
+							</h4>
+							<div id="charsheet-combat-conditions">
+								<div class="ve-muted ve-text-center py-2">No active conditions</div>
+							</div>
+						</div>
+
+						<!-- Combat Effects (advantage/disadvantage, bonuses from states/conditions) -->
+						<div class="charsheet__section">
+							<h4 class="charsheet__section-title">Active Combat Effects</h4>
+							<div id="charsheet-combat-effects">
+								<div class="ve-muted ve-text-center py-2">No active effects</div>
+							</div>
+						</div>
+
+						<!-- Combat Resources (quick access) -->
+						<div class="charsheet__section">
+							<h4 class="charsheet__section-title">Combat Resources</h4>
+							<div class="charsheet__combat-resources-list" id="charsheet-combat-resources">
+								<div class="ve-muted ve-text-center py-2">No combat resources</div>
+							</div>
+						</div>
+
+						<!-- Active States in Combat (quick access) -->
+						<div class="charsheet__section">
+							<h4 class="charsheet__section-title">Active States</h4>
+							<div class="charsheet__combat-states-list" id="charsheet-combat-states">
+								<div class="ve-muted ve-text-center py-2">No active states</div>
+							</div>
+							<div class="charsheet__quick-states mt-2">
+								<button class="ve-btn ve-btn-xs ve-btn-danger mr-1" id="charsheet-combat-rage" title="Toggle Rage">Rage</button>
+								<button class="ve-btn ve-btn-xs ve-btn-primary mr-1" id="charsheet-combat-dodge" title="Take Dodge action">Dodge</button>
+								<button class="ve-btn ve-btn-xs ve-btn-warning" id="charsheet-combat-concentrate" title="Concentration">Concentrate</button>
 							</div>
 						</div>
 					</div>
