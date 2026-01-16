@@ -767,6 +767,80 @@
 	opacity: 1;
 }
 
+/* Combat Actions (race/class/feat abilities) */
+.charsheet__combat-actions-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.charsheet__combat-action-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 0.35rem 0.5rem;
+	background: rgba(23, 162, 184, 0.1);
+	border: 1px solid rgba(23, 162, 184, 0.3);
+	border-radius: 4px;
+	cursor: help;
+}
+
+.charsheet__combat-action-item:hover {
+	background: rgba(23, 162, 184, 0.2);
+}
+
+.charsheet__combat-action-clickable {
+	cursor: pointer;
+}
+
+.charsheet__combat-action-clickable:hover {
+	background: rgba(23, 162, 184, 0.25);
+	border-color: rgba(23, 162, 184, 0.5);
+}
+
+.charsheet__combat-action-header {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	flex: 1;
+	min-width: 0;
+}
+
+.charsheet__combat-action-icon {
+	font-size: 1rem;
+	margin-right: 0.25rem;
+}
+
+.charsheet__combat-action-name {
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.charsheet__combat-action-info {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.charsheet__combat-action-uses {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	font-size: 0.85rem;
+}
+
+.charsheet__combat-action-uses-label {
+	font-weight: 600;
+}
+
+.charsheet__combat-action-uses-recharge {
+	font-size: 0.7rem;
+}
+
 /* Exhaustion Tracker */
 .charsheet__exhaustion-tracker {
 	display: flex;
@@ -2695,4 +2769,52 @@
 
 .charsheet__innate-cast {
 	background: linear-gradient(135deg, var(--rgb-btn-primary) 0%, rgba(255, 193, 7, 0.5) 100%);
+}
+
+/* Combat Tab Resources and States */
+.charsheet__combat-resources-list,
+.charsheet__combat-states-list {
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+.charsheet__combat-resource-item {
+	padding: 0.5rem;
+	background: var(--rgb-bg-alt);
+	border: 1px solid var(--rgb-border-grey);
+	border-radius: 4px;
+}
+
+.charsheet__combat-resource-pips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	margin: 0.25rem 0;
+}
+
+.charsheet__resource-pip.used {
+	background: var(--rgb-link);
+}
+
+.charsheet__combat-state-item {
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.charsheet__combat-state-item:hover {
+	opacity: 0.8;
+}
+
+.charsheet__state-remove {
+	cursor: pointer;
+	font-weight: bold;
+}
+
+.charsheet__state-remove:hover {
+	color: #ff6b6b;
+}
+
+.charsheet__quick-states .ve-btn.active {
+	box-shadow: 0 0 8px currentColor;
+	opacity: 0.9;
 }

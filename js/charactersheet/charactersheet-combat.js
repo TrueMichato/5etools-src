@@ -71,6 +71,21 @@ class CharacterSheetCombat {
 		// Exertion controls
 		$(document).on("click", "#charsheet-exertion-add", () => this._modifyExertion(1));
 		$(document).on("click", "#charsheet-exertion-remove", () => this._modifyExertion(-1));
+
+		// Add condition button in combat tab
+		$(document).on("click", "#charsheet-combat-add-condition", () => this._onAddCondition());
+	}
+
+	/**
+	 * Add a condition from the combat tab
+	 */
+	async _onAddCondition () {
+		// Delegate to main page's add condition method
+		await this._page._onAddCondition?.();
+		// Sync the combat tab
+		this.renderCombatConditions();
+		this.renderCombatEffects();
+		this.renderCombatDefenses();
 	}
 
 	_castCombatSpell (spellId) {
@@ -315,6 +330,21 @@ class CharacterSheetCombat {
 		}
 		if (!attack) return;
 
+		// Determine attack type for advantage/disadvantage matching
+		const isMelee = attack.isMelee || attack.type === "melee" || attack.range === "melee" || 
+			(attack.range && !attack.range.includes("/"));
+		const abilityUsed = attack.abilityMod || (isMelee ? "str" : "dex");
+		const attackType = `attack:${isMelee ? "melee" : "ranged"}:${abilityUsed}`;
+
+		// Check for advantage/disadvantage from active states and conditions
+		let stateMode;
+		const hasAdvantage = this._state.hasAdvantageFromStates?.(attackType) || 
+			this._state.hasAdvantageFromStates?.("attack");
+		const hasDisadvantage = this._state.hasDisadvantageFromStates?.(attackType) || 
+			this._state.hasDisadvantageFromStates?.("attack");
+		if (hasAdvantage && !hasDisadvantage) stateMode = "advantage";
+		else if (hasDisadvantage && !hasAdvantage) stateMode = "disadvantage";
+
 		// Calculate total attack bonus
 		const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
 		const profBonus = this._state.getProficiencyBonus();
@@ -325,8 +355,8 @@ class CharacterSheetCombat {
 		
 		const totalBonus = abilityMod + profBonus + (attack.attackBonus || 0) + featureAttackBonus;
 
-		// Roll d20 with advantage/disadvantage support
-		const rollResult = this._page.rollD20({event});
+		// Roll d20 with advantage/disadvantage support (state mode can be overridden by shift/ctrl keys)
+		const rollResult = this._page.rollD20({event, mode: stateMode});
 		const total = rollResult.roll + totalBonus;
 
 		// Check for crit/fumble
@@ -340,10 +370,13 @@ class CharacterSheetCombat {
 			resultNote = "Critical Miss!";
 		}
 
+		// Build state effect label for display
+		const stateEffectLabel = this._getStateEffectLabel(hasAdvantage, hasDisadvantage);
+
 		// Show result
 		const modeLabel = this._page.getModeLabel(rollResult.mode);
 		this._page.showDiceResult({
-			title: `${attack.name} Attack${modeLabel}`,
+			title: `${attack.name} Attack${modeLabel}${stateEffectLabel}`,
 			roll: rollResult.roll,
 			modifier: totalBonus,
 			total,
@@ -351,6 +384,16 @@ class CharacterSheetCombat {
 			resultNote,
 			subtitle: this._page.formatD20Breakdown(rollResult, totalBonus),
 		});
+	}
+
+	/**
+	 * Get label showing state effects on roll
+	 */
+	_getStateEffectLabel (hasAdvantage, hasDisadvantage) {
+		if (hasAdvantage && hasDisadvantage) return " (adv+disadv cancel)";
+		if (hasAdvantage) return " (from states)";
+		if (hasDisadvantage) return " (from states)";
+		return "";
 	}
 
 	_rollDamage (attackId, isCrit = false) {
@@ -889,10 +932,963 @@ class CharacterSheetCombat {
 		this.renderDeathSaves();
 		this.renderCombatSpells();
 		this.renderCombatMethods();
+		this.renderCombatDefenses();
+		this.renderCombatConditions();
+		this.renderCombatEffects();
+		this.renderCombatResources();
+		this.renderCombatActions();
+		this.renderCombatStates();
 
 		// Render combat stats
 		const initiative = this._state.getAbilityMod("dex");
 		$("#charsheet-initiative").text(`+${initiative}`);
+	}
+
+	/**
+	 * Render combat actions - race/class/feat abilities that use action economy
+	 * (e.g., Aggressive, Charge, Ram, Breath Weapon, Relentless Endurance, etc.)
+	 */
+	renderCombatActions () {
+		const $container = $("#charsheet-combat-actions");
+		const $section = $("#charsheet-combat-actions-section");
+		if (!$container.length) return;
+
+		const features = this._state.getFeatures();
+		
+		// Filter for combat-relevant features that have action economy
+		const combatActions = features.filter(f => {
+			if (!f.description) return false;
+			const desc = f.description.toLowerCase();
+			const nameLower = f.name?.toLowerCase() || "";
+			
+			// Skip combat methods (they have their own section)
+			if (f.optionalFeatureTypes?.some(ft => /^CTM:\d?[A-Z]{2}$/.test(ft))) return false;
+			
+			// Exclude non-combat features explicitly
+			const excludePatterns = [
+				"suggested characteristics",
+				"personality trait",
+				"ideal",
+				"bond",
+				"flaw",
+				"equipment",
+				"tool proficiency",
+				"skill proficiency",
+				"languages",
+				"starting equipment",
+				"proficiencies",
+				"background feature",
+				"feature:",
+				"you gain proficiency",
+				"you are proficient",
+				"you have proficiency",
+				"you can speak",
+				"you can read",
+				"darkvision",
+				"creature type",
+				"size",
+				"speed",
+				"ability score",
+			];
+			if (excludePatterns.some(pattern => nameLower.includes(pattern) || desc.includes(pattern) && !desc.includes("action"))) {
+				// Only exclude if there's no action economy
+				if (!/\b(bonus action|as an action|use your action|as a reaction)\b/i.test(desc)) {
+					return false;
+				}
+			}
+			
+			// Must have actual action economy to be considered a combat action
+			// More strict: require specific action phrasing, not just "you can use"
+			const hasActionEconomy = /\b(as a bonus action|bonus action to|as an action|use your action|take the \w+ action|as a reaction|use your reaction)\b/i.test(desc);
+			
+			// Check for combat-specific keywords in NAME (not description, too broad)
+			const combatKeywords = [
+				"aggressive", "charge", "ram", "breath weapon", "relentless",
+				"fury of the small", "savage attacks", "hellish rebuke", "healing hands",
+				"celestial revelation", "infernal legacy", "fey step", "misty step",
+				"stone's endurance", "lucky", "second wind", "action surge",
+				"fighting spirit", "cunning action", "patient defense", "step of the wind",
+				"flurry of blows", "stunning strike", "deflect missiles", "slow fall",
+				"wild shape", "channel divinity", "divine smite", "lay on hands",
+				"hex", "hexblade's curse",
+				"rage", "reckless attack",
+				"bardic inspiration",
+				"metamagic",
+				"arcane recovery",
+			];
+			
+			const hasCombatKeyword = combatKeywords.some(kw => nameLower.includes(kw));
+			
+			// Include if:
+			// 1. Has explicit action economy AND (has uses OR combat keyword in name), OR
+			// 2. Has combat keyword in name AND has uses
+			const hasLimitedUses = f.uses && f.uses.max > 0;
+			
+			return (hasActionEconomy && (hasLimitedUses || hasCombatKeyword)) || 
+				   (hasCombatKeyword && hasLimitedUses);
+		});
+
+		// Sort: features with uses first, then by feature type, then by name
+		combatActions.sort((a, b) => {
+			const aHasUses = a.uses && a.uses.max > 0;
+			const bHasUses = b.uses && b.uses.max > 0;
+			if (aHasUses && !bHasUses) return -1;
+			if (!aHasUses && bHasUses) return 1;
+			
+			const typeOrder = ["Species", "Subrace", "Class", "Background", "Other"];
+			const aType = typeOrder.indexOf(a.featureType) !== -1 ? typeOrder.indexOf(a.featureType) : 999;
+			const bType = typeOrder.indexOf(b.featureType) !== -1 ? typeOrder.indexOf(b.featureType) : 999;
+			if (aType !== bType) return aType - bType;
+			
+			return (a.name || "").localeCompare(b.name || "");
+		});
+
+		// Hide section if no combat actions
+		if (!combatActions.length) {
+			$section.hide();
+			return;
+		}
+
+		$section.show();
+		$container.empty();
+
+		for (const feature of combatActions) {
+			const $action = this._createCombatActionElement(feature);
+			$container.append($action);
+		}
+	}
+
+	/**
+	 * Create a combat action element for a feature
+	 */
+	_createCombatActionElement (feature) {
+		const featureId = `${feature.name}-${feature.source || ""}`.replace(/\s+/g, "-").toLowerCase();
+		const hasUses = feature.uses && feature.uses.max > 0;
+		
+		// Determine action type icon
+		const desc = feature.description?.toLowerCase() || "";
+		let actionIcon = "⚔️";
+		let actionType = "Action";
+		if (/bonus action/i.test(desc)) {
+			actionIcon = "⚡";
+			actionType = "Bonus Action";
+		} else if (/reaction/i.test(desc)) {
+			actionIcon = "🔄";
+			actionType = "Reaction";
+		} else if (/no action required|free/i.test(desc)) {
+			actionIcon = "✨";
+			actionType = "Free";
+		}
+		
+		// Get feature type badge
+		const typeBadge = feature.featureType ? 
+			`<span class="badge badge-${this._getFeatureTypeBadgeClass(feature.featureType)} mr-1 ve-small">${feature.featureType}</span>` : "";
+		
+		// Build uses display if applicable
+		let usesHtml = "";
+		if (hasUses) {
+			const rechargeIcon = feature.uses.recharge === "short" ? "☀️" : 
+				(feature.uses.recharge === "long" ? "🌙" : "");
+			usesHtml = `
+				<div class="charsheet__combat-action-uses">
+					<span class="charsheet__combat-action-uses-label">${feature.uses.current}/${feature.uses.max}</span>
+					<span class="charsheet__combat-action-uses-recharge" title="${feature.uses.recharge} rest">${rechargeIcon}</span>
+				</div>
+			`;
+		}
+		
+		// Get hover link if possible - try multiple approaches
+		let nameHtml = feature.name;
+		let hasHoverLink = false;
+		
+		if (this._page?.getHoverLink && feature.source) {
+			try {
+				// Try to get hover link based on feature type
+				let hoverPage = null;
+				if (feature.optionalFeatureTypes?.length) {
+					hoverPage = UrlUtil.PG_OPT_FEATURES;
+				} else if (feature.featureType === "Class" && feature.className) {
+					// Class features - try classFeature page
+					hoverPage = "classFeature";
+				}
+				if (hoverPage) {
+					nameHtml = this._page.getHoverLink(hoverPage, feature.name, feature.source);
+					hasHoverLink = true;
+				}
+			} catch {
+				// Fallback to plain name
+			}
+		}
+		
+		// If no hover link, show description in a tooltip on click
+		const tooltipDesc = this._cleanDescriptionForTooltip(feature.description);
+		
+		const $action = $(`
+			<div class="charsheet__combat-action-item ${hasHoverLink ? "" : "charsheet__combat-action-clickable"}" 
+				data-action-id="${featureId}" 
+				${!hasHoverLink ? `title="${tooltipDesc}"` : ""}>
+				<div class="charsheet__combat-action-header">
+					<span class="charsheet__combat-action-icon" title="${actionType}">${actionIcon}</span>
+					<span class="charsheet__combat-action-name">${nameHtml}</span>
+					${typeBadge}
+				</div>
+				<div class="charsheet__combat-action-info">
+					${usesHtml}
+					${hasUses ? `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__combat-action-use" data-action-id="${featureId}" title="Use this ability">Use</button>` : ""}
+				</div>
+			</div>
+		`);
+
+		// Add click handler for use button
+		if (hasUses) {
+			$action.find(".charsheet__combat-action-use").on("click", () => {
+				this._useCombatAction(feature);
+			});
+		}
+
+		return $action;
+	}
+
+	/**
+	 * Get badge class for feature type
+	 */
+	_getFeatureTypeBadgeClass (featureType) {
+		switch (featureType) {
+			case "Species":
+			case "Subrace":
+				return "info";
+			case "Class":
+				return "primary";
+			case "Background":
+				return "secondary";
+			default:
+				return "light";
+		}
+	}
+
+	/**
+	 * Use a combat action (spend a use if applicable)
+	 */
+	_useCombatAction (feature) {
+		if (!feature.uses || feature.uses.current <= 0) {
+			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${feature.name}!`});
+			return;
+		}
+
+		// Spend a use
+		feature.uses.current--;
+		
+		// Update state
+		const features = this._state.getFeatures();
+		const idx = features.findIndex(f => f.name === feature.name && f.source === feature.source);
+		if (idx >= 0) {
+			features[idx].uses = feature.uses;
+		}
+
+		// Re-render
+		this.renderCombatActions();
+		this.renderCombatResources();
+		this._page._renderFeatures?.();
+		this._page._saveCurrentCharacter?.();
+
+		// Toast notification
+		const remaining = feature.uses.current;
+		JqueryUtil.doToast({
+			type: "success",
+			content: `Used ${feature.name}! (${remaining}/${feature.uses.max} remaining)`,
+		});
+	}
+
+	/**
+	 * Clean description text for tooltip display
+	 */
+	_cleanDescriptionForTooltip (description) {
+		if (!description) return "";
+		// Remove HTML tags and extra whitespace
+		return description
+			.replace(/<[^>]+>/g, "")
+			.replace(/\s+/g, " ")
+			.trim()
+			.substring(0, 300) + (description.length > 300 ? "..." : "");
+	}
+
+	/**
+	 * Render active conditions in combat tab
+	 */
+	renderCombatConditions () {
+		const $container = $("#charsheet-combat-conditions");
+		if (!$container.length) return;
+
+		const conditions = this._state.getConditions?.() || [];
+
+		if (!conditions.length) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No active conditions</div>`);
+			return;
+		}
+
+		$container.empty();
+
+		for (const condition of conditions) {
+			const conditionDef = CharacterSheetState.getConditionEffects(condition);
+			
+			const icon = conditionDef?.icon || "⚠️";
+			const description = conditionDef?.description || condition;
+			
+			// Build tooltip with effects
+			let tooltip = description;
+			if (conditionDef?.effects?.length) {
+				const effectList = conditionDef.effects.map(e => {
+					if (e.type === "advantage") return `• Advantage on ${this._formatEffectTarget(e.target)}`;
+					if (e.type === "disadvantage") return `• Disadvantage on ${this._formatEffectTarget(e.target)}`;
+					if (e.type === "autoFail") return `• Auto-fail ${this._formatEffectTarget(e.target)}`;
+					if (e.type === "setSpeed") return `• Speed set to ${e.value}`;
+					if (e.type === "resistance") return `• Resistance to ${e.target}`;
+					if (e.type === "bonus") return `• ${e.value >= 0 ? "+" : ""}${e.value} to ${this._formatEffectTarget(e.target)}`;
+					if (e.type === "note") return `• ${e.value}`;
+					return null;
+				}).filter(Boolean);
+				if (effectList.length) {
+					tooltip += "\n" + effectList.join("\n");
+				}
+			}
+			
+			const $condition = $(`
+				<div class="charsheet__combat-condition badge badge-warning mr-1 mb-1" 
+					title="${tooltip}" data-condition="${condition}">
+					${icon} ${condition}
+					<span class="charsheet__condition-remove ml-1" title="Remove condition">&times;</span>
+				</div>
+			`);
+
+			$condition.find(".charsheet__condition-remove").on("click", (e) => {
+				e.stopPropagation();
+				this._state.removeCondition?.(condition);
+				this.renderCombatConditions();
+				this.renderCombatEffects();
+				this.renderCombatDefenses();
+				this._page._renderConditions?.();
+				this._page._saveCurrentCharacter?.();
+				this._page._renderCharacter?.();
+			});
+
+			$container.append($condition);
+		}
+	}
+
+	/**
+	 * Render defenses (resistances, immunities, vulnerabilities, condition immunities)
+	 */
+	renderCombatDefenses () {
+		// Get base defenses from character state
+		const resistances = this._state.getResistances?.() || [];
+		const immunities = this._state.getImmunities?.() || [];
+		const vulnerabilities = this._state.getVulnerabilities?.() || [];
+		const conditionImmunities = this._state.getConditionImmunities?.() || [];
+
+		// Also get defenses from active states (like Rage giving resistance to B/P/S)
+		const activeStateEffects = this._state.getActiveStateEffects?.() || [];
+		const stateResistances = activeStateEffects
+			.filter(e => e.type === "resistance")
+			.map(e => e.target);
+		const stateImmunities = activeStateEffects
+			.filter(e => e.type === "immunity")
+			.map(e => e.target);
+		const stateConditionImmunities = activeStateEffects
+			.filter(e => e.type === "conditionImmunity")
+			.map(e => e.target);
+
+		// Merge and deduplicate
+		const allResistances = [...new Set([...resistances, ...stateResistances])];
+		const allImmunities = [...new Set([...immunities, ...stateImmunities])];
+		const allVulnerabilities = [...new Set([...vulnerabilities])];
+		const allConditionImmunities = [...new Set([...conditionImmunities, ...stateConditionImmunities])];
+
+		// Render resistances
+		const $resistances = $("#charsheet-resistances");
+		if ($resistances.length) {
+			if (allResistances.length) {
+				$resistances.html(allResistances.map(r => {
+					const isFromState = stateResistances.includes(r) && !resistances.includes(r);
+					return `<span class="badge ${isFromState ? "badge-warning" : "badge-success"} mr-1" title="${isFromState ? "From active state" : "Base resistance"}">${this._formatDamageType(r)}</span>`;
+				}).join(""));
+			} else {
+				$resistances.html(`<span class="ve-muted">—</span>`);
+			}
+		}
+
+		// Render immunities (damage)
+		const $immunities = $("#charsheet-immunities");
+		if ($immunities.length) {
+			if (allImmunities.length) {
+				$immunities.html(allImmunities.map(i => {
+					const isFromState = stateImmunities.includes(i) && !immunities.includes(i);
+					return `<span class="badge ${isFromState ? "badge-warning" : "badge-primary"} mr-1" title="${isFromState ? "From active state" : "Base immunity"}">${this._formatDamageType(i)}</span>`;
+				}).join(""));
+			} else {
+				$immunities.html(`<span class="ve-muted">—</span>`);
+			}
+		}
+
+		// Render vulnerabilities
+		const $vulnerabilities = $("#charsheet-vulnerabilities");
+		if ($vulnerabilities.length) {
+			if (allVulnerabilities.length) {
+				$vulnerabilities.html(allVulnerabilities.map(v => 
+					`<span class="badge badge-danger mr-1">${this._formatDamageType(v)}</span>`
+				).join(""));
+			} else {
+				$vulnerabilities.html(`<span class="ve-muted">—</span>`);
+			}
+		}
+
+		// Add condition immunities section if not exists
+		let $condImmunities = $("#charsheet-condition-immunities");
+		if (!$condImmunities.length && allConditionImmunities.length) {
+			// Add condition immunities row dynamically
+			const $defenses = $("#charsheet-combat-defenses");
+			if ($defenses.length) {
+				$defenses.append(`
+					<div class="charsheet__defense-row">
+						<span class="charsheet__defense-label">Condition Immunities:</span>
+						<span class="charsheet__defense-value" id="charsheet-condition-immunities">—</span>
+					</div>
+				`);
+				$condImmunities = $("#charsheet-condition-immunities");
+			}
+		}
+
+		if ($condImmunities.length) {
+			if (allConditionImmunities.length) {
+				$condImmunities.html(allConditionImmunities.map(c => {
+					const isFromState = stateConditionImmunities.includes(c) && !conditionImmunities.includes(c);
+					return `<span class="badge ${isFromState ? "badge-warning" : "badge-info"} mr-1" title="${isFromState ? "From active state" : "Base immunity"}">${c.charAt(0).toUpperCase() + c.slice(1)}</span>`;
+				}).join(""));
+			} else {
+				$condImmunities.html(`<span class="ve-muted">—</span>`);
+			}
+		}
+	}
+
+	/**
+	 * Format damage type for display
+	 */
+	_formatDamageType (type) {
+		if (!type) return "Unknown";
+		// Capitalize first letter, handle compound types like "bludgeoning, piercing, and slashing"
+		return type.split(/,\s*/).map(t => t.trim().charAt(0).toUpperCase() + t.trim().slice(1)).join(", ");
+	}
+
+	/**
+	 * Render active combat effects from states, conditions, and features
+	 */
+	renderCombatEffects () {
+		const $container = $("#charsheet-combat-effects");
+		if (!$container.length) return;
+
+		const effects = [];
+
+		// Get all active state effects
+		const stateEffects = this._state.getActiveStateEffects?.() || [];
+		
+		// Get conditions
+		const conditions = this._state.getConditions?.() || [];
+
+		// Process advantage/disadvantage effects
+		const advantageTypes = new Map(); // rollType -> [sources]
+		const disadvantageTypes = new Map();
+		const bonusEffects = []; // {target, value, source}
+		const otherEffects = []; // misc effects like speed changes
+
+		// Separate effects: "attacksAgainst" means attacks AGAINST you (enemies' rolls)
+		// Regular advantage/disadvantage applies to YOUR rolls
+		const enemyAdvantageAgainst = new Map(); // Enemies have advantage attacking you
+		const enemyDisadvantageAgainst = new Map(); // Enemies have disadvantage attacking you
+
+		for (const effect of stateEffects) {
+			const source = effect.stateName || "Active State";
+			
+			switch (effect.type) {
+				case "advantage":
+					// Check if this is "attacks against" (enemy's advantage) vs your own advantage
+					if (effect.target?.includes("Against")) {
+						if (!enemyAdvantageAgainst.has(effect.target)) enemyAdvantageAgainst.set(effect.target, []);
+						enemyAdvantageAgainst.get(effect.target).push(source);
+					} else {
+						if (!advantageTypes.has(effect.target)) advantageTypes.set(effect.target, []);
+						advantageTypes.get(effect.target).push(source);
+					}
+					break;
+				case "disadvantage":
+					// Check if this is "attacks against" (enemy's disadvantage) vs your own disadvantage
+					if (effect.target?.includes("Against")) {
+						if (!enemyDisadvantageAgainst.has(effect.target)) enemyDisadvantageAgainst.set(effect.target, []);
+						enemyDisadvantageAgainst.get(effect.target).push(source);
+					} else {
+						if (!disadvantageTypes.has(effect.target)) disadvantageTypes.set(effect.target, []);
+						disadvantageTypes.get(effect.target).push(source);
+					}
+					break;
+				case "bonus":
+					if (effect.value) {
+						bonusEffects.push({
+							target: effect.target,
+							value: effect.value,
+							source: source,
+						});
+					}
+					break;
+				case "speed":
+					if (effect.value !== undefined) {
+						otherEffects.push({
+							icon: "🏃",
+							text: `Speed ${effect.value >= 0 ? "+" : ""}${effect.value} ft`,
+							source: source,
+							type: "speed",
+						});
+					}
+					break;
+				case "ac":
+					if (effect.value) {
+						bonusEffects.push({
+							target: "AC",
+							value: effect.value,
+							source: source,
+						});
+					}
+					break;
+				case "attackRoll":
+					if (effect.value) {
+						bonusEffects.push({
+							target: "Attack Rolls",
+							value: effect.value,
+							source: source,
+						});
+					}
+					break;
+				case "damageRoll":
+					if (effect.value) {
+						bonusEffects.push({
+							target: "Damage",
+							value: effect.value,
+							source: source,
+						});
+					}
+					break;
+				case "autoFail":
+					otherEffects.push({
+						icon: "❌",
+						text: `Auto-fail ${this._formatEffectTarget(effect.target)}`,
+						source: source,
+						type: "negative",
+					});
+					break;
+				case "incapacitated":
+					otherEffects.push({
+						icon: "💫",
+						text: "Incapacitated (can't take actions/reactions)",
+						source: source,
+						type: "negative",
+					});
+					break;
+				case "speedZero":
+					otherEffects.push({
+						icon: "🚫",
+						text: "Speed is 0",
+						source: source,
+						type: "negative",
+					});
+					break;
+			}
+		}
+
+		// Build HTML
+		$container.empty();
+
+		// Advantage section
+		if (advantageTypes.size > 0) {
+			const $advSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$advSection.append(`<div class="ve-small ve-bold text-success mb-1">⬆️ Advantage On:</div>`);
+			for (const [target, sources] of advantageTypes) {
+				$advSection.append(`
+					<div class="charsheet__effect-item badge badge-success mr-1 mb-1" title="From: ${sources.join(", ")}">
+						${this._formatEffectTarget(target)}
+					</div>
+				`);
+			}
+			$container.append($advSection);
+		}
+
+		// Disadvantage section  
+		if (disadvantageTypes.size > 0) {
+			const $disadvSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$disadvSection.append(`<div class="ve-small ve-bold text-danger mb-1">⬇️ Disadvantage On:</div>`);
+			for (const [target, sources] of disadvantageTypes) {
+				$disadvSection.append(`
+					<div class="charsheet__effect-item badge badge-danger mr-1 mb-1" title="From: ${sources.join(", ")}">
+						${this._formatEffectTarget(target)}
+					</div>
+				`);
+			}
+			$container.append($disadvSection);
+		}
+
+		// Bonus section
+		if (bonusEffects.length > 0) {
+			const $bonusSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$bonusSection.append(`<div class="ve-small ve-bold text-primary mb-1">📊 Bonuses:</div>`);
+			for (const bonus of bonusEffects) {
+				const sign = bonus.value >= 0 ? "+" : "";
+				$bonusSection.append(`
+					<div class="charsheet__effect-item badge badge-primary mr-1 mb-1" title="From: ${bonus.source}">
+						${bonus.target} ${sign}${bonus.value}
+					</div>
+				`);
+			}
+			$container.append($bonusSection);
+		}
+
+		// Other effects (negative effects, speed changes, etc.)
+		if (otherEffects.length > 0) {
+			const $otherSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$otherSection.append(`<div class="ve-small ve-bold text-warning mb-1">⚠️ Other Effects:</div>`);
+			for (const effect of otherEffects) {
+				const badgeClass = effect.type === "negative" ? "badge-danger" : (effect.type === "speed" ? "badge-info" : "badge-secondary");
+				$otherSection.append(`
+					<div class="charsheet__effect-item badge ${badgeClass} mr-1 mb-1" title="From: ${effect.source}">
+						${effect.icon} ${effect.text}
+					</div>
+				`);
+			}
+			$container.append($otherSection);
+		}
+
+		// Enemy advantage against you (defensive: they have advantage)
+		if (enemyAdvantageAgainst.size > 0) {
+			const $enemyAdvSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$enemyAdvSection.append(`<div class="ve-small ve-bold text-danger mb-1">⚠️ Enemies Have Advantage On:</div>`);
+			for (const [target, sources] of enemyAdvantageAgainst) {
+				$enemyAdvSection.append(`
+					<div class="charsheet__effect-item badge badge-danger mr-1 mb-1" title="From: ${sources.join(", ")}">
+						${this._formatEffectTarget(target)}
+					</div>
+				`);
+			}
+			$container.append($enemyAdvSection);
+		}
+
+		// Enemy disadvantage against you (defensive: they have disadvantage)
+		if (enemyDisadvantageAgainst.size > 0) {
+			const $enemyDisadvSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$enemyDisadvSection.append(`<div class="ve-small ve-bold text-success mb-1">🛡️ Enemies Have Disadvantage On:</div>`);
+			for (const [target, sources] of enemyDisadvantageAgainst) {
+				$enemyDisadvSection.append(`
+					<div class="charsheet__effect-item badge badge-success mr-1 mb-1" title="From: ${sources.join(", ")}">
+						${this._formatEffectTarget(target)}
+					</div>
+				`);
+			}
+			$container.append($enemyDisadvSection);
+		}
+
+		// If no effects, show placeholder
+		if (advantageTypes.size === 0 && disadvantageTypes.size === 0 && bonusEffects.length === 0 && otherEffects.length === 0 && enemyAdvantageAgainst.size === 0 && enemyDisadvantageAgainst.size === 0) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No active effects</div>`);
+		}
+	}
+
+	/**
+	 * Format effect target for display
+	 */
+	_formatEffectTarget (target) {
+		if (!target) return "Unknown";
+		
+		const targetLabels = {
+			"attack": "Attack Rolls",
+			"attackRoll": "Attack Rolls",
+			"attacks": "Attack Rolls",
+			"attack:melee": "Melee Attacks",
+			"attack:ranged": "Ranged Attacks",
+			"save": "Saving Throws",
+			"saves": "Saving Throws",
+			"savingThrow": "Saving Throws",
+			"check": "Ability Checks",
+			"checks": "Ability Checks",
+			"abilityCheck": "Ability Checks",
+			"check:str": "STR Checks",
+			"check:dex": "DEX Checks",
+			"check:con": "CON Checks",
+			"check:int": "INT Checks",
+			"check:wis": "WIS Checks",
+			"check:cha": "CHA Checks",
+			"strCheck": "STR Checks",
+			"dexCheck": "DEX Checks",
+			"conCheck": "CON Checks",
+			"intCheck": "INT Checks",
+			"wisCheck": "WIS Checks",
+			"chaCheck": "CHA Checks",
+			"save:str": "STR Saves",
+			"save:dex": "DEX Saves",
+			"save:con": "CON Saves",
+			"save:int": "INT Saves",
+			"save:wis": "WIS Saves",
+			"save:cha": "CHA Saves",
+			"strSave": "STR Saves",
+			"dexSave": "DEX Saves",
+			"conSave": "CON Saves",
+			"intSave": "INT Saves",
+			"wisSave": "WIS Saves",
+			"chaSave": "CHA Saves",
+			"initiative": "Initiative",
+			"concentration": "Concentration",
+			"deathSave": "Death Saves",
+			// "Attacks against" targets
+			"attacksAgainst": "Attacks Against You",
+			"meleeAttacksAgainst": "Melee Attacks Against You",
+			"rangedAttacksAgainst": "Ranged Attacks Against You",
+			// Check-specific targets
+			"check:sight": "Checks Requiring Sight",
+			"check:hearing": "Checks Requiring Hearing",
+		};
+
+		return targetLabels[target] || target.charAt(0).toUpperCase() + target.slice(1);
+	}
+
+	/**
+	 * Render combat resources (quick access in combat tab)
+	 * Shows limited-use features relevant to combat (rage, ki, spell slots, etc.)
+	 */
+	renderCombatResources () {
+		const $container = $("#charsheet-combat-resources");
+		if (!$container.length) return;
+
+		const resources = this._state.getResources();
+		if (!resources?.length) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No combat resources</div>`);
+			return;
+		}
+
+		// Filter to combat-relevant resources
+		const combatResources = resources.filter(r => {
+			const name = r.name.toLowerCase();
+			// Include combat-relevant resources
+			return name.includes("rage") ||
+				name.includes("ki") ||
+				name.includes("focus") ||
+				name.includes("sorcery") ||
+				name.includes("superiority") ||
+				name.includes("exertion") ||
+				name.includes("channel") ||
+				name.includes("wild shape") ||
+				name.includes("bardic") ||
+				name.includes("action surge") ||
+				name.includes("second wind") ||
+				name.includes("smite") ||
+				name.includes("lay on hands") ||
+				name.includes("arcane recovery") ||
+				name.includes("sneak attack") || // Not a resource but might be tracked
+				r.recharge; // Any resource with recharge is likely combat-relevant
+		});
+
+		if (!combatResources.length) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No combat resources</div>`);
+			return;
+		}
+
+		$container.empty();
+		for (const resource of combatResources) {
+			const used = resource.max - resource.current;
+			const $resource = $(`
+				<div class="charsheet__combat-resource-item mb-2" data-resource-id="${resource.id}">
+					<div class="charsheet__combat-resource-name ve-small font-weight-bold">${resource.name}</div>
+					<div class="charsheet__combat-resource-pips">
+						${Array.from({length: resource.max}, (_, i) => `
+							<span class="charsheet__resource-pip ${i < used ? "used" : ""}" data-pip-index="${i}" title="Click to use/restore"></span>
+						`).join("")}
+					</div>
+					<div class="ve-small ve-muted">${resource.current}/${resource.max}${resource.recharge ? ` (${resource.recharge})` : ""}</div>
+				</div>
+			`);
+
+			// Click on pips to use/restore
+			$resource.find(".charsheet__resource-pip").on("click", (e) => {
+				const pipIndex = $(e.currentTarget).data("pip-index");
+				const isUsed = $(e.currentTarget).hasClass("used");
+				if (isUsed) {
+					// Restore one use
+					this._state.setResourceCurrent(resource.id, resource.current + 1);
+				} else {
+					// Use one
+					this._state.setResourceCurrent(resource.id, resource.current - 1);
+				}
+				this.renderCombatResources();
+				// Also update the main resources display
+				this._page._renderResources?.();
+				this._page._features?._renderResources?.();
+			});
+
+			$container.append($resource);
+		}
+	}
+
+	/**
+	 * Render active states in combat tab (quick access)
+	 */
+	renderCombatStates () {
+		const $container = $("#charsheet-combat-states");
+		if (!$container.length) return;
+
+		const allStates = this._state.getActiveStates?.() || [];
+		// Filter for only currently active, non-condition states
+		const activeStates = allStates.filter(s => s.active && !s.isCondition);
+		
+		// Also check for concentration
+		const concentration = this._state.getConcentration?.();
+		
+		if (!activeStates.length && !concentration) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No active states</div>`);
+		} else {
+			$container.empty();
+			
+			// Render concentration first if active
+			if (concentration) {
+				const $conc = $(`
+					<div class="charsheet__combat-state-item badge badge-info mr-1 mb-1">
+						🔮 ${concentration.spellName || "Concentrating"}
+						<span class="charsheet__state-remove ml-1" title="Break Concentration">&times;</span>
+					</div>
+				`);
+				$conc.find(".charsheet__state-remove").on("click", (e) => {
+					e.stopPropagation();
+					this._state.breakConcentration?.();
+					this.renderCombatStates();
+					this._page._renderActiveStates?.();
+					this._page._saveCurrentCharacter?.();
+					this._page._renderCharacter?.(); // Re-render to remove effects
+				});
+				$container.append($conc);
+			}
+			
+			for (const state of activeStates) {
+				const stateType = CharacterSheetState.ACTIVE_STATE_TYPES?.[state.stateTypeId];
+				const $state = $(`
+					<div class="charsheet__combat-state-item badge ${this._getStateBadgeClass(state.stateTypeId)} mr-1 mb-1" data-state-id="${state.id}">
+						${state.icon || stateType?.icon || "⚡"} ${state.name || stateType?.name || state.stateTypeId}
+						<span class="charsheet__state-remove ml-1" title="End">&times;</span>
+					</div>
+				`);
+
+				$state.find(".charsheet__state-remove").on("click", (e) => {
+					e.stopPropagation();
+					this._state.deactivateState(state.stateTypeId);
+					this.renderCombatStates();
+					this.renderCombatDefenses(); // Update defenses (resistances may change)
+					this.renderCombatEffects(); // Update effects (advantage/disadvantage may change)
+					this._page._renderActiveStates?.();
+					this._page._saveCurrentCharacter?.();
+					this._page._renderCharacter?.(); // Re-render to remove effects
+				});
+
+				$container.append($state);
+			}
+		}
+
+		// Set up quick activation buttons
+		this._initQuickStateButtons();
+	}
+
+	_getStateBadgeClass (typeId) {
+		const classes = {
+			"rage": "badge-danger",
+			"concentration": "badge-info",
+			"wildshape": "badge-success",
+			"dodge": "badge-primary",
+			"defensivestance": "badge-warning",
+			"combatStance": "badge-warning",
+			"prone": "badge-secondary",
+		};
+		return classes[typeId] || "badge-secondary";
+	}
+
+	_initQuickStateButtons () {
+		// Rage button
+		$("#charsheet-combat-rage").off("click").on("click", () => {
+			if (this._state.isStateTypeActive?.("rage")) {
+				this._state.deactivateState("rage");
+			} else {
+				// Check if character has rage resource
+				const rageResource = this._state.getResources?.()?.find(r => r.name.toLowerCase().includes("rage"));
+				if (rageResource && rageResource.current <= 0) {
+					JqueryUtil.doToast({type: "warning", content: "No rage uses remaining!"});
+					return;
+				}
+				this._state.activateState("rage");
+				// Spend rage use
+				if (rageResource) {
+					this._state.setResourceCurrent(rageResource.id, rageResource.current - 1);
+					this.renderCombatResources();
+				}
+			}
+			this.renderCombatStates();
+			this.renderCombatDefenses(); // Rage gives resistances
+			this.renderCombatEffects(); // Rage gives advantage on STR checks/saves
+			this._page._renderActiveStates?.();
+			this._page._saveCurrentCharacter?.();
+			this._page._renderCharacter?.(); // Re-render to apply/remove effects
+			this._updateQuickButtonStates();
+		});
+
+		// Dodge button
+		$("#charsheet-combat-dodge").off("click").on("click", () => {
+			if (this._state.isStateTypeActive?.("dodge")) {
+				this._state.deactivateState("dodge");
+			} else {
+				this._state.activateState("dodge");
+			}
+			this.renderCombatStates();
+			this.renderCombatEffects(); // Dodge gives advantage on DEX saves
+			this._page._renderActiveStates?.();
+			this._page._saveCurrentCharacter?.();
+			this._page._renderCharacter?.(); // Re-render to apply/remove effects
+			this._updateQuickButtonStates();
+		});
+
+		// Concentration button (show modal to enter spell name)
+		$("#charsheet-combat-concentrate").off("click").on("click", async () => {
+			if (this._state.isConcentrating?.()) {
+				const confirmed = await InputUiUtil.pGetUserBoolean({
+					title: "Break Concentration?",
+					textYes: "Yes, break",
+					textNo: "Cancel",
+					htmlDescription: `Currently concentrating on: <strong>${this._state.getConcentration?.()?.spellName || "Unknown"}</strong>`,
+				});
+				if (confirmed) {
+					this._state.breakConcentration();
+					this.renderCombatStates();
+					this._page._renderActiveStates?.();
+					this._page._saveCurrentCharacter?.();
+					this._page._renderCharacter?.(); // Re-render to remove effects
+				}
+			} else {
+				const spellName = await InputUiUtil.pGetUserString({title: "Concentrating on which spell?"});
+				if (spellName) {
+					this._state.setConcentration(spellName);
+					this.renderCombatStates();
+					this._page._renderActiveStates?.();
+					this._page._saveCurrentCharacter?.();
+					this._page._renderCharacter?.(); // Re-render to apply effects
+				}
+			}
+			this._updateQuickButtonStates();
+		});
+
+		this._updateQuickButtonStates();
+	}
+
+	_updateQuickButtonStates () {
+		// Update button active states
+		$("#charsheet-combat-rage").toggleClass("active", this._state.isStateTypeActive?.("rage") || false);
+		$("#charsheet-combat-dodge").toggleClass("active", this._state.isStateTypeActive?.("dodge") || false);
+		$("#charsheet-combat-concentrate").toggleClass("active", this._state.isConcentrating?.() || false);
 	}
 
 	/**
@@ -1050,6 +2046,9 @@ class CharacterSheetCombat {
 			return;
 		}
 
+		// Get the method data from the parent element
+		const method = $btn.closest(".charsheet__method-item").data("method");
+
 		this._state.setExertionCurrent(currentExertion - cost);
 		this._updateExertionDisplay();
 
@@ -1058,13 +2057,69 @@ class CharacterSheetCombat {
 			this._page._features._renderResources();
 		}
 
-		// Find method name for feedback
-		const methodName = methodId.split("-").slice(0, -1).join(" ").replace(/\b\w/g, c => c.toUpperCase());
-		JqueryUtil.doToast({type: "success", content: `Used ${methodName}! (−${cost} exertion)`});
+		// Activate this method as an active state (combat stance)
+		if (method) {
+			// Check if this is a stance (typically has duration) vs instant effect
+			const isStance = this._isMethodStance(method);
+			
+			if (isStance) {
+				// Parse effects from description
+				const description = method.entries ? JSON.stringify(method.entries) : "";
+				const parsedEffects = CharacterSheetState.parseEffectsFromDescription?.(description) || [];
+				
+				// Activate as a combat stance state
+				this._state.activateState("combatStance", {
+					name: method.name,
+					icon: "⚔️",
+					sourceFeatureId: method.id || methodId,
+					description: description,
+					customEffects: parsedEffects.length > 0 ? parsedEffects : null,
+				});
+				
+				this.renderCombatStates();
+				this.renderCombatEffects(); // Show stance effects
+				this._page._renderActiveStates?.();
+				this._page._saveCurrentCharacter?.();
+				this._page._renderCharacter?.(); // Re-render character to apply effects
+				
+				JqueryUtil.doToast({type: "success", content: `Activated ${method.name}! (−${cost} exertion)`});
+			} else {
+				// Instant effect - just show feedback
+				JqueryUtil.doToast({type: "success", content: `Used ${method.name}! (−${cost} exertion)`});
+			}
+		} else {
+			// Fallback: find method name for feedback
+			const methodName = methodId.split("-").slice(0, -1).join(" ").replace(/\b\w/g, c => c.toUpperCase());
+			JqueryUtil.doToast({type: "success", content: `Used ${methodName}! (−${cost} exertion)`});
+		}
 
 		// Flash the button to indicate use
 		$btn.addClass("ve-btn-success");
 		setTimeout(() => $btn.removeClass("ve-btn-success"), 200);
+	}
+
+	/**
+	 * Check if a combat method is a stance (has duration) vs instant effect
+	 */
+	_isMethodStance (method) {
+		if (!method.entries) return false;
+		const entriesStr = JSON.stringify(method.entries).toLowerCase();
+		
+		// Check for duration indicators
+		const stanceIndicators = [
+			"until the start of your next turn",
+			"until the end of your next turn",
+			"for 1 minute",
+			"for the duration",
+			"while this stance",
+			"while in this stance",
+			"you enter",
+			"stance",
+			"you maintain",
+			"concentration",
+		];
+		
+		return stanceIndicators.some(indicator => entriesStr.includes(indicator));
 	}
 
 	_modifyExertion (delta) {

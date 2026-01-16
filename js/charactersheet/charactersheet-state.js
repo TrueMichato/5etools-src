@@ -4912,6 +4912,7 @@ class CharacterSheetState {
 	getResistances () { return [...this._data.resistances]; }
 	getImmunities () { return [...this._data.immunities]; }
 	getVulnerabilities () { return [...this._data.vulnerabilities]; }
+	getConditionImmunities () { return [...this._data.conditionImmunities]; }
 
 	addResistance (type) {
 		if (!this._data.resistances.includes(type)) {
@@ -4928,6 +4929,12 @@ class CharacterSheetState {
 	addVulnerability (type) {
 		if (!this._data.vulnerabilities.includes(type)) {
 			this._data.vulnerabilities.push(type);
+		}
+	}
+
+	addConditionImmunity (condition) {
+		if (!this._data.conditionImmunities.includes(condition)) {
+			this._data.conditionImmunities.push(condition);
 		}
 	}
 	// #endregion
@@ -6433,6 +6440,8 @@ class CharacterSheetState {
 		const effects = this.getActiveStateEffects();
 		return effects.some(e => {
 			if (e.type !== "advantage") return false;
+			// Skip "attacksAgainst" effects - those are for enemies attacking YOU, not your rolls
+			if (e.target?.includes("Against")) return false;
 			// Exact match
 			if (e.target === rollType) return true;
 			// Generic "check" applies to all ability checks (check:str, check:dex, etc.)
@@ -6461,6 +6470,8 @@ class CharacterSheetState {
 		const effects = this.getActiveStateEffects();
 		return effects.some(e => {
 			if (e.type !== "disadvantage") return false;
+			// Skip "attacksAgainst" effects - those are for enemies attacking YOU, not your rolls
+			if (e.target?.includes("Against")) return false;
 			// Exact match
 			if (e.target === rollType) return true;
 			// Generic "check" applies to all ability checks
