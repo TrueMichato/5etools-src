@@ -151,17 +151,17 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] Deft Explorer not giving expertise choice.
 
 ### Multiclassing
-- [] spell slots not calculated correctly with multiclassing 
-- [] choosing a class in multiclassing is not visually clear which class is being chosen
-- [] level 1 choices for multiclassing not given (like fighting style for fighter,  invocations for warlock, etc)
+- [x] spell slots not calculated correctly with multiclassing (fixed: Updated calculateSpellSlots() in charactersheet-state.js to use casterProgression property from class/subclass data instead of hardcoded class name lists. Added casterProgression and spellcastingAbility to class data when adding classes in builder and level-up. Supports all progression types: "full" (Bard, Cleric, etc.), "1/2" (Paladin, Ranger), "1/3" (Eldritch Knight, Arcane Trickster), "artificer" (rounds up), and "pact" (Warlock separate slots). Includes fallback mappings for older saved characters without stored progression.)
+- [x] choosing a class in multiclassing is not visually clear which class is being chosen (fixed: Redesigned multiclass selection modal in showMulticlass(). Now uses charsheet__levelup-option styling with radio buttons, hit die display, and class descriptions. Added selection confirmation display showing chosen class name. Confirm button dynamically updates to show "Add [ClassName] (Level 1)" when class is selected. Empty state message shown when filter matches nothing.)
+- [x] level 1 choices for multiclassing not given (like fighting style for fighter, invocations for warlock, etc) (fixed: Added _showMulticlassChoices() method that checks for optionalfeatureProgression and feature options at level 1. If choices exist (like Fighter's Fighting Style), shows a second modal with _renderOptionalFeaturesSelection() and _renderFeatureOptionsSelection(). Validates all required selections before allowing confirmation. Added _applyMulticlass() helper that handles adding the class, features, selected optional features, and feature options all together.)
 
 ### General
 - [x] rolls go from 0 to number of sides instead of 1 to number of sides (e.g d20 roll can be 0) (fixed: Changed from RollerUtil.roll(N) which returns 0 to N-1, to RollerUtil.randomise(N) which returns 1 to N. Fixed in: rollDice(), _rollD20(), _onDeathSave(), hit die rolls, and level-up HP rolls.)
-- [] Activated abilities not appliying their effects to rolls or stats
+- [x] Activated abilities not applying their effects to rolls or stats (fixed: Added getBonusFromStates() calls to attack rolls and damage rolls in combat module. Added getSaveBonusFromStates() method for saving throw bonuses from active states. Updated getSaveMod() to include state bonuses. Updated getBonusFromStates() to handle abilityMod effects like Bladesong's +INT to AC. Active state effects like combat stances, Bladesong bonuses, etc. now properly apply to attacks, damage, saves, and AC.)
 
 
 ### UI
- - [] in specialties choices in builder it's not quite clear which box is for which feature. Spacing a bit off.
+ - [x] in specialties choices in builder it's not quite clear which box is for which feature. Spacing a bit off.
 
 
 ## Old Bugs

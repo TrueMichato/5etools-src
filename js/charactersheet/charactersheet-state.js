@@ -2534,7 +2534,9 @@ class CharacterSheetState {
 		const custom = this._data.customModifiers.savingThrows[ability] || 0;
 		// Add item bonuses (general saving throw bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.savingThrow || 0;
-		return mod + prof + custom + itemBonus;
+		// Add bonus from active states (e.g., Bless spell, Paladin's Aura)
+		const stateBonus = this.getSaveBonusFromStates(ability);
+		return mod + prof + custom + itemBonus + stateBonus;
 	}
 	// #endregion
 
@@ -3247,16 +3249,30 @@ class CharacterSheetState {
 	/**
 	 * Calculate spell slots based on class(es) and level using standard 5e spell slot progression
 	 * Handles full casters, half casters, third casters, and multiclassing
+	 * Uses casterProgression property from class/subclass data for accurate multiclass calculation
 	 */
 	calculateSpellSlots () {
 		const classes = this._data.classes || [];
 		if (!classes.length) return;
 
-		// Full casters
-		const fullCasters = ["Bard", "Cleric", "Druid", "Sorcerer", "Wizard"];
-		// Half casters (round down)
-		const halfCasters = ["Paladin", "Ranger", "Artificer"];
-		// Warlock is special - has pact slots instead
+		// Fallback mappings for classes without stored casterProgression
+		const classProgressionFallback = {
+			"Bard": "full",
+			"Cleric": "full",
+			"Druid": "full",
+			"Sorcerer": "full",
+			"Wizard": "full",
+			"Paladin": "1/2",
+			"Ranger": "1/2",
+			"Artificer": "artificer",
+			"Warlock": "pact",
+		};
+		
+		// Fallback for known third-caster subclasses
+		const subclassProgressionFallback = {
+			"Eldritch Knight": "1/3",
+			"Arcane Trickster": "1/3",
+		};
 
 		// Calculate total caster level (for multiclassing)
 		let casterLevel = 0;
@@ -3266,22 +3282,32 @@ class CharacterSheetState {
 		for (const cls of classes) {
 			const className = cls.name;
 			const level = cls.level || 1;
+			
+			// Get caster progression: prefer stored value, then check subclass, then fallback
+			let progression = cls.casterProgression 
+				|| cls.subclass?.casterProgression 
+				|| subclassProgressionFallback[cls.subclass?.name] 
+				|| classProgressionFallback[className]
+				|| null;
 
-			if (className === "Warlock") {
+			if (progression === "pact") {
+				// Warlock uses pact magic - doesn't contribute to multiclass caster level
 				isWarlock = true;
 				warlockLevel = level;
-			} else if (fullCasters.includes(className)) {
+			} else if (progression === "full") {
+				// Full casters: each level counts
 				casterLevel += level;
-			} else if (halfCasters.includes(className)) {
-				// Half casters need level 2 to start contributing
+			} else if (progression === "1/2") {
+				// Half casters: round down
 				casterLevel += Math.floor(level / 2);
-			} else {
-				// Check for third-caster subclasses (Eldritch Knight, Arcane Trickster)
-				const subclassName = cls.subclass?.name;
-				if (subclassName === "Eldritch Knight" || subclassName === "Arcane Trickster") {
-					casterLevel += Math.floor(level / 3);
-				}
+			} else if (progression === "1/3") {
+				// Third casters: round down
+				casterLevel += Math.floor(level / 3);
+			} else if (progression === "artificer") {
+				// Artificer progression: round up instead of down
+				casterLevel += Math.ceil(level / 2);
 			}
+			// Non-caster classes (no progression) don't contribute
 		}
 
 		// Standard spell slot progression table (by caster level)
@@ -6712,7 +6738,10 @@ class CharacterSheetState {
 		effects
 			.filter(e => e.type === "bonus" && e.target === target)
 			.forEach(e => {
-				if (e.useProficiency) {
+				if (e.abilityMod) {
+					// Add ability modifier (e.g., Bladesong adds INT to AC)
+					bonus += this.getAbilityMod(e.abilityMod);
+				} else if (e.useProficiency) {
 					bonus += this.getProficiencyBonus();
 				} else {
 					bonus += e.value || 0;
@@ -6742,6 +6771,36 @@ class CharacterSheetState {
 			
 			if (e.target === exactTarget || e.target === abilityTarget || e.target === genericTarget) {
 				if (e.useProficiency) {
+					bonus += this.getProficiencyBonus();
+				} else {
+					bonus += e.value || 0;
+				}
+			}
+		});
+		
+		return bonus;
+	}
+
+	/**
+	 * Get bonus to saving throws from active states
+	 * @param {string} ability - The ability (e.g., "str", "dex", "con")
+	 * @returns {number} The total bonus from active states
+	 */
+	getSaveBonusFromStates (ability) {
+		const effects = this.getActiveStateEffects();
+		let bonus = 0;
+		
+		effects.filter(e => e.type === "bonus").forEach(e => {
+			// Check for exact save match: "save:str"
+			const exactTarget = `save:${ability}`;
+			// Check for generic save match: "save" applies to all saves
+			const genericTarget = "save";
+			
+			if (e.target === exactTarget || e.target === genericTarget) {
+				if (e.abilityMod) {
+					// Add ability modifier (e.g., Bladesong adds INT to concentration saves)
+					bonus += this.getAbilityMod(e.abilityMod);
+				} else if (e.useProficiency) {
 					bonus += this.getProficiencyBonus();
 				} else {
 					bonus += e.value || 0;

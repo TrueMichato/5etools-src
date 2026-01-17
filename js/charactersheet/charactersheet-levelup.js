@@ -1736,7 +1736,19 @@ class CharacterSheetLevelUp {
 		if (targetClass) {
 			targetClass.level = newLevel;
 			if (selectedSubclass) {
-				targetClass.subclass = selectedSubclass;
+				// Store subclass info with caster progression for multiclass spell slot calculation
+				targetClass.subclass = {
+					name: selectedSubclass.name,
+					shortName: selectedSubclass.shortName,
+					source: selectedSubclass.source,
+					casterProgression: selectedSubclass.casterProgression,
+					spellcastingAbility: selectedSubclass.spellcastingAbility,
+				};
+				// Update class-level caster progression if subclass grants spellcasting (like Eldritch Knight)
+				if (selectedSubclass.casterProgression && !targetClass.casterProgression) {
+					targetClass.casterProgression = selectedSubclass.casterProgression;
+					targetClass.spellcastingAbility = selectedSubclass.spellcastingAbility;
+				}
 			}
 		}
 		
@@ -2426,9 +2438,15 @@ class CharacterSheetLevelUp {
 		});
 
 		let selectedClass = null;
+		let updateConfirmButton = null; // Will be assigned after button is created
 
-		const $search = $(`<input type="text" class="form-control" placeholder="Filter...">`);
-		const $list = $(`<div class="charsheet__picker-list"></div>`);
+		const $search = $(`<input type="text" class="form-control" placeholder="Search classes...">`);
+		const $list = $(`<div class="charsheet__levelup-subclasses" style="max-height: 350px;"></div>`);
+		
+		// Selection display showing which class is chosen
+		const $selectionDisplay = $(`<div class="alert alert-success mt-2" style="display: none;">
+			<strong>Selected:</strong> <span class="charsheet__multiclass-selection-name"></span>
+		</div>`);
 
 		const renderList = (filter = "") => {
 			$list.empty();
@@ -2437,19 +2455,44 @@ class CharacterSheetLevelUp {
 				c.name.toLowerCase().includes(filter.toLowerCase())
 			);
 
+			if (filtered.length === 0) {
+				$list.append(`<div class="ve-muted p-2 text-center">No matching classes found</div>`);
+				return;
+			}
+
 			filtered.forEach(cls => {
+				// Get hit die info
+				const hitDie = cls.hd?.faces ? `d${cls.hd.faces}` : "—";
+				// Get primary ability if available
+				const primaryAbility = cls.spellcastingAbility 
+					? Parser.attAbvToFull(cls.spellcastingAbility) 
+					: (cls.classTableGroups?.[0]?.colLabels?.[0] || "");
+				
 				const $item = $$`
-					<div class="charsheet__picker-item">
-						<strong>${cls.name}</strong>
-						<span class="ve-muted">(${Parser.sourceJsonToAbv(cls.source)})</span>
+					<div class="charsheet__levelup-option" data-class-name="${cls.name}">
+						<div class="charsheet__levelup-option-header">
+							<input type="radio" name="multiclass-choice" value="${cls.name}">
+							<strong>${cls.name}</strong>
+							<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(cls.source)})</span>
+							<span class="ml-auto ve-small ve-muted">Hit Die: ${hitDie}</span>
+						</div>
+						${cls.fluff?.[0]?.entries?.[0] ? `<div class="charsheet__levelup-option-description ve-small ve-muted">${typeof cls.fluff[0].entries[0] === "string" ? cls.fluff[0].entries[0].substring(0, 150) + "..." : ""}</div>` : ""}
 					</div>
 				`;
 
 				$item.on("click", () => {
-					$list.find(".charsheet__picker-item").removeClass("selected");
+					$list.find(".charsheet__levelup-option").removeClass("selected");
+					$list.find("input[type='radio']").prop("checked", false);
 					$item.addClass("selected");
+					$item.find("input[type='radio']").prop("checked", true);
 					selectedClass = cls;
-					$btnConfirm.prop("disabled", false);
+					
+					// Update selection display
+					$selectionDisplay.find(".charsheet__multiclass-selection-name").text(cls.name);
+					$selectionDisplay.show();
+					
+					// Update confirm button (will be set after button is created)
+					if (typeof updateConfirmButton === "function") updateConfirmButton(cls);
 				});
 
 				$list.append($item);
@@ -2460,72 +2503,259 @@ class CharacterSheetLevelUp {
 		renderList();
 
 		$$`<div>
-			<div class="alert alert-info">
-				<strong>Note:</strong> Multiclassing has ability score prerequisites. 
-				Make sure your character meets the requirements.
+			<div class="alert alert-info mb-3">
+				<strong>📚 Add a New Class</strong><br>
+				<span class="ve-small">Select a class to multiclass into. You'll start at level 1 in the new class. 
+				Make sure your character meets the ability score prerequisites for multiclassing.</span>
 			</div>
-			<div class="form-group">
-				<label>Search Classes</label>
+			<div class="form-group mb-2">
+				<label class="ve-small ve-bold">Filter Classes</label>
 				${$search}
 			</div>
+			<div class="ve-small ve-muted mb-1">Available classes: ${availableClasses.length}</div>
 			${$list}
+			${$selectionDisplay}
 		</div>`.appendTo($modalInner);
 
 		// Footer buttons
 		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
 			.on("click", () => doClose(false));
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary" disabled>Add Class</button>`)
-			.on("click", async () => {
+		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select a Class</span></button>`);
+		
+		// Assign update function now that button exists
+		updateConfirmButton = (cls) => {
+			if (cls) {
+				$btnConfirm.find(".btn-text").text(`Add ${cls.name} (Level 1)`);
+				$btnConfirm.prop("disabled", false);
+			} else {
+				$btnConfirm.find(".btn-text").text("Select a Class");
+				$btnConfirm.prop("disabled", true);
+			}
+		};
+		
+		$btnConfirm.on("click", async () => {
 				if (!selectedClass) return;
 
-				// Add class at level 1
-				this._state.addClass({
-					name: selectedClass.name,
-					source: selectedClass.source,
-					level: 1,
-					subclass: null,
-				});
-
-				// Get first level features
-				const features = this._getLevelFeatures(selectedClass, 1);
-				features.forEach(f => {
-					// Render description from entries if available
-					let description = f.description;
-					if (!description && f.entries) {
-						description = Renderer.get().render({entries: f.entries});
-					}
-					
-					this._state.addFeature({
-						name: f.name,
-						source: f.source || selectedClass.source,
-						level: f.level || 1,
-						className: f.className || selectedClass.name,
-						classSource: f.classSource || selectedClass.source,
-						subclassName: f.subclassName,
-						subclassShortName: f.subclassShortName,
-						subclassSource: f.subclassSource,
-						featureType: "Class",
-						description: description || "",
-					});
-				});
-
-				// Add hit die (don't add first level HP for multiclass - only on level up)
-				this._updateHitDice(selectedClass);
-
-				// Add proficiencies from multiclass
-				this._applyMulticlassProficiencies(selectedClass);
-
-				await this._page.saveCharacter();
-				this._page.renderCharacter();
-
+				// Close class selection modal
 				doClose(true);
-				JqueryUtil.doToast({type: "success", content: `Added ${selectedClass.name} to your character!`});
+				
+				// Check for level 1 choices (optional features, feature options)
+				const hasLevel1Choices = await this._showMulticlassChoices(selectedClass);
+				
+				// If choices modal was cancelled, don't add the class
+				if (hasLevel1Choices === false) {
+					JqueryUtil.doToast({type: "info", content: "Multiclass cancelled."});
+					return;
+				}
 			});
 
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			${$btnCancel}
 			${$btnConfirm}
 		</div>`.appendTo($modalInner);
+	}
+	
+	/**
+	 * Show level 1 choices for multiclassing (Fighting Style, etc.)
+	 * Returns true if class was added, false if cancelled
+	 */
+	async _showMulticlassChoices (selectedClass) {
+		// Get level 1 features
+		const features = this._getLevelFeatures(selectedClass, 1);
+		
+		// Get optional feature gains (Fighting Style, etc.)
+		const optionalFeatureGains = this._getOptionalFeatureGains(selectedClass, 0, 1);
+		
+		// Get feature options (choices within features)
+		const featureOptionGroups = this._getFeatureOptionsForLevel(features, 1);
+		
+		// If no choices needed, add the class directly
+		if (!optionalFeatureGains.length && !featureOptionGroups.length) {
+			await this._applyMulticlass(selectedClass, features, {}, {});
+			return true;
+		}
+		
+		// Show choices modal
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `${selectedClass.name} - Level 1 Choices`,
+			isMinHeight0: true,
+			isWidth100: true,
+		});
+		
+		let selectedOptionalFeatures = {};
+		let selectedFeatureOptions = {};
+		
+		const $content = $(`<div></div>`);
+		
+		// Info about what choices need to be made
+		const choicesList = [];
+		if (optionalFeatureGains.length) {
+			optionalFeatureGains.forEach(g => choicesList.push(`${g.newCount} ${g.name}`));
+		}
+		if (featureOptionGroups.length) {
+			featureOptionGroups.forEach(g => choicesList.push(`${g.count} option(s) for ${g.featureName}`));
+		}
+		
+		$content.append(`
+			<div class="alert alert-info mb-3">
+				<strong>🎯 Make Your Choices</strong><br>
+				<span class="ve-small">As a level 1 ${selectedClass.name}, you need to select: ${choicesList.join(", ")}</span>
+			</div>
+		`);
+		
+		// Render optional features selection (Fighting Style, etc.)
+		if (optionalFeatureGains.length) {
+			const $optSection = this._renderOptionalFeaturesSelection(selectedClass, optionalFeatureGains, (featureType, featuresList) => {
+				selectedOptionalFeatures[featureType] = featuresList;
+			}, 1);
+			$content.append($optSection);
+		}
+		
+		// Render feature options selection
+		if (featureOptionGroups.length) {
+			const $featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
+				selectedFeatureOptions[featureKey] = options;
+			});
+			$content.append($featOptSection);
+		}
+		
+		$content.appendTo($modalInner);
+		
+		// Footer buttons
+		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
+			.on("click", () => doClose(false));
+		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">Confirm & Add ${selectedClass.name}</button>`)
+			.on("click", async () => {
+				// Validate optional features
+				for (const gain of optionalFeatureGains) {
+					const featureKey = gain.featureTypes.join("_");
+					const selected = selectedOptionalFeatures[featureKey] || [];
+					if (selected.length < gain.newCount) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${gain.newCount} ${gain.name}.`});
+						return;
+					}
+				}
+				
+				// Validate feature options
+				for (const optGroup of featureOptionGroups) {
+					const featureKey = `${optGroup.featureName}_${optGroup.featureSource || ""}`;
+					const selected = selectedFeatureOptions[featureKey] || [];
+					if (selected.length < optGroup.count) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${optGroup.count} option(s) for ${optGroup.featureName}.`});
+						return;
+					}
+				}
+				
+				// Apply multiclass with selections
+				await this._applyMulticlass(selectedClass, features, selectedOptionalFeatures, selectedFeatureOptions);
+				
+				doClose(true);
+			});
+		
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			${$btnCancel}
+			${$btnConfirm}
+		</div>`.appendTo($modalInner);
+		
+		// Wait for modal to close and return result
+		return new Promise(resolve => {
+			const checkClosed = setInterval(() => {
+				if (!$modalInner.is(":visible")) {
+					clearInterval(checkClosed);
+					// Check if class was added by looking for it
+					const wasAdded = this._state.getClasses().some(c => c.name === selectedClass.name);
+					resolve(wasAdded);
+				}
+			}, 100);
+		});
+	}
+	
+	/**
+	 * Apply multiclass - add class, features, proficiencies, and selected optional features
+	 */
+	async _applyMulticlass (selectedClass, features, selectedOptionalFeatures, selectedFeatureOptions) {
+		// Add class at level 1 with caster info for multiclass spell slot calculation
+		this._state.addClass({
+			name: selectedClass.name,
+			source: selectedClass.source,
+			level: 1,
+			subclass: null,
+			casterProgression: selectedClass.casterProgression || null,
+			spellcastingAbility: selectedClass.spellcastingAbility || null,
+		});
+
+		// Add first level features
+		features.forEach(f => {
+			let description = f.description;
+			if (!description && f.entries) {
+				description = Renderer.get().render({entries: f.entries});
+			}
+			
+			this._state.addFeature({
+				name: f.name,
+				source: f.source || selectedClass.source,
+				level: f.level || 1,
+				className: f.className || selectedClass.name,
+				classSource: f.classSource || selectedClass.source,
+				subclassName: f.subclassName,
+				subclassShortName: f.subclassShortName,
+				subclassSource: f.subclassSource,
+				featureType: "Class",
+				description: description || "",
+			});
+		});
+		
+		// Add selected optional features (Fighting Style, etc.)
+		for (const [featureKey, optFeatures] of Object.entries(selectedOptionalFeatures)) {
+			for (const optFeat of optFeatures) {
+				const description = optFeat.entries 
+					? Renderer.get().render({entries: optFeat.entries})
+					: "";
+				
+				this._state.addFeature({
+					name: optFeat.name,
+					source: optFeat.source,
+					level: 1,
+					className: selectedClass.name,
+					classSource: selectedClass.source,
+					featureType: "Optional Feature",
+					optionalFeatureTypes: optFeat.featureType,
+					description,
+				});
+			}
+		}
+		
+		// Add selected feature options
+		for (const [featureKey, options] of Object.entries(selectedFeatureOptions)) {
+			const [featureName] = featureKey.split("_");
+			for (const option of options) {
+				const description = option.entries 
+					? Renderer.get().render({entries: option.entries})
+					: option.description || "";
+				
+				this._state.addFeature({
+					name: option.name || `${featureName} Option`,
+					source: option.source || selectedClass.source,
+					level: 1,
+					className: selectedClass.name,
+					classSource: selectedClass.source,
+					featureType: "Class",
+					parentFeature: featureName,
+					description,
+				});
+			}
+		}
+
+		// Add hit die (don't add first level HP for multiclass - only on level up)
+		this._updateHitDice(selectedClass);
+
+		// Add proficiencies from multiclass
+		this._applyMulticlassProficiencies(selectedClass);
+
+		await this._page.saveCharacter();
+		this._page.renderCharacter();
+
+		JqueryUtil.doToast({type: "success", content: `Added ${selectedClass.name} to your character!`});
 	}
 
 	_applyMulticlassProficiencies (classData) {
