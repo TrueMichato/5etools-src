@@ -355,7 +355,10 @@ class CharacterSheetCombat {
 		const attackModifiers = this._state.getNamedModifiersByType("attack");
 		const featureAttackBonus = attackModifiers.reduce((sum, mod) => sum + (mod.value || 0), 0);
 		
-		const totalBonus = abilityMod + profBonus + (attack.attackBonus || 0) + featureAttackBonus;
+		// Get bonus from active states (activated abilities like combat stances)
+		const stateAttackBonus = this._state.getBonusFromStates?.("attack") || 0;
+		
+		const totalBonus = abilityMod + profBonus + (attack.attackBonus || 0) + featureAttackBonus + stateAttackBonus;
 
 		// Roll d20 with advantage/disadvantage support (state mode can be overridden by shift/ctrl keys)
 		const rollResult = this._page.rollD20({event, mode: stateMode});
@@ -414,6 +417,9 @@ class CharacterSheetCombat {
 		const damageModifiers = this._state.getNamedModifiersByType("damage");
 		const featureDamageBonus = damageModifiers.reduce((sum, mod) => sum + (mod.value || 0), 0);
 		
+		// Get bonus from active states (activated abilities)
+		const stateDamageBonus = this._state.getBonusFromStates?.("damage") || 0;
+		
 		// Check if attack uses strength and if rage is active (for rage damage)
 		let rageBonus = 0;
 		const isMeleeStrengthAttack = (attack.abilityMod === "str" || !attack.abilityMod) && 
@@ -425,7 +431,7 @@ class CharacterSheetCombat {
 			) || 0;
 		}
 		
-		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus;
+		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus + stateDamageBonus;
 
 		const total = damageRoll.total + totalBonus;
 
@@ -434,6 +440,7 @@ class CharacterSheetCombat {
 		if (attack.damageBonus) subtitle += ` + ${attack.damageBonus} (weapon)`;
 		if (featureDamageBonus) subtitle += ` + ${featureDamageBonus} (features)`;
 		if (rageBonus) subtitle += ` + ${rageBonus} (rage)`;
+		if (stateDamageBonus) subtitle += ` + ${stateDamageBonus} (states)`;
 		subtitle += ` ${attack.damageType}`;
 
 		// Show result

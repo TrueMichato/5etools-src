@@ -361,11 +361,23 @@ class CharacterSheetBuilder {
 				break;
 
 			case 2: // Class
+				// Determine caster progression - check subclass first (for Eldritch Knight, etc.)
+				const casterProgressionBuilder = this._selectedSubclass?.casterProgression || this._selectedClass.casterProgression || null;
+				const spellcastingAbilityBuilder = this._selectedSubclass?.spellcastingAbility || this._selectedClass.spellcastingAbility || null;
+				
 				this._state.addClass({
 					name: this._selectedClass.name,
 					source: this._selectedClass.source,
 					level: 1,
-					subclass: this._selectedSubclass,
+					subclass: this._selectedSubclass ? {
+						name: this._selectedSubclass.name,
+						shortName: this._selectedSubclass.shortName,
+						source: this._selectedSubclass.source,
+						casterProgression: this._selectedSubclass.casterProgression,
+						spellcastingAbility: this._selectedSubclass.spellcastingAbility,
+					} : null,
+					casterProgression: casterProgressionBuilder,
+					spellcastingAbility: spellcastingAbilityBuilder,
 				});
 				this._applyClassFeatures();
 				break;
@@ -3733,10 +3745,13 @@ class CharacterSheetBuilder {
 			}
 
 			const $section = $(`
-				<div class="charsheet__builder-feat-opt-section mb-3">
-					<p><strong>${optGroup.featureName}:</strong> Choose ${optGroup.count}</p>
-					<div class="charsheet__builder-feat-opt-list" style="max-height: 200px; overflow-y: auto;"></div>
-					<div class="ve-small ve-muted mt-1">Selected: <span class="feat-opt-count">${this._selectedFeatureOptions[featureKey].length}</span>/${optGroup.count}</div>
+				<div class="charsheet__builder-feat-opt-section">
+					<div class="charsheet__builder-feat-opt-header">
+						<span class="charsheet__builder-feat-opt-header-name">${optGroup.featureName}</span>
+						<span class="charsheet__builder-feat-opt-header-count">Choose ${optGroup.count}</span>
+					</div>
+					<div class="charsheet__builder-feat-opt-list"></div>
+					<div class="charsheet__builder-feat-opt-status">Selected: <span class="feat-opt-count">${this._selectedFeatureOptions[featureKey].length}</span> / ${optGroup.count}</div>
 				</div>
 			`);
 
@@ -3748,10 +3763,10 @@ class CharacterSheetBuilder {
 				);
 
 				const $item = $(`
-					<label class="charsheet__builder-feat-opt-item d-block mb-1" style="cursor: pointer;">
-						<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
+					<label class="charsheet__builder-feat-opt-item">
+						<input type="checkbox" ${isSelected ? "checked" : ""}>
 						<span class="feat-opt-name">${opt.name}</span>
-						${opt.source ? `<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
+						${opt.source ? `<span class="ve-muted ve-small">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 					</label>
 				`);
 

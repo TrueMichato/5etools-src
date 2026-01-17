@@ -1726,6 +1726,82 @@
 	border: 1px solid var(--rgb-border-grey);
 }
 
+/* Feature Options Selection (Specialties) in Builder */
+.charsheet__builder-feature-options {
+	margin-top: 1rem;
+}
+
+.charsheet__builder-feat-opt-section {
+	background: var(--rgb-bg-alt);
+	border: 1px solid var(--rgb-border-grey);
+	border-radius: 4px;
+	padding: 0.75rem;
+	margin-bottom: 1rem;
+}
+
+.charsheet__builder-feat-opt-section:last-child {
+	margin-bottom: 0;
+}
+
+.charsheet__builder-feat-opt-header {
+	font-weight: 600;
+	margin-bottom: 0.5rem;
+	padding-bottom: 0.5rem;
+	border-bottom: 1px solid var(--rgb-border-grey);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.charsheet__builder-feat-opt-header-name {
+	color: var(--rgb-link);
+}
+
+.charsheet__builder-feat-opt-header-count {
+	font-size: 0.85rem;
+	color: var(--rgb-text-muted);
+}
+
+.charsheet__builder-feat-opt-list {
+	max-height: 180px;
+	overflow-y: auto;
+	padding: 0.25rem;
+}
+
+.charsheet__builder-feat-opt-item {
+	display: flex;
+	align-items: center;
+	padding: 0.35rem 0.5rem;
+	margin-bottom: 0.25rem;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.15s;
+}
+
+.charsheet__builder-feat-opt-item:hover {
+	background-color: var(--rgb-bg);
+}
+
+.charsheet__builder-feat-opt-item:has(input:checked) {
+	background-color: var(--rgb-link-opacity-10);
+}
+
+.charsheet__builder-feat-opt-item input[type="checkbox"] {
+	margin-right: 0.5rem;
+}
+
+.charsheet__builder-feat-opt-item .feat-opt-name {
+	flex: 1;
+}
+
+.charsheet__builder-feat-opt-status {
+	font-size: 0.85rem;
+	color: var(--rgb-text-muted);
+	margin-top: 0.5rem;
+	padding-top: 0.5rem;
+	border-top: 1px solid var(--rgb-border-grey);
+}
+
 /* Skill Selection in Builder */
 .charsheet__builder-skill-selection {
 	background: var(--rgb-bg-alt);
