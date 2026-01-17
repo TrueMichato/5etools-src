@@ -344,14 +344,45 @@ class CharacterSheetSpells {
 		return `${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
 	}
 
-	_castSpell (spellId) {
+	async _castSpell (spellId) {
 		const spells = this._state.getSpells();
 		const spell = spells.find(s => s.id === spellId);
 		if (!spell) return;
 
+		// Get full spell data for component/constraint checks
+		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
+
+		// Check for conditions that prevent spellcasting
+		const castingConstraint = this._checkCastingConstraints(spell, spellData);
+		if (castingConstraint) {
+			JqueryUtil.doToast({type: "warning", content: castingConstraint});
+			return;
+		}
+
+		// Check if spell requires concentration
+		const requiresConcentration = spell.concentration || spellData?.duration?.some?.(d => d.concentration);
+
+		// If concentrating on another spell, ask to break concentration first
+		if (requiresConcentration && this._state.isConcentrating?.()) {
+			const currentConc = this._state.getConcentration?.();
+			const confirmed = await InputUiUtil.pGetUserBoolean({
+				title: "Break Concentration?",
+				htmlDescription: `You are currently concentrating on <strong>${currentConc?.spellName || "a spell"}</strong>. Casting <strong>${spell.name}</strong> will break that concentration.`,
+				textYes: "Cast and break concentration",
+				textNo: "Cancel",
+			});
+			if (!confirmed) return;
+			this._state.breakConcentration?.();
+		}
+
 		// Cantrips don't use slots
 		if (spell.level === 0) {
 			this._showCastResult(spell);
+			// Set concentration for concentration cantrips (rare but possible)
+			if (requiresConcentration) {
+				this._state.setConcentration?.(spell.name, 0);
+				this._updateConcentrationUI();
+			}
 			return;
 		}
 
@@ -360,6 +391,11 @@ class CharacterSheetSpells {
 		if (pactSlots && pactSlots.current > 0 && spell.level <= pactSlots.level) {
 			this._state.setPactSlotsCurrent(pactSlots.current - 1);
 			this._showCastResult(spell, pactSlots.level, true);
+			// Set concentration if spell requires it
+			if (requiresConcentration) {
+				this._state.setConcentration?.(spell.name, pactSlots.level);
+				this._updateConcentrationUI();
+			}
 			this.renderSlots();
 			this._page._renderQuickSpells(); // Update overview spell slots
 			this._page.saveCharacter();
@@ -373,6 +409,11 @@ class CharacterSheetSpells {
 			if (current > 0) {
 				this._state.setSpellSlots(slotLevel, this._state.getSpellSlotsMax(slotLevel), current - 1);
 				this._showCastResult(spell, slotLevel);
+				// Set concentration if spell requires it
+				if (requiresConcentration) {
+					this._state.setConcentration?.(spell.name, slotLevel);
+					this._updateConcentrationUI();
+				}
 				this.renderSlots();
 				this._page._renderQuickSpells(); // Update overview spell slots
 				this._page.saveCharacter();
@@ -382,6 +423,83 @@ class CharacterSheetSpells {
 		}
 
 		JqueryUtil.doToast({type: "warning", content: "No spell slots available!"});
+	}
+
+	/**
+	 * Update concentration UI in combat tab and overview
+	 */
+	_updateConcentrationUI () {
+		// Update combat tab states
+		this._page._combat?.renderCombatStates?.();
+		this._page._combat?.renderCombatEffects?.();
+		// Update overview active states
+		this._page._renderActiveStates?.();
+	}
+
+	/**
+	 * Check for conditions/effects that prevent spellcasting
+	 * @param {object} spell - The spell being cast (from character's spell list)
+	 * @param {object} spellData - Full spell data from the spells database
+	 * @returns {string|null} Error message if casting is prevented, null if allowed
+	 */
+	_checkCastingConstraints (spell, spellData) {
+		// Check for conditions that completely prevent actions (thus spellcasting)
+		const incapacitatingConditions = ["Incapacitated", "Paralyzed", "Petrified", "Stunned", "Unconscious"];
+		for (const condition of incapacitatingConditions) {
+			if (this._state.hasCondition?.(condition)) {
+				return `Cannot cast spells while ${condition.toLowerCase()}!`;
+			}
+		}
+
+		// Get spell components
+		const components = spellData?.components || spell.components || {};
+		const hasVerbal = components.v;
+		const hasSomatic = components.s;
+		const hasMaterial = components.m;
+
+		// Check if character is in a Silence effect (custom condition/active state)
+		// Also check for conditions that prevent speaking
+		if (hasVerbal) {
+			if (this._state.hasCondition?.("Silenced")) {
+				return `Cannot cast ${spell.name} - spell has verbal components and you are silenced!`;
+			}
+			// Some conditions prevent speech indirectly (already covered by incapacitated check above)
+		}
+
+		// Check for restrained affecting somatic components (doesn't actually prevent casting in RAW)
+		// Restrained only affects movement and attack rolls, not spellcasting directly
+		// But some DMs rule it affects somatic components - could add optional check here
+
+		// Check if hands are full/occupied for somatic components (if we track this)
+		// This would require tracking what the character is holding
+		// For now, we skip this check as it requires more state tracking
+
+		// Check for material component availability (if we track components)
+		// This would require an inventory check for specific components
+		// Spellcasting focus typically substitutes for non-consumed components
+		// For now, we assume the character has access to required materials
+
+		// Check for Wild Shape (can't cast most spells while transformed)
+		// Would need to check if character has active Wild Shape state
+		const activeStates = this._state.getActiveStates?.() || [];
+		const wildShapeState = activeStates.find(s => 
+			s.name?.toLowerCase().includes("wild shape") && s.active,
+		);
+		if (wildShapeState) {
+			// Note: Some druids can cast spells in Wild Shape (e.g., Moon Druid at high levels)
+			// For now, show a warning but allow casting - DM can rule
+			// Could add a feature check for Beast Spells here
+			const hasBeastSpells = this._state.getFeatures?.()?.some(f => 
+				f.name?.toLowerCase().includes("beast spells"),
+			);
+			if (!hasBeastSpells) {
+				// Allow but warn - user can decide
+				console.log(`[CharSheet Spells] Warning: Casting ${spell.name} while in Wild Shape`);
+			}
+		}
+
+		// All checks passed
+		return null;
 	}
 
 	_showCastResult (spell, slotLevel = null, isPactSlot = false) {
@@ -865,6 +983,16 @@ class CharacterSheetSpells {
 		const spell = this._state.getInnateSpells().find(s => s.id === spellId);
 		if (!spell) return;
 
+		// Get full spell data for constraint checks
+		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
+
+		// Check for conditions that prevent spellcasting
+		const castingConstraint = this._checkCastingConstraints(spell, spellData);
+		if (castingConstraint) {
+			JqueryUtil.doToast({type: "warning", content: castingConstraint});
+			return;
+		}
+
 		if (spell.atWill) {
 			// At-will spells can always be cast
 			JqueryUtil.doToast({type: "success", content: `Cast ${spell.name} (at will)`});
@@ -1048,6 +1176,277 @@ class CharacterSheetSpells {
 				const preparedColor = currentPrepared > maxPrepared ? "color: #c9302c;" : "";
 				$("#charsheet-spells-prepared").html(`<span style="${preparedColor}">${currentPrepared}/${maxPrepared}</span>`);
 			}
+		}
+	}
+	// #endregion
+
+	// #region Filtered Spell Picker (for feat/feature spell choices)
+	/**
+	 * Parse a spell filter string like "level=1|school=E;D" or "level=0|class=Sorcerer"
+	 * @param {string} filterString - The filter string from additionalSpells choose property
+	 * @returns {object} Parsed filter criteria
+	 */
+	_parseSpellFilter (filterString) {
+		const criteria = {
+			level: null,
+			schools: [],
+			classes: [],
+		};
+
+		if (!filterString) return criteria;
+
+		const parts = filterString.split("|");
+		parts.forEach(part => {
+			const [key, value] = part.split("=");
+			if (!key || !value) return;
+
+			switch (key.toLowerCase()) {
+				case "level":
+					criteria.level = parseInt(value);
+					break;
+				case "school":
+					// Schools are separated by ; and use abbreviations (E=Enchantment, D=Divination, etc.)
+					criteria.schools = value.split(";").map(s => s.trim().toUpperCase());
+					break;
+				case "class":
+					criteria.classes = value.split(";").map(c => c.trim().toLowerCase());
+					break;
+			}
+		});
+
+		return criteria;
+	}
+
+	/**
+	 * Filter spells based on parsed criteria
+	 */
+	_filterSpellsByCriteria (spells, criteria) {
+		return spells.filter(spell => {
+			// Level filter
+			if (criteria.level !== null && spell.level !== criteria.level) return false;
+
+			// School filter (use abbreviations)
+			if (criteria.schools.length > 0) {
+				const spellSchool = spell.school?.toUpperCase() || "";
+				if (!criteria.schools.includes(spellSchool)) return false;
+			}
+
+			// Class filter
+			if (criteria.classes.length > 0) {
+				const spellClasses = spell.classes?.fromClassList?.map(c => c.name.toLowerCase()) || [];
+				const hasMatchingClass = criteria.classes.some(cls => spellClasses.includes(cls));
+				if (!hasMatchingClass) return false;
+			}
+
+			return true;
+		});
+	}
+
+	/**
+	 * Get human-readable description of filter criteria
+	 */
+	_getFilterDescription (criteria) {
+		const parts = [];
+
+		if (criteria.level !== null) {
+			parts.push(criteria.level === 0 ? "Cantrip" : `Level ${criteria.level}`);
+		}
+
+		if (criteria.schools.length > 0) {
+			const schoolNames = criteria.schools.map(s => ({
+				"A": "Abjuration",
+				"C": "Conjuration",
+				"D": "Divination",
+				"E": "Enchantment",
+				"V": "Evocation",
+				"I": "Illusion",
+				"N": "Necromancy",
+				"T": "Transmutation",
+			})[s] || s).join(" or ");
+			parts.push(schoolNames);
+		}
+
+		if (criteria.classes.length > 0) {
+			parts.push(`from ${criteria.classes.map(c => c.toTitleCase()).join(" or ")} spell list`);
+		}
+
+		return parts.join(" ") || "Any spell";
+	}
+
+	/**
+	 * Show a spell picker modal filtered for a specific choice (e.g., from Fey Touched feat)
+	 * @param {object} choice - The pending spell choice object from state
+	 * @param {function} onSelect - Callback when spell is selected
+	 */
+	async showFilteredSpellPicker (choice, onSelect) {
+		const criteria = this._parseSpellFilter(choice.filter);
+		const filterDescription = this._getFilterDescription(criteria);
+
+		// Get filtered spells
+		const filteredSpells = this._page.filterByAllowedSources(this._allSpells);
+		const matchingSpells = this._filterSpellsByCriteria(filteredSpells, criteria)
+			.sort((a, b) => a.name.localeCompare(b.name));
+
+		if (!matchingSpells.length) {
+			JqueryUtil.doToast({type: "warning", content: `No spells found matching: ${filterDescription}`});
+			return;
+		}
+
+		// Get spells already known to mark them
+		const knownSpellIds = [
+			...this._state.getSpells().map(s => `${s.name}|${s.source}`),
+			...this._state.getInnateSpells().map(s => `${s.name}|${s.source}`),
+		];
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `Choose Spell: ${choice.featureName}`,
+			isMinHeight0: true,
+		});
+
+		// Description
+		$modalInner.append(`<p class="mb-2">Select a <strong>${filterDescription}</strong> spell:</p>`);
+
+		// Search
+		const $search = $(`<input type="text" class="form-control form-control--minimal mb-2" placeholder="Search spells...">`);
+		$modalInner.append($search);
+
+		// Spell list
+		const $list = $(`<div class="spell-choice-list" style="max-height: 350px; overflow-y: auto;"></div>`).appendTo($modalInner);
+
+		const renderList = (filter = "") => {
+			$list.empty();
+
+			const filtered = filter 
+				? matchingSpells.filter(s => s.name.toLowerCase().includes(filter))
+				: matchingSpells;
+
+			if (!filtered.length) {
+				$list.append(`<p class="ve-muted text-center py-2">No spells found</p>`);
+				return;
+			}
+
+			filtered.forEach(spell => {
+				const spellId = `${spell.name}|${spell.source}`;
+				const isKnown = knownSpellIds.includes(spellId);
+				const school = Parser.spSchoolAbvToFull(spell.school);
+
+				const $item = $(`
+					<div class="ve-flex-v-center p-2 clickable spell-choice-item ${isKnown ? "ve-muted" : ""}" 
+						 style="border-bottom: 1px solid var(--rgb-border-grey);">
+						<div class="ve-flex-col" style="flex: 1;">
+							<span class="bold">${spell.name}</span>
+							<span class="ve-small ve-muted">${school}${spell.ritual ? " (ritual)" : ""} • ${Parser.sourceJsonToAbv(spell.source)}</span>
+						</div>
+						${isKnown
+							? `<span class="ve-muted ve-small">Already known</span>`
+							: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-choice-select">Select</button>`
+						}
+					</div>
+				`);
+
+				if (!isKnown) {
+					$item.find(".spell-choice-select").on("click", () => {
+						onSelect(spell);
+						doClose(true);
+						JqueryUtil.doToast({type: "success", content: `Selected ${spell.name} for ${choice.featureName}`});
+					});
+
+					// Show spell info on item click (not on button)
+					$item.on("click", (e) => {
+						if (!$(e.target).is("button")) {
+							this._showSpellInfoModal(spell);
+						}
+					});
+				}
+
+				$list.append($item);
+			});
+		};
+
+		$search.on("input", () => renderList($search.val().toLowerCase()));
+		renderList();
+
+		// Cancel button
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default">Cancel</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
+	/**
+	 * Show spell info in a modal
+	 */
+	async _showSpellInfoModal (spell) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: spell.name,
+			isMinHeight0: true,
+		});
+
+		const levelSchool = spell.level === 0 
+			? `${Parser.spSchoolAbvToFull(spell.school)} cantrip`
+			: `${Parser.spLevelToFull(spell.level)}-level ${Parser.spSchoolAbvToFull(spell.school).toLowerCase()}`;
+
+		$modalInner.append(`<p class="ve-muted"><em>${levelSchool}</em></p>`);
+
+		// Basic info
+		const infoLines = [];
+		if (spell.time?.length) {
+			const time = spell.time[0];
+			infoLines.push(`<strong>Casting Time:</strong> ${time.number} ${time.unit}`);
+		}
+		if (spell.range) {
+			const rangeStr = spell.range.distance?.type === "self" ? "Self" 
+				: spell.range.distance?.type === "touch" ? "Touch"
+				: `${spell.range.distance?.amount || ""} ${spell.range.distance?.type || ""}`.trim();
+			infoLines.push(`<strong>Range:</strong> ${rangeStr}`);
+		}
+		if (spell.components) {
+			const parts = [];
+			if (spell.components.v) parts.push("V");
+			if (spell.components.s) parts.push("S");
+			if (spell.components.m) {
+				const mText = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
+				parts.push(mText ? `M (${mText})` : "M");
+			}
+			infoLines.push(`<strong>Components:</strong> ${parts.join(", ")}`);
+		}
+		if (spell.duration?.length) {
+			const dur = spell.duration[0];
+			let durStr = "Instantaneous";
+			if (dur.type === "timed") {
+				durStr = dur.concentration 
+					? `Concentration, up to ${dur.duration.amount} ${dur.duration.type}`
+					: `${dur.duration.amount} ${dur.duration.type}`;
+			} else if (dur.type === "permanent") {
+				durStr = "Until dispelled";
+			}
+			infoLines.push(`<strong>Duration:</strong> ${durStr}`);
+		}
+
+		$modalInner.append(`<div class="mb-2">${infoLines.join("<br>")}</div>`);
+
+		// Spell description
+		if (spell.entries) {
+			$modalInner.append(`<div class="rd__b">${Renderer.get().render({type: "entries", entries: spell.entries})}</div>`);
+		}
+
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
+	/**
+	 * Process all pending spell choices, showing the picker for each
+	 */
+	async processPendingSpellChoices () {
+		const pendingChoices = this._state.getPendingSpellChoices();
+		if (!pendingChoices.length) return;
+
+		for (const choice of pendingChoices) {
+			await this.showFilteredSpellPicker(choice, (spell) => {
+				this._state.fulfillSpellChoice(choice.id, spell);
+				this._renderSpellList();
+				this._page.saveCharacter();
+			});
 		}
 	}
 	// #endregion
