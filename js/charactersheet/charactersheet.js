@@ -3559,6 +3559,27 @@ class CharacterSheetPage {
 		return Array.from(conditionsMap.values()).sort();
 	}
 
+	/**
+	 * Get unique languages list, preferring 2024 (XPHB) versions
+	 * @returns {Array} Array of {name, source} objects
+	 */
+	getLanguagesList () {
+		// Create map of languages, preferring XPHB sources
+		const langMap = new Map();
+		this._languagesData.forEach(lang => {
+			const existing = langMap.get(lang.name);
+			// Prefer XPHB (2024) version
+			if (!existing || lang.source === Parser.SRC_XPHB) {
+				langMap.set(lang.name, {
+					name: lang.name,
+					source: lang.source,
+				});
+			}
+		});
+		// Sort alphabetically
+		return Array.from(langMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
 	async saveCharacter () {
 		await this._saveCurrentCharacter();
 	}

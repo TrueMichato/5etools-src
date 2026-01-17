@@ -30,6 +30,10 @@ class CharacterSheetBuilder {
 		this._selectedCombatTraditions = []; // For combat tradition proficiency choices (Thelemar homebrew)
 		this._selectedRacialSkills = []; // For racial skill proficiency choices (e.g., Elf)
 		this._selectedRacialTools = []; // For racial tool proficiency choices (e.g., Dwarf)
+		this._useTashasRules = false; // For Tasha's Custom Origin rules - reassign racial ASI
+		this._tashasAbilityBonuses = {}; // Stores custom ASI when using Tasha's rules
+		this._customBackground = null; // Stores custom background object
+		this._customBackgroundData = null; // Stores custom background form data
 
 		this._init();
 	}
@@ -336,6 +340,17 @@ class CharacterSheetBuilder {
 					const unassigned = Parser.ABIL_ABVS.filter(abl => this._abilityScores[abl] == null);
 					if (unassigned.length > 0) {
 						JqueryUtil.doToast({type: "warning", content: "Please assign all ability scores from the standard array."});
+						return false;
+					}
+				}
+				// Validate Tasha's Custom Origin choices if enabled
+				if (this._useTashasRules) {
+					const bonuses = this._getRacialASIBonuses();
+					const assignedCount = Object.entries(this._tashasAbilityBonuses)
+						.filter(([k, v]) => !k.includes("_amount") && v)
+						.length;
+					if (assignedCount < bonuses.length) {
+						JqueryUtil.doToast({type: "warning", content: "Please assign all ability score bonuses using Tasha's Custom Origin rules."});
 						return false;
 					}
 				}
@@ -3832,9 +3847,7 @@ class CharacterSheetBuilder {
 				<div>
 					<div class="charsheet__section">
 						<h5>Racial Bonuses</h5>
-						<div id="builder-racial-bonuses">
-							${this._selectedRace ? this._getRacialBonusesHtml() : "<p class='ve-muted'>Select a race first</p>"}
-						</div>
+						<div id="builder-racial-bonuses"></div>
 					</div>
 					<div class="charsheet__section mt-3">
 						<h5>Summary</h5>
@@ -3853,7 +3866,180 @@ class CharacterSheetBuilder {
 			this._renderAbilityInputs();
 		});
 
+		// Render racial bonuses section with Tasha's option
+		this._renderRacialBonusesSection();
 		this._renderAbilityInputs();
+	}
+
+	/**
+	 * Render the racial bonuses section with optional Tasha's Custom Origin rules
+	 */
+	_renderRacialBonusesSection () {
+		const $container = $("#builder-racial-bonuses");
+		$container.empty();
+
+		if (!this._selectedRace) {
+			$container.append(`<p class='ve-muted'>Select a race first</p>`);
+			return;
+		}
+
+		// Check if race is 2024 (no ASI from race) or has ASI to reassign
+		const raceIs2024 = this._raceUses2024ASI();
+		const hasRacialASI = this._getRacialASITotal() > 0;
+
+		if (raceIs2024) {
+			$container.append(`<p class='ve-muted'>2024 species do not provide ability score bonuses. ASI comes from your background choice.</p>`);
+			return;
+		}
+
+		if (!hasRacialASI) {
+			$container.append(`<p class='ve-muted'>No racial ability bonuses</p>`);
+			return;
+		}
+
+		// Show Tasha's Custom Origin option
+		const $tashasOption = $(`
+			<label class="ve-flex-v-center mb-2" style="cursor: pointer;">
+				<input type="checkbox" class="mr-2" id="builder-tashas-rules" ${this._useTashasRules ? "checked" : ""}>
+				<span>Use Tasha's Custom Origin Rules</span>
+				<span class="ve-muted ve-small ml-1" title="Allows you to reassign your racial ability score bonuses to different abilities">(reassign ASI)</span>
+			</label>
+		`);
+
+		$tashasOption.find("input").on("change", (e) => {
+			this._useTashasRules = e.target.checked;
+			if (!this._useTashasRules) {
+				// Reset custom bonuses when disabling
+				this._tashasAbilityBonuses = {};
+			}
+			this._renderRacialBonusesSection();
+			this._updateAbilitySummary();
+		});
+
+		$container.append($tashasOption);
+
+		// Show either default bonuses or custom selection UI
+		if (this._useTashasRules) {
+			this._renderTashasASIChoices($container);
+		} else {
+			$container.append(`<div class="mt-2">${this._getRacialBonusesHtml()}</div>`);
+		}
+	}
+
+	/**
+	 * Get total ASI points from racial bonuses
+	 */
+	_getRacialASITotal () {
+		let total = 0;
+
+		if (this._selectedRace?.ability) {
+			this._selectedRace.ability.forEach(abiSet => {
+				Object.entries(abiSet).forEach(([abi, bonus]) => {
+					if (Parser.ABIL_ABVS.includes(abi)) {
+						total += bonus;
+					}
+				});
+			});
+		}
+
+		if (this._selectedSubrace?.ability) {
+			this._selectedSubrace.ability.forEach(abiSet => {
+				Object.entries(abiSet).forEach(([abi, bonus]) => {
+					if (Parser.ABIL_ABVS.includes(abi)) {
+						total += bonus;
+					}
+				});
+			});
+		}
+
+		return total;
+	}
+
+	/**
+	 * Get racial ASI as an array of bonuses for Tasha's rules
+	 * Returns [{amount: 2}, {amount: 1}] or similar
+	 */
+	_getRacialASIBonuses () {
+		const bonuses = [];
+
+		if (this._selectedRace?.ability) {
+			this._selectedRace.ability.forEach(abiSet => {
+				Object.entries(abiSet).forEach(([abi, bonus]) => {
+					if (Parser.ABIL_ABVS.includes(abi) && typeof bonus === "number") {
+						bonuses.push({amount: bonus, source: this._selectedRace.name});
+					}
+				});
+			});
+		}
+
+		if (this._selectedSubrace?.ability) {
+			this._selectedSubrace.ability.forEach(abiSet => {
+				Object.entries(abiSet).forEach(([abi, bonus]) => {
+					if (Parser.ABIL_ABVS.includes(abi) && typeof bonus === "number") {
+						bonuses.push({amount: bonus, source: this._selectedSubrace.name});
+					}
+				});
+			});
+		}
+
+		return bonuses;
+	}
+
+	/**
+	 * Render Tasha's Custom Origin ASI selection
+	 */
+	_renderTashasASIChoices ($container) {
+		const bonuses = this._getRacialASIBonuses();
+		if (!bonuses.length) return;
+
+		const $info = $(`<p class="ve-small ve-muted mb-2">Reassign your racial ability score bonuses to any abilities you choose:</p>`);
+		$container.append($info);
+
+		const $choices = $(`<div class="charsheet__builder-tashas-asi-choices"></div>`);
+		const abilities = ["str", "dex", "con", "int", "wis", "cha"];
+
+		bonuses.forEach((bonus, idx) => {
+			const $row = $(`<div class="ve-flex-v-center mb-1"></div>`);
+			$row.append(`<span class="mr-2">+${bonus.amount}:</span>`);
+
+			const $select = $(`<select class="form-control form-control--minimal ve-inline-block w-auto" data-tasha-idx="${idx}"></select>`);
+			$select.append(`<option value="">-- Select --</option>`);
+
+			abilities.forEach(ab => {
+				const abName = Parser.attAbvToFull(ab);
+				const selected = this._tashasAbilityBonuses[`tasha_${idx}`] === ab ? "selected" : "";
+				$select.append(`<option value="${ab}" ${selected}>${abName}</option>`);
+			});
+
+			$select.on("change", (e) => {
+				const val = e.target.value;
+				this._tashasAbilityBonuses[`tasha_${idx}`] = val;
+				this._tashasAbilityBonuses[`tasha_${idx}_amount`] = bonus.amount;
+
+				// Update other selects to disable already-selected options
+				$choices.find("select").each((i, sel) => {
+					const $sel = $(sel);
+					const selIdx = $sel.data("tasha-idx");
+					if (selIdx !== idx) {
+						$sel.find("option").each((j, opt) => {
+							const $opt = $(opt);
+							const optVal = $opt.val();
+							// Check if this option is selected in another dropdown
+							const isSelectedElsewhere = Object.entries(this._tashasAbilityBonuses)
+								.some(([k, v]) => k.startsWith("tasha_") && !k.includes("_amount") && k !== `tasha_${selIdx}` && v === optVal);
+							$opt.prop("disabled", optVal && isSelectedElsewhere);
+						});
+					}
+				});
+
+				this._updateAbilitySummary();
+			});
+
+			$row.append($select);
+			$choices.append($row);
+		});
+
+		$container.append($choices);
 	}
 
 	_resetAbilityScores () {
@@ -4024,6 +4210,20 @@ class CharacterSheetBuilder {
 	}
 
 	_getRacialBonus (ability) {
+		// If using Tasha's Custom Origin rules, use custom bonuses
+		if (this._useTashasRules) {
+			let bonus = 0;
+			Object.entries(this._tashasAbilityBonuses).forEach(([key, value]) => {
+				if (key.includes("_amount")) return;
+				if (value === ability) {
+					const amountKey = `${key}_amount`;
+					bonus += this._tashasAbilityBonuses[amountKey] || 0;
+				}
+			});
+			return bonus;
+		}
+
+		// Standard racial bonuses
 		let bonus = 0;
 
 		if (this._selectedRace?.ability) {
@@ -4118,6 +4318,11 @@ class CharacterSheetBuilder {
 						<input type="text" class="form-control form-control--minimal" placeholder="Search backgrounds..." id="builder-bg-search">
 					</div>
 					<div class="charsheet__builder-list-content" id="builder-bg-list"></div>
+					<div class="charsheet__builder-list-footer p-2" style="border-top: 1px solid var(--rgb-border-grey);">
+						<button class="ve-btn ve-btn-xs ve-btn-default w-100" id="builder-custom-bg-btn">
+							<span class="glyphicon glyphicon-plus mr-1"></span>Create Custom Background
+						</button>
+					</div>
 				</div>
 				<div class="charsheet__builder-preview" id="builder-bg-preview">
 					<div class="charsheet__builder-preview-placeholder">Select a background to see details</div>
@@ -4131,15 +4336,40 @@ class CharacterSheetBuilder {
 		const $preview = $("#builder-bg-preview");
 		const $search = $("#builder-bg-search");
 
+		// Custom background button
+		$("#builder-custom-bg-btn").on("click", () => {
+			this._showCustomBackgroundCreator($preview);
+		});
+
 		const renderBgList = (filter = "") => {
 			$list.empty();
 			const filterLower = filter.toLowerCase();
+
+			// Add "Custom" option at the top if we have a custom background selected
+			if (this._customBackground) {
+				const isSelected = this._selectedBackground === this._customBackground;
+				const $customItem = $(`
+					<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
+						<span class="charsheet__builder-list-item-name">${this._customBackground.name}</span>
+						<span class="charsheet__builder-list-item-source">Custom</span>
+					</div>
+				`);
+				$customItem.on("click", () => {
+					$list.find(".charsheet__builder-list-item").removeClass("active");
+					$customItem.addClass("active");
+					this._selectedBackground = this._customBackground;
+					this._selectedToolProficiencies = [];
+					this._selectedLanguages = [];
+					this._renderBackgroundPreview($preview, this._customBackground);
+				});
+				$list.append($customItem);
+			}
 
 			backgrounds
 				.filter(bg => !filter || bg.name.toLowerCase().includes(filterLower))
 				.sort((a, b) => a.name.localeCompare(b.name))
 				.forEach(bg => {
-					const isSelected = this._selectedBackground?.name === bg.name;
+					const isSelected = this._selectedBackground?.name === bg.name && !this._selectedBackground?._isCustom;
 					const $item = $(`
 						<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
 							<span class="charsheet__builder-list-item-name">${bg.name}</span>
@@ -4167,6 +4397,304 @@ class CharacterSheetBuilder {
 		if (this._selectedBackground) {
 			this._renderBackgroundPreview($preview, this._selectedBackground);
 		}
+	}
+
+	/**
+	 * Show the custom background creation form
+	 */
+	_showCustomBackgroundCreator ($preview) {
+		$preview.empty();
+
+		// Initialize custom background data
+		if (!this._customBackgroundData) {
+			this._customBackgroundData = {
+				name: "Custom Background",
+				skills: [],
+				tools: [],
+				languages: [],
+				equipment: "",
+				feature: "",
+			};
+		}
+
+		const allSkills = this._page.getSkillsList().map(s => s.name);
+		const allTools = [
+			"Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies", 
+			"Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools",
+			"Cook's Utensils", "Disguise Kit", "Forgery Kit", "Gaming Set",
+			"Glassblower's Tools", "Herbalism Kit", "Jeweler's Tools",
+			"Leatherworker's Tools", "Mason's Tools", "Musical Instrument",
+			"Navigator's Tools", "Painter's Supplies", "Poisoner's Kit",
+			"Potter's Tools", "Smith's Tools", "Thieves' Tools", 
+			"Tinker's Tools", "Weaver's Tools", "Woodcarver's Tools",
+		];
+		const allLanguages = this._page.getLanguagesList().map(l => l.name);
+
+		const $content = $(`
+			<div class="charsheet__custom-bg-creator">
+				<h4>Create Custom Background</h4>
+				<p class="ve-muted ve-small mb-3">Build your own background with custom proficiencies and features.</p>
+				
+				<div class="charsheet__section mb-3">
+					<label class="ve-block mb-1"><strong>Background Name:</strong></label>
+					<input type="text" class="form-control form-control--minimal" id="custom-bg-name" 
+						value="${this._customBackgroundData.name}" placeholder="Enter background name">
+				</div>
+
+				<div class="charsheet__section mb-3">
+					<label class="ve-block mb-1"><strong>Skill Proficiencies:</strong> <span class="ve-muted">(choose 2)</span></label>
+					<div id="custom-bg-skills" class="charsheet__builder-skill-checkboxes"></div>
+				</div>
+
+				<div class="charsheet__section mb-3">
+					<label class="ve-block mb-1"><strong>Tool/Language Proficiencies:</strong> <span class="ve-muted">(choose 2 total)</span></label>
+					<div class="ve-flex-col">
+						<div class="mb-2">
+							<label class="ve-muted ve-small">Tools:</label>
+							<select class="form-control form-control--minimal" id="custom-bg-tool1">
+								<option value="">-- None --</option>
+							</select>
+						</div>
+						<div class="mb-2">
+							<label class="ve-muted ve-small">Languages:</label>
+							<select class="form-control form-control--minimal" id="custom-bg-lang1">
+								<option value="">-- None --</option>
+							</select>
+						</div>
+						<div>
+							<label class="ve-muted ve-small">Additional (Tool or Language):</label>
+							<select class="form-control form-control--minimal" id="custom-bg-extra">
+								<option value="">-- None --</option>
+								<optgroup label="Tools" id="custom-bg-extra-tools"></optgroup>
+								<optgroup label="Languages" id="custom-bg-extra-langs"></optgroup>
+							</select>
+						</div>
+					</div>
+				</div>
+
+				<div class="charsheet__section mb-3">
+					<label class="ve-block mb-1"><strong>Equipment:</strong></label>
+					<textarea class="form-control form-control--minimal" id="custom-bg-equipment" rows="2" 
+						placeholder="e.g., A set of common clothes, a trinket, 15 gp">${this._customBackgroundData.equipment || ""}</textarea>
+				</div>
+
+				<div class="charsheet__section mb-3">
+					<label class="ve-block mb-1"><strong>Feature Name:</strong></label>
+					<input type="text" class="form-control form-control--minimal" id="custom-bg-feature" 
+						value="${this._customBackgroundData.feature || ""}" placeholder="e.g., Shelter of the Faithful">
+				</div>
+
+				<div class="ve-flex-v-center ve-flex-h-right mt-3">
+					<button class="ve-btn ve-btn-default mr-2" id="custom-bg-cancel">Cancel</button>
+					<button class="ve-btn ve-btn-primary" id="custom-bg-save">Create Background</button>
+				</div>
+			</div>
+		`);
+
+		$preview.append($content);
+
+		// Populate skill checkboxes
+		const $skillsContainer = $("#custom-bg-skills");
+		allSkills.forEach(skill => {
+			const isSelected = this._customBackgroundData.skills.includes(skill);
+			const $cb = $(`
+				<label class="charsheet__builder-skill-checkbox">
+					<input type="checkbox" data-skill="${skill}" ${isSelected ? "checked" : ""}>
+					<span>${skill}</span>
+				</label>
+			`);
+			$cb.find("input").on("change", () => this._updateCustomBgSkills());
+			$skillsContainer.append($cb);
+		});
+
+		// Populate tool dropdown
+		const $toolSelect = $("#custom-bg-tool1");
+		allTools.forEach(tool => {
+			$toolSelect.append(`<option value="${tool}" ${this._customBackgroundData.tools[0] === tool ? "selected" : ""}>${tool}</option>`);
+		});
+
+		// Populate language dropdown
+		const $langSelect = $("#custom-bg-lang1");
+		allLanguages.forEach(lang => {
+			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+		});
+
+		// Populate extra dropdown (combined tools and languages)
+		const $extraToolsGroup = $("#custom-bg-extra-tools");
+		const $extraLangsGroup = $("#custom-bg-extra-langs");
+		allTools.forEach(tool => {
+			$extraToolsGroup.append(`<option value="tool:${tool}">${tool}</option>`);
+		});
+		allLanguages.forEach(lang => {
+			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+		});
+
+		// Event handlers
+		$("#custom-bg-name").on("input", (e) => {
+			this._customBackgroundData.name = e.target.value || "Custom Background";
+		});
+
+		$("#custom-bg-tool1").on("change", (e) => {
+			this._customBackgroundData.tools[0] = e.target.value;
+		});
+
+		$("#custom-bg-lang1").on("change", (e) => {
+			this._customBackgroundData.languages[0] = e.target.value;
+		});
+
+		$("#custom-bg-extra").on("change", (e) => {
+			const val = e.target.value;
+			if (val.startsWith("tool:")) {
+				this._customBackgroundData.tools[1] = val.replace("tool:", "");
+				this._customBackgroundData.languages[1] = "";
+			} else if (val.startsWith("lang:")) {
+				this._customBackgroundData.languages[1] = val.replace("lang:", "");
+				this._customBackgroundData.tools[1] = "";
+			} else {
+				this._customBackgroundData.tools[1] = "";
+				this._customBackgroundData.languages[1] = "";
+			}
+		});
+
+		$("#custom-bg-equipment").on("input", (e) => {
+			this._customBackgroundData.equipment = e.target.value;
+		});
+
+		$("#custom-bg-feature").on("input", (e) => {
+			this._customBackgroundData.feature = e.target.value;
+		});
+
+		$("#custom-bg-cancel").on("click", () => {
+			if (this._selectedBackground) {
+				this._renderBackgroundPreview($preview, this._selectedBackground);
+			} else {
+				$preview.html(`<div class="charsheet__builder-preview-placeholder">Select a background to see details</div>`);
+			}
+		});
+
+		$("#custom-bg-save").on("click", () => {
+			// Validate
+			if (this._customBackgroundData.skills.length !== 2) {
+				JqueryUtil.doToast({type: "warning", content: "Please select exactly 2 skill proficiencies."});
+				return;
+			}
+
+			// Build the custom background object
+			this._customBackground = this._buildCustomBackground();
+			this._selectedBackground = this._customBackground;
+
+			// Re-render the list to show the custom background
+			const $list = $("#builder-bg-list");
+			const $search = $("#builder-bg-search");
+			this._renderBackgroundStep_refreshList($list, $search.val());
+
+			// Show the preview
+			this._renderBackgroundPreview($preview, this._customBackground);
+		});
+	}
+
+	_updateCustomBgSkills () {
+		const selected = [];
+		$("#custom-bg-skills input:checked").each((i, el) => {
+			selected.push($(el).data("skill"));
+		});
+		
+		// Limit to 2 skills
+		if (selected.length > 2) {
+			// Uncheck the last one
+			const $checkboxes = $("#custom-bg-skills input:checked");
+			$checkboxes.last().prop("checked", false);
+			selected.pop();
+		}
+
+		this._customBackgroundData.skills = selected;
+	}
+
+	_renderBackgroundStep_refreshList ($list, filter = "") {
+		const backgrounds = this._page.filterByAllowedSources(this._page.getBackgrounds());
+		$list.empty();
+		const filterLower = (filter || "").toLowerCase();
+
+		// Add custom background at top if exists
+		if (this._customBackground) {
+			const isSelected = this._selectedBackground === this._customBackground;
+			const $customItem = $(`
+				<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
+					<span class="charsheet__builder-list-item-name">${this._customBackground.name}</span>
+					<span class="charsheet__builder-list-item-source">Custom</span>
+				</div>
+			`);
+			$customItem.on("click", () => {
+				$list.find(".charsheet__builder-list-item").removeClass("active");
+				$customItem.addClass("active");
+				this._selectedBackground = this._customBackground;
+				this._selectedToolProficiencies = [];
+				this._selectedLanguages = [];
+				this._renderBackgroundPreview($("#builder-bg-preview"), this._customBackground);
+			});
+			$list.append($customItem);
+		}
+
+		backgrounds
+			.filter(bg => !filter || bg.name.toLowerCase().includes(filterLower))
+			.sort((a, b) => a.name.localeCompare(b.name))
+			.forEach(bg => {
+				const isSelected = this._selectedBackground?.name === bg.name && !this._selectedBackground?._isCustom;
+				const $item = $(`
+					<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
+						<span class="charsheet__builder-list-item-name">${bg.name}</span>
+						<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(bg.source)}</span>
+					</div>
+				`);
+
+				$item.on("click", () => {
+					$list.find(".charsheet__builder-list-item").removeClass("active");
+					$item.addClass("active");
+					this._selectedBackground = bg;
+					this._selectedToolProficiencies = [];
+					this._selectedLanguages = [];
+					this._renderBackgroundPreview($("#builder-bg-preview"), bg);
+				});
+
+				$list.append($item);
+			});
+	}
+
+	/**
+	 * Build a background object from custom background data
+	 */
+	_buildCustomBackground () {
+		const data = this._customBackgroundData;
+		
+		// Build skill proficiencies array
+		const skillProfs = data.skills.map(s => s.toLowerCase().replace(/\s+/g, " "));
+
+		// Build tool proficiencies
+		const toolProfs = data.tools.filter(t => t);
+
+		// Build language proficiencies
+		const langProfs = data.languages.filter(l => l);
+
+		return {
+			name: data.name || "Custom Background",
+			source: "Custom",
+			_isCustom: true,
+			skillProficiencies: skillProfs.length ? [{[skillProfs[0]]: true, [skillProfs[1]]: true}] : [],
+			toolProficiencies: toolProfs.length ? [Object.fromEntries(toolProfs.map(t => [t.toLowerCase(), true]))] : [],
+			languageProficiencies: langProfs.length ? [Object.fromEntries(langProfs.map(l => [l.toLowerCase(), true]))] : [],
+			entries: [
+				data.feature ? {
+					type: "entries",
+					name: "Feature: " + data.feature,
+					entries: ["Custom background feature."],
+				} : null,
+				data.equipment ? {
+					type: "entries",
+					name: "Equipment",
+					entries: [data.equipment],
+				} : null,
+			].filter(Boolean),
+		};
 	}
 
 	_renderBackgroundPreview ($preview, bg) {
