@@ -1748,6 +1748,8 @@ class CharacterSheetLevelUp {
 			this._state.addFeat(selectedFeat);
 			// Apply feat bonuses if any
 			this._applyFeatBonuses(selectedFeat);
+			// Process pending spell choices from the feat
+			await this._processFeatSpellChoices();
 		} else if (asiChoices) {
 			// Apply ability score increases
 			const increases = [];
@@ -2552,6 +2554,20 @@ class CharacterSheetLevelUp {
 			profs.weapons.forEach(w => this._state.addWeaponProficiency(w));
 		}
 		// Skills would need UI selection - skip for now
+	}
+
+	/**
+	 * Process pending spell choices from a recently added feat
+	 */
+	async _processFeatSpellChoices () {
+		if (!this._state.hasPendingSpellChoices()) return;
+
+		// Give UI time to update before showing modal
+		await MiscUtil.pDelay(100);
+
+		if (this._page._spells) {
+			await this._page._spells.processPendingSpellChoices();
+		}
 	}
 }
 

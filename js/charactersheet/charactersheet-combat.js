@@ -88,11 +88,13 @@ class CharacterSheetCombat {
 		this.renderCombatDefenses();
 	}
 
-	_castCombatSpell (spellId) {
+	async _castCombatSpell (spellId) {
 		// Delegate to the spells module if available
 		if (this._page._spells) {
-			this._page._spells._castSpell(spellId);
+			await this._page._spells._castSpell(spellId);
 			this.renderCombatSpells(); // Refresh to update slot display
+			this.renderCombatStates(); // Refresh to show concentration
+			this.renderCombatEffects(); // Refresh effects
 		} else {
 			JqueryUtil.doToast({type: "warning", content: "Spells module not available."});
 		}

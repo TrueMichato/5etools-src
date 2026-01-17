@@ -206,8 +206,8 @@ class CharacterSheetFeatures {
 				`);
 
 				if (!isKnown) {
-					$item.find(".feat-picker-add").on("click", () => {
-						this._addFeat(feat);
+					$item.find(".feat-picker-add").on("click", async () => {
+						await this._addFeat(feat);
 						knownFeatNames.push(feat.name.toLowerCase());
 						$item.addClass("ve-muted");
 						$item.find(".feat-picker-add").replaceWith(`<span class="ve-muted">Known</span>`);
@@ -262,11 +262,12 @@ class CharacterSheetFeatures {
 		}).join("; ");
 	}
 
-	_addFeat (feat) {
+	async _addFeat (feat) {
 		const newFeat = {
 			name: feat.name,
 			source: feat.source,
 			description: feat.entries ? Renderer.get().render({type: "entries", entries: feat.entries}) : "",
+			additionalSpells: feat.additionalSpells, // Preserve for spell processing
 		};
 
 		// Apply ability score increases
@@ -284,6 +285,16 @@ class CharacterSheetFeatures {
 		this._state.addFeat(newFeat);
 		this.render();
 		this._page.saveCharacter();
+
+		// Check for pending spell choices and trigger the picker
+		if (this._state.hasPendingSpellChoices()) {
+			// Give UI time to update before showing modal
+			await MiscUtil.pDelay(100);
+			if (this._page._spells) {
+				await this._page._spells.processPendingSpellChoices();
+				this.render(); // Re-render after spell selection
+			}
+		}
 	}
 
 	async _showFeatInfo (feat) {

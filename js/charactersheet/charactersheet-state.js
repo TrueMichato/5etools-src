@@ -254,73 +254,178 @@ class SpellGrantParser {
 		if (!additionalSpells?.length) return [];
 
 		const spells = [];
+		const ability = additionalSpells[0]?.ability; // Spellcasting ability for these spells
 
 		additionalSpells.forEach(spellBlock => {
 			// Handle innate spells (at-will or limited uses)
 			if (spellBlock.innate) {
-				const innate = spellBlock.innate._ || spellBlock.innate;
-				
-				// At-will spells (array format)
-				if (Array.isArray(innate)) {
-					innate.forEach(spellRef => {
-						if (typeof spellRef === "string") {
-							spells.push(this._parseSpellRef(spellRef, {
-								innate: true,
-								atWill: true,
-								sourceFeature: featureName,
-							}));
-						}
-					});
-				}
-
-				// Daily use spells
-				if (innate.daily) {
-					Object.entries(innate.daily).forEach(([uses, spellRefs]) => {
-						// Parse uses like "1e" (1 each), "2" (2 total), etc.
-						const usesNum = parseInt(uses);
-						const isEach = uses.endsWith("e");
-						
-						(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
-							if (typeof spellRef === "string") {
-								spells.push(this._parseSpellRef(spellRef, {
-									innate: true,
-									uses: usesNum,
-									usesEach: isEach,
-									recharge: "long",
-									sourceFeature: featureName,
-								}));
-							} else if (spellRef?.choose) {
-								// Choice required - mark for UI
-								spells.push({
-									requiresChoice: true,
-									choiceFilter: spellRef.choose,
-									innate: true,
-									uses: usesNum,
-									usesEach: isEach,
-									recharge: "long",
-									sourceFeature: featureName,
-								});
-							}
-						});
-					});
-				}
+				this._parseInnateBlock(spellBlock.innate, spells, featureName, ability);
 			}
 
-			// Handle known/prepared spells
-			if (spellBlock.known || spellBlock.prepared) {
-				const spellList = spellBlock.known || spellBlock.prepared;
-				(Array.isArray(spellList) ? spellList : []).forEach(spellRef => {
-					if (typeof spellRef === "string") {
-						spells.push(this._parseSpellRef(spellRef, {
-							prepared: !!spellBlock.prepared,
-							sourceFeature: featureName,
-						}));
-					}
-				});
+			// Handle known spells
+			if (spellBlock.known) {
+				this._parseKnownPreparedBlock(spellBlock.known, spells, featureName, ability, false);
+			}
+
+			// Handle prepared spells
+			if (spellBlock.prepared) {
+				this._parseKnownPreparedBlock(spellBlock.prepared, spells, featureName, ability, true);
 			}
 		});
 
 		return spells.filter(s => s && (s.name || s.requiresChoice));
+	}
+
+	/**
+	 * Parse innate spell block structure
+	 */
+	static _parseInnateBlock (innate, spells, featureName, ability) {
+		// Handle nested "_" structure
+		const innateData = innate._ || innate;
+
+		// At-will spells (direct array)
+		if (Array.isArray(innateData)) {
+			innateData.forEach(spellRef => {
+				this._addSpellRef(spellRef, spells, {
+					innate: true,
+					atWill: true,
+					sourceFeature: featureName,
+					ability,
+				});
+			});
+		}
+
+		// Daily use spells
+		if (innateData.daily) {
+			Object.entries(innateData.daily).forEach(([uses, spellRefs]) => {
+				const usesNum = parseInt(uses);
+				const isEach = uses.endsWith("e");
+
+				(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
+					this._addSpellRef(spellRef, spells, {
+						innate: true,
+						uses: usesNum,
+						usesEach: isEach,
+						recharge: "long",
+						sourceFeature: featureName,
+						ability,
+					});
+				});
+			});
+		}
+
+		// Rest-based use spells
+		if (innateData.rest) {
+			Object.entries(innateData.rest).forEach(([uses, spellRefs]) => {
+				const usesNum = parseInt(uses);
+				const isEach = uses.endsWith("e");
+
+				(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
+					this._addSpellRef(spellRef, spells, {
+						innate: true,
+						uses: usesNum,
+						usesEach: isEach,
+						recharge: "short",
+						sourceFeature: featureName,
+						ability,
+					});
+				});
+			});
+		}
+	}
+
+	/**
+	 * Parse known/prepared spell block structure
+	 */
+	static _parseKnownPreparedBlock (block, spells, featureName, ability, isPrepared) {
+		// Handle nested "_" structure (character level keys or direct array)
+		const data = block._ || block;
+
+		// Direct array of spells
+		if (Array.isArray(data)) {
+			data.forEach(spellRef => {
+				this._addSpellRef(spellRef, spells, {
+					prepared: isPrepared,
+					sourceFeature: featureName,
+					ability,
+				});
+			});
+			return;
+		}
+
+		// Level-keyed structure: {"1": [...], "3": [...]}
+		if (typeof data === "object") {
+			// Handle daily/rest sub-structure for prepared spells
+			if (data.daily) {
+				Object.entries(data.daily).forEach(([uses, spellRefs]) => {
+					const usesNum = parseInt(uses);
+					const isEach = uses.endsWith("e");
+
+					(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
+						this._addSpellRef(spellRef, spells, {
+							innate: true,
+							prepared: isPrepared,
+							uses: usesNum,
+							usesEach: isEach,
+							recharge: "long",
+							sourceFeature: featureName,
+							ability,
+						});
+					});
+				});
+			}
+
+			if (data.rest) {
+				Object.entries(data.rest).forEach(([uses, spellRefs]) => {
+					const usesNum = parseInt(uses);
+					const isEach = uses.endsWith("e");
+
+					(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
+						this._addSpellRef(spellRef, spells, {
+							innate: true,
+							prepared: isPrepared,
+							uses: usesNum,
+							usesEach: isEach,
+							recharge: "short",
+							sourceFeature: featureName,
+							ability,
+						});
+					});
+				});
+			}
+
+			// Level-keyed entries (for character level unlocks)
+			Object.entries(data).forEach(([key, spellList]) => {
+				if (key === "daily" || key === "rest") return; // Already handled
+				if (!Array.isArray(spellList)) return;
+
+				const charLevel = parseInt(key);
+				spellList.forEach(spellRef => {
+					this._addSpellRef(spellRef, spells, {
+						prepared: isPrepared,
+						sourceFeature: featureName,
+						ability,
+						unlocksAtLevel: isNaN(charLevel) ? undefined : charLevel,
+					});
+				});
+			});
+		}
+	}
+
+	/**
+	 * Add a spell reference (string or choice object) to the spells array
+	 */
+	static _addSpellRef (spellRef, spells, additionalProps) {
+		if (typeof spellRef === "string") {
+			spells.push(this._parseSpellRef(spellRef, additionalProps));
+		} else if (spellRef?.choose) {
+			// Choice required - mark for UI
+			spells.push({
+				requiresChoice: true,
+				choiceFilter: spellRef.choose,
+				...additionalProps,
+			});
+		}
 	}
 
 	/**
@@ -1826,6 +1931,10 @@ class CharacterSheetState {
 
 			// Concentration tracking
 			concentrating: null, // {spellName, spellLevel, startTime?} or null
+
+			// Pending spell choices (from feats/features that grant spell selection)
+			// Each choice: {id, featureName, featureId, filter, innate, uses, recharge, ability}
+			pendingSpellChoices: [],
 
 			// Sheet settings/options
 			settings: {
@@ -3437,6 +3546,88 @@ class CharacterSheetState {
 		});
 	}
 
+	// Pending spell choice management
+	getPendingSpellChoices () {
+		return [...(this._data.pendingSpellChoices || [])];
+	}
+
+	addPendingSpellChoice (choice) {
+		if (!this._data.pendingSpellChoices) {
+			this._data.pendingSpellChoices = [];
+		}
+
+		const pendingChoice = {
+			id: CryptUtil.uid(),
+			featureName: choice.featureName,
+			featureId: choice.featureId,
+			filter: choice.filter,
+			innate: choice.innate || false,
+			uses: choice.uses,
+			recharge: choice.recharge,
+			ability: choice.ability,
+			prepared: choice.prepared,
+		};
+
+		this._data.pendingSpellChoices.push(pendingChoice);
+		console.log(`[CharSheet State] Added pending spell choice:`, pendingChoice);
+	}
+
+	removePendingSpellChoice (choiceId) {
+		if (!this._data.pendingSpellChoices) return;
+		this._data.pendingSpellChoices = this._data.pendingSpellChoices.filter(c => c.id !== choiceId);
+	}
+
+	clearPendingSpellChoicesByFeature (featureIdOrName) {
+		if (!this._data.pendingSpellChoices) return;
+		this._data.pendingSpellChoices = this._data.pendingSpellChoices.filter(
+			c => c.featureId !== featureIdOrName && c.featureName !== featureIdOrName,
+		);
+	}
+
+	hasPendingSpellChoices () {
+		return (this._data.pendingSpellChoices?.length || 0) > 0;
+	}
+
+	/**
+	 * Fulfill a pending spell choice by adding the selected spell
+	 * @param {string} choiceId - ID of the pending choice
+	 * @param {object} spell - The spell data to add
+	 */
+	fulfillSpellChoice (choiceId, spell) {
+		const choice = this._data.pendingSpellChoices?.find(c => c.id === choiceId);
+		if (!choice) {
+			console.warn(`[CharSheet State] No pending choice found with id: ${choiceId}`);
+			return;
+		}
+
+		// Add the spell based on the choice configuration
+		if (choice.innate) {
+			this.addInnateSpell({
+				name: spell.name,
+				source: spell.source,
+				level: spell.level,
+				atWill: !choice.uses,
+				uses: choice.uses,
+				recharge: choice.recharge || "long",
+				sourceFeature: choice.featureName,
+			});
+		} else {
+			this.addSpell({
+				name: spell.name,
+				source: spell.source,
+				level: spell.level,
+				school: spell.school,
+				prepared: choice.prepared,
+				ritual: spell.ritual || false,
+				concentration: spell.concentration || false,
+			});
+		}
+
+		// Remove the fulfilled choice
+		this.removePendingSpellChoice(choiceId);
+		console.log(`[CharSheet State] Fulfilled spell choice "${choice.featureName}" with spell: ${spell.name}`);
+	}
+
 	setSpellPrepared (spellIdOrName, sourceOrPrepared, prepared) {
 		// Support both (id, prepared) and (name, source, prepared) signatures
 		let spell;
@@ -4521,9 +4712,11 @@ class CharacterSheetState {
 	 * Process spells granted by a feature
 	 * @param {object} feature - Feature data (may have additionalSpells property or description)
 	 * @param {string} featureId - ID of the feature in state
+	 * @returns {boolean} True if there are pending spell choices that need UI interaction
 	 */
 	_processFeatureSpells (feature, featureId) {
 		let spells = [];
+		let hasPendingChoices = false;
 
 		// First try structured additionalSpells data (from official content)
 		if (feature.additionalSpells) {
@@ -4534,13 +4727,23 @@ class CharacterSheetState {
 			spells = SpellGrantParser.parseSpellsFromText(feature.description, feature.name);
 		}
 
-		if (!spells.length) return;
+		if (!spells.length) return false;
 
 		spells.forEach(spell => {
-			// Skip choice-required spells (would need UI for selection)
+			// Handle choice-required spells - add to pending choices
 			if (spell.requiresChoice) {
-				console.log(`[CharSheet State] Spell choice required for "${feature.name}":`, spell.choiceFilter);
-				// Could add to a pending choices list for UI
+				this.addPendingSpellChoice({
+					featureName: feature.name,
+					featureId: featureId,
+					filter: spell.choiceFilter,
+					innate: spell.innate,
+					uses: spell.uses,
+					recharge: spell.recharge,
+					ability: spell.ability,
+					prepared: spell.prepared,
+				});
+				hasPendingChoices = true;
+				console.log(`[CharSheet State] Added pending spell choice for "${feature.name}":`, spell.choiceFilter);
 				return;
 			}
 
@@ -4567,7 +4770,8 @@ class CharacterSheetState {
 			}
 		});
 
-		console.log(`[CharSheet State] Processed ${spells.length} spells from "${feature.name}"`);
+		console.log(`[CharSheet State] Processed ${spells.length} spells from "${feature.name}"${hasPendingChoices ? " (has pending choices)" : ""}`);
+		return hasPendingChoices;
 	}
 
 	removeFeature (featureIdOrName, source) {
@@ -5824,6 +6028,16 @@ class CharacterSheetState {
 				{type: "bonus", target: "ac", value: -2},
 				{type: "bonus", target: "save:dex", value: -2},
 				{type: "note", value: "Cannot use reactions"},
+			],
+		},
+		// Non-standard but commonly used conditions
+		silenced: {
+			name: "Silenced",
+			icon: "🤫",
+			description: "Cannot speak or cast spells with verbal components",
+			effects: [
+				{type: "note", value: "Cannot speak or make sounds"},
+				{type: "cantCast", target: "verbal", condition: "Silenced - cannot use verbal components"},
 			],
 		},
 		// Custom/Homebrew condition placeholder
