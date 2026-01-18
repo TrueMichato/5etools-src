@@ -435,6 +435,9 @@ class CharacterSheetPage {
 		// Inspiration
 		$("#charsheet-box-inspiration").on("click", () => this._toggleInspiration());
 
+		// Help toggle
+		$("#charsheet-help-toggle").on("click", () => this._toggleHelpTips());
+
 		// Conditions
 		$("#charsheet-btn-add-condition").on("click", () => this._onAddCondition());
 
@@ -447,8 +450,12 @@ class CharacterSheetPage {
 			$(`#charsheet-ipt-${currency}`).on("change", (e) => {
 				this._state.setCurrency(currency, parseInt(e.target.value) || 0);
 				this._saveCurrentCharacter();
+				this._renderCurrency(); // Update total
 			});
 		});
+		
+		// Currency conversion button
+		$("#charsheet-btn-convert-currency").on("click", () => this._convertCurrencyToGold());
 
 		// Notes
 		["personality", "ideals", "bonds", "flaws", "backstory", "notes"].forEach(field => {
@@ -771,14 +778,7 @@ class CharacterSheetPage {
 			$(`#charsheet-ability-${abl}-mod`).text(mod >= 0 ? `+${mod}` : mod);
 		});
 
-		// Passive scores (10 + skill modifier)
-		const passivePerception = 10 + this._state.getSkillMod("perception");
-		const passiveInvestigation = 10 + this._state.getSkillMod("investigation");
-		const passiveInsight = 10 + this._state.getSkillMod("insight");
-
-		$("#charsheet-disp-passive-perception").text(passivePerception);
-		$("#charsheet-disp-passive-investigation").text(passiveInvestigation);
-		$("#charsheet-disp-passive-insight").text(passiveInsight);
+		// Note: Passive scores are now rendered inline with skills in _renderSkills()
 	}
 
 	_renderSavingThrows () {
@@ -807,21 +807,14 @@ class CharacterSheetPage {
 		const $container = $("#charsheet-skills");
 		$container.empty();
 
-		// Add legend for proficiency indicators
+		// Add header row with column labels
 		$container.append(`
-			<div class="charsheet__skills-legend">
-				<div class="charsheet__legend-item">
-					<span class="charsheet__legend-dot charsheet__legend-dot--half"></span>
-					<span>Half</span>
-				</div>
-				<div class="charsheet__legend-item">
-					<span class="charsheet__legend-dot charsheet__legend-dot--proficient"></span>
-					<span>Prof</span>
-				</div>
-				<div class="charsheet__legend-item">
-					<span class="charsheet__legend-dot charsheet__legend-dot--expertise"></span>
-					<span>Expert</span>
-				</div>
+			<div class="charsheet__skills-header">
+				<span class="charsheet__skills-header-prof" title="Proficiency level: Click dots to cycle">Prof</span>
+				<span class="charsheet__skills-header-name">Skill</span>
+				<span class="charsheet__skills-header-ability">Abl</span>
+				<span class="charsheet__skills-header-mod">Mod</span>
+				<span class="charsheet__skills-header-passive" title="Passive score = 10 + modifier">Passive</span>
 			</div>
 		`);
 
@@ -850,6 +843,9 @@ class CharacterSheetPage {
 				profTitle = "Half proficiency (Jack of All Trades) - Click to toggle";
 			}
 
+			// Calculate passive score (10 + modifier) for ALL skills
+			const passiveScore = 10 + mod;
+
 			const customClass = skill.isCustom ? " charsheet__skill-row--custom" : "";
 			const $row = $(`
 				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${skill.ability}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
@@ -857,6 +853,7 @@ class CharacterSheetPage {
 					<span class="charsheet__skill-name">${skill.name}${skill.isCustom ? " ✦" : ""}</span>
 					<span class="charsheet__skill-ability">(${skill.ability.toUpperCase()})</span>
 					<span class="charsheet__skill-mod">${modStr}</span>
+					<span class="charsheet__skill-passive" title="Passive ${skill.name}: 10 + modifier = ${passiveScore}">${passiveScore}</span>
 					${skill.isCustom ? `<span class="charsheet__skill-delete" title="Remove custom skill">×</span>` : ""}
 				</div>
 			`);
@@ -958,6 +955,20 @@ class CharacterSheetPage {
 		$("#charsheet-disp-carry").text(carryCapacity);
 		$("#charsheet-disp-push").text(pushDragLift);
 
+		// Update carry bar visualization
+		const carryPercent = carryCapacity > 0 ? Math.min(100, (currentWeight / carryCapacity) * 100) : 0;
+		const $carryFill = $("#charsheet-carry-bar-fill");
+		$carryFill.css("width", `${carryPercent}%`);
+
+		// Color coding based on encumbrance
+		if (carryPercent >= 100) {
+			$carryFill.css("background", "var(--color-danger, #dc3545)"); // Encumbered
+		} else if (carryPercent >= 66) {
+			$carryFill.css("background", "var(--color-warning, #ffc107)"); // Heavy load
+		} else {
+			$carryFill.css("background", "var(--color-success, #28a745)"); // Light load
+		}
+
 		// Render senses
 		this._renderSenses();
 	}
@@ -1047,8 +1058,19 @@ class CharacterSheetPage {
 	_renderInspiration () {
 		const hasInspiration = this._state.hasInspiration();
 		const $icon = $("#charsheet-icon-inspiration");
+		const $box = $("#charsheet-box-inspiration");
+		
+		// Update emoji-based icon
+		$icon.text(hasInspiration ? "⭐" : "☆");
+		
+		// Toggle active class for styling
+		$box.toggleClass("active", hasInspiration);
+		
+		// Legacy glyphicon support (fallback)
 		$icon.removeClass("glyphicon-star glyphicon-star-empty");
-		$icon.addClass(hasInspiration ? "glyphicon-star" : "glyphicon-star-empty");
+		if ($icon.hasClass("glyphicon")) {
+			$icon.addClass(hasInspiration ? "glyphicon-star" : "glyphicon-star-empty");
+		}
 	}
 
 	_renderProficiencies () {
@@ -1147,9 +1169,48 @@ class CharacterSheetPage {
 	}
 
 	_renderCurrency () {
+		const values = {};
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
-			$(`#charsheet-ipt-${currency}`).val(this._state.getCurrency(currency));
+			values[currency] = this._state.getCurrency(currency) || 0;
+			$(`#charsheet-ipt-${currency}`).val(values[currency]);
 		});
+		
+		// Calculate total value in GP (standard D&D conversion rates)
+		// 10 CP = 1 SP, 10 SP = 1 GP, 2 EP = 1 GP, 10 GP = 1 PP
+		const totalGp = (values.cp / 100) + (values.sp / 10) + (values.ep / 2) + values.gp + (values.pp * 10);
+		const $total = $("#charsheet-currency-total");
+		if (totalGp > 0) {
+			$total.text(`≈ ${totalGp.toFixed(1)} GP`).show();
+		} else {
+			$total.hide();
+		}
+	}
+
+	_convertCurrencyToGold () {
+		const cp = this._state.getCurrency("cp") || 0;
+		const sp = this._state.getCurrency("sp") || 0;
+		const ep = this._state.getCurrency("ep") || 0;
+		const gp = this._state.getCurrency("gp") || 0;
+		const pp = this._state.getCurrency("pp") || 0;
+		
+		// Convert everything to copper first (most precise)
+		const totalCopper = cp + (sp * 10) + (ep * 50) + (gp * 100) + (pp * 1000);
+		
+		// Convert copper to gold (keeping remainder as copper)
+		const newGp = Math.floor(totalCopper / 100);
+		const remainingCp = totalCopper % 100;
+		
+		// Update values
+		this._state.setCurrency("cp", remainingCp);
+		this._state.setCurrency("sp", 0);
+		this._state.setCurrency("ep", 0);
+		this._state.setCurrency("gp", newGp);
+		this._state.setCurrency("pp", 0);
+		
+		this._saveCurrentCharacter();
+		this._renderCurrency();
+		
+		JqueryUtil.doToast({type: "success", content: `Converted to ${newGp} GP${remainingCp > 0 ? ` and ${remainingCp} CP` : ""}`});
 	}
 
 	_renderNotes () {
@@ -1304,18 +1365,57 @@ class CharacterSheetPage {
 		const exhaustion = this._state.getExhaustion();
 		const rules = this._state.getExhaustionRules();
 		const maxExhaustion = this._state.getMaxExhaustion();
-		const $number = $("#charsheet-exhaustion-display .charsheet__exhaustion-number");
-		const $label = $("#charsheet-exhaustion-display .charsheet__exhaustion-label");
+		
+		// Update the number display
+		const $number = $("#charsheet-exhaustion-number");
+		const $maxDisplay = $("#charsheet-exhaustion-max");
 		const $effect = $("#charsheet-exhaustion-effect");
 		const $rulesToggle = $("#charsheet-exhaustion-rules");
+		const $pipsContainer = $("#charsheet-exhaustion-display");
+		
+		// Update max display
+		$maxDisplay.text(`/ ${maxExhaustion}`);
+		
+		// Dynamically generate pips based on rules
+		$pipsContainer.empty();
+		for (let i = 1; i <= maxExhaustion; i++) {
+			let tooltip;
+			if (rules === "thelemar") {
+				tooltip = i === 10 ? "Level 10: DEATH" : `Level ${i}: -${i} to all rolls and DCs`;
+			} else if (rules === "2024") {
+				const effects = [
+					"Level 1: -2 to d20 Tests, -5 ft. speed",
+					"Level 2: -4 to d20 Tests, -10 ft. speed",
+					"Level 3: -6 to d20 Tests, -15 ft. speed",
+					"Level 4: -8 to d20 Tests, -20 ft. speed",
+					"Level 5: -10 to d20 Tests, -25 ft. speed",
+					"Level 6: DEATH",
+				];
+				tooltip = effects[i - 1] || `Level ${i}`;
+			} else {
+				const effects = [
+					"Level 1: Disadvantage on ability checks",
+					"Level 2: Speed halved",
+					"Level 3: Disadvantage on attack rolls and saves",
+					"Level 4: HP maximum halved",
+					"Level 5: Speed reduced to 0",
+					"Level 6: DEATH",
+				];
+				tooltip = effects[i - 1] || `Level ${i}`;
+			}
+			const isDeath = i === maxExhaustion;
+			const isActive = i <= exhaustion;
+			const $pip = $(`<div class="charsheet__exhaustion-pip ${isDeath ? "charsheet__exhaustion-pip--death" : ""} ${isActive ? "active" : ""}" data-level="${i}" title="${tooltip}"></div>`);
+			$pipsContainer.append($pip);
+		}
 
+		// Update number display
 		$number.text(exhaustion);
-		$label.text(`/ ${maxExhaustion}`);
 
-		// Update color based on level (normalize to 0-6 range for CSS classes)
+		// Update color class based on level
 		$number.removeClass("exhaustion-0 exhaustion-1 exhaustion-2 exhaustion-3 exhaustion-4 exhaustion-5 exhaustion-6 exhaustion-max");
 		if (exhaustion >= maxExhaustion) {
-			$number.addClass("exhaustion-max");
+			$number.addClass("exhaustion-max exhaustion-6");
 		} else if (rules === "thelemar") {
 			// For Thelemar, map 0-10 to color classes
 			const colorLevel = Math.min(6, Math.floor(exhaustion * 6 / 10));
@@ -1549,6 +1649,14 @@ class CharacterSheetPage {
 
 		const resources = this._state.getResources();
 		const usesCombatSystem = this._state.usesCombatSystem?.() || false;
+
+		// Update resources count badge
+		let totalResourceCount = resources.length;
+		if (usesCombatSystem) {
+			const exertionMax = this._state.getExertionMax() || 0;
+			if (exertionMax > 0) totalResourceCount++;
+		}
+		$("#charsheet-resources-count").text(totalResourceCount);
 
 		// Show exertion if character uses combat methods system
 		if (usesCombatSystem) {
@@ -2455,6 +2563,28 @@ class CharacterSheetPage {
 		this._state.toggleInspiration();
 		this._saveCurrentCharacter();
 		this._renderInspiration();
+	}
+
+	_toggleHelpTips () {
+		const $helpTips = $(".charsheet__help-tips");
+		const $toggle = $("#charsheet-help-toggle");
+		const $toggleText = $toggle.find(".charsheet__help-toggle-text");
+		const isVisible = $helpTips.is(":visible");
+		
+		if (isVisible) {
+			$helpTips.slideUp(200);
+			$toggleText.text("Show");
+			$toggle.attr("title", "Show help tips");
+			$toggle.removeClass("active");
+		} else {
+			$helpTips.slideDown(200);
+			$toggleText.text("Hide");
+			$toggle.attr("title", "Hide help tips");
+			$toggle.addClass("active");
+		}
+		
+		// Save preference
+		StorageUtil.pSet("charsheet-help-visible", !isVisible);
 	}
 
 	async _onAddCondition () {

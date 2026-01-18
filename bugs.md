@@ -17,8 +17,49 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [x] need to support custom AC formulas from features (like natural armor, unarmored defense, etc) (fixed: FeatureModifierParser already detects AC formula patterns like "your AC equals 13 + your Dexterity modifier", natural armor, and unarmored defense. AC formulas are stored and getAc() calculates the best option between standard AC, armor, and custom formulas. Supports noDex for flat AC like Tortle, and secondAbility for Barbarian/Monk style formulas.)
 - [x] need to support Thelemar carry weight rules (50 + 25 × STR modifier, minimum 50) (fixed: Added "Thelemar Carry Weight" toggle in Settings modal under "Thelemar Homebrew Rules" section. When enabled, getCarryingCapacity() uses the formula 50 + 25 * STR mod instead of STR * 15. Still applies flat bonuses and multipliers from features.)
 - [x] need to support Thelemar linguistics skill bonus (+1 per known language except Common) (fixed: Added "Thelemar Linguistics" toggle in Settings modal under "Thelemar Homebrew Rules" section. When enabled, the Linguistics skill gets +1 for each language the character knows that isn't Common. Bonus is calculated in _getSkillFeatureBonus() and reflected in skill rolls.)
-- [] need to add more friendly UI for understanding the sheet functions (e.g tooltips, help buttons, rolling with adv/disadv, changing skill abilities or proficiency, etc)
-- [] need to improve UI greatly, currently very basic and not user friendly
+- [x] need to add more friendly UI for understanding the sheet functions (e.g tooltips, help buttons, rolling with adv/disadv, changing skill abilities or proficiency, etc)
+- [x] need to improve UI greatly, currently very basic and not user friendly
+  **FIXED**: Major UI overhaul completed with modern design system:
+  
+  **New CSS Architecture:**
+  - Created `charactersheet-modern.css` with comprehensive design tokens (CSS custom properties)
+  - Modern color palette with primary indigo (#6366f1), semantic colors (success/warning/danger/info), and accent colors (gold/emerald/ruby/sapphire/amethyst)
+  - Google Fonts integration: Cinzel for display text, Inter for body text
+  - Consistent spacing scale, border radius values, and shadow depths
+  
+  **Visual Improvements:**
+  - Modern card-based section design with hover effects and subtle shadows
+  - Enhanced ability score boxes with gradient accents and animations
+  - Improved skills/saves list with hover animations and color-coded proficiency indicators
+  - Redesigned combat stats with prominent displays and hover effects
+  - Modern tab navigation with icons (emoji) and better visual feedback
+  - Enhanced header bar with gradient buttons and modern styling
+  - Improved Builder wizard with progress indicator line and step animations
+  
+  **Component Enhancements:**
+  - Attacks: Modern cards with left accent stripe and hover effects
+  - Resources: Gold-themed pips with glow effects
+  - Conditions: Pill-shaped badges with warning colors
+  - Inventory: Item rarity colors with glow effects, artifact animation
+  - Features: Accordion-style display with modern styling
+  - Spell slots: Purple/amethyst themed to match magic aesthetic
+  
+  **Animations Added:**
+  - Dice roll popup with bounce animation
+  - Critical hit celebration effect (gold glow + scale)
+  - Fumble shake effect (red color + shake)
+  - Damage/heal flash effects
+  - Concentration pulse animation
+  - Magic item glow animation
+  - Level up celebration
+  - Loading shimmer effect
+  
+  **Accessibility:**
+  - Proper focus-visible styles with outline and glow
+  - Screen reader only class (.sr-only)
+  - Reduced motion preference support
+  - Custom scrollbars for better UX
+  
 - [] need to allow for some color customization (e.g dark mode, custom background colors, etc)
 - [] need to support mobile devices better (bigger buttons, less clicks, altternative ways to do things that require hover or shift/ctrl keys)
 

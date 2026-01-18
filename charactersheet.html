@@ -17,6 +17,12 @@
 	<link rel="stylesheet" href="css/fontawesome.css">
 	<link rel="stylesheet" href="css/main.css">
 	<link rel="stylesheet" href="css/charactersheet.css">
+	<link rel="stylesheet" href="css/charactersheet-modern.css">
+	
+	<!-- Google Fonts for modern typography -->
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 	<!-- Favicons -->
 	<link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -55,41 +61,66 @@
 <main class="container">
 	<div class="ve-flex-col w-100">
 		<!-- Character Selection Bar -->
-		<div class="ve-flex-v-center mb-3 no-print" id="charsheet-header">
-			<div class="ve-flex-v-center mr-3">
-				<label class="mr-2 ve-flex-v-center">
-					<span class="mr-2">Character:</span>
-					<select class="form-control form-control--minimal input-sm" id="charsheet-sel-character">
-						<option value="">-- New Character --</option>
-					</select>
-				</label>
-				<button class="ve-btn ve-btn-primary ve-btn-xs mr-2" id="charsheet-btn-new" title="Create New Character"><span class="glyphicon glyphicon-plus"></span></button>
-				<button class="ve-btn ve-btn-default ve-btn-xs mr-2" id="charsheet-btn-duplicate" title="Duplicate Character"><span class="glyphicon glyphicon-duplicate"></span></button>
-				<button class="ve-btn ve-btn-danger ve-btn-xs" id="charsheet-btn-delete" title="Delete Character"><span class="glyphicon glyphicon-trash"></span></button>
+		<div class="ve-flex-col w-100 charsheet__main-header" id="charsheet-header">
+			<div class="charsheet__header-row charsheet__header-row--primary">
+				<div class="charsheet__header-section charsheet__header-section--character">
+					<label class="charsheet__header-label">
+						<span class="charsheet__header-label-icon">👤</span>
+						<span class="charsheet__header-label-text">Character:</span>
+						<select class="form-control form-control--minimal input-sm charsheet__header-select" id="charsheet-sel-character">
+							<option value="">-- New Character --</option>
+						</select>
+					</label>
+					<div class="charsheet__header-actions">
+						<button class="ve-btn ve-btn-primary ve-btn-xs charsheet__header-btn" id="charsheet-btn-new" title="Create New Character"><span class="charsheet__btn-icon">➕</span></button>
+						<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-duplicate" title="Duplicate Character"><span class="charsheet__btn-icon">📋</span></button>
+						<button class="ve-btn ve-btn-danger ve-btn-xs charsheet__header-btn" id="charsheet-btn-delete" title="Delete Character"><span class="charsheet__btn-icon">🗑️</span></button>
+					</div>
+				</div>
+				<div class="charsheet__header-section charsheet__header-section--progression">
+					<button class="ve-btn ve-btn-success ve-btn-xs charsheet__header-btn charsheet__header-btn--action" id="charsheet-btn-levelup" title="Level Up"><span class="charsheet__btn-icon">⬆️</span> Level Up</button>
+					<button class="ve-btn ve-btn-info ve-btn-xs charsheet__header-btn charsheet__header-btn--action" id="charsheet-btn-multiclass" title="Add Multiclass"><span class="charsheet__btn-icon">➕</span> Multiclass</button>
+				</div>
+				<div class="charsheet__header-section charsheet__header-section--tools">
+					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-modifiers" title="Custom Modifiers"><span class="charsheet__btn-icon">🎯</span> Modifiers</button>
+					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-settings" title="Sheet Settings"><span class="charsheet__btn-icon">⚙️</span> Settings</button>
+					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-import" title="Import Character"><span class="charsheet__btn-icon">📥</span> Import</button>
+					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-export" title="Export Character"><span class="charsheet__btn-icon">📤</span> Export</button>
+					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-print" title="Print Character Sheet"><span class="charsheet__btn-icon">🖨️</span> Print</button>
+				</div>
 			</div>
-			<div class="ve-flex-v-center">
-				<button class="ve-btn ve-btn-success ve-btn-xs mr-2" id="charsheet-btn-levelup" title="Level Up"><span class="glyphicon glyphicon-arrow-up"></span> Level Up</button>
-				<button class="ve-btn ve-btn-info ve-btn-xs" id="charsheet-btn-multiclass" title="Add Multiclass"><span class="glyphicon glyphicon-plus-sign"></span> Multiclass</button>
-			</div>
-			<div class="ve-flex-v-center ml-auto">
-				<button class="ve-btn ve-btn-default ve-btn-xs mr-2" id="charsheet-btn-modifiers" title="Custom Modifiers"><span class="glyphicon glyphicon-adjust"></span> Modifiers</button>
-				<button class="ve-btn ve-btn-default ve-btn-xs mr-2" id="charsheet-btn-settings" title="Sheet Settings"><span class="glyphicon glyphicon-cog"></span> Settings</button>
-				<button class="ve-btn ve-btn-default ve-btn-xs mr-2" id="charsheet-btn-import" title="Import Character"><span class="glyphicon glyphicon-upload"></span> Import</button>
-				<button class="ve-btn ve-btn-default ve-btn-xs mr-2" id="charsheet-btn-export" title="Export Character"><span class="glyphicon glyphicon-download"></span> Export</button>
-				<button class="ve-btn ve-btn-default ve-btn-xs" id="charsheet-btn-print" title="Print Character Sheet"><span class="glyphicon glyphicon-print"></span> Print</button>
+			<div class="charsheet__header-row charsheet__header-row--help-wrapper">
+				<div class="charsheet__help-tips" id="charsheet-help-bar">
+					<div class="charsheet__help-tip">
+						<span class="charsheet__help-key">Shift+Click</span>
+						<span class="charsheet__help-desc">= Advantage</span>
+					</div>
+					<div class="charsheet__help-tip">
+						<span class="charsheet__help-key">Ctrl+Click</span>
+						<span class="charsheet__help-desc">= Disadvantage</span>
+					</div>
+					<div class="charsheet__help-tip">
+						<span class="charsheet__help-key">Right-Click</span>
+						<span class="charsheet__help-desc">= Options</span>
+					</div>
+				</div>
+				<button class="charsheet__help-toggle" id="charsheet-help-toggle" title="Toggle help tips">
+					<span class="charsheet__help-toggle-icon">❓</span>
+					<span class="charsheet__help-toggle-text">Help</span>
+				</button>
 			</div>
 		</div>
 
 		<!-- Main Tabs -->
-		<ul class="nav nav-tabs mb-3 no-print" id="charsheet-tabs">
-			<li class="active"><a data-toggle="tab" href="#charsheet-tab-overview">Overview</a></li>
-			<li><a data-toggle="tab" href="#charsheet-tab-abilities">Abilities</a></li>
-			<li><a data-toggle="tab" href="#charsheet-tab-combat">Combat</a></li>
-			<li><a data-toggle="tab" href="#charsheet-tab-spells">Spells</a></li>
-			<li><a data-toggle="tab" href="#charsheet-tab-inventory">Inventory</a></li>
-			<li><a data-toggle="tab" href="#charsheet-tab-features">Features</a></li>
-			<li><a data-toggle="tab" href="#charsheet-tab-notes">Notes</a></li>
-			<li><a data-toggle="tab" href="#charsheet-tab-builder">Builder</a></li>
+		<ul class="nav nav-tabs charsheet__main-tabs mb-3 no-print" id="charsheet-tabs">
+			<li class="active"><a data-toggle="tab" href="#charsheet-tab-overview"><span class="charsheet__tab-icon">📊</span><span class="charsheet__tab-text">Overview</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-abilities"><span class="charsheet__tab-icon">💪</span><span class="charsheet__tab-text">Abilities</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-combat"><span class="charsheet__tab-icon">⚔️</span><span class="charsheet__tab-text">Combat</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-spells"><span class="charsheet__tab-icon">✨</span><span class="charsheet__tab-text">Spells</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-inventory"><span class="charsheet__tab-icon">🎒</span><span class="charsheet__tab-text">Inventory</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-features"><span class="charsheet__tab-icon">📜</span><span class="charsheet__tab-text">Features</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-notes"><span class="charsheet__tab-icon">📝</span><span class="charsheet__tab-text">Notes</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-builder"><span class="charsheet__tab-icon">🔧</span><span class="charsheet__tab-text">Builder</span></a></li>
 		</ul>
 
 		<!-- Tab Content -->
@@ -100,90 +131,93 @@
 					<!-- Left Column - Character Info -->
 					<div class="ve-flex-col charsheet__col-left">
 						<!-- Basic Info -->
-						<div class="charsheet__section charsheet__section--header">
-							<div class="ve-flex-v-center mb-2">
-								<input type="text" class="form-control form-control--minimal charsheet__ipt-name" id="charsheet-ipt-name" placeholder="Character Name">
+						<div class="charsheet__section charsheet__section--header charsheet__section--identity">
+							<div class="charsheet__identity-main">
+								<div class="charsheet__identity-name">
+									<span class="charsheet__identity-icon">👤</span>
+									<input type="text" class="form-control form-control--minimal charsheet__ipt-name" id="charsheet-ipt-name" placeholder="Character Name">
+								</div>
+								<div class="charsheet__identity-level" id="charsheet-level-badge" title="Character Level">
+									<span class="charsheet__level-label">LVL</span>
+									<span class="charsheet__level-value" id="charsheet-disp-level">1</span>
+								</div>
 							</div>
-							<div class="ve-flex ve-flex-wrap">
-								<div class="charsheet__info-item">
-									<span class="charsheet__info-label">Species:</span>
-									<span class="charsheet__info-value" id="charsheet-disp-race">—</span>
+							<div class="charsheet__identity-details">
+								<div class="charsheet__info-chip charsheet__info-chip--race" title="Species/Race">
+									<span class="charsheet__chip-icon">🧬</span>
+									<span class="charsheet__chip-label">Species</span>
+									<span class="charsheet__chip-value" id="charsheet-disp-race">—</span>
 								</div>
-								<div class="charsheet__info-item">
-									<span class="charsheet__info-label">Class:</span>
-									<span class="charsheet__info-value" id="charsheet-disp-class">—</span>
+								<div class="charsheet__info-chip charsheet__info-chip--class" title="Class">
+									<span class="charsheet__chip-icon">⚔️</span>
+									<span class="charsheet__chip-label">Class</span>
+									<span class="charsheet__chip-value" id="charsheet-disp-class">—</span>
 								</div>
-								<div class="charsheet__info-item">
-									<span class="charsheet__info-label">Level:</span>
-									<span class="charsheet__info-value" id="charsheet-disp-level">1</span>
-								</div>
-								<div class="charsheet__info-item">
-									<span class="charsheet__info-label">Background:</span>
-									<span class="charsheet__info-value" id="charsheet-disp-background">—</span>
+								<div class="charsheet__info-chip charsheet__info-chip--background" title="Background">
+									<span class="charsheet__chip-icon">📖</span>
+									<span class="charsheet__chip-label">Background</span>
+									<span class="charsheet__chip-value" id="charsheet-disp-background">—</span>
 								</div>
 							</div>
 						</div>
 
 						<!-- Ability Scores -->
 						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Ability Scores</h4>
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">💪</span>
+								Ability Scores
+							</h4>
 							<div class="charsheet__abilities-grid" id="charsheet-abilities">
 								<!-- Generated by JS -->
 							</div>
 						</div>
 
 						<!-- Proficiency & Inspiration -->
-						<div class="charsheet__section">
-							<div class="ve-flex ve-flex-wrap">
-								<div class="charsheet__stat-box">
+						<div class="charsheet__section charsheet__section--core-stats">
+							<div class="charsheet__core-stats-row">
+								<div class="charsheet__stat-box charsheet__stat-box--proficiency" title="Added to attacks, saves, and skill checks you're proficient with">
+									<div class="charsheet__stat-icon">🎯</div>
 									<div class="charsheet__stat-value" id="charsheet-disp-proficiency">+2</div>
-									<div class="charsheet__stat-label">Proficiency</div>
+									<div class="charsheet__stat-label">Proficiency Bonus</div>
 								</div>
-								<div class="charsheet__stat-box charsheet__stat-box--clickable" id="charsheet-box-inspiration">
-									<div class="charsheet__stat-value"><span class="glyphicon glyphicon-star-empty" id="charsheet-icon-inspiration"></span></div>
+								<div class="charsheet__stat-box charsheet__stat-box--clickable charsheet__stat-box--inspiration" id="charsheet-box-inspiration" title="Click to toggle inspiration (grants advantage on one roll)">
+									<div class="charsheet__inspiration-icon" id="charsheet-icon-inspiration">⭐</div>
 									<div class="charsheet__stat-label">Inspiration</div>
-								</div>
-							</div>
-						</div>
-
-						<!-- Passive Stats -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Passive Scores</h4>
-							<div class="ve-flex ve-flex-wrap charsheet__passives-row">
-								<div class="charsheet__passive-stat">
-									<span class="charsheet__passive-value" id="charsheet-disp-passive-perception">10</span>
-									<span class="charsheet__passive-label">Perception</span>
-								</div>
-								<div class="charsheet__passive-stat">
-									<span class="charsheet__passive-value" id="charsheet-disp-passive-investigation">10</span>
-									<span class="charsheet__passive-label">Investigation</span>
-								</div>
-								<div class="charsheet__passive-stat">
-									<span class="charsheet__passive-value" id="charsheet-disp-passive-insight">10</span>
-									<span class="charsheet__passive-label">Insight</span>
+									<div class="charsheet__stat-hint">Click to toggle</div>
 								</div>
 							</div>
 						</div>
 
 						<!-- Senses -->
-						<div class="charsheet__section" id="charsheet-senses-section" style="display:none;">
-							<h4 class="charsheet__section-title">Senses</h4>
+						<div class="charsheet__section charsheet__section--senses" id="charsheet-senses-section" style="display:none;">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">👀</span>
+								Senses
+							</h4>
 							<div class="charsheet__senses-list" id="charsheet-senses">
 								<!-- Generated by JS -->
 							</div>
 						</div>
 
 						<!-- Saving Throws -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Saving Throws</h4>
+						<div class="charsheet__section charsheet__section--saves">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">🛡️</span>
+								Saving Throws
+								<span class="charsheet__section-hint">Click to roll</span>
+							</h4>
 							<div class="charsheet__saves-list" id="charsheet-saves">
 								<!-- Generated by JS -->
 							</div>
 						</div>
 
 						<!-- Skills -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Skills</h4>
+						<div class="charsheet__section charsheet__section--skills">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">🎯</span>
+								Skills
+								<span class="charsheet__section-hint">Click to roll</span>
+							</h4>
 							<div class="charsheet__skills-list" id="charsheet-skills">
 								<!-- Generated by JS -->
 							</div>
@@ -194,7 +228,19 @@
 					<div class="ve-flex-col charsheet__col-center">
 						<!-- HP Section -->
 						<div class="charsheet__section charsheet__section--hp">
-							<div class="ve-flex">
+							<div class="charsheet__hp-visual">
+								<div class="charsheet__hp-bar-container">
+									<div class="charsheet__hp-bar-track">
+										<div class="charsheet__hp-bar-fill" id="charsheet-hp-bar-fill"></div>
+										<div class="charsheet__hp-bar-temp" id="charsheet-hp-bar-temp"></div>
+									</div>
+									<div class="charsheet__hp-bar-label">
+										<span class="charsheet__hp-bar-icon">❤️</span>
+										<span id="charsheet-hp-percent">100%</span>
+									</div>
+								</div>
+							</div>
+							<div class="ve-flex charsheet__hp-inputs">
 								<div class="charsheet__hp-box charsheet__hp-box--current">
 									<div class="charsheet__hp-label">Current HP</div>
 									<div class="ve-flex-v-center ve-flex-h-center">
@@ -202,116 +248,189 @@
 										<span class="charsheet__hp-separator">/</span>
 										<span class="charsheet__hp-max" id="charsheet-disp-hp-max">0</span>
 									</div>
-									<div class="ve-flex ve-flex-h-center mt-2">
-										<button class="ve-btn ve-btn-success ve-btn-xs mr-1" id="charsheet-btn-heal"><span class="glyphicon glyphicon-plus"></span> Heal</button>
-										<button class="ve-btn ve-btn-danger ve-btn-xs" id="charsheet-btn-damage"><span class="glyphicon glyphicon-minus"></span> Damage</button>
+									<div class="ve-flex ve-flex-h-center mt-2 charsheet__hp-buttons">
+										<button class="ve-btn ve-btn-success ve-btn-xs mr-1 charsheet__hp-btn charsheet__hp-btn--heal" id="charsheet-btn-heal" title="Add HP (healing)"><span class="charsheet__hp-btn-icon">💚</span> Heal</button>
+										<button class="ve-btn ve-btn-danger ve-btn-xs charsheet__hp-btn charsheet__hp-btn--damage" id="charsheet-btn-damage" title="Remove HP (damage)"><span class="charsheet__hp-btn-icon">💔</span> Damage</button>
 									</div>
 								</div>
 								<div class="charsheet__hp-box charsheet__hp-box--temp">
 									<div class="charsheet__hp-label">Temp HP</div>
-									<input type="number" class="form-control form-control--minimal charsheet__ipt-hp charsheet__ipt-hp--temp" id="charsheet-ipt-hp-temp" value="0" min="0">
+									<input type="number" class="form-control form-control--minimal charsheet__ipt-hp charsheet__ipt-hp--temp" id="charsheet-ipt-hp-temp" value="0" min="0" title="Temporary HP (absorbed before regular HP)">
+									<div class="charsheet__hp-temp-hint">🛡️ Shield</div>
 								</div>
 							</div>
 						</div>
 
 						<!-- AC, Initiative, Speed -->
-						<div class="charsheet__section">
-							<div class="ve-flex ve-flex-wrap ve-flex-h-center">
-								<div class="charsheet__combat-stat" id="charsheet-box-ac">
+						<div class="charsheet__section charsheet__section--combat-stats">
+							<div class="ve-flex ve-flex-wrap ve-flex-h-center charsheet__combat-stats-row">
+								<div class="charsheet__combat-stat charsheet__combat-stat--ac" id="charsheet-box-ac" title="Armor Class - how hard you are to hit">
+									<div class="charsheet__combat-stat-icon">🛡️</div>
 									<div class="charsheet__combat-stat-value" id="charsheet-disp-ac">10</div>
-									<div class="charsheet__combat-stat-label">AC</div>
+									<div class="charsheet__combat-stat-label">Armor Class</div>
 								</div>
-								<div class="charsheet__combat-stat charsheet__combat-stat--clickable" id="charsheet-box-initiative">
+								<div class="charsheet__combat-stat charsheet__combat-stat--clickable charsheet__combat-stat--initiative" id="charsheet-box-initiative" title="Click to roll initiative (Shift: Advantage, Ctrl: Disadvantage)">
+									<div class="charsheet__combat-stat-icon">⚡</div>
 									<div class="charsheet__combat-stat-value" id="charsheet-disp-initiative">+0</div>
 									<div class="charsheet__combat-stat-label">Initiative</div>
+									<div class="charsheet__combat-stat-hint">Click to roll</div>
 								</div>
-								<div class="charsheet__combat-stat" id="charsheet-box-speed">
+								<div class="charsheet__combat-stat charsheet__combat-stat--speed" id="charsheet-box-speed" title="Movement speed per turn">
+									<div class="charsheet__combat-stat-icon">🏃</div>
 									<div class="charsheet__combat-stat-value" id="charsheet-disp-speed">30 ft.</div>
 									<div class="charsheet__combat-stat-label">Speed</div>
 								</div>
 							</div>
-							<!-- Jump Distance -->
-							<div class="charsheet__jump-row ve-flex ve-flex-wrap ve-flex-h-center mt-2" id="charsheet-jump-section">
-								<div class="charsheet__jump-stat">
-									<span class="charsheet__jump-value" id="charsheet-disp-jump-long">0 ft.</span>
-									<span class="charsheet__jump-label">Long Jump</span>
+									<!-- Movement & Physical Stats -->
+									<div class="charsheet__physical-stats">
+										<div class="charsheet__physical-stat-group charsheet__physical-stat-group--jumps">
+											<div class="charsheet__physical-stat-header">
+												<span class="charsheet__physical-stat-icon">🦘</span>
+												<span class="charsheet__physical-stat-title">Jumps</span>
+											</div>
+											<div class="charsheet__physical-stat-grid">
+												<div class="charsheet__physical-stat-item" title="Running long jump = STR score in feet">
+													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-long">0</span>
+													<span class="charsheet__physical-stat-unit">ft.</span>
+													<span class="charsheet__physical-stat-label">Long</span>
+												</div>
+												<div class="charsheet__physical-stat-item" title="Running high jump = 3 + STR modifier feet">
+													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-high">0</span>
+													<span class="charsheet__physical-stat-unit">ft.</span>
+													<span class="charsheet__physical-stat-label">High</span>
+												</div>
+											</div>
+										</div>
+										<div class="charsheet__physical-stat-group charsheet__physical-stat-group--carry">
+											<div class="charsheet__physical-stat-header">
+												<span class="charsheet__physical-stat-icon">💪</span>
+												<span class="charsheet__physical-stat-title">Carry</span>
+											</div>
+											<div class="charsheet__carry-bar-mini">
+												<div class="charsheet__carry-bar-track">
+													<div class="charsheet__carry-bar-fill" id="charsheet-carry-bar-fill"></div>
+												</div>
+												<span class="charsheet__carry-bar-text">
+													<span id="charsheet-disp-weight">0</span>/<span id="charsheet-disp-carry">150</span> lb.
+												</span>
+											</div>
+											<div class="charsheet__physical-stat-grid">
+												<div class="charsheet__physical-stat-item charsheet__physical-stat-item--small" title="Push, Drag, or Lift = 2× Carry Capacity">
+													<span class="charsheet__physical-stat-value" id="charsheet-disp-push">300</span>
+													<span class="charsheet__physical-stat-unit">lb.</span>
+													<span class="charsheet__physical-stat-label">Push/Drag</span>
+												</div>
+											</div>
+										</div>
+									</div>
 								</div>
-								<div class="charsheet__jump-stat">
-									<span class="charsheet__jump-value" id="charsheet-disp-jump-high">0 ft.</span>
-									<span class="charsheet__jump-label">High Jump</span>
-								</div>
-							</div>
-							<!-- Carrying Capacity -->
-							<div class="charsheet__carry-row ve-flex ve-flex-wrap ve-flex-h-center mt-2" id="charsheet-carry-section">
-								<div class="charsheet__carry-stat" title="Current weight / Carrying Capacity">
-									<span class="charsheet__carry-value"><span id="charsheet-disp-weight">0</span>/<span id="charsheet-disp-carry">150</span> lb.</span>
-									<span class="charsheet__carry-label">Carry</span>
-								</div>
-								<div class="charsheet__carry-stat" title="Push, Drag, or Lift limit (2× Carry)">
-									<span class="charsheet__carry-value" id="charsheet-disp-push">300</span> lb.</span>
-									<span class="charsheet__carry-label">Push/Drag/Lift</span>
-								</div>
-							</div>
-						</div>
 
 						<!-- Hit Dice & Death Saves -->
-						<div class="charsheet__section">
-							<div class="ve-flex">
+						<div class="charsheet__section charsheet__section--survival">
+							<div class="ve-flex charsheet__survival-row">
 								<div class="charsheet__hitdice-box">
-									<div class="charsheet__hp-label">Hit Dice</div>
-									<div class="ve-flex-v-center ve-flex-h-center">
-										<span class="charsheet__hitdice-current" id="charsheet-disp-hitdice-current">1</span>
-										<span class="charsheet__hitdice-separator">/</span>
-										<span class="charsheet__hitdice-max" id="charsheet-disp-hitdice-max">1</span>
+									<div class="charsheet__survival-header">
+										<span class="charsheet__survival-icon">🎲</span>
+										<span class="charsheet__hp-label">Hit Dice</span>
+									</div>
+									<div class="charsheet__hitdice-display">
+										<div class="charsheet__hitdice-visual">
+											<span class="charsheet__hitdice-current" id="charsheet-disp-hitdice-current">1</span>
+											<span class="charsheet__hitdice-separator">/</span>
+											<span class="charsheet__hitdice-max" id="charsheet-disp-hitdice-max">1</span>
+										</div>
 										<span class="charsheet__hitdice-type" id="charsheet-disp-hitdice-type">d8</span>
 									</div>
-									<button class="ve-btn ve-btn-default ve-btn-xs mt-2" id="charsheet-btn-use-hitdie">Use Hit Die</button>
+									<button class="ve-btn ve-btn-primary ve-btn-xs mt-2 charsheet__hitdice-btn" id="charsheet-btn-use-hitdie" title="Spend a hit die to heal (Shift: max healing)">
+										<span class="charsheet__btn-icon">💚</span> Use Hit Die
+									</button>
 								</div>
 								<div class="charsheet__deathsaves-box">
-									<div class="charsheet__hp-label">Death Saves</div>
+									<div class="charsheet__survival-header">
+										<span class="charsheet__survival-icon">💀</span>
+										<span class="charsheet__hp-label">Death Saves</span>
+									</div>
 									<div class="charsheet__deathsaves">
-										<div class="charsheet__deathsaves-row">
-											<span class="charsheet__deathsaves-label">Success</span>
+										<div class="charsheet__deathsaves-row charsheet__deathsaves-row--success">
+											<span class="charsheet__deathsaves-label">✓ Success</span>
 											<div class="charsheet__deathsaves-checks" id="charsheet-deathsaves-success">
-												<input type="checkbox" class="charsheet__deathsave-check">
-												<input type="checkbox" class="charsheet__deathsave-check">
-												<input type="checkbox" class="charsheet__deathsave-check">
+												<label class="charsheet__deathsave-marker charsheet__deathsave-marker--success">
+													<input type="checkbox" class="charsheet__deathsave-check">
+													<span class="charsheet__deathsave-visual"></span>
+												</label>
+												<label class="charsheet__deathsave-marker charsheet__deathsave-marker--success">
+													<input type="checkbox" class="charsheet__deathsave-check">
+													<span class="charsheet__deathsave-visual"></span>
+												</label>
+												<label class="charsheet__deathsave-marker charsheet__deathsave-marker--success">
+													<input type="checkbox" class="charsheet__deathsave-check">
+													<span class="charsheet__deathsave-visual"></span>
+												</label>
 											</div>
 										</div>
-										<div class="charsheet__deathsaves-row">
-											<span class="charsheet__deathsaves-label">Failure</span>
+										<div class="charsheet__deathsaves-row charsheet__deathsaves-row--failure">
+											<span class="charsheet__deathsaves-label">✗ Failure</span>
 											<div class="charsheet__deathsaves-checks" id="charsheet-deathsaves-failure">
-												<input type="checkbox" class="charsheet__deathsave-check">
-												<input type="checkbox" class="charsheet__deathsave-check">
-												<input type="checkbox" class="charsheet__deathsave-check">
+												<label class="charsheet__deathsave-marker charsheet__deathsave-marker--failure">
+													<input type="checkbox" class="charsheet__deathsave-check">
+													<span class="charsheet__deathsave-visual"></span>
+												</label>
+												<label class="charsheet__deathsave-marker charsheet__deathsave-marker--failure">
+													<input type="checkbox" class="charsheet__deathsave-check">
+													<span class="charsheet__deathsave-visual"></span>
+												</label>
+												<label class="charsheet__deathsave-marker charsheet__deathsave-marker--failure">
+													<input type="checkbox" class="charsheet__deathsave-check">
+													<span class="charsheet__deathsave-visual"></span>
+												</label>
 											</div>
 										</div>
 									</div>
-									<button class="ve-btn ve-btn-default ve-btn-xs mt-2" id="charsheet-btn-deathsave">Roll Death Save</button>
+									<button class="ve-btn ve-btn-default ve-btn-xs mt-2 charsheet__deathsave-btn" id="charsheet-btn-deathsave" title="Roll a death saving throw">
+										<span class="charsheet__btn-icon">🎲</span> Roll Death Save
+									</button>
 								</div>
 							</div>
 						</div>
 
 						<!-- Quick Actions -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Quick Actions</h4>
-							<div class="ve-flex ve-flex-wrap mb-2">
-								<button class="ve-btn ve-btn-primary ve-btn-sm mr-2 mb-1" id="charsheet-btn-short-rest"><span class="fas fa-campfire"></span> Short Rest</button>
-								<button class="ve-btn ve-btn-primary ve-btn-sm mr-2 mb-1" id="charsheet-btn-long-rest"><span class="fas fa-bed"></span> Long Rest</button>
+						<div class="charsheet__section charsheet__section--actions">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">⚔️</span>
+								Quick Actions
+							</h4>
+							<div class="charsheet__quick-actions-grid">
+								<button class="charsheet__quick-action charsheet__quick-action--rest charsheet__quick-action--short" id="charsheet-btn-short-rest" title="Take a short rest (1+ hours): Spend hit dice, recover some abilities">
+									<span class="charsheet__quick-action-icon">🏕️</span>
+									<span class="charsheet__quick-action-text">Short Rest</span>
+								</button>
+								<button class="charsheet__quick-action charsheet__quick-action--rest charsheet__quick-action--long" id="charsheet-btn-long-rest" title="Take a long rest (8 hours): Full HP, recover all hit dice and abilities">
+									<span class="charsheet__quick-action-icon">🛏️</span>
+									<span class="charsheet__quick-action-text">Long Rest</span>
+								</button>
 							</div>
 						</div>
 
 						<!-- Attacks -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Attacks</h4>
+						<div class="charsheet__section charsheet__section--attacks">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">🗡️</span>
+								Attacks
+							</h4>
 							<div class="charsheet__attacks-list" id="charsheet-attacks">
-								<div class="ve-muted ve-text-center py-2">No attacks configured. Add weapons from Inventory.</div>
+								<div class="charsheet__empty-state">
+									<span class="charsheet__empty-icon">⚔️</span>
+									<span class="charsheet__empty-text">No attacks configured. Add weapons from Inventory.</span>
+								</div>
 							</div>
 						</div>
 
 						<!-- Combat Methods (Thelemar homebrew) -->
-						<div class="charsheet__section" id="charsheet-combat-methods-section" style="display: none;">
-							<h4 class="charsheet__section-title">Combat Methods</h4>
+						<div class="charsheet__section charsheet__section--methods" id="charsheet-combat-methods-section" style="display: none;">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">🥋</span>
+								Combat Methods
+							</h4>
 							<div class="ve-flex ve-flex-wrap mb-2" id="charsheet-combat-methods-stats">
 								<div class="charsheet__mini-stat mr-3">
 									<span class="charsheet__mini-stat-label">Method DC:</span>
@@ -328,40 +447,59 @@
 						</div>
 
 						<!-- Quick Spells -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Quick Spells</h4>
+						<div class="charsheet__section charsheet__section--spells">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">✨</span>
+								Quick Spells
+							</h4>
 							<div class="charsheet__quick-spells-list" id="charsheet-quick-spells">
-								<div class="ve-muted ve-text-center py-2">No spells. Add from Spells tab.</div>
+								<div class="charsheet__empty-state">
+									<span class="charsheet__empty-icon">🔮</span>
+									<span class="charsheet__empty-text">No spells. Add from Spells tab.</span>
+								</div>
 							</div>
 						</div>
 
 						<!-- Conditions -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Conditions</h4>
-							<div class="ve-flex ve-flex-wrap" id="charsheet-conditions">
+						<div class="charsheet__section charsheet__section--conditions">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">⚠️</span>
+								Conditions
+							</h4>
+							<div class="charsheet__conditions-grid" id="charsheet-conditions">
 								<!-- Condition badges generated by JS -->
 							</div>
-							<button class="ve-btn ve-btn-default ve-btn-xs mt-2" id="charsheet-btn-add-condition"><span class="glyphicon glyphicon-plus"></span> Add Condition</button>
+							<button class="ve-btn ve-btn-default ve-btn-xs mt-2 charsheet__add-condition-btn" id="charsheet-btn-add-condition">
+								<span class="charsheet__btn-icon">➕</span> Add Condition
+							</button>
 						</div>
 
 						<!-- Exhaustion Tracker -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Exhaustion</h4>
+						<div class="charsheet__section charsheet__section--exhaustion">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">😵</span>
+								Exhaustion
+							</h4>
 							<div class="charsheet__exhaustion-tracker">
-								<div class="charsheet__exhaustion-level" id="charsheet-exhaustion-display">
-									<span class="charsheet__exhaustion-number">0</span>
-									<span class="charsheet__exhaustion-label">/ 6</span>
+								<div class="charsheet__exhaustion-bar">
+									<div class="charsheet__exhaustion-pips" id="charsheet-exhaustion-display">
+										<!-- Pips generated dynamically by JS based on exhaustion rules -->
+									</div>
+									<div class="charsheet__exhaustion-level-display">
+										<span class="charsheet__exhaustion-number" id="charsheet-exhaustion-number">0</span>
+										<span class="charsheet__exhaustion-max" id="charsheet-exhaustion-max">/ 6</span>
+									</div>
 								</div>
 								<div class="charsheet__exhaustion-controls">
-									<button class="ve-btn ve-btn-danger ve-btn-xs" id="charsheet-btn-exhaustion-add" title="Add exhaustion">
-										<span class="glyphicon glyphicon-plus"></span>
+									<button class="ve-btn ve-btn-danger ve-btn-xs charsheet__exhaustion-btn" id="charsheet-btn-exhaustion-add" title="Add exhaustion level">
+										<span class="charsheet__btn-icon">➕</span>
 									</button>
-									<button class="ve-btn ve-btn-success ve-btn-xs" id="charsheet-btn-exhaustion-remove" title="Remove exhaustion">
-										<span class="glyphicon glyphicon-minus"></span>
+									<button class="ve-btn ve-btn-success ve-btn-xs charsheet__exhaustion-btn" id="charsheet-btn-exhaustion-remove" title="Remove exhaustion level">
+										<span class="charsheet__btn-icon">➖</span>
 									</button>
 								</div>
-								<div class="charsheet__exhaustion-effect ve-small ve-muted" id="charsheet-exhaustion-effect"></div>
-								<div class="charsheet__exhaustion-rules mt-1" id="charsheet-exhaustion-rules"></div>
+								<div class="charsheet__exhaustion-effect" id="charsheet-exhaustion-effect">No exhaustion</div>
+								<div class="charsheet__exhaustion-rules" id="charsheet-exhaustion-rules"></div>
 							</div>
 						</div>
 					</div>
@@ -369,26 +507,45 @@
 					<!-- Right Column - Features & Resources -->
 					<div class="ve-flex-col charsheet__col-right">
 						<!-- Resources -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Resources</h4>
+						<div class="charsheet__section charsheet__section--resources">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">⚡</span>
+								Resources
+								<span class="charsheet__section-badge" id="charsheet-resources-count">0</span>
+							</h4>
 							<div class="charsheet__resources-list" id="charsheet-resources">
-								<div class="ve-muted ve-text-center py-2">No limited-use features</div>
+								<div class="charsheet__empty-state">
+									<span class="charsheet__empty-icon">📦</span>
+									<span class="charsheet__empty-text">No limited-use features</span>
+								</div>
 							</div>
 						</div>
 
 						<!-- Active States (Rage, Concentration, etc.) -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Active States</h4>
+						<div class="charsheet__section charsheet__section--states">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">✨</span>
+								Active States
+							</h4>
 							<div class="charsheet__active-states-list" id="charsheet-active-states">
-								<div class="ve-muted ve-text-center py-2">No active states</div>
+								<div class="charsheet__empty-state">
+									<span class="charsheet__empty-icon">💤</span>
+									<span class="charsheet__empty-text">No active states</span>
+								</div>
 							</div>
 						</div>
 
 						<!-- Active Features (Summary) -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Active Features</h4>
+						<div class="charsheet__section charsheet__section--features">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">📜</span>
+								Active Features
+							</h4>
 							<div class="charsheet__features-summary" id="charsheet-features-summary">
-								<div class="ve-muted ve-text-center py-2">Build your character to see features</div>
+								<div class="charsheet__empty-state">
+									<span class="charsheet__empty-icon">🎭</span>
+									<span class="charsheet__empty-text">Build your character to see features</span>
+								</div>
 							</div>
 						</div>
 
@@ -419,29 +576,41 @@
 						</div>
 
 						<!-- Currency -->
-						<div class="charsheet__section">
-							<h4 class="charsheet__section-title">Currency</h4>
+						<div class="charsheet__section charsheet__section--currency">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">💰</span>
+								Currency
+								<span class="charsheet__currency-total" id="charsheet-currency-total" title="Total value in gold pieces"></span>
+							</h4>
 							<div class="charsheet__currency-grid">
-								<div class="charsheet__currency-item">
+								<div class="charsheet__currency-item charsheet__currency--cp" data-currency="cp">
+									<span class="charsheet__currency-icon">🟤</span>
 									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-ipt-cp" value="0" min="0">
 									<span class="charsheet__currency-label">CP</span>
 								</div>
-								<div class="charsheet__currency-item">
+								<div class="charsheet__currency-item charsheet__currency--sp" data-currency="sp">
+									<span class="charsheet__currency-icon">⚪</span>
 									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-ipt-sp" value="0" min="0">
 									<span class="charsheet__currency-label">SP</span>
 								</div>
-								<div class="charsheet__currency-item">
+								<div class="charsheet__currency-item charsheet__currency--ep" data-currency="ep">
+									<span class="charsheet__currency-icon">🔵</span>
 									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-ipt-ep" value="0" min="0">
 									<span class="charsheet__currency-label">EP</span>
 								</div>
-								<div class="charsheet__currency-item">
+								<div class="charsheet__currency-item charsheet__currency--gp" data-currency="gp">
+									<span class="charsheet__currency-icon">🟡</span>
 									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-ipt-gp" value="0" min="0">
 									<span class="charsheet__currency-label">GP</span>
 								</div>
-								<div class="charsheet__currency-item">
+								<div class="charsheet__currency-item charsheet__currency--pp" data-currency="pp">
+									<span class="charsheet__currency-icon">⬜</span>
 									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-ipt-pp" value="0" min="0">
 									<span class="charsheet__currency-label">PP</span>
 								</div>
+							</div>
+							<div class="charsheet__currency-actions">
+								<button class="ve-btn ve-btn-xs ve-btn-default" id="charsheet-btn-convert-currency" title="Convert all to gold">Convert to GP</button>
 							</div>
 						</div>
 					</div>

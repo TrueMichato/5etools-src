@@ -106,93 +106,283 @@ class CharacterSheetInventory {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "Add Item",
 			isMinHeight0: true,
+			isWidth100: true,
 		});
 
-		// Search and filter controls
-		const $search = $(`<input type="text" class="form-control form-control--minimal mr-2" placeholder="Search items...">`);
+		// Build enhanced filter UI
+		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
+		
+		// Search input with icon
+		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
+		const $search = $(`<input type="text" class="form-control" placeholder="Search items by name...">`).appendTo($searchWrapper);
+		
+		// Type filter
 		const $typeSelect = $(`
-			<select class="form-control form-control--minimal" style="width: auto;">
+			<select class="form-control" style="width: auto; min-width: 130px;">
 				<option value="all">All Types</option>
 				<option value="weapon">Weapons</option>
 				<option value="armor">Armor</option>
 				<option value="potion">Potions</option>
-				<option value="wondrous">Wondrous Items</option>
-				<option value="gear">Adventuring Gear</option>
+				<option value="scroll">Scrolls</option>
+				<option value="wand">Wands</option>
+				<option value="staff">Staves</option>
+				<option value="ring">Rings</option>
+				<option value="wondrous">Wondrous</option>
+				<option value="gear">Gear</option>
 				<option value="tool">Tools</option>
 			</select>
-		`);
+		`).appendTo($filterContainer);
 
-		$$`<div class="ve-flex mb-3">${$search}${$typeSelect}</div>`.appendTo($modalInner);
-		const $list = $(`<div class="item-picker-list" style="max-height: 400px; overflow-y: auto;"></div>`).appendTo($modalInner);
+		// Rarity filter
+		const $raritySelect = $(`
+			<select class="form-control" style="width: auto; min-width: 130px;">
+				<option value="all">All Rarities</option>
+				<option value="common">Common</option>
+				<option value="uncommon">Uncommon</option>
+				<option value="rare">Rare</option>
+				<option value="very rare">Very Rare</option>
+				<option value="legendary">Legendary</option>
+				<option value="artifact">Artifact</option>
+			</select>
+		`).appendTo($filterContainer);
 
-		const renderList = (filter = "", typeFilter = "all") => {
+		// Quick filter buttons row
+		const $quickFilters = $(`<div class="ve-flex gap-2 mt-2 w-100"></div>`).appendTo($modalInner);
+		
+		let filterAttunement = false;
+		let filterMagic = false;
+		let filterConsumable = false;
+
+		const $attuneBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🔗 Requires Attunement</button>`).appendTo($quickFilters);
+		const $magicBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">✨ Magic Items</button>`).appendTo($quickFilters);
+		const $consumeBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🧪 Consumables</button>`).appendTo($quickFilters);
+
+		// Results count
+		const $resultsCount = $(`<div class="ve-small ve-muted mt-2 mb-2"></div>`).appendTo($modalInner);
+
+		// Item list
+		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
+
+		const renderList = () => {
 			$list.empty();
 
+			const searchTerm = $search.val().toLowerCase();
+			const typeFilter = $typeSelect.val();
+			const rarityFilter = $raritySelect.val();
+
 			const filtered = items.filter(item => {
-				if (filter && !item.name.toLowerCase().includes(filter)) return false;
+				if (searchTerm && !item.name.toLowerCase().includes(searchTerm)) return false;
 				if (typeFilter !== "all") {
 					const itemType = this._getItemType(item);
 					if (itemType !== typeFilter) return false;
 				}
+				if (rarityFilter !== "all") {
+					const itemRarity = (item.rarity || "").toLowerCase();
+					if (itemRarity !== rarityFilter) return false;
+				}
+				if (filterAttunement && !item.reqAttune) return false;
+				if (filterMagic && !this._isMagicItem(item)) return false;
+				if (filterConsumable && !this._isConsumable(item)) return false;
 				return true;
-			}).slice(0, 100); // Limit for performance
+			}).slice(0, 150); // Limit for performance
+
+			$resultsCount.text(`${filtered.length}${filtered.length >= 150 ? "+" : ""} item${filtered.length !== 1 ? "s" : ""} found`);
 
 			if (!filtered.length) {
-				$list.append(`<p class="ve-muted text-center">No items found</p>`);
+				$list.html(`
+					<div class="charsheet__modal-empty">
+						<div class="charsheet__modal-empty-icon">🔍</div>
+						<div class="charsheet__modal-empty-text">No items match your filters</div>
+					</div>
+				`);
 				return;
 			}
 
+			// Group by type
+			const grouped = {};
 			filtered.forEach(item => {
-				const typeTag = this._getItemTypeTag(item);
-				// Don't display "none", "unknown", "unknown (magic)", or "varies" as rarity - these are internal markers
-				const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) 
-					? item.rarity.toTitleCase() 
-					: "";
+				const type = this._getItemTypeTag(item) || "Other";
+				if (!grouped[type]) grouped[type] = [];
+				grouped[type].push(item);
+			});
 
-				const $item = $(`
-					<div class="ve-flex-v-center p-2 clickable" style="border-bottom: 1px solid var(--rgb-border-grey);">
-						<div class="ve-flex-col" style="flex: 1;">
-							<span class="bold">${item.name}</span>
-							<span class="ve-small ve-muted">
-								${typeTag ? `<span class="badge badge-secondary">${typeTag}</span>` : ""}
-								${rarity ? `<span class="badge badge-info">${rarity}</span>` : ""}
-								${Parser.sourceJsonToAbv(item.source)}
-							</span>
+			const typeOrder = ["Weapon", "Armor", "Shield", "Potion", "Scroll", "Wand", "Staff", "Ring", "Wondrous", "Tool", "Other"];
+			Object.entries(grouped).sort((a, b) => {
+				const aIdx = typeOrder.indexOf(a[0]);
+				const bIdx = typeOrder.indexOf(b[0]);
+				return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+			}).forEach(([type, typeItems]) => {
+				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
+				$(`<div class="charsheet__modal-section-title">${type} (${typeItems.length})</div>`).appendTo($section);
+
+				typeItems.forEach(item => {
+					const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) 
+						? item.rarity.toTitleCase() 
+						: "";
+					const isMagic = this._isMagicItem(item);
+					
+					// Build tags
+					const tags = [];
+					if (item.reqAttune) tags.push("🔗");
+					if (isMagic) tags.push("✨");
+
+					const $item = $(`
+						<div class="charsheet__modal-list-item">
+							<div class="charsheet__modal-list-item-icon">${this._getItemTypeEmoji(item)}</div>
+							<div class="charsheet__modal-list-item-content">
+								<div class="charsheet__modal-list-item-title">${item.name} ${tags.join(" ")}</div>
+								<div class="charsheet__modal-list-item-subtitle">
+									${rarity ? `${rarity} • ` : ""}${item.value ? `${this._formatValue(item.value)} • ` : ""}${Parser.sourceJsonToAbv(item.source)}
+								</div>
+							</div>
+							<button class="ve-btn ve-btn-primary ve-btn-xs item-picker-add">+ Add</button>
 						</div>
-						<button class="ve-btn ve-btn-primary ve-btn-xs item-picker-add">Add</button>
-					</div>
-				`);
+					`);
 
-				$item.find(".item-picker-add").on("click", () => {
-					this._addItem(item);
-					JqueryUtil.doToast({type: "success", content: `Added ${item.name}`});
+					$item.find(".item-picker-add").on("click", (e) => {
+						e.stopPropagation();
+						this._addItem(item);
+						JqueryUtil.doToast({type: "success", content: `Added ${item.name}`});
+					});
+
+					// Click row to show info
+					$item.on("click", () => this._showItemInfoFromData(item));
+
+					$section.append($item);
 				});
-
-				$list.append($item);
 			});
 		};
 
-		$search.on("input", () => renderList($search.val().toLowerCase(), $typeSelect.val()));
-		$typeSelect.on("change", () => renderList($search.val().toLowerCase(), $typeSelect.val()));
+		// Toggle quick filter buttons
+		const toggleBtn = ($btn, prop) => {
+			if (prop === "attunement") filterAttunement = !filterAttunement;
+			if (prop === "magic") filterMagic = !filterMagic;
+			if (prop === "consumable") filterConsumable = !filterConsumable;
+			$btn.toggleClass("active");
+			renderList();
+		};
+
+		$attuneBtn.on("click", () => toggleBtn($attuneBtn, "attunement"));
+		$magicBtn.on("click", () => toggleBtn($magicBtn, "magic"));
+		$consumeBtn.on("click", () => toggleBtn($consumeBtn, "consumable"));
+
+		$search.on("input", renderList);
+		$typeSelect.on("change", renderList);
+		$raritySelect.on("change", renderList);
 
 		renderList();
 
 		// Custom item section
-		const $customName = $(`<input type="text" class="form-control form-control--minimal mr-2" placeholder="Item name" style="width: 200px;">`);
-		$$`<div class="ve-flex-v-center mt-3 pt-3" style="border-top: 1px solid var(--rgb-border-grey);">
-			<label class="mr-2">Custom Item:</label>
+		const $customSection = $(`<div class="charsheet__modal-section mt-3 pt-3" style="border-top: 1px solid var(--cs-border, rgba(99, 102, 241, 0.2));"></div>`).appendTo($modalInner);
+		$(`<div class="charsheet__modal-section-title">Custom Item</div>`).appendTo($customSection);
+		
+		const $customName = $(`<input type="text" class="form-control" placeholder="Item name" style="flex: 1;">`);
+		const $customQty = $(`<input type="number" class="form-control" placeholder="Qty" style="width: 60px;" value="1" min="1">`);
+		const $customWeight = $(`<input type="number" class="form-control" placeholder="Weight" style="width: 80px;" step="0.1" min="0">`);
+		
+		$$`<div class="ve-flex gap-2 mt-2">
 			${$customName}
-			<button class="ve-btn ve-btn-primary">Add Custom</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => {
+			${$customQty}
+			${$customWeight}
+			<button class="ve-btn ve-btn-primary">Add</button>
+		</div>`.appendTo($customSection).find("button").on("click", () => {
 			const name = $customName.val().trim();
 			if (name) {
-				this._addCustomItem(name);
+				const qty = parseInt($customQty.val()) || 1;
+				const weight = parseFloat($customWeight.val()) || 0;
+				this._addCustomItem(name, qty, weight);
 				$customName.val("");
+				$customQty.val("1");
+				$customWeight.val("");
 				JqueryUtil.doToast({type: "success", content: `Added ${name}`});
 			}
 		});
 
 		// Close button
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
+	_isMagicItem (item) {
+		if (item.rarity && !["none", "unknown"].includes(item.rarity.toLowerCase())) return true;
+		if (item.wondrous) return true;
+		if (item.reqAttune) return true;
+		if (item.bonusWeapon || item.bonusAc || item.bonusSpellAttack) return true;
+		return false;
+	}
+
+	_isConsumable (item) {
+		const type = item.type?.toLowerCase();
+		if (type === "p") return true; // Potion
+		if (type === "sc") return true; // Scroll
+		if (item.poison) return true;
+		if (item.name?.toLowerCase().includes("potion")) return true;
+		if (item.name?.toLowerCase().includes("scroll")) return true;
+		return false;
+	}
+
+	_getItemTypeEmoji (item) {
+		const type = this._getItemType(item);
+		const emojis = {
+			"weapon": "⚔️",
+			"armor": "🛡️",
+			"potion": "🧪",
+			"scroll": "📜",
+			"wand": "🪄",
+			"staff": "🏑",
+			"ring": "💍",
+			"wondrous": "✨",
+			"gear": "🎒",
+			"tool": "🔧",
+		};
+		return emojis[type] || "📦";
+	}
+
+	_formatValue (value) {
+		if (!value) return "";
+		// Value is in copper pieces
+		const gp = Math.floor(value / 100);
+		const sp = Math.floor((value % 100) / 10);
+		const cp = value % 10;
+		
+		if (gp > 0) return `${gp} gp`;
+		if (sp > 0) return `${sp} sp`;
+		return `${cp} cp`;
+	}
+
+	async _showItemInfoFromData (item) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: item.name,
+			isMinHeight0: true,
+		});
+
+		const typeTag = this._getItemTypeTag(item);
+		const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) 
+			? item.rarity.toTitleCase() 
+			: "";
+
+		const $content = $(`
+			<div class="charsheet__item-info-modal">
+				<div class="ve-flex gap-2 mb-2 ve-flex-wrap">
+					${typeTag ? `<span class="charsheet__modal-list-item-badge">${typeTag}</span>` : ""}
+					${rarity ? `<span class="charsheet__modal-list-item-badge">${rarity}</span>` : ""}
+					${item.reqAttune ? `<span class="charsheet__modal-list-item-badge">🔗 Attunement</span>` : ""}
+				</div>
+				<div class="ve-small mb-3">
+					${item.value ? `<div><strong>Value:</strong> ${this._formatValue(item.value)}</div>` : ""}
+					${item.weight ? `<div><strong>Weight:</strong> ${item.weight} lb.</div>` : ""}
+					${item.ac ? `<div><strong>AC:</strong> ${item.ac}${item.dexterityMax ? ` (max Dex ${item.dexterityMax > 0 ? "+" + item.dexterityMax : item.dexterityMax})` : ""}</div>` : ""}
+					${item.dmg1 ? `<div><strong>Damage:</strong> ${item.dmg1} ${item.dmgType ? Parser.dmgTypeToFull(item.dmgType) : ""}</div>` : ""}
+					${item.property?.length ? `<div><strong>Properties:</strong> ${item.property.map(p => Parser.itemPropertyToFull(p)).join(", ")}</div>` : ""}
+				</div>
+				${item.entries?.length ? `
+					<hr>
+					<div class="rd__b">${Renderer.get().render({entries: item.entries})}</div>
+				` : ""}
+			</div>
+		`).appendTo($modalInner);
+
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
@@ -205,6 +395,10 @@ class CharacterSheetInventory {
 		if (item.armor || ["LA", "MA", "HA"].includes(typeBase)) return "armor";
 		if (typeBase === "S") return "armor"; // Shield
 		if (item.type === "P") return "potion";
+		if (item.type === "SC") return "scroll";
+		if (item.type === "WD") return "wand";
+		if (item.type === "ST") return "staff";
+		if (item.type === "RG") return "ring";
 		if (item.wondrous) return "wondrous";
 		if (item.type === "AT" || item.type === "T") return "tool";
 		if (item.type === "G" || item.type === "SCF") return "gear";
@@ -217,6 +411,10 @@ class CharacterSheetInventory {
 		if (item.armor || ["LA", "MA", "HA"].includes(typeBase)) return "Armor";
 		if (typeBase === "S") return "Shield";
 		if (item.type === "P") return "Potion";
+		if (item.type === "SC") return "Scroll";
+		if (item.type === "WD") return "Wand";
+		if (item.type === "ST") return "Staff";
+		if (item.type === "RG") return "Ring";
 		if (item.wondrous) return "Wondrous";
 		if (item.type === "AT" || item.type === "T") return "Tool";
 		return "";
@@ -311,14 +509,14 @@ class CharacterSheetInventory {
 		this._page.saveCharacter();
 	}
 
-	_addCustomItem (name) {
+	_addCustomItem (name, quantity = 1, weight = 0) {
 		const newItem = {
 			name,
 			source: "Custom",
-			quantity: 1,
+			quantity,
 			equipped: false,
 			attuned: false,
-			weight: 0,
+			weight,
 			value: 0,
 			type: "gear",
 			requiresAttunement: false,
