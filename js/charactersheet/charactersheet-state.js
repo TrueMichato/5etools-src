@@ -2667,6 +2667,16 @@ class CharacterSheetState {
 			total += stateBonus;
 		}
 		
+		// Thelemar rules: Linguistics gets +1 for each language known (except Common)
+		if (skill === "linguistics" && this._data.settings?.thelemar_linguisticsBonus) {
+			const languages = this._data.languages || [];
+			const languageBonus = languages.filter(lang => lang.toLowerCase() !== "common").length;
+			if (languageBonus > 0) {
+				console.log(`[CharSheet State] Adding ${languageBonus} from known languages (Thelemar rules)`);
+				total += languageBonus;
+			}
+		}
+		
 		console.log(`[CharSheet State] Total feature bonus for ${skill}: ${total}`);
 		return total;
 	}
@@ -3912,7 +3922,17 @@ class CharacterSheetState {
 	}
 
 	getCarryingCapacity () {
-		const baseCapacity = this.getAbilityScore("str") * 15;
+		let baseCapacity;
+		
+		// Thelemar rules: 50 + 25 * STR modifier (minimum 50)
+		if (this._data.settings?.thelemar_carryWeight) {
+			const strMod = this.getAbilityMod("str");
+			baseCapacity = Math.max(50, 50 + 25 * strMod);
+		} else {
+			// Standard rules: STR score * 15
+			baseCapacity = this.getAbilityScore("str") * 15;
+		}
+		
 		const flatBonus = this._data.customModifiers.carryCapacity || 0;
 		const multiplier = this._data.customModifiers.carryCapacityMultiplier || 1;
 		return (baseCapacity + flatBonus) * multiplier;

@@ -3042,6 +3042,24 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
+		// Thelemar homebrew rules
+		const currentThelemar_carryWeight = this._state.getSettings()?.thelemar_carryWeight || false;
+		const currentThelemar_linguisticsBonus = this._state.getSettings()?.thelemar_linguisticsBonus || false;
+		
+		const $thelemar_carryWeight = $$`<div class="mt-2">
+			<label class="ve-flex-v-center">
+				<input type="checkbox" id="settings-thelemar-carry" ${currentThelemar_carryWeight ? "checked" : ""}>
+				<span class="ml-2">Thelemar Carry Weight: 50 + 25 × STR modifier (minimum 50)</span>
+			</label>
+		</div>`;
+
+		const $thelemar_linguisticsBonus = $$`<div class="mt-2">
+			<label class="ve-flex-v-center">
+				<input type="checkbox" id="settings-thelemar-linguistics" ${currentThelemar_linguisticsBonus ? "checked" : ""}>
+				<span class="ml-2">Thelemar Linguistics: +1 per known language (except Common)</span>
+			</label>
+		</div>`;
+
 		// Build modal content
 		$$`<div>
 			<h5>Source Filter</h5>
@@ -3053,6 +3071,10 @@ class CharacterSheetPage {
 			<hr>
 			<h5>Game Rules</h5>
 			${$exhaustionToggle}
+			<hr>
+			<h5>Thelemar Homebrew Rules</h5>
+			${$thelemar_carryWeight}
+			${$thelemar_linguisticsBonus}
 		</div>`.appendTo($modalInner);
 
 		// Quick select handlers
@@ -3117,6 +3139,18 @@ class CharacterSheetPage {
 			if (this._spellsModule) {
 				this._spellsModule.render();
 			}
+		});
+
+		// Thelemar carry weight handler
+		$modalInner.find("#settings-thelemar-carry").on("change", (e) => {
+			this._state.setSetting("thelemar_carryWeight", e.target.checked);
+			this._renderInventory();
+		});
+
+		// Thelemar linguistics bonus handler
+		$modalInner.find("#settings-thelemar-linguistics").on("change", (e) => {
+			this._state.setSetting("thelemar_linguisticsBonus", e.target.checked);
+			this._renderSkills();
 		});
 	}
 
