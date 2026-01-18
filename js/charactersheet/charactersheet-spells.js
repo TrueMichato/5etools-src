@@ -220,22 +220,243 @@ class CharacterSheetSpells {
 		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
 		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search spells by name...">`).appendTo($searchWrapper);
 		
-		// Level filter
-		const $levelSelect = $(`
-			<select class="form-control" style="width: auto; min-width: 130px;">
-				<option value="all">📊 All Levels</option>
-				<option value="0">⭐ Cantrips</option>
-				${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(l => `<option value="${l}">Level ${l}</option>`).join("")}
-			</select>
+		// Multi-select level filter
+		let selectedLevels = new Set(); // Empty = all levels
+		const levelOptions = [
+			{value: "0", label: "⭐ Cantrips"},
+			{value: "1", label: "1️⃣ Level 1"},
+			{value: "2", label: "2️⃣ Level 2"},
+			{value: "3", label: "3️⃣ Level 3"},
+			{value: "4", label: "4️⃣ Level 4"},
+			{value: "5", label: "5️⃣ Level 5"},
+			{value: "6", label: "6️⃣ Level 6"},
+			{value: "7", label: "7️⃣ Level 7"},
+			{value: "8", label: "8️⃣ Level 8"},
+			{value: "9", label: "9️⃣ Level 9"},
+		];
+
+		const $levelDropdown = $(`
+			<div class="charsheet__source-multiselect charsheet__level-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">📊</span>
+					<span class="charsheet__source-multiselect-text">All Levels</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown charsheet__level-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${levelOptions.map(l => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${l.value}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${l.label}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
 		`).appendTo($filterContainer);
 
-		// School filter
-		const $schoolSelect = $(`
-			<select class="form-control" style="width: auto; min-width: 150px;">
-				<option value="all">🎓 All Schools</option>
-				${schools.map(s => `<option value="${s}">${this._getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
-			</select>
+		// Level dropdown behavior
+		const $levelBtn = $levelDropdown.find(".charsheet__source-multiselect-btn");
+		const $levelDropdownMenu = $levelDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $levelText = $levelDropdown.find(".charsheet__source-multiselect-text");
+		
+		$levelBtn.on("click", (e) => {
+			e.stopPropagation();
+			$levelDropdownMenu.toggleClass("open");
+			// Close other dropdowns
+			$schoolDropdownMenu.removeClass("open");
+			$sourceDropdownMenu.removeClass("open");
+		});
+
+		const updateLevelText = () => {
+			const checked = $levelDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$levelText.text("No Levels");
+				selectedLevels = new Set(["__NONE__"]);
+			} else if (checked.length === levelOptions.length) {
+				$levelText.text("All Levels");
+				selectedLevels = new Set();
+			} else if (checked.length === 1) {
+				const val = checked.first().val();
+				$levelText.text(val === "0" ? "Cantrips" : `Level ${val}`);
+				selectedLevels = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$levelText.text(`${checked.length} Levels`);
+				selectedLevels = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		$levelDropdown.find("input[type=checkbox]").on("change", updateLevelText);
+		$levelDropdown.find("[data-action=all]").on("click", () => {
+			$levelDropdown.find("input").prop("checked", true);
+			updateLevelText();
+		});
+		$levelDropdown.find("[data-action=none]").on("click", () => {
+			$levelDropdown.find("input").prop("checked", false);
+			updateLevelText();
+		});
+
+		// Multi-select school filter
+		let selectedSchools = new Set(); // Empty = all schools
+		const $schoolDropdown = $(`
+			<div class="charsheet__source-multiselect charsheet__school-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">🎓</span>
+					<span class="charsheet__source-multiselect-text">All Schools</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown charsheet__school-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${schools.map(s => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${s}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${this._getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
 		`).appendTo($filterContainer);
+
+		// School dropdown behavior
+		const $schoolBtn = $schoolDropdown.find(".charsheet__source-multiselect-btn");
+		const $schoolDropdownMenu = $schoolDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $schoolText = $schoolDropdown.find(".charsheet__source-multiselect-text");
+		
+		$schoolBtn.on("click", (e) => {
+			e.stopPropagation();
+			$schoolDropdownMenu.toggleClass("open");
+			// Close other dropdowns
+			$levelDropdownMenu.removeClass("open");
+			$sourceDropdownMenu.removeClass("open");
+		});
+
+		const updateSchoolText = () => {
+			const checked = $schoolDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$schoolText.text("No Schools");
+				selectedSchools = new Set(["__NONE__"]);
+			} else if (checked.length === schools.length) {
+				$schoolText.text("All Schools");
+				selectedSchools = new Set();
+			} else if (checked.length === 1) {
+				$schoolText.text(Parser.spSchoolAbvToFull(checked.first().val()));
+				selectedSchools = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$schoolText.text(`${checked.length} Schools`);
+				selectedSchools = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		$schoolDropdown.find("input[type=checkbox]").on("change", updateSchoolText);
+		$schoolDropdown.find("[data-action=all]").on("click", () => {
+			$schoolDropdown.find("input").prop("checked", true);
+			updateSchoolText();
+		});
+		$schoolDropdown.find("[data-action=none]").on("click", () => {
+			$schoolDropdown.find("input").prop("checked", false);
+			updateSchoolText();
+		});
+
+		// Collect unique subschools from spells
+		const allSubschools = [...new Set(spells.flatMap(s => s.subschools || []))].sort();
+		
+		// Multi-select subschool filter (only show if there are subschools)
+		let selectedSubschools = new Set(); // Empty = all (no filter)
+		let $subschoolDropdown = null;
+		let $subschoolDropdownMenu = null;
+		
+		if (allSubschools.length > 0) {
+			// Parse subschool into display name
+			const formatSubschool = (sub) => {
+				// Subschools are in format "category:value" like "rarity:common" or "legality:illegal-I"
+				const parts = sub.split(":");
+				if (parts.length === 2) {
+					return `${parts[0].toTitleCase()}: ${parts[1].toTitleCase()}`;
+				}
+				return sub.toTitleCase();
+			};
+
+			$subschoolDropdown = $(`
+				<div class="charsheet__source-multiselect charsheet__subschool-multiselect">
+					<button class="charsheet__source-multiselect-btn">
+						<span class="charsheet__source-multiselect-icon">🏷️</span>
+						<span class="charsheet__source-multiselect-text">All Tags</span>
+						<span class="charsheet__source-multiselect-arrow">▼</span>
+					</button>
+					<div class="charsheet__source-multiselect-dropdown charsheet__subschool-dropdown">
+						<div class="charsheet__source-multiselect-actions">
+							<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+							<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+						</div>
+						<div class="charsheet__source-multiselect-list">
+							${allSubschools.map(sub => `
+								<label class="charsheet__source-multiselect-item">
+									<input type="checkbox" value="${sub}" checked>
+									<span class="charsheet__source-multiselect-check">✓</span>
+									<span class="charsheet__source-multiselect-label">${formatSubschool(sub)}</span>
+								</label>
+							`).join("")}
+						</div>
+					</div>
+				</div>
+			`).appendTo($filterContainer);
+
+			$subschoolDropdownMenu = $subschoolDropdown.find(".charsheet__source-multiselect-dropdown");
+			const $subschoolBtn = $subschoolDropdown.find(".charsheet__source-multiselect-btn");
+			const $subschoolText = $subschoolDropdown.find(".charsheet__source-multiselect-text");
+			
+			$subschoolBtn.on("click", (e) => {
+				e.stopPropagation();
+				$subschoolDropdownMenu.toggleClass("open");
+				// Close other dropdowns
+				$levelDropdownMenu.removeClass("open");
+				$schoolDropdownMenu.removeClass("open");
+				$sourceDropdownMenu.removeClass("open");
+			});
+
+			const updateSubschoolText = () => {
+				const checked = $subschoolDropdown.find("input:checked");
+				if (checked.length === 0) {
+					$subschoolText.text("No Tags");
+					selectedSubschools = new Set(["__NONE__"]);
+				} else if (checked.length === allSubschools.length) {
+					$subschoolText.text("All Tags");
+					selectedSubschools = new Set();
+				} else if (checked.length === 1) {
+					$subschoolText.text(formatSubschool(checked.first().val()));
+					selectedSubschools = new Set(checked.map((_, el) => $(el).val()).get());
+				} else {
+					$subschoolText.text(`${checked.length} Tags`);
+					selectedSubschools = new Set(checked.map((_, el) => $(el).val()).get());
+				}
+				renderList();
+			};
+
+			$subschoolDropdown.find("input[type=checkbox]").on("change", updateSubschoolText);
+			$subschoolDropdown.find("[data-action=all]").on("click", () => {
+				$subschoolDropdown.find("input").prop("checked", true);
+				updateSubschoolText();
+			});
+			$subschoolDropdown.find("[data-action=none]").on("click", () => {
+				$subschoolDropdown.find("input").prop("checked", false);
+				updateSubschoolText();
+			});
+			
+			$subschoolDropdownMenu.on("click", (e) => e.stopPropagation());
+		}
 
 		// Multi-select source filter
 		let selectedSources = new Set(); // Empty = all sources
@@ -274,11 +495,22 @@ class CharacterSheetSpells {
 		$sourceBtn.on("click", (e) => {
 			e.stopPropagation();
 			$sourceDropdownMenu.toggleClass("open");
+			// Close other dropdowns
+			$levelDropdownMenu.removeClass("open");
+			$schoolDropdownMenu.removeClass("open");
+			$subschoolDropdownMenu?.removeClass("open");
 		});
 
-		// Close dropdown when clicking outside
-		$(document).on("click.spellSourceFilter", () => $sourceDropdownMenu.removeClass("open"));
+		// Close all dropdowns when clicking outside
+		$(document).on("click.spellSourceFilter", () => {
+			$sourceDropdownMenu.removeClass("open");
+			$levelDropdownMenu.removeClass("open");
+			$schoolDropdownMenu.removeClass("open");
+			$subschoolDropdownMenu?.removeClass("open");
+		});
 		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
+		$levelDropdownMenu.on("click", (e) => e.stopPropagation());
+		$schoolDropdownMenu.on("click", (e) => e.stopPropagation());
 
 		// Update source text based on selection
 		const updateSourceText = () => {
@@ -344,13 +576,22 @@ class CharacterSheetSpells {
 			$list.empty();
 
 			const searchTerm = $search.val().toLowerCase();
-			const levelFilter = $levelSelect.val();
-			const schoolFilter = $schoolSelect.val();
 
 			const filtered = spells.filter(spell => {
 				if (searchTerm && !spell.name.toLowerCase().includes(searchTerm)) return false;
-				if (levelFilter !== "all" && spell.level !== parseInt(levelFilter)) return false;
-				if (schoolFilter !== "all" && spell.school !== schoolFilter) return false;
+				// Multi-select level filter
+				if (selectedLevels.has("__NONE__")) return false;
+				if (selectedLevels.size > 0 && !selectedLevels.has(String(spell.level))) return false;
+				// Multi-select school filter
+				if (selectedSchools.has("__NONE__")) return false;
+				if (selectedSchools.size > 0 && !selectedSchools.has(spell.school)) return false;
+				// Multi-select subschool filter
+				if (selectedSubschools.has("__NONE__")) return false;
+				if (selectedSubschools.size > 0) {
+					// Spell must have at least one of the selected subschools
+					const spellSubschools = spell.subschools || [];
+					if (spellSubschools.length === 0 || !spellSubschools.some(sub => selectedSubschools.has(sub))) return false;
+				}
 				// Multi-select source filter
 				if (selectedSources.has("__NONE__")) return false; // No sources selected
 				if (selectedSources.size > 0 && !selectedSources.has(spell.source)) return false;
@@ -410,12 +651,25 @@ class CharacterSheetSpells {
 					if (spell.concentration) tagParts.push("⏳");
 					const tagsStr = tagParts.length ? ` ${tagParts.join(" ")}` : "";
 
+					// Build subschool string
+					let subschoolStr = "";
+					if (spell.subschools && spell.subschools.length > 0) {
+						const formatSubschool = (sub) => {
+							const parts = sub.split(":");
+							if (parts.length === 2) {
+								return `${parts[1].toTitleCase()}`;
+							}
+							return sub.toTitleCase();
+						};
+						subschoolStr = ` • 🏷️ ${spell.subschools.map(formatSubschool).join(", ")}`;
+					}
+
 					const $item = $(`
 						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""}">
 							<div class="charsheet__modal-list-item-icon">${this._getSchoolEmoji(spell.school)}</div>
 							<div class="charsheet__modal-list-item-content">
 								<div class="charsheet__modal-list-item-title">${spell.name}${tagsStr}</div>
-								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}</div>
+								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}${subschoolStr}</div>
 							</div>
 							${isKnown
 								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
@@ -461,9 +715,7 @@ class CharacterSheetSpells {
 		$materialBtn.on("click", () => toggleBtn($materialBtn, "material"));
 
 		$search.on("input", renderList);
-		$levelSelect.on("change", renderList);
-		$schoolSelect.on("change", renderList);
-		// Source filter is handled by checkbox change events above
+		// Level, school, and source filters are handled by checkbox change events above
 
 		// Initial render
 		renderList();
@@ -779,7 +1031,9 @@ class CharacterSheetSpells {
 			// Check if spell attack
 			if (spellData.entries?.some(e => typeof e === "string" && e.toLowerCase().includes("spell attack"))) {
 				const attackBonus = spellcastingMod + profBonus;
-				const roll = this._page.rollDice(1, 20);
+				// Spell attacks are attacks, so use isAttack: true (no Thelemar crit bonus)
+				const rollResult = this._page.rollD20({isAttack: true});
+				const roll = rollResult.roll;
 				attackInfo = `<br>Spell Attack: ${roll} + ${attackBonus} = <strong>${roll + attackBonus}</strong>`;
 			}
 

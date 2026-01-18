@@ -9,6 +9,8 @@ class CharacterSheetInventory {
 		this._allItems = [];
 		this._itemFilter = "";
 		this._itemTypeFilter = "all";
+		this._currentPage = 0;
+		this._itemsPerPage = 10;
 
 		this._init();
 	}
@@ -22,6 +24,19 @@ class CharacterSheetInventory {
 	}
 
 	_initEventListeners () {
+		// Inventory view toggle buttons
+		$(document).on("click", "#charsheet-btn-view-list", () => {
+			$(".charsheet__inventory-list").removeClass("charsheet__inventory-list--compact");
+			$("#charsheet-btn-view-list").addClass("active");
+			$("#charsheet-btn-view-compact").removeClass("active");
+		});
+
+		$(document).on("click", "#charsheet-btn-view-compact", () => {
+			$(".charsheet__inventory-list").addClass("charsheet__inventory-list--compact");
+			$("#charsheet-btn-view-compact").addClass("active");
+			$("#charsheet-btn-view-list").removeClass("active");
+		});
+
 		// Add item button - support both ID variants
 		$(document).on("click", "#charsheet-add-item, #charsheet-btn-add-item", () => this._showItemPicker());
 
@@ -86,11 +101,13 @@ class CharacterSheetInventory {
 		// Filter inputs
 		$(document).on("input", "#charsheet-item-search", (e) => {
 			this._itemFilter = e.target.value.toLowerCase();
+			this._currentPage = 0; // Reset to first page when filtering
 			this._renderItemList();
 		});
 
 		$(document).on("change", "#charsheet-item-type-filter", (e) => {
 			this._itemTypeFilter = e.target.value;
+			this._currentPage = 0; // Reset to first page when filtering
 			this._renderItemList();
 		});
 	}
@@ -123,35 +140,165 @@ class CharacterSheetInventory {
 		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
 		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search items by name...">`).appendTo($searchWrapper);
 		
-		// Type filter
-		const $typeSelect = $(`
-			<select class="form-control" style="width: auto; min-width: 140px;">
-				<option value="all">📦 All Types</option>
-				<option value="weapon">⚔️ Weapons</option>
-				<option value="armor">🛡️ Armor</option>
-				<option value="potion">🧪 Potions</option>
-				<option value="scroll">📜 Scrolls</option>
-				<option value="wand">🪄 Wands</option>
-				<option value="staff">🏑 Staves</option>
-				<option value="ring">💍 Rings</option>
-				<option value="wondrous">✨ Wondrous</option>
-				<option value="gear">🎒 Gear</option>
-				<option value="tool">🔧 Tools</option>
-			</select>
+		// Type filter - Multi-select dropdown
+		const itemTypes = [
+			{value: "weapon", label: "Weapons", emoji: "⚔️"},
+			{value: "armor", label: "Armor", emoji: "🛡️"},
+			{value: "potion", label: "Potions", emoji: "🧪"},
+			{value: "scroll", label: "Scrolls", emoji: "📜"},
+			{value: "wand", label: "Wands", emoji: "🪄"},
+			{value: "staff", label: "Staves", emoji: "🏑"},
+			{value: "ring", label: "Rings", emoji: "💍"},
+			{value: "wondrous", label: "Wondrous", emoji: "✨"},
+			{value: "gear", label: "Gear", emoji: "🎒"},
+			{value: "tool", label: "Tools", emoji: "🔧"},
+		];
+		let selectedTypes = new Set(); // Empty = all types
+		
+		const $typeDropdown = $(`
+			<div class="charsheet__source-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">📦</span>
+					<span class="charsheet__source-multiselect-text">All Types</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${itemTypes.map(t => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${t.value}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${t.emoji} ${t.label}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
 		`).appendTo($filterContainer);
 
-		// Rarity filter
-		const $raritySelect = $(`
-			<select class="form-control" style="width: auto; min-width: 140px;">
-				<option value="all">🌟 All Rarities</option>
-				<option value="common">⚪ Common</option>
-				<option value="uncommon">🟢 Uncommon</option>
-				<option value="rare">🔵 Rare</option>
-				<option value="very rare">🟣 Very Rare</option>
-				<option value="legendary">🟠 Legendary</option>
-				<option value="artifact">🔴 Artifact</option>
-			</select>
+		// Type dropdown behavior
+		const $typeBtn = $typeDropdown.find(".charsheet__source-multiselect-btn");
+		const $typeDropdownMenu = $typeDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $typeText = $typeDropdown.find(".charsheet__source-multiselect-text");
+		
+		$typeBtn.on("click", (e) => {
+			e.stopPropagation();
+			$typeDropdownMenu.toggleClass("open");
+			// Close other dropdowns
+			$rarityDropdownMenu.removeClass("open");
+			$sourceDropdownMenu.removeClass("open");
+		});
+
+		const updateTypeText = () => {
+			const checked = $typeDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$typeText.text("No Types");
+				selectedTypes = new Set(["__NONE__"]);
+			} else if (checked.length === itemTypes.length) {
+				$typeText.text("All Types");
+				selectedTypes = new Set();
+			} else if (checked.length <= 2) {
+				const labels = checked.map((_, el) => itemTypes.find(t => t.value === $(el).val())?.label || $(el).val()).get();
+				$typeText.text(labels.join(", "));
+				selectedTypes = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$typeText.text(`${checked.length} Types`);
+				selectedTypes = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		$typeDropdown.find("input[type=checkbox]").on("change", updateTypeText);
+		$typeDropdown.find("[data-action=all]").on("click", () => {
+			$typeDropdown.find("input").prop("checked", true);
+			updateTypeText();
+		});
+		$typeDropdown.find("[data-action=none]").on("click", () => {
+			$typeDropdown.find("input").prop("checked", false);
+			updateTypeText();
+		});
+
+		// Rarity filter - Multi-select dropdown
+		const rarities = [
+			{value: "common", label: "Common", emoji: "⚪"},
+			{value: "uncommon", label: "Uncommon", emoji: "🟢"},
+			{value: "rare", label: "Rare", emoji: "🔵"},
+			{value: "very rare", label: "Very Rare", emoji: "🟣"},
+			{value: "legendary", label: "Legendary", emoji: "🟠"},
+			{value: "artifact", label: "Artifact", emoji: "🔴"},
+		];
+		let selectedRarities = new Set(); // Empty = all rarities
+		
+		const $rarityDropdown = $(`
+			<div class="charsheet__source-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">🌟</span>
+					<span class="charsheet__source-multiselect-text">All Rarities</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${rarities.map(r => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${r.value}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${r.emoji} ${r.label}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
 		`).appendTo($filterContainer);
+
+		// Rarity dropdown behavior
+		const $rarityBtn = $rarityDropdown.find(".charsheet__source-multiselect-btn");
+		const $rarityDropdownMenu = $rarityDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $rarityText = $rarityDropdown.find(".charsheet__source-multiselect-text");
+		
+		$rarityBtn.on("click", (e) => {
+			e.stopPropagation();
+			$rarityDropdownMenu.toggleClass("open");
+			// Close other dropdowns
+			$typeDropdownMenu.removeClass("open");
+			$sourceDropdownMenu.removeClass("open");
+		});
+
+		const updateRarityText = () => {
+			const checked = $rarityDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$rarityText.text("No Rarities");
+				selectedRarities = new Set(["__NONE__"]);
+			} else if (checked.length === rarities.length) {
+				$rarityText.text("All Rarities");
+				selectedRarities = new Set();
+			} else if (checked.length <= 2) {
+				const labels = checked.map((_, el) => rarities.find(r => r.value === $(el).val())?.label || $(el).val()).get();
+				$rarityText.text(labels.join(", "));
+				selectedRarities = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$rarityText.text(`${checked.length} Rarities`);
+				selectedRarities = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		$rarityDropdown.find("input[type=checkbox]").on("change", updateRarityText);
+		$rarityDropdown.find("[data-action=all]").on("click", () => {
+			$rarityDropdown.find("input").prop("checked", true);
+			updateRarityText();
+		});
+		$rarityDropdown.find("[data-action=none]").on("click", () => {
+			$rarityDropdown.find("input").prop("checked", false);
+			updateRarityText();
+		});
 
 		// Source filter - collect unique sources from items with multi-select
 		const uniqueSources = [...new Set(items.map(i => i.source))].sort((a, b) => {
@@ -202,11 +349,20 @@ class CharacterSheetInventory {
 		$sourceBtn.on("click", (e) => {
 			e.stopPropagation();
 			$sourceDropdownMenu.toggleClass("open");
+			// Close other dropdowns
+			$typeDropdownMenu.removeClass("open");
+			$rarityDropdownMenu.removeClass("open");
 		});
 
-		// Close dropdown when clicking outside
-		$(document).on("click.sourceFilter", () => $sourceDropdownMenu.removeClass("open"));
+		// Close all dropdowns when clicking outside
+		$(document).on("click.itemFilter", () => {
+			$sourceDropdownMenu.removeClass("open");
+			$typeDropdownMenu.removeClass("open");
+			$rarityDropdownMenu.removeClass("open");
+		});
 		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
+		$typeDropdownMenu.on("click", (e) => e.stopPropagation());
+		$rarityDropdownMenu.on("click", (e) => e.stopPropagation());
 
 		// Update source text based on selection
 		const updateSourceText = () => {
@@ -270,18 +426,20 @@ class CharacterSheetInventory {
 			$list.empty();
 
 			const searchTerm = $search.val().toLowerCase();
-			const typeFilter = $typeSelect.val();
-			const rarityFilter = $raritySelect.val();
 
 			const filterItem = (item) => {
 				if (searchTerm && !item.name.toLowerCase().includes(searchTerm)) return false;
-				if (typeFilter !== "all") {
+				// Multi-select type filter
+				if (selectedTypes.has("__NONE__")) return false;
+				if (selectedTypes.size > 0) {
 					const itemType = this._getItemType(item);
-					if (itemType !== typeFilter) return false;
+					if (!selectedTypes.has(itemType)) return false;
 				}
-				if (rarityFilter !== "all") {
+				// Multi-select rarity filter
+				if (selectedRarities.has("__NONE__")) return false;
+				if (selectedRarities.size > 0) {
 					const itemRarity = (item.rarity || "").toLowerCase();
-					if (itemRarity !== rarityFilter) return false;
+					if (!selectedRarities.has(itemRarity)) return false;
 				}
 				// Multi-select source filter
 				if (selectedSources.has("__NONE__")) return false; // No sources selected
@@ -418,9 +576,7 @@ class CharacterSheetInventory {
 		$consumeBtn.on("click", () => toggleBtn($consumeBtn, "consumable"));
 
 		$search.on("input", renderList);
-		$typeSelect.on("change", renderList);
-		$raritySelect.on("change", renderList);
-		// Source filter is handled by checkbox change events above
+		// Type, rarity, and source filters are handled by checkbox change events above
 
 		// Initial render
 		renderList();
@@ -1428,13 +1584,72 @@ class CharacterSheetInventory {
 
 		if (!filtered.length) {
 			$container.append(`<p class="ve-muted text-center">No items</p>`);
+			this._renderPagination($container, 0, 0);
 			return;
 		}
 
-		filtered.forEach(item => {
+		// Calculate pagination
+		const totalItems = filtered.length;
+		const totalPages = Math.ceil(totalItems / this._itemsPerPage);
+		
+		// Ensure current page is valid
+		if (this._currentPage >= totalPages) {
+			this._currentPage = Math.max(0, totalPages - 1);
+		}
+
+		// Get items for current page
+		const startIdx = this._currentPage * this._itemsPerPage;
+		const endIdx = Math.min(startIdx + this._itemsPerPage, totalItems);
+		const pageItems = filtered.slice(startIdx, endIdx);
+
+		pageItems.forEach(item => {
 			const $item = this._renderItemRow(item);
 			$container.append($item);
 		});
+
+		// Render pagination controls if there are multiple pages
+		this._renderPagination($container, totalItems, totalPages);
+	}
+
+	_renderPagination ($container, totalItems, totalPages) {
+		// Remove existing pagination
+		$container.siblings(".charsheet__inventory-pagination").remove();
+
+		// Only show pagination if there's more than one page
+		if (totalPages <= 1) return;
+
+		const startIdx = this._currentPage * this._itemsPerPage + 1;
+		const endIdx = Math.min((this._currentPage + 1) * this._itemsPerPage, totalItems);
+
+		const $pagination = $(`
+			<div class="charsheet__inventory-pagination">
+				<button class="ve-btn ve-btn-xs ve-btn-default charsheet__pagination-prev" ${this._currentPage === 0 ? "disabled" : ""}>
+					<span class="glyphicon glyphicon-chevron-left"></span> Prev
+				</button>
+				<span class="charsheet__inventory-pagination-info">
+					${startIdx}-${endIdx} of ${totalItems}
+				</span>
+				<button class="ve-btn ve-btn-xs ve-btn-default charsheet__pagination-next" ${this._currentPage >= totalPages - 1 ? "disabled" : ""}>
+					Next <span class="glyphicon glyphicon-chevron-right"></span>
+				</button>
+			</div>
+		`);
+
+		$pagination.find(".charsheet__pagination-prev").on("click", () => {
+			if (this._currentPage > 0) {
+				this._currentPage--;
+				this._renderItemList();
+			}
+		});
+
+		$pagination.find(".charsheet__pagination-next").on("click", () => {
+			if (this._currentPage < totalPages - 1) {
+				this._currentPage++;
+				this._renderItemList();
+			}
+		});
+
+		$container.after($pagination);
 	}
 
 	_renderItemRow (item) {
