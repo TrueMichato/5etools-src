@@ -96,12 +96,12 @@
 						<span class="charsheet__help-desc">= Advantage</span>
 					</div>
 					<div class="charsheet__help-tip">
-						<span class="charsheet__help-key">Ctrl+Click</span>
+						<span class="charsheet__help-key">Ctrl/Cmd +Click</span>
 						<span class="charsheet__help-desc">= Disadvantage</span>
 					</div>
 					<div class="charsheet__help-tip">
 						<span class="charsheet__help-key">Right-Click</span>
-						<span class="charsheet__help-desc">= Options</span>
+						<span class="charsheet__help-desc">= Options (if available)</span>
 					</div>
 				</div>
 				<button class="charsheet__help-toggle" id="charsheet-help-toggle" title="Toggle help tips">
@@ -211,6 +211,31 @@
 							</div>
 						</div>
 
+						<!-- Passive Scores - Key detection scores -->
+						<div class="charsheet__section charsheet__section--passives">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">👁️</span>
+								Passive Scores
+							</h4>
+							<div class="charsheet__passives-grid" id="charsheet-passives">
+								<div class="charsheet__passive-card charsheet__passive-card--perception" title="Passive Perception: Notices hidden creatures, traps, secret doors">
+									<div class="charsheet__passive-icon">👁️</div>
+									<div class="charsheet__passive-value" id="charsheet-passive-perception">10</div>
+									<div class="charsheet__passive-label">Perception</div>
+								</div>
+								<div class="charsheet__passive-card charsheet__passive-card--investigation" title="Passive Investigation: Detects clues, finds hidden objects">
+									<div class="charsheet__passive-icon">🔍</div>
+									<div class="charsheet__passive-value" id="charsheet-passive-investigation">10</div>
+									<div class="charsheet__passive-label">Investigation</div>
+								</div>
+								<div class="charsheet__passive-card charsheet__passive-card--insight" title="Passive Insight: Detects lies, understands true intentions">
+									<div class="charsheet__passive-icon">🧠</div>
+									<div class="charsheet__passive-value" id="charsheet-passive-insight">10</div>
+									<div class="charsheet__passive-label">Insight</div>
+								</div>
+							</div>
+						</div>
+
 						<!-- Skills -->
 						<div class="charsheet__section charsheet__section--skills">
 							<h4 class="charsheet__section-title">
@@ -256,7 +281,7 @@
 								<div class="charsheet__hp-box charsheet__hp-box--temp">
 									<div class="charsheet__hp-label">Temp HP</div>
 									<input type="number" class="form-control form-control--minimal charsheet__ipt-hp charsheet__ipt-hp--temp" id="charsheet-ipt-hp-temp" value="0" min="0" title="Temporary HP (absorbed before regular HP)">
-									<div class="charsheet__hp-temp-hint">🛡️ Shield</div>
+									<div class="charsheet__hp-temp-hint">Absorbs damage first</div>
 								</div>
 							</div>
 						</div>
@@ -264,10 +289,12 @@
 						<!-- AC, Initiative, Speed -->
 						<div class="charsheet__section charsheet__section--combat-stats">
 							<div class="ve-flex ve-flex-wrap ve-flex-h-center charsheet__combat-stats-row">
-								<div class="charsheet__combat-stat charsheet__combat-stat--ac" id="charsheet-box-ac" title="Armor Class - how hard you are to hit">
+								<div class="charsheet__combat-stat charsheet__combat-stat--ac charsheet__combat-stat--clickable" id="charsheet-box-ac" title="Armor Class - click to see breakdown">
 									<div class="charsheet__combat-stat-icon">🛡️</div>
 									<div class="charsheet__combat-stat-value" id="charsheet-disp-ac">10</div>
 									<div class="charsheet__combat-stat-label">Armor Class</div>
+									<div class="charsheet__ac-breakdown" id="charsheet-ac-breakdown"></div>
+									<div class="charsheet__combat-stat-hint">Click for details</div>
 								</div>
 								<div class="charsheet__combat-stat charsheet__combat-stat--clickable charsheet__combat-stat--initiative" id="charsheet-box-initiative" title="Click to roll initiative (Shift: Advantage, Ctrl: Disadvantage)">
 									<div class="charsheet__combat-stat-icon">⚡</div>

@@ -34,41 +34,46 @@ class CharacterSheetRest {
 		}
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Short Rest",
+			title: "😴 Short Rest",
 			isMinHeight0: true,
+			isWidth100: true,
 		});
 
 		let totalHealing = 0;
 		// Track spent dice by type
 		const spentDice = {};
 
-		const $totalHealing = $(`<span class="bold">0</span>`);
+		const $totalHealing = $(`<span class="charsheet__rest-healing-value">0</span>`);
 
-		$$`<div>
-			<p>During a short rest, you can spend hit dice to recover hit points.</p>
-			<p class="ve-muted">Current HP: ${currentHp}/${maxHp}</p>
+		$$`<div class="charsheet__rest-modal">
+			<div class="charsheet__rest-intro">
+				<p class="mb-1">During a short rest (typically 1 hour), you can spend Hit Dice to recover hit points.</p>
+				<p class="mb-0">Current HP: <span class="charsheet__rest-current-hp">❤️ ${currentHp}/${maxHp}</span></p>
+			</div>
 			
-			<div class="mt-3">
-				<h5>Available Hit Dice</h5>
+			<div class="charsheet__rest-section">
+				<div class="charsheet__rest-section-title">🎲 Available Hit Dice</div>
 				<div id="short-rest-hit-dice-container"></div>
 			</div>
 			
-			<div class="mt-3">
-				<h5>Healing</h5>
-				<p>Total healing: ${$totalHealing} HP</p>
+			<div class="charsheet__rest-healing-display">
+				<span class="charsheet__rest-healing-icon">💚</span>
+				<span class="charsheet__rest-healing-label">Total Healing:</span>
+				${$totalHealing}
+				<span class="charsheet__rest-healing-label">HP</span>
 			</div>
 		</div>`.appendTo($modalInner);
 
 		// Render hit dice options
 		const $hdContainer = $modalInner.find("#short-rest-hit-dice-container");
 		if (!hitDice.length) {
-			$hdContainer.append(`<p class="ve-muted">No hit dice available</p>`);
+			$hdContainer.append(`<p class="ve-muted ve-text-center">No hit dice available</p>`);
 		} else {
 			hitDice.forEach((hd, idx) => {
 				// Track remaining locally for display
 				let remaining = hd.current;
 				const $remaining = $(`<span>${remaining}</span>`);
-				const $btn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary" ${hd.current <= 0 ? "disabled" : ""}>Roll d${hd.die}</button>`);
+				const $btn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary" ${hd.current <= 0 ? "disabled" : ""}>🎲 Roll</button>`);
 
 				$btn.on("click", () => {
 					if (remaining <= 0) {
@@ -94,13 +99,16 @@ class CharacterSheetRest {
 
 					JqueryUtil.doToast({
 						type: "success",
-						content: `Rolled d${hd.die} + ${conMod} = ${healing} HP`,
+						content: `🎲 Rolled d${hd.die} (${roll}) + CON (${conMod >= 0 ? "+" : ""}${conMod}) = ${healing} HP`,
 					});
 				});
 
-				$$`<div class="ve-flex-v-center mb-2">
-					<span style="width: 120px;">${hd.className}: d${hd.die}</span>
-					<span class="mr-2">${$remaining}/${hd.max}</span>
+				$$`<div class="charsheet__hit-die-row">
+					<div class="charsheet__hit-die-info">
+						<span class="charsheet__hit-die-class">${hd.className}:</span>
+						<span class="charsheet__hit-die-die">d${hd.die}</span>
+					</div>
+					<span class="charsheet__hit-die-remaining">${$remaining} / ${hd.max} remaining</span>
 					${$btn}
 				</div>`.appendTo($hdContainer);
 			});
@@ -109,7 +117,7 @@ class CharacterSheetRest {
 		// Footer buttons
 		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
 			.on("click", () => doClose(false));
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">Finish Short Rest</button>`)
+		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">✓ Finish Short Rest</button>`)
 			.on("click", () => {
 				// Apply hit dice spending using spentDice tracker
 				Object.entries(spentDice).forEach(([dieType, count]) => {
@@ -134,11 +142,11 @@ class CharacterSheetRest {
 				doClose(true);
 				JqueryUtil.doToast({
 					type: "success",
-					content: `Short rest complete! Recovered ${totalHealing} HP.`,
+					content: `😴 Short rest complete! Recovered ${totalHealing} HP.`,
 				});
 			});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		$$`<div class="charsheet__modal-footer">
 			${$btnCancel}
 			${$btnConfirm}
 		</div>`.appendTo($modalInner);
@@ -151,46 +159,86 @@ class CharacterSheetRest {
 		const totalMaxHd = hitDice.reduce((sum, hd) => sum + hd.max, 0);
 		const totalCurrentHd = hitDice.reduce((sum, hd) => sum + hd.current, 0);
 		const currentExhaustion = this._state.getExhaustion();
+		const newHdTotal = Math.min(totalMaxHd, totalCurrentHd + Math.max(1, Math.floor(totalMaxHd / 2)));
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Long Rest",
+			title: "🌙 Long Rest",
 			isMinHeight0: true,
+			isWidth100: true,
 		});
 
-		const $cbResetTempHp = $(`<input type="checkbox" checked class="mr-2">`);
-		const $cbClearExhaustion = $(`<input type="checkbox" ${currentExhaustion > 0 ? "checked" : "disabled"} class="mr-2">`);
+		const $cbResetTempHp = $(`<input type="checkbox" checked>`);
+		const $cbClearExhaustion = $(`<input type="checkbox" ${currentExhaustion > 0 ? "checked" : "disabled"}>`);
 
-		$$`<div>
-			<p>A long rest restores all hit points and recovers half your total hit dice (minimum 1).</p>
+		$$`<div class="charsheet__rest-modal">
+			<div class="charsheet__rest-intro">
+				<p class="mb-0">A long rest (typically 8 hours) restores all hit points and recovers spent Hit Dice.</p>
+			</div>
 			
-			<div class="charsheet__section">
-				<h5>Recovery Summary</h5>
-				<ul>
-					<li>HP: ${currentHp} → <strong>${maxHp}</strong> (full)</li>
-					<li>Hit Dice: ${totalCurrentHd}/${totalMaxHd} → <strong>${Math.min(totalMaxHd, totalCurrentHd + Math.max(1, Math.floor(totalMaxHd / 2)))}/${totalMaxHd}</strong></li>
-					<li>Spell Slots: All recovered</li>
-					<li>Class Resources: All recovered</li>
-					${currentExhaustion > 0 ? `<li>Exhaustion: ${currentExhaustion} → <strong>${currentExhaustion - 1}</strong></li>` : ""}
+			<div class="charsheet__rest-section">
+				<div class="charsheet__rest-section-title">📊 Recovery Summary</div>
+				<ul class="charsheet__rest-recovery-list">
+					<li class="charsheet__rest-recovery-item">
+						<span class="charsheet__rest-recovery-label">❤️ Hit Points</span>
+						<div class="charsheet__rest-recovery-values">
+							<span class="charsheet__rest-recovery-old">${currentHp}</span>
+							<span class="charsheet__rest-recovery-arrow">→</span>
+							<span class="charsheet__rest-recovery-new">${maxHp}</span>
+							<span class="ve-muted">(full)</span>
+						</div>
+					</li>
+					<li class="charsheet__rest-recovery-item">
+						<span class="charsheet__rest-recovery-label">🎲 Hit Dice</span>
+						<div class="charsheet__rest-recovery-values">
+							<span class="charsheet__rest-recovery-old">${totalCurrentHd}/${totalMaxHd}</span>
+							<span class="charsheet__rest-recovery-arrow">→</span>
+							<span class="charsheet__rest-recovery-new">${newHdTotal}/${totalMaxHd}</span>
+						</div>
+					</li>
+					<li class="charsheet__rest-recovery-item">
+						<span class="charsheet__rest-recovery-label">✨ Spell Slots</span>
+						<div class="charsheet__rest-recovery-values">
+							<span class="charsheet__rest-recovery-new">All recovered</span>
+						</div>
+					</li>
+					<li class="charsheet__rest-recovery-item">
+						<span class="charsheet__rest-recovery-label">⚡ Class Resources</span>
+						<div class="charsheet__rest-recovery-values">
+							<span class="charsheet__rest-recovery-new">All recovered</span>
+						</div>
+					</li>
+					${currentExhaustion > 0 ? `
+					<li class="charsheet__rest-recovery-item">
+						<span class="charsheet__rest-recovery-label">😫 Exhaustion</span>
+						<div class="charsheet__rest-recovery-values">
+							<span class="charsheet__rest-recovery-old">${currentExhaustion}</span>
+							<span class="charsheet__rest-recovery-arrow">→</span>
+							<span class="charsheet__rest-recovery-new">${currentExhaustion - 1}</span>
+						</div>
+					</li>
+					` : ""}
 				</ul>
 			</div>
 			
-			<div class="charsheet__section mt-3">
-				<h5>Additional Options</h5>
-				<label class="ve-flex-v-center">
-					${$cbResetTempHp}
-					Reset temporary HP to 0
-				</label>
-				<label class="ve-flex-v-center mt-1 ${currentExhaustion === 0 ? "ve-muted" : ""}">
-					${$cbClearExhaustion}
-					Reduce exhaustion by 1 level ${currentExhaustion === 0 ? "(none)" : `(${currentExhaustion} → ${currentExhaustion - 1})`}
-				</label>
+			<div class="charsheet__rest-section">
+				<div class="charsheet__rest-section-title">⚙️ Options</div>
+				<div class="charsheet__rest-options">
+					<label class="charsheet__rest-option">
+						${$cbResetTempHp}
+						<span>Reset temporary HP to 0</span>
+					</label>
+					<label class="charsheet__rest-option ${currentExhaustion === 0 ? "charsheet__rest-option--disabled" : ""}">
+						${$cbClearExhaustion}
+						<span>Reduce exhaustion by 1 level ${currentExhaustion === 0 ? "(none to reduce)" : ""}</span>
+					</label>
+				</div>
 			</div>
 		</div>`.appendTo($modalInner);
 
 		// Footer buttons
 		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
 			.on("click", () => doClose(false));
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">Finish Long Rest</button>`)
+		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">🌙 Finish Long Rest</button>`)
 			.on("click", () => {
 				// Full HP recovery
 				this._state.setHp(maxHp, maxHp, $cbResetTempHp.is(":checked") ? 0 : this._state.getHp().temp);
@@ -238,11 +286,11 @@ class CharacterSheetRest {
 
 				JqueryUtil.doToast({
 					type: "success",
-					content: "Long rest complete! All resources restored.",
+					content: "🌙 Long rest complete! All resources restored.",
 				});
 			});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		$$`<div class="charsheet__modal-footer">
 			${$btnCancel}
 			${$btnConfirm}
 		</div>`.appendTo($modalInner);

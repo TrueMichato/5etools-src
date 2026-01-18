@@ -778,7 +778,19 @@ class CharacterSheetPage {
 			$(`#charsheet-ability-${abl}-mod`).text(mod >= 0 ? `+${mod}` : mod);
 		});
 
-		// Note: Passive scores are now rendered inline with skills in _renderSkills()
+		// Update prominent passive scores display
+		this._renderPassiveScores();
+	}
+
+	_renderPassiveScores () {
+		// Calculate passive scores for key skills (10 + skill modifier)
+		const perceptionMod = this._state.getSkillMod("perception");
+		const investigationMod = this._state.getSkillMod("investigation");
+		const insightMod = this._state.getSkillMod("insight");
+
+		$("#charsheet-passive-perception").text(10 + perceptionMod);
+		$("#charsheet-passive-investigation").text(10 + investigationMod);
+		$("#charsheet-passive-insight").text(10 + insightMod);
 	}
 
 	_renderSavingThrows () {
@@ -902,7 +914,11 @@ class CharacterSheetPage {
 	}
 
 	_renderCombatStats () {
-		$("#charsheet-disp-ac").text(this._state.getAc());
+		// AC with breakdown
+		const acBreakdown = this._state.getAcBreakdown();
+		$("#charsheet-disp-ac").text(acBreakdown.total);
+		this._renderAcBreakdown(acBreakdown);
+
 		$("#charsheet-disp-initiative").text(this._formatMod(this._state.getInitiative()));
 
 		// Calculate speed with exhaustion penalty
@@ -945,9 +961,9 @@ class CharacterSheetPage {
 		$("#charsheet-disp-jump-long").text(`${longJump} ft.`);
 		$("#charsheet-disp-jump-high").text(`${Math.max(0, highJump)} ft.`);
 
-		// Carrying capacity
-		const carryCapacity = strScore * 15;
-		const pushDragLift = strScore * 30; // 2x carrying capacity
+		// Carrying capacity (uses state method which respects Thelemar homebrew rules)
+		const carryCapacity = this._state.getCarryingCapacity();
+		const pushDragLift = carryCapacity * 2; // 2x carrying capacity
 		const items = this._state.getItems();
 		const currentWeight = items.reduce((sum, item) => sum + (item.weight || 0) * item.quantity, 0);
 
@@ -1305,10 +1321,14 @@ class CharacterSheetPage {
 		const $container = $("#charsheet-conditions");
 		$container.empty();
 
+		// Now returns {name, source} objects
 		const conditions = this._state.getConditions();
-		conditions.forEach(condition => {
+		conditions.forEach(condObj => {
+			const conditionName = condObj.name;
+			const conditionSource = condObj.source;
+			
 			// Get condition effects for tooltip
-			const condDef = CharacterSheetState.getConditionEffects(condition);
+			const condDef = CharacterSheetState.getConditionEffects(conditionName);
 			const icon = condDef?.icon || "❓";
 			const description = condDef?.description || "Unknown condition";
 			
@@ -1331,22 +1351,26 @@ class CharacterSheetPage {
 			}
 			
 			// Use instance method for proper homebrew source lookup
-			const conditionLink = this.getConditionLink(condition);
+			const conditionLink = this.getConditionLinkWithSource(conditionName, conditionSource);
+			const sourceAbbr = Parser.sourceJsonToAbv(conditionSource);
+			
 			const $badge = $(`
 				<span class="charsheet__condition-badge" title="${description}">
 					<span class="charsheet__condition-icon">${icon}</span>
 					${conditionLink}
+					<span class="charsheet__condition-source-badge">${sourceAbbr}</span>
 					<span class="charsheet__condition-remove glyphicon glyphicon-remove"></span>
 				</span>
 			`);
 
 			// Add tooltip with effects
 			if (effectsHtml) {
-				$badge.attr("data-tippy-content", `<strong>${condDef?.name || condition}</strong>: ${description}${effectsHtml}`);
+				$badge.attr("data-tippy-content", `<strong>${condDef?.name || conditionName}</strong> (${sourceAbbr}): ${description}${effectsHtml}`);
 			}
 
 			$badge.find(".charsheet__condition-remove").on("click", () => {
-				this._state.removeCondition(condition);
+				// Now passes {name, source} object
+				this._state.removeCondition({name: conditionName, source: conditionSource});
 				this._saveCurrentCharacter();
 				this._renderConditions();
 				this._renderActiveStates(); // Also update active states since conditions create states
@@ -1526,11 +1550,44 @@ class CharacterSheetPage {
 
 		$container.empty();
 
-		// Header
-		$container.append(`<h4>Ability Scores</h4>`);
+		// Get skills list for later use
+		const skills = this.getSkillsList();
 
-		// Create detailed ability score display
-		const $grid = $(`<div class="charsheet__abilities-grid"></div>`);
+		// Ability emoji icons
+		const abilityIcons = {
+			str: "💪",
+			dex: "🎯",
+			con: "❤️",
+			int: "🧠",
+			wis: "👁️",
+			cha: "✨",
+		};
+
+		// Ability colors for styling
+		const abilityColors = {
+			str: "var(--cs-ability-str, #ef4444)",
+			dex: "var(--cs-ability-dex, #22c55e)",
+			con: "var(--cs-ability-con, #f59e0b)",
+			int: "var(--cs-ability-int, #3b82f6)",
+			wis: "var(--cs-ability-wis, #8b5cf6)",
+			cha: "var(--cs-ability-cha, #ec4899)",
+		};
+
+		// Main container with modern layout
+		const $mainContent = $(`<div class="charsheet__abilities-tab"></div>`);
+
+		// Ability Scores Section - Hero cards
+		const $abilitiesSection = $(`
+			<div class="charsheet__abilities-section">
+				<div class="charsheet__abilities-section-header">
+					<span class="charsheet__abilities-section-icon">📊</span>
+					<h4 class="charsheet__abilities-section-title">Ability Scores</h4>
+				</div>
+				<div class="charsheet__abilities-hero-grid"></div>
+			</div>
+		`);
+
+		const $heroGrid = $abilitiesSection.find(".charsheet__abilities-hero-grid");
 
 		Parser.ABIL_ABVS.forEach(abl => {
 			const base = this._state.getAbilityBase(abl);
@@ -1538,109 +1595,198 @@ class CharacterSheetPage {
 			const total = this._state.getAbilityScore(abl);
 			const mod = this._state.getAbilityMod(abl);
 			const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-
-			const $ability = $(`
-				<div class="charsheet__ability-detailed">
-					<div class="charsheet__ability-header">
-						<span class="charsheet__ability-full-name">${Parser.attAbvToFull(abl)}</span>
-						<span class="charsheet__ability-abbr">(${abl.toUpperCase()})</span>
-					</div>
-					<div class="charsheet__ability-scores">
-						<div class="charsheet__ability-total">
-							<span class="charsheet__ability-total-value">${total}</span>
-							<span class="charsheet__ability-mod-value">${modStr}</span>
-						</div>
-						<div class="charsheet__ability-breakdown">
-							<span class="ve-small ve-muted">Base: ${base}</span>
-							${bonus !== 0 ? `<span class="ve-small ve-muted"> | Bonus: ${bonus >= 0 ? "+" : ""}${bonus}</span>` : ""}
-						</div>
-					</div>
-					<div class="charsheet__ability-actions mt-2">
-						<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__roll-ability" data-ability="${abl}">
-							<span class="glyphicon glyphicon-random"></span> Roll Check
-						</button>
-						<button class="ve-btn ve-btn-xs ve-btn-default charsheet__roll-save" data-ability="${abl}">
-							<span class="glyphicon glyphicon-shield"></span> Save
-						</button>
-					</div>
-				</div>
-			`);
-
-			$ability.find(".charsheet__roll-ability").on("click", () => this._rollAbilityCheck(abl));
-			$ability.find(".charsheet__roll-save").on("click", () => this._rollSavingThrow(abl));
-
-			$grid.append($ability);
-		});
-
-		$container.append($grid);
-
-		// Saving throws summary
-		const $savesSection = $(`
-			<div class="charsheet__section mt-4">
-				<h4>Saving Throw Proficiencies</h4>
-				<div class="charsheet__saves-summary"></div>
-			</div>
-		`);
-
-		const $savesSummary = $savesSection.find(".charsheet__saves-summary");
-		Parser.ABIL_ABVS.forEach(abl => {
 			const isProficient = this._state.hasSaveProficiency(abl);
-			const mod = this._state.getSaveMod(abl);
-			const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+			const saveMod = this._state.getSaveMod(abl);
+			const saveModStr = saveMod >= 0 ? `+${saveMod}` : `${saveMod}`;
 
-			$savesSummary.append(`
-				<div class="charsheet__save-summary-item ${isProficient ? "proficient" : ""}">
-					<span class="charsheet__save-prof-indicator ${isProficient ? "active" : ""}">●</span>
-					<span class="charsheet__save-name">${Parser.attAbvToFull(abl)}</span>
-					<span class="charsheet__save-mod">${modStr}</span>
+			// Get related skills for this ability
+			const relatedSkills = skills.filter(s => s.ability === abl);
+
+			const $card = $(`
+				<div class="charsheet__ability-hero-card" data-ability="${abl}" style="--ability-color: ${abilityColors[abl]}">
+					<div class="charsheet__ability-hero-header">
+						<span class="charsheet__ability-hero-icon">${abilityIcons[abl]}</span>
+						<div class="charsheet__ability-hero-names">
+							<span class="charsheet__ability-hero-full">${Parser.attAbvToFull(abl)}</span>
+							<span class="charsheet__ability-hero-abbr">${abl.toUpperCase()}</span>
+						</div>
+					</div>
+					<div class="charsheet__ability-hero-scores">
+						<div class="charsheet__ability-hero-total">${total}</div>
+						<div class="charsheet__ability-hero-mod">${modStr}</div>
+					</div>
+					<div class="charsheet__ability-hero-breakdown">
+						<span class="charsheet__ability-hero-base">Base ${base}</span>
+						${bonus !== 0 ? `<span class="charsheet__ability-hero-bonus">${bonus >= 0 ? "+" : ""}${bonus} bonus</span>` : ""}
+					</div>
+					<div class="charsheet__ability-hero-save">
+						<span class="charsheet__ability-save-prof ${isProficient ? "active" : ""}">${isProficient ? "●" : "○"}</span>
+						<span class="charsheet__ability-save-label">Save</span>
+						<span class="charsheet__ability-save-value">${saveModStr}</span>
+					</div>
+					<div class="charsheet__ability-hero-skills">
+						${relatedSkills.map(s => {
+							const skillKey = s.name.toLowerCase().replace(/\s+/g, "");
+							const profLevel = this._state.getSkillProficiency(skillKey);
+							const skillMod = this._state.getSkillMod(skillKey);
+							const skillModStr = skillMod >= 0 ? `+${skillMod}` : `${skillMod}`;
+							let profIcon = "○";
+							let profClass = "";
+							if (profLevel === 2) { profIcon = "◉"; profClass = "expertise"; }
+							else if (profLevel === 1) { profIcon = "●"; profClass = "proficient"; }
+							return `<div class="charsheet__ability-skill-mini ${profClass}" data-skill="${skillKey}">
+								<span class="charsheet__ability-skill-prof">${profIcon}</span>
+								<span class="charsheet__ability-skill-name">${s.name}</span>
+								<span class="charsheet__ability-skill-mod">${skillModStr}</span>
+							</div>`;
+						}).join("")}
+					</div>
+					<div class="charsheet__ability-hero-actions">
+						<button class="charsheet__ability-roll-btn charsheet__ability-roll-check" data-ability="${abl}" title="Roll ${Parser.attAbvToFull(abl)} Check">
+							🎲 Check
+						</button>
+						<button class="charsheet__ability-roll-btn charsheet__ability-roll-save" data-ability="${abl}" title="Roll ${Parser.attAbvToFull(abl)} Save">
+							🛡️ Save
+						</button>
+					</div>
 				</div>
 			`);
+
+			// Click handlers
+			$card.find(".charsheet__ability-roll-check").on("click", (e) => {
+				e.stopPropagation();
+				this._rollAbilityCheck(abl);
+			});
+			$card.find(".charsheet__ability-roll-save").on("click", (e) => {
+				e.stopPropagation();
+				this._rollSavingThrow(abl);
+			});
+			$card.find(".charsheet__ability-skill-mini").on("click", (e) => {
+				e.stopPropagation();
+				const skillKey = $(e.currentTarget).data("skill");
+				const skill = skills.find(s => s.name.toLowerCase().replace(/\s+/g, "") === skillKey);
+				if (skill) this._rollSkillCheck(skillKey, skill.name);
+			});
+
+			$heroGrid.append($card);
 		});
 
-		$container.append($savesSection);
+		$mainContent.append($abilitiesSection);
 
-		// Skills section
-		const $skillsSection = $(`
-			<div class="charsheet__section mt-4">
-				<h4>Skills</h4>
-				<div class="charsheet__skills-grid"></div>
+		// Passive Scores Section
+		const $passivesSection = $(`
+			<div class="charsheet__abilities-section charsheet__abilities-section--passives">
+				<div class="charsheet__abilities-section-header">
+					<span class="charsheet__abilities-section-icon">👁️</span>
+					<h4 class="charsheet__abilities-section-title">Passive Scores</h4>
+					<span class="charsheet__abilities-section-hint">10 + skill modifier</span>
+				</div>
+				<div class="charsheet__passives-hero-grid"></div>
 			</div>
 		`);
 
-		// Get skills from loaded data (dynamic, supports homebrew)
-		const skills = this.getSkillsList();
+		const passiveSkills = [
+			{key: "perception", name: "Perception", icon: "👁️", desc: "Notices hidden creatures, traps, secret doors"},
+			{key: "investigation", name: "Investigation", icon: "🔍", desc: "Detects clues, finds hidden objects"},
+			{key: "insight", name: "Insight", icon: "💭", desc: "Detects lies, understands true intentions"},
+		];
 
-		const $skillsGrid = $skillsSection.find(".charsheet__skills-grid");
-		skills.forEach(skill => {
-			const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
-			const profLevel = this._state.getSkillProficiency(skillKey);
-			const mod = this._state.getSkillMod(skillKey);
-			const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-
+		const $passivesGrid = $passivesSection.find(".charsheet__passives-hero-grid");
+		passiveSkills.forEach(passive => {
+			const skillMod = this._state.getSkillMod(passive.key);
+			const passiveScore = 10 + skillMod;
+			const profLevel = this._state.getSkillProficiency(passive.key);
 			let profIcon = "○";
-			let profClass = "";
-			if (profLevel === 2) {
-				profIcon = "◉";
-				profClass = "expertise";
-			} else if (profLevel === 1) {
-				profIcon = "●";
-				profClass = "proficient";
-			}
+			if (profLevel === 2) profIcon = "◉";
+			else if (profLevel === 1) profIcon = "●";
 
-			const $skill = $(`
-				<div class="charsheet__skill-item ${profClass}" title="Click to roll ${skill.name}">
-					<span class="charsheet__skill-prof">${profIcon}</span>
-					<span class="charsheet__skill-name">${skill.name}</span>
-					<span class="charsheet__skill-ability">(${skill.ability.toUpperCase()})</span>
-					<span class="charsheet__skill-mod">${modStr}</span>
+			$passivesGrid.append(`
+				<div class="charsheet__passive-hero-card charsheet__passive-hero-card--${passive.key}" title="${passive.desc}">
+					<div class="charsheet__passive-hero-icon">${passive.icon}</div>
+					<div class="charsheet__passive-hero-value">${passiveScore}</div>
+					<div class="charsheet__passive-hero-label">${passive.name}</div>
+					<div class="charsheet__passive-hero-prof">${profIcon} ${skillMod >= 0 ? "+" : ""}${skillMod}</div>
+				</div>
+			`);
+		});
+
+		$mainContent.append($passivesSection);
+
+		// Full Skills Section
+		const $skillsSection = $(`
+			<div class="charsheet__abilities-section charsheet__abilities-section--skills">
+				<div class="charsheet__abilities-section-header">
+					<span class="charsheet__abilities-section-icon">📋</span>
+					<h4 class="charsheet__abilities-section-title">All Skills</h4>
+					<span class="charsheet__abilities-section-hint">Click to roll</span>
+				</div>
+				<div class="charsheet__skills-full-grid"></div>
+			</div>
+		`);
+
+		const $skillsGrid = $skillsSection.find(".charsheet__skills-full-grid");
+
+		// Group skills by ability
+		const skillsByAbility = {};
+		Parser.ABIL_ABVS.forEach(abl => skillsByAbility[abl] = []);
+		skills.forEach(skill => {
+			if (skillsByAbility[skill.ability]) {
+				skillsByAbility[skill.ability].push(skill);
+			}
+		});
+
+		Parser.ABIL_ABVS.forEach(abl => {
+			if (skillsByAbility[abl].length === 0) return;
+
+			const $group = $(`
+				<div class="charsheet__skills-ability-group" style="--ability-color: ${abilityColors[abl]}">
+					<div class="charsheet__skills-ability-header">
+						<span class="charsheet__skills-ability-icon">${abilityIcons[abl]}</span>
+						<span class="charsheet__skills-ability-name">${abl.toUpperCase()}</span>
+					</div>
+					<div class="charsheet__skills-ability-columns">
+						<span class="charsheet__skills-column-prof"></span>
+						<span class="charsheet__skills-column-name">Skill</span>
+						<span class="charsheet__skills-column-mod">Mod</span>
+						<span class="charsheet__skills-column-passive">Pass</span>
+					</div>
+					<div class="charsheet__skills-ability-list"></div>
 				</div>
 			`);
 
-			$skill.on("click", () => this._rollSkillCheck(skillKey, skill.name));
-			$skillsGrid.append($skill);
+			const $list = $group.find(".charsheet__skills-ability-list");
+
+			skillsByAbility[abl].forEach(skill => {
+				const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
+				const profLevel = this._state.getSkillProficiency(skillKey);
+				const mod = this._state.getSkillMod(skillKey);
+				const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+				const passiveScore = 10 + mod;
+
+				let profIcon = "○";
+				let profClass = "";
+				if (profLevel === 2) { profIcon = "◉"; profClass = "expertise"; }
+				else if (profLevel === 1) { profIcon = "●"; profClass = "proficient"; }
+
+				const $skillRow = $(`
+					<div class="charsheet__skill-full-row ${profClass}" data-skill="${skillKey}">
+						<span class="charsheet__skill-full-prof">${profIcon}</span>
+						<span class="charsheet__skill-full-name">${skill.name}</span>
+						<span class="charsheet__skill-full-mod">${modStr}</span>
+						<span class="charsheet__skill-full-passive">${passiveScore}</span>
+					</div>
+				`);
+
+				$skillRow.on("click", () => this._rollSkillCheck(skillKey, skill.name));
+				$list.append($skillRow);
+			});
+
+			$skillsGrid.append($group);
 		});
 
-		$container.append($skillsSection);
+		$mainContent.append($skillsSection);
+
+		$container.append($mainContent);
 	}
 
 	_renderResources () {
@@ -2589,34 +2735,288 @@ class CharacterSheetPage {
 
 	async _onAddCondition () {
 		// Get conditions from loaded data (dynamic, supports homebrew)
-		const conditions = this.getConditionsList();
+		// Now returns {name, source, sourceAbbr} objects
+		const allConditions = this.getConditionsList();
 
+		// Get current conditions as {name, source} objects
 		const currentConditions = this._state.getConditions();
-		const availableConditions = conditions.filter(c => !currentConditions.includes(c));
+		
+		// Filter out conditions that are already applied (exact name + source match)
+		const availableConditions = allConditions.filter(cond => 
+			!currentConditions.some(curr => 
+				curr.name.toLowerCase() === cond.name.toLowerCase() && curr.source === cond.source
+			)
+		);
 
 		if (!availableConditions.length) {
 			JqueryUtil.doToast({type: "warning", content: "All conditions already applied!"});
 			return;
 		}
 
-		const selected = await InputUiUtil.pGetUserEnum({
-			title: "Add Condition",
-			values: availableConditions,
-			fnDisplay: v => v,
-			isResolveItem: true,
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "🩹 Add Condition",
+			isMinHeight0: true,
+			isWidth100: true,
 		});
 
-		if (!selected) return;
+		let selectedCondition = null;
+		
+		// Get unique sources for filtering
+		const conditionSources = [...new Set(availableConditions.map(c => c.source))].sort((a, b) => {
+			// XPHB first, then PHB, then alphabetically
+			if (a === Parser.SRC_XPHB) return -1;
+			if (b === Parser.SRC_XPHB) return 1;
+			if (a === Parser.SRC_PHB) return -1;
+			if (b === Parser.SRC_PHB) return 1;
+			return a.localeCompare(b);
+		});
+		
+		// Track selected sources (all selected by default)
+		const selectedSources = new Set(conditionSources);
 
-		this._state.addCondition(selected);
-		this._saveCurrentCharacter();
-		this._renderConditions();
-		this._renderActiveStates();
-		this._renderCharacter();
-		// Sync combat tab
-		this._combat?.renderCombatConditions?.();
-		this._combat?.renderCombatEffects?.();
-		this._combat?.renderCombatDefenses?.();
+		const $search = $(`<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search conditions...">`);
+		const $list = $(`<div class="charsheet__conditions-list"></div>`);
+		const $count = $(`<span class="charsheet__modal-search-count">${availableConditions.length} conditions</span>`);
+
+		// Build source filter UI
+		const $sourceFilter = $(`<div class="charsheet__source-multiselect"></div>`);
+		const $sourceBtn = $(`
+			<button type="button" class="charsheet__source-multiselect-btn">
+				<span class="charsheet__source-multiselect-icon">📚</span>
+				<span class="charsheet__source-multiselect-text">All Sources</span>
+				<span class="charsheet__source-multiselect-arrow">▼</span>
+			</button>
+		`);
+		const $sourceDropdown = $(`<div class="charsheet__source-multiselect-dropdown"></div>`);
+		
+		// Action buttons
+		const $sourceActions = $(`
+			<div class="charsheet__source-multiselect-actions">
+				<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__source-action-btn" data-action="all">Select All</button>
+				<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__source-action-btn" data-action="clear">Clear All</button>
+				<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__source-action-btn" data-action="official">Official Only</button>
+			</div>
+		`);
+		
+		const $sourceList = $(`<div class="charsheet__source-multiselect-list"></div>`);
+		
+		// Build source checkboxes
+		conditionSources.forEach(src => {
+			const srcAbbr = Parser.sourceJsonToAbv(src);
+			const srcFull = Parser.sourceJsonToFull(src);
+			const isChecked = selectedSources.has(src);
+			
+			const $item = $(`
+				<label class="charsheet__source-multiselect-item">
+					<input type="checkbox" value="${src}" ${isChecked ? "checked" : ""}>
+					<span class="charsheet__source-multiselect-check">${isChecked ? "✓" : ""}</span>
+					<span class="charsheet__source-multiselect-label">
+						<strong>${srcAbbr}</strong>
+						<span class="ve-muted ve-small">${srcFull}</span>
+					</span>
+				</label>
+			`);
+			
+			$item.find("input").on("change", function() {
+				if (this.checked) {
+					selectedSources.add(src);
+					$(this).siblings(".charsheet__source-multiselect-check").text("✓");
+				} else {
+					selectedSources.delete(src);
+					$(this).siblings(".charsheet__source-multiselect-check").text("");
+				}
+				updateSourceBtnText();
+				renderList($search.val());
+			});
+			
+			$sourceList.append($item);
+		});
+		
+		$sourceDropdown.append($sourceActions, $sourceList);
+		$sourceFilter.append($sourceBtn, $sourceDropdown);
+		
+		// Toggle dropdown
+		$sourceBtn.on("click", (e) => {
+			e.stopPropagation();
+			$sourceDropdown.toggleClass("open");
+		});
+		
+		// Close dropdown when clicking outside
+		$(document).on("click.conditionSourceFilter", () => {
+			$sourceDropdown.removeClass("open");
+		});
+		
+		$sourceDropdown.on("click", (e) => e.stopPropagation());
+		
+		// Action button handlers
+		$sourceActions.find("[data-action='all']").on("click", () => {
+			conditionSources.forEach(src => selectedSources.add(src));
+			$sourceList.find("input").prop("checked", true);
+			$sourceList.find(".charsheet__source-multiselect-check").text("✓");
+			updateSourceBtnText();
+			renderList($search.val());
+		});
+		
+		$sourceActions.find("[data-action='clear']").on("click", () => {
+			selectedSources.clear();
+			$sourceList.find("input").prop("checked", false);
+			$sourceList.find(".charsheet__source-multiselect-check").text("");
+			updateSourceBtnText();
+			renderList($search.val());
+		});
+		
+		$sourceActions.find("[data-action='official']").on("click", () => {
+			selectedSources.clear();
+			const officialSources = [Parser.SRC_XPHB, Parser.SRC_PHB, Parser.SRC_DMG, Parser.SRC_MM, Parser.SRC_XDMG, Parser.SRC_XMM];
+			conditionSources.forEach(src => {
+				if (officialSources.includes(src) || src.startsWith("UA")) {
+					selectedSources.add(src);
+				}
+			});
+			$sourceList.find("input").each(function() {
+				const isSelected = selectedSources.has($(this).val());
+				$(this).prop("checked", isSelected);
+				$(this).siblings(".charsheet__source-multiselect-check").text(isSelected ? "✓" : "");
+			});
+			updateSourceBtnText();
+			renderList($search.val());
+		});
+		
+		const updateSourceBtnText = () => {
+			if (selectedSources.size === conditionSources.length) {
+				$sourceBtn.find(".charsheet__source-multiselect-text").text("All Sources");
+			} else if (selectedSources.size === 0) {
+				$sourceBtn.find(".charsheet__source-multiselect-text").text("No Sources");
+			} else {
+				$sourceBtn.find(".charsheet__source-multiselect-text").text(`${selectedSources.size} Source${selectedSources.size !== 1 ? "s" : ""}`);
+			}
+		};
+
+		const renderList = (filter = "") => {
+			$list.empty();
+
+			const filtered = availableConditions.filter(cond => {
+				// Check source filter
+				if (!selectedSources.has(cond.source)) return false;
+				// Check text filter
+				if (filter) {
+					return cond.name.toLowerCase().includes(filter.toLowerCase()) ||
+					       cond.sourceAbbr.toLowerCase().includes(filter.toLowerCase());
+				}
+				return true;
+			});
+
+			$count.text(`${filtered.length} conditions`);
+
+			if (filtered.length === 0) {
+				$list.append(`<div class="ve-muted p-2 text-center">No matching conditions found</div>`);
+				return;
+			}
+
+			filtered.forEach(cond => {
+				const condDef = CharacterSheetState.getConditionEffects(cond.name);
+				const icon = condDef?.icon || "❓";
+				const description = condDef?.description || "Apply this condition";
+				
+				// Build effect preview
+				let effectsPreview = "";
+				if (condDef?.effects?.length) {
+					const effects = condDef.effects.slice(0, 3).map(e => {
+						if (e.type === "advantage") return `⬆️ Adv: ${e.target}`;
+						if (e.type === "disadvantage") return `⬇️ Disadv: ${e.target}`;
+						if (e.type === "autoFail") return `❌ Auto-fail: ${e.target}`;
+						if (e.type === "setSpeed") return `🏃 Speed → ${e.value}`;
+						if (e.type === "resistance") return `🛡️ Resist: ${e.target}`;
+						if (e.type === "bonus") return `${e.value >= 0 ? "+" : ""}${e.value} ${e.target}`;
+						if (e.type === "note") return `📝 ${e.value.substring(0, 30)}...`;
+						return null;
+					}).filter(Boolean);
+					if (effects.length) {
+						effectsPreview = `<div class="charsheet__condition-item-effects">${effects.join(" • ")}</div>`;
+					}
+				}
+
+				// Show source badge to distinguish same-name conditions from different sources
+				const sourceBadge = `<span class="charsheet__condition-item-source">${cond.sourceAbbr}</span>`;
+
+				const $item = $(`
+					<div class="charsheet__condition-item" data-condition-name="${cond.name}" data-condition-source="${cond.source}">
+						<div class="charsheet__condition-item-header">
+							<span class="charsheet__condition-item-icon">${icon}</span>
+							<strong class="charsheet__condition-item-name">${cond.name}</strong>
+							${sourceBadge}
+						</div>
+						<div class="charsheet__condition-item-desc">${description}</div>
+						${effectsPreview}
+					</div>
+				`);
+
+				$item.on("click", () => {
+					$list.find(".charsheet__condition-item").removeClass("selected");
+					$item.addClass("selected");
+					selectedCondition = cond;
+					$btnConfirm.prop("disabled", false);
+					$btnConfirm.find(".btn-text").text(`Apply ${cond.name}`);
+				});
+
+				// Double-click to apply immediately
+				$item.on("dblclick", () => {
+					selectedCondition = cond;
+					applyCondition();
+				});
+
+				$list.append($item);
+			});
+		};
+
+		$search.on("input", (e) => renderList(e.target.value));
+		renderList();
+
+		const applyCondition = () => {
+			if (!selectedCondition) return;
+			// Now passes {name, source} object
+			this._state.addCondition({name: selectedCondition.name, source: selectedCondition.source});
+			this._saveCurrentCharacter();
+			this._renderConditions();
+			this._renderActiveStates();
+			this._renderCharacter();
+			this._combat?.renderCombatConditions?.();
+			this._combat?.renderCombatEffects?.();
+			this._combat?.renderCombatDefenses?.();
+			// Clean up event listener
+			$(document).off("click.conditionSourceFilter");
+			doClose(true);
+		};
+
+		$$`<div class="charsheet__conditions-modal-body">
+			<div class="charsheet__modal-info-banner charsheet__modal-info-banner--info">
+				<div class="charsheet__modal-info-banner-icon">🩹</div>
+				<div class="charsheet__modal-info-banner-content">
+					<strong>Apply a Condition</strong>
+					<div class="ve-small">Select a condition to apply to your character. Conditions will affect your abilities, saves, and attacks.</div>
+				</div>
+			</div>
+			<div class="charsheet__modal-search-wrapper">
+				${$search}
+				${$sourceFilter}
+				${$count}
+			</div>
+			${$list}
+		</div>`.appendTo($modalInner);
+
+		// Footer buttons
+		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
+			.on("click", () => {
+				$(document).off("click.conditionSourceFilter");
+				doClose(false);
+			});
+		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select Condition</span></button>`)
+			.on("click", applyCondition);
+
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			${$btnCancel}
+			${$btnConfirm}
+		</div>`.appendTo($modalInner);
 	}
 	// #endregion
 
@@ -3030,6 +3430,48 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Render AC breakdown popup content
+	 * @param {object} breakdown - Object from getAcBreakdown() with total and components
+	 */
+	_renderAcBreakdown (breakdown) {
+		const $container = $("#charsheet-ac-breakdown");
+		$container.empty();
+
+		if (!breakdown.components.length) {
+			$container.html(`<div class="charsheet__ac-breakdown-item"><span>Base AC</span><span>10</span></div>`);
+			return;
+		}
+
+		breakdown.components.forEach(comp => {
+			const valueClass = comp.value > 0 && comp.type !== "base" && comp.type !== "armor" ? "charsheet__ac-breakdown-value--positive" : 
+				comp.value < 0 ? "charsheet__ac-breakdown-value--negative" : "";
+			const displayValue = comp.type === "base" || comp.type === "armor" ? comp.value : this._formatMod(comp.value);
+			const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-breakdown-subtype">(${comp.subtype})</span>` : "";
+			
+			$container.append(`
+				<div class="charsheet__ac-breakdown-item">
+					<span class="charsheet__ac-breakdown-name">
+						<span class="charsheet__ac-breakdown-icon">${comp.icon || ""}</span>
+						${comp.name}${subtypeHtml}
+					</span>
+					<span class="charsheet__ac-breakdown-value ${valueClass}">${displayValue}</span>
+				</div>
+			`);
+		});
+
+		// Add total line
+		$container.append(`
+			<div class="charsheet__ac-breakdown-item charsheet__ac-breakdown-item--total">
+				<span class="charsheet__ac-breakdown-name">
+					<span class="charsheet__ac-breakdown-icon">🛡️</span>
+					Total AC
+				</span>
+				<span class="charsheet__ac-breakdown-value charsheet__ac-breakdown-value--total">${breakdown.total}</span>
+			</div>
+		`);
+	}
+
+	/**
 	 * Create a 5etools hover link (instance method for sub-modules)
 	 * @param {string} page - The page URL (e.g., "conditionsdiseases.html", "items.html")
 	 * @param {string} name - Display name
@@ -3088,6 +3530,23 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Create a condition hover link with explicit source
+	 * @param {string} condition - Condition name
+	 * @param {string} source - Source book code
+	 * @returns {string} HTML string for the link
+	 */
+	getConditionLinkWithSource (condition, source) {
+		const hash = UrlUtil.encodeForHash([condition.trim(), source].join(HASH_LIST_SEP));
+		
+		return this.getHoverLink(
+			UrlUtil.PG_CONDITIONS_DISEASES,
+			condition.trim(),
+			source,
+			hash,
+		);
+	}
+
+	/**
 	 * Create a condition hover link (static fallback - uses XPHB)
 	 * @param {string} condition - Condition name
 	 * @returns {string} HTML string for the link
@@ -3108,7 +3567,7 @@ class CharacterSheetPage {
 	// #region Settings Modal
 	async _showSettingsModal () {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Sheet Settings",
+			title: "⚙️ Sheet Settings",
 			isMinHeight0: true,
 			isWidth100: true,
 			cbClose: () => {
@@ -3127,13 +3586,13 @@ class CharacterSheetPage {
 		const $sourceFilter = $(`<div class="charsheet__settings-sources"></div>`);
 
 		// Quick select buttons
-		const $quickButtons = $$`<div class="mb-2 ve-flex-wrap">
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-all">All</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-none">None</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-core">Core Only</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-2024">2024 Rules</button>
-			<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-official">Official Only</button>
-			${hasHomebrew ? `<button class="ve-btn ve-btn-xs ve-btn-default mr-1 mb-1" id="settings-source-homebrew">Homebrew Only</button>` : ""}
+		const $quickButtons = $$`<div class="charsheet__settings-quick-buttons">
+			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-all">All</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-none">None</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-core">Core Only</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-2024">2024 Rules</button>
+			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-official">Official Only</button>
+			${hasHomebrew ? `<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-homebrew">Homebrew Only</button>` : ""}
 		</div>`;
 
 		// Group sources by category
@@ -3141,14 +3600,14 @@ class CharacterSheetPage {
 
 		// Create checkboxes for each source
 		Object.entries(sourceGroups).forEach(([group, sources]) => {
-			const $group = $(`<div class="charsheet__settings-source-group mb-2">
-				<div class="charsheet__settings-source-group-header ve-bold mb-1">${group}</div>
+			const $group = $(`<div class="charsheet__settings-source-group">
+				<div class="charsheet__settings-source-group-header">${group}</div>
 			</div>`);
 
 			sources.forEach(src => {
 				const isChecked = !currentAllowed || currentAllowed.includes(src.json);
 				const $checkbox = $(`
-					<label class="charsheet__settings-source-item mr-2 mb-1">
+					<label class="charsheet__settings-source-item">
 						<input type="checkbox" value="${src.json}" ${isChecked ? "checked" : ""} class="source-checkbox">
 						<span title="${src.full}">${src.abbr}</span>
 					</label>
@@ -3161,50 +3620,64 @@ class CharacterSheetPage {
 
 		// Exhaustion rules toggle
 		const currentExhaustionRules = this._state.getExhaustionRules();
-		const $exhaustionToggle = $$`<div class="mt-3">
-			<label class="ve-flex-v-center">
-				<span class="mr-2 ve-bold">Exhaustion Rules:</span>
-				<select class="form-control form-control--minimal input-sm" id="settings-exhaustion-rules" style="width: auto;">
-					<option value="2024" ${currentExhaustionRules === "2024" ? "selected" : ""}>2024 Rules (Stacking -2 to d20 tests)</option>
-					<option value="2014" ${currentExhaustionRules === "2014" ? "selected" : ""}>2014 Rules (Tiered effects)</option>
-					<option value="thelemar" ${currentExhaustionRules === "thelemar" ? "selected" : ""}>Thelemar Rules (-1 to rolls/DCs, max 10)</option>
-				</select>
+		const $exhaustionToggle = $$`<div class="charsheet__settings-option">
+			<label class="charsheet__settings-option-label">
+				<span class="charsheet__settings-option-icon">😫</span>
+				<span class="charsheet__settings-option-name">Exhaustion Rules</span>
 			</label>
+			<select class="form-control form-control--minimal input-sm charsheet__settings-select" id="settings-exhaustion-rules">
+				<option value="2024" ${currentExhaustionRules === "2024" ? "selected" : ""}>2024 Rules (Stacking -2 to d20 tests)</option>
+				<option value="2014" ${currentExhaustionRules === "2014" ? "selected" : ""}>2014 Rules (Tiered effects)</option>
+				<option value="thelemar" ${currentExhaustionRules === "thelemar" ? "selected" : ""}>Thelemar Rules (-1 to rolls/DCs, max 10)</option>
+			</select>
 		</div>`;
 
 		// Thelemar homebrew rules
 		const currentThelemar_carryWeight = this._state.getSettings()?.thelemar_carryWeight || false;
 		const currentThelemar_linguisticsBonus = this._state.getSettings()?.thelemar_linguisticsBonus || false;
 		
-		const $thelemar_carryWeight = $$`<div class="mt-2">
-			<label class="ve-flex-v-center">
+		const $thelemar_carryWeight = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-carry" ${currentThelemar_carryWeight ? "checked" : ""}>
-				<span class="ml-2">Thelemar Carry Weight: 50 + 25 × STR modifier (minimum 50)</span>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">🎒 Thelemar Carry Weight</span>
+					<span class="charsheet__settings-checkbox-desc">50 + 25 × Might modifier (minimum 50)</span>
+				</span>
 			</label>
 		</div>`;
 
-		const $thelemar_linguisticsBonus = $$`<div class="mt-2">
-			<label class="ve-flex-v-center">
+		const $thelemar_linguisticsBonus = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-linguistics" ${currentThelemar_linguisticsBonus ? "checked" : ""}>
-				<span class="ml-2">Thelemar Linguistics: +1 per known language (except Common)</span>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">📖 Thelemar Linguistics</span>
+					<span class="charsheet__settings-checkbox-desc">+1 bonus per known language (except Common)</span>
+				</span>
 			</label>
 		</div>`;
 
 		// Build modal content
-		$$`<div>
-			<h5>Source Filter</h5>
-			<p class="ve-muted ve-small">Select which sources to use when adding races, classes, spells, items, etc. Uncheck sources to exclude them from selection lists.</p>
-			${$quickButtons}
-			<div class="charsheet__settings-sources-container" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 4px;">
-				${$sourceFilter}
+		$$`<div class="charsheet__settings-modal">
+			<div class="charsheet__settings-section">
+				<div class="charsheet__settings-section-title">📚 Source Filter</div>
+				<p class="charsheet__settings-section-intro">Select which sources to use when adding races, classes, spells, items, etc. Uncheck sources to exclude them from selection lists.</p>
+				${$quickButtons}
+				<div class="charsheet__settings-sources-container">
+					${$sourceFilter}
+				</div>
 			</div>
-			<hr>
-			<h5>Game Rules</h5>
-			${$exhaustionToggle}
-			<hr>
-			<h5>Thelemar Homebrew Rules</h5>
-			${$thelemar_carryWeight}
-			${$thelemar_linguisticsBonus}
+			
+			<div class="charsheet__settings-section">
+				<div class="charsheet__settings-section-title">🎮 Game Rules</div>
+				${$exhaustionToggle}
+			</div>
+			
+			<div class="charsheet__settings-section">
+				<div class="charsheet__settings-section-title">🏠 Homebrew Rules</div>
+				<p class="charsheet__settings-section-intro">Optional house rules for customized gameplay.</p>
+				${$thelemar_carryWeight}
+				${$thelemar_linguisticsBonus}
+			</div>
 		</div>`.appendTo($modalInner);
 
 		// Quick select handlers
@@ -3274,7 +3747,10 @@ class CharacterSheetPage {
 		// Thelemar carry weight handler
 		$modalInner.find("#settings-thelemar-carry").on("change", (e) => {
 			this._state.setSetting("thelemar_carryWeight", e.target.checked);
-			this._renderInventory();
+			// Update encumbrance display
+			this._inventory?._updateEncumbrance?.();
+			// Also update combat stats which shows carry capacity
+			this._renderCombatStats();
 		});
 
 		// Thelemar linguistics bonus handler
@@ -3385,7 +3861,7 @@ class CharacterSheetPage {
 	 */
 	async _showCustomModifiersModal () {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Custom Modifiers",
+			title: "🎯 Custom Modifiers",
 			isMinHeight0: true,
 			isWidth100: true,
 			cbClose: () => {
@@ -3495,14 +3971,14 @@ class CharacterSheetPage {
 				$valueInput.val(existingMod.value);
 				$noteInput.val(existingMod.note || "");
 				$form.data("editing-id", existingMod.id);
-				$form.find(".charsheet__modifier-form-title").text("Edit Modifier");
+				$form.find(".charsheet__modifier-form-title-text").text("Edit Modifier");
 			} else {
 				$nameInput.val("");
 				$typeSelect.val("ac");
 				$valueInput.val(1);
 				$noteInput.val("");
 				$form.removeData("editing-id");
-				$form.find(".charsheet__modifier-form-title").text("Add Modifier");
+				$form.find(".charsheet__modifier-form-title-text").text("Add Modifier");
 			}
 
 			$nameInput.focus();
@@ -3513,54 +3989,52 @@ class CharacterSheetPage {
 
 		// Build modal content
 		$$`<div class="charsheet__modifiers-modal">
-			<p class="ve-muted ve-small mb-3">
-				Add custom modifiers to adjust your rolls. These can represent temporary effects (Bless, Guidance, Cover), 
-				magic items, or other situational bonuses. Toggle modifiers on/off as needed.
-			</p>
+			<div class="charsheet__modifiers-intro">
+				<p class="mb-0">Add custom modifiers to adjust your rolls. These can represent temporary effects (Bless, Guidance, Cover), magic items, or other situational bonuses. Toggle modifiers on/off as needed.</p>
+			</div>
 			
-			<div class="charsheet__modifiers-list" id="charsheet-modifiers-list">
-				<!-- Populated by renderModifiersList -->
+			<div class="charsheet__modifiers-section">
+				<div class="charsheet__modifiers-section-title">📋 Active Modifiers</div>
+				<div class="charsheet__modifiers-list" id="charsheet-modifiers-list">
+					<!-- Populated by renderModifiersList -->
+				</div>
+				
+				<button class="ve-btn ve-btn-primary ve-btn-sm charsheet__modifiers-add-btn" id="charsheet-btn-add-modifier">
+					<span class="glyphicon glyphicon-plus"></span> Add Modifier
+				</button>
 			</div>
 
 			<div class="charsheet__modifier-form" id="charsheet-modifier-form" style="display: none;">
-				<h5 class="charsheet__modifier-form-title">Add Modifier</h5>
-				<div class="ve-flex mb-2">
-					<div class="ve-flex-col mr-2" style="flex: 2;">
-						<label class="ve-small ve-muted">Name</label>
+				<div class="charsheet__modifier-form-title">✏️ <span class="charsheet__modifier-form-title-text">Add Modifier</span></div>
+				<div class="charsheet__modifier-form-row">
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--name">
+						<label class="charsheet__modifier-form-label">Name</label>
 						<input type="text" class="form-control form-control--minimal" id="mod-name" placeholder="e.g., Bless, Shield of Faith, Cover">
 					</div>
-					<div class="ve-flex-col mr-2" style="flex: 2;">
-						<label class="ve-small ve-muted">Type</label>
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--type">
+						<label class="charsheet__modifier-form-label">Type</label>
 						<select class="form-control form-control--minimal" id="mod-type">
 							${$typeOptions}
 						</select>
 					</div>
-					<div class="ve-flex-col" style="flex: 1;">
-						<label class="ve-small ve-muted">Value</label>
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--value">
+						<label class="charsheet__modifier-form-label">Value</label>
 						<input type="number" class="form-control form-control--minimal" id="mod-value" value="1">
 					</div>
 				</div>
-				<div class="mb-2">
-					<label class="ve-small ve-muted">Note (optional)</label>
+				<div class="charsheet__modifier-form-field charsheet__modifier-form-field--note">
+					<label class="charsheet__modifier-form-label">Note (optional)</label>
 					<input type="text" class="form-control form-control--minimal" id="mod-note" placeholder="e.g., Lasts 1 minute, Concentration">
 				</div>
-				<div class="ve-flex">
-					<button class="ve-btn ve-btn-primary ve-btn-sm mr-2" id="mod-save">Save</button>
+				<div class="charsheet__modifier-form-actions">
+					<button class="ve-btn ve-btn-primary ve-btn-sm" id="mod-save">💾 Save</button>
 					<button class="ve-btn ve-btn-default ve-btn-sm" id="mod-cancel">Cancel</button>
 				</div>
 			</div>
-
-			<div class="mt-3">
-				<button class="ve-btn ve-btn-primary ve-btn-sm" id="charsheet-btn-add-modifier">
-					<span class="glyphicon glyphicon-plus"></span> Add Modifier
-				</button>
-			</div>
 			
-			<hr class="my-3">
-			
-			<div class="charsheet__modifiers-summary">
-				<h5>Current Totals</h5>
-				<div class="ve-flex ve-flex-wrap" id="charsheet-modifiers-summary">
+			<div class="charsheet__modifiers-section">
+				<div class="charsheet__modifiers-section-title">📊 Current Totals</div>
+				<div class="charsheet__modifiers-summary-list" id="charsheet-modifiers-summary">
 					<!-- Populated by renderSummary -->
 				</div>
 			</div>
@@ -3572,23 +4046,26 @@ class CharacterSheetPage {
 			$summary.empty();
 
 			const summaryItems = [
-				{type: "ac", label: "AC"},
-				{type: "initiative", label: "Initiative"},
-				{type: "speed", label: "Speed"},
-				{type: "attack", label: "Attack"},
-				{type: "damage", label: "Damage"},
-				{type: "spellDc", label: "Spell DC"},
-				{type: "spellAttack", label: "Spell Attack"},
+				{type: "ac", label: "AC", icon: "🛡️"},
+				{type: "initiative", label: "Initiative", icon: "⚡"},
+				{type: "speed", label: "Speed", icon: "👟"},
+				{type: "attack", label: "Attack", icon: "⚔️"},
+				{type: "damage", label: "Damage", icon: "💥"},
+				{type: "spellDc", label: "Spell DC", icon: "🎯"},
+				{type: "spellAttack", label: "Spell Attack", icon: "✨"},
 			];
 
+			let hasAny = false;
 			summaryItems.forEach(item => {
 				const value = this._state.getCustomModifier(item.type);
 				if (value !== 0) {
+					hasAny = true;
 					const valueStr = value >= 0 ? `+${value}` : value;
 					$summary.append(`
-						<div class="charsheet__modifier-summary-item mr-3 mb-1">
-							<span class="ve-muted ve-small">${item.label}:</span>
-							<span class="ve-bold ${value >= 0 ? "text-success" : "text-danger"}">${valueStr}</span>
+						<div class="charsheet__modifier-summary-item">
+							<span class="charsheet__modifier-summary-icon">${item.icon}</span>
+							<span class="charsheet__modifier-summary-label">${item.label}</span>
+							<span class="charsheet__modifier-summary-value ${value >= 0 ? "charsheet__modifier-summary-value--positive" : "charsheet__modifier-summary-value--negative"}">${valueStr}</span>
 						</div>
 					`);
 				}
@@ -3598,18 +4075,20 @@ class CharacterSheetPage {
 			Parser.ABIL_ABVS.forEach(abl => {
 				const value = this._state.getCustomModifier(`save:${abl}`);
 				if (value !== 0) {
+					hasAny = true;
 					const valueStr = value >= 0 ? `+${value}` : value;
 					$summary.append(`
-						<div class="charsheet__modifier-summary-item mr-3 mb-1">
-							<span class="ve-muted ve-small">${Parser.attAbvToFull(abl)} Save:</span>
-							<span class="ve-bold ${value >= 0 ? "text-success" : "text-danger"}">${valueStr}</span>
+						<div class="charsheet__modifier-summary-item">
+							<span class="charsheet__modifier-summary-icon">💪</span>
+							<span class="charsheet__modifier-summary-label">${Parser.attAbvToFull(abl)} Save</span>
+							<span class="charsheet__modifier-summary-value ${value >= 0 ? "charsheet__modifier-summary-value--positive" : "charsheet__modifier-summary-value--negative"}">${valueStr}</span>
 						</div>
 					`);
 				}
 			});
 
-			if (!$summary.children().length) {
-				$summary.append(`<div class="ve-muted">No active modifiers</div>`);
+			if (!hasAny) {
+				$summary.append(`<div class="charsheet__modifiers-empty">No active modifiers affecting stats</div>`);
 			}
 		};
 
@@ -3706,11 +4185,33 @@ class CharacterSheetPage {
 	}
 
 	/**
-	 * Get unique conditions list, preferring 2024 (XPHB) versions
-	 * @returns {Array} Array of condition names
+	 * Get all conditions list with sources (allows same-name conditions from different sources)
+	 * @returns {Array} Array of {name, source, sourceAbbr} objects sorted by name then source
 	 */
 	getConditionsList () {
-		// Create map of conditions, preferring XPHB sources
+		// Return all conditions with their sources
+		return this._conditionsData
+			.map(cond => ({
+				name: cond.name,
+				source: cond.source,
+				sourceAbbr: Parser.sourceJsonToAbv(cond.source),
+			}))
+			.sort((a, b) => {
+				// Sort by name first, then by source (XPHB first)
+				const nameCompare = a.name.localeCompare(b.name);
+				if (nameCompare !== 0) return nameCompare;
+				// Prefer XPHB (2024) version to appear first
+				if (a.source === Parser.SRC_XPHB) return -1;
+				if (b.source === Parser.SRC_XPHB) return 1;
+				return a.source.localeCompare(b.source);
+			});
+	}
+
+	/**
+	 * Get unique condition names (legacy method for backward compatibility)
+	 * @returns {Array} Array of condition names
+	 */
+	getConditionNamesList () {
 		const conditionsMap = new Map();
 		this._conditionsData.forEach(cond => {
 			const existing = conditionsMap.get(cond.name);
@@ -3719,7 +4220,6 @@ class CharacterSheetPage {
 				conditionsMap.set(cond.name, cond.name);
 			}
 		});
-		// Sort alphabetically
 		return Array.from(conditionsMap.values()).sort();
 	}
 

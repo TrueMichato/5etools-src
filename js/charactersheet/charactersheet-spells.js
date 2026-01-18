@@ -187,7 +187,7 @@ class CharacterSheetSpells {
 		const knownSpellIds = this._state.getSpells().map(s => `${s.name}|${s.source}`);
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Add Spell",
+			title: "✨ Add Spell",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
@@ -195,32 +195,132 @@ class CharacterSheetSpells {
 		// All available schools
 		const schools = [...new Set(spells.map(s => s.school).filter(Boolean))].sort();
 
+		// Unique sources from spells
+		const uniqueSources = [...new Set(spells.map(s => s.source))].sort((a, b) => {
+			const priority = ["PHB", "XGE", "TCE", "FTD", "XPHB"];
+			const aIdx = priority.indexOf(a);
+			const bIdx = priority.indexOf(b);
+			if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+			if (aIdx !== -1) return -1;
+			if (bIdx !== -1) return 1;
+			return a.localeCompare(b);
+		});
+
+		// Intro text
+		$modalInner.append(`
+			<p class="ve-small ve-muted mb-3">
+				Browse and add spells to your character. Click a spell to view details, or click <strong>+ Add</strong> to add it directly.
+			</p>
+		`);
+
 		// Build enhanced filter UI
 		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
 		
 		// Search input with icon
 		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
-		const $search = $(`<input type="text" class="form-control" placeholder="Search spells by name...">`).appendTo($searchWrapper);
+		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search spells by name...">`).appendTo($searchWrapper);
 		
 		// Level filter
 		const $levelSelect = $(`
-			<select class="form-control" style="width: auto; min-width: 120px;">
-				<option value="all">All Levels</option>
-				<option value="0">Cantrips</option>
+			<select class="form-control" style="width: auto; min-width: 130px;">
+				<option value="all">📊 All Levels</option>
+				<option value="0">⭐ Cantrips</option>
 				${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(l => `<option value="${l}">Level ${l}</option>`).join("")}
 			</select>
 		`).appendTo($filterContainer);
 
 		// School filter
 		const $schoolSelect = $(`
-			<select class="form-control" style="width: auto; min-width: 140px;">
-				<option value="all">All Schools</option>
-				${schools.map(s => `<option value="${s}">${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
+			<select class="form-control" style="width: auto; min-width: 150px;">
+				<option value="all">🎓 All Schools</option>
+				${schools.map(s => `<option value="${s}">${this._getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
 			</select>
 		`).appendTo($filterContainer);
 
+		// Multi-select source filter
+		let selectedSources = new Set(); // Empty = all sources
+		const $sourceDropdown = $(`
+			<div class="charsheet__source-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">📚</span>
+					<span class="charsheet__source-multiselect-text">All Sources</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+						<button class="charsheet__source-action-btn" data-action="official">Official Only</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${uniqueSources.map(s => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${s}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${Parser.sourceJsonToAbv(s)}</span>
+								<span class="charsheet__source-multiselect-full">${Parser.sourceJsonToFull(s)}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
+		`).appendTo($filterContainer);
+
+		// Source dropdown toggle behavior
+		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
+		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
+		
+		$sourceBtn.on("click", (e) => {
+			e.stopPropagation();
+			$sourceDropdownMenu.toggleClass("open");
+		});
+
+		// Close dropdown when clicking outside
+		$(document).on("click.spellSourceFilter", () => $sourceDropdownMenu.removeClass("open"));
+		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
+
+		// Update source text based on selection
+		const updateSourceText = () => {
+			const checked = $sourceDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$sourceText.text("No Sources");
+				selectedSources = new Set(["__NONE__"]); // Special marker
+			} else if (checked.length === uniqueSources.length) {
+				$sourceText.text("All Sources");
+				selectedSources = new Set(); // Empty = all
+			} else if (checked.length <= 2) {
+				$sourceText.text(checked.map((_, el) => Parser.sourceJsonToAbv($(el).val())).get().join(", "));
+				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$sourceText.text(`${checked.length} Sources`);
+				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		// Checkbox change handler
+		$sourceDropdown.find("input[type=checkbox]").on("change", updateSourceText);
+
+		// Action buttons
+		$sourceDropdown.find("[data-action=all]").on("click", () => {
+			$sourceDropdown.find("input").prop("checked", true);
+			updateSourceText();
+		});
+		$sourceDropdown.find("[data-action=none]").on("click", () => {
+			$sourceDropdown.find("input").prop("checked", false);
+			updateSourceText();
+		});
+		$sourceDropdown.find("[data-action=official]").on("click", () => {
+			const official = ["PHB", "XGE", "TCE", "FTD", "XPHB", "XDMG"];
+			$sourceDropdown.find("input").each((_, el) => {
+				$(el).prop("checked", official.includes($(el).val()));
+			});
+			updateSourceText();
+		});
+
 		// Quick filter buttons row
-		const $quickFilters = $(`<div class="ve-flex gap-2 mt-2 w-100"></div>`).appendTo($modalInner);
+		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
 		
 		let filterRitual = false;
 		let filterConcentration = false;
@@ -228,14 +328,14 @@ class CharacterSheetSpells {
 		let filterSomatic = false;
 		let filterMaterial = false;
 
-		const $ritualBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🔮 Ritual</button>`).appendTo($quickFilters);
-		const $concBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">⏳ Concentration</button>`).appendTo($quickFilters);
-		const $verbalBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🗣️ V</button>`).appendTo($quickFilters);
-		const $somaticBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">✋ S</button>`).appendTo($quickFilters);
-		const $materialBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">💎 M</button>`).appendTo($quickFilters);
+		const $ritualBtn = $(`<button class="charsheet__modal-filter-btn">🔮 Ritual</button>`).appendTo($quickFilters);
+		const $concBtn = $(`<button class="charsheet__modal-filter-btn">⏳ Concentration</button>`).appendTo($quickFilters);
+		const $verbalBtn = $(`<button class="charsheet__modal-filter-btn">🗣️ Verbal</button>`).appendTo($quickFilters);
+		const $somaticBtn = $(`<button class="charsheet__modal-filter-btn">✋ Somatic</button>`).appendTo($quickFilters);
+		const $materialBtn = $(`<button class="charsheet__modal-filter-btn">💎 Material</button>`).appendTo($quickFilters);
 
 		// Results count
-		const $resultsCount = $(`<div class="ve-small ve-muted mt-2 mb-2"></div>`).appendTo($modalInner);
+		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);
 
 		// Spell list
 		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
@@ -251,6 +351,9 @@ class CharacterSheetSpells {
 				if (searchTerm && !spell.name.toLowerCase().includes(searchTerm)) return false;
 				if (levelFilter !== "all" && spell.level !== parseInt(levelFilter)) return false;
 				if (schoolFilter !== "all" && spell.school !== schoolFilter) return false;
+				// Multi-select source filter
+				if (selectedSources.has("__NONE__")) return false; // No sources selected
+				if (selectedSources.size > 0 && !selectedSources.has(spell.source)) return false;
 				if (filterRitual && !spell.ritual) return false;
 				if (filterConcentration && !spell.concentration) return false;
 				if (filterVerbal && (!spell.components?.v)) return false;
@@ -259,13 +362,14 @@ class CharacterSheetSpells {
 				return true;
 			});
 
-			$resultsCount.text(`${filtered.length} spell${filtered.length !== 1 ? "s" : ""} found`);
+			const knownCount = filtered.filter(s => knownSpellIds.includes(`${s.name}|${s.source}`)).length;
+			$resultsCount.html(`<span>${filtered.length} spell${filtered.length !== 1 ? "s" : ""} found</span>${knownCount > 0 ? `<span class="ml-2" style="color: var(--cs-success);">(${knownCount} already known)</span>` : ""}`);
 
 			if (!filtered.length) {
 				$list.html(`
 					<div class="charsheet__modal-empty">
-						<div class="charsheet__modal-empty-icon">🔍</div>
-						<div class="charsheet__modal-empty-text">No spells match your filters</div>
+						<div class="charsheet__modal-empty-icon">📖</div>
+						<div class="charsheet__modal-empty-text">No spells match your filters.<br>Try adjusting your search or filters.</div>
 					</div>
 				`);
 				return;
@@ -285,7 +389,8 @@ class CharacterSheetSpells {
 				return parseInt(a[0].split(" ")[1]) - parseInt(b[0].split(" ")[1]);
 			}).forEach(([level, levelSpells]) => {
 				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
-				$(`<div class="charsheet__modal-section-title">${level} (${levelSpells.length})</div>`).appendTo($section);
+				const levelEmoji = level === "Cantrips" ? "⭐" : ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"][parseInt(level.split(" ")[1]) - 1] || "📜";
+				$(`<div class="charsheet__modal-section-title">${levelEmoji} ${level} <span style="opacity: 0.6;">(${levelSpells.length})</span></div>`).appendTo($section);
 
 				levelSpells.forEach(spell => {
 					const spellId = `${spell.name}|${spell.source}`;
@@ -299,20 +404,21 @@ class CharacterSheetSpells {
 					if (spell.components?.m) components.push("M");
 					const componentStr = components.join(", ");
 
-					// Build tags
-					const tags = [];
-					if (spell.ritual) tags.push("🔮");
-					if (spell.concentration) tags.push("⏳");
+					// Build tags string
+					const tagParts = [];
+					if (spell.ritual) tagParts.push("🔮");
+					if (spell.concentration) tagParts.push("⏳");
+					const tagsStr = tagParts.length ? ` ${tagParts.join(" ")}` : "";
 
 					const $item = $(`
 						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""}">
 							<div class="charsheet__modal-list-item-icon">${this._getSchoolEmoji(spell.school)}</div>
 							<div class="charsheet__modal-list-item-content">
-								<div class="charsheet__modal-list-item-title">${spell.name} ${tags.join(" ")}</div>
-								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr} • ${Parser.sourceJsonToAbv(spell.source)}</div>
+								<div class="charsheet__modal-list-item-title">${spell.name}${tagsStr}</div>
+								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}</div>
 							</div>
 							${isKnown
-								? `<span class="charsheet__modal-list-item-badge">Known</span>`
+								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
 								: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-picker-add">+ Add</button>`
 							}
 						</div>
@@ -324,8 +430,8 @@ class CharacterSheetSpells {
 							this._addSpell(spell);
 							knownSpellIds.push(spellId);
 							$item.addClass("ve-muted");
-							$item.find(".spell-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge">Known</span>`);
-							JqueryUtil.doToast({type: "success", content: `Added ${spell.name}`});
+							$item.find(".spell-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`);
+							JqueryUtil.doToast({type: "success", content: `Added ${spell.name} to your spellbook!`});
 						});
 
 						// Click row to show info
@@ -357,11 +463,16 @@ class CharacterSheetSpells {
 		$search.on("input", renderList);
 		$levelSelect.on("change", renderList);
 		$schoolSelect.on("change", renderList);
+		// Source filter is handled by checkbox change events above
 
+		// Initial render
 		renderList();
 
+		// Focus search on open
+		setTimeout(() => $search.focus(), 100);
+
 		// Close button
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		$$`<div class="charsheet__modal-footer">
 			<button class="ve-btn ve-btn-default">Close</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
 	}
