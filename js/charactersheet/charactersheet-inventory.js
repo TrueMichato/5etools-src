@@ -104,61 +104,164 @@ class CharacterSheetInventory {
 		const items = this._page.filterByAllowedSources(this._allItems);
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Add Item",
+			title: "🎒 Add Item",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
+
+		// Intro text
+		$modalInner.append(`
+			<p class="ve-small ve-muted mb-3">
+				Browse and add items to your inventory. Click an item to view details, or click <strong>+ Add</strong> to add it directly.
+			</p>
+		`);
 
 		// Build enhanced filter UI
 		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
 		
 		// Search input with icon
 		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
-		const $search = $(`<input type="text" class="form-control" placeholder="Search items by name...">`).appendTo($searchWrapper);
+		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search items by name...">`).appendTo($searchWrapper);
 		
 		// Type filter
 		const $typeSelect = $(`
-			<select class="form-control" style="width: auto; min-width: 130px;">
-				<option value="all">All Types</option>
-				<option value="weapon">Weapons</option>
-				<option value="armor">Armor</option>
-				<option value="potion">Potions</option>
-				<option value="scroll">Scrolls</option>
-				<option value="wand">Wands</option>
-				<option value="staff">Staves</option>
-				<option value="ring">Rings</option>
-				<option value="wondrous">Wondrous</option>
-				<option value="gear">Gear</option>
-				<option value="tool">Tools</option>
+			<select class="form-control" style="width: auto; min-width: 140px;">
+				<option value="all">📦 All Types</option>
+				<option value="weapon">⚔️ Weapons</option>
+				<option value="armor">🛡️ Armor</option>
+				<option value="potion">🧪 Potions</option>
+				<option value="scroll">📜 Scrolls</option>
+				<option value="wand">🪄 Wands</option>
+				<option value="staff">🏑 Staves</option>
+				<option value="ring">💍 Rings</option>
+				<option value="wondrous">✨ Wondrous</option>
+				<option value="gear">🎒 Gear</option>
+				<option value="tool">🔧 Tools</option>
 			</select>
 		`).appendTo($filterContainer);
 
 		// Rarity filter
 		const $raritySelect = $(`
-			<select class="form-control" style="width: auto; min-width: 130px;">
-				<option value="all">All Rarities</option>
-				<option value="common">Common</option>
-				<option value="uncommon">Uncommon</option>
-				<option value="rare">Rare</option>
-				<option value="very rare">Very Rare</option>
-				<option value="legendary">Legendary</option>
-				<option value="artifact">Artifact</option>
+			<select class="form-control" style="width: auto; min-width: 140px;">
+				<option value="all">🌟 All Rarities</option>
+				<option value="common">⚪ Common</option>
+				<option value="uncommon">🟢 Uncommon</option>
+				<option value="rare">🔵 Rare</option>
+				<option value="very rare">🟣 Very Rare</option>
+				<option value="legendary">🟠 Legendary</option>
+				<option value="artifact">🔴 Artifact</option>
 			</select>
 		`).appendTo($filterContainer);
 
+		// Source filter - collect unique sources from items with multi-select
+		const uniqueSources = [...new Set(items.map(i => i.source))].sort((a, b) => {
+			// Sort PHB/DMG/etc first, then alphabetically
+			const priority = ["PHB", "DMG", "MM", "XGE", "TCE", "FTD", "XPHB", "XDMG"];
+			const aIdx = priority.indexOf(a);
+			const bIdx = priority.indexOf(b);
+			if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+			if (aIdx !== -1) return -1;
+			if (bIdx !== -1) return 1;
+			return a.localeCompare(b);
+		});
+		
+		// Multi-select source filter
+		let selectedSources = new Set(); // Empty = all sources
+		const $sourceDropdown = $(`
+			<div class="charsheet__source-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">📚</span>
+					<span class="charsheet__source-multiselect-text">All Sources</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+						<button class="charsheet__source-action-btn" data-action="official">Official Only</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${uniqueSources.map(s => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${s}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${Parser.sourceJsonToAbv(s)}</span>
+								<span class="charsheet__source-multiselect-full">${Parser.sourceJsonToFull(s)}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
+		`).appendTo($filterContainer);
+
+		// Source dropdown toggle behavior
+		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
+		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
+		
+		$sourceBtn.on("click", (e) => {
+			e.stopPropagation();
+			$sourceDropdownMenu.toggleClass("open");
+		});
+
+		// Close dropdown when clicking outside
+		$(document).on("click.sourceFilter", () => $sourceDropdownMenu.removeClass("open"));
+		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
+
+		// Update source text based on selection
+		const updateSourceText = () => {
+			const checked = $sourceDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$sourceText.text("No Sources");
+				selectedSources = new Set(["__NONE__"]); // Special marker
+			} else if (checked.length === uniqueSources.length) {
+				$sourceText.text("All Sources");
+				selectedSources = new Set(); // Empty = all
+			} else if (checked.length <= 2) {
+				$sourceText.text(checked.map((_, el) => Parser.sourceJsonToAbv($(el).val())).get().join(", "));
+				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$sourceText.text(`${checked.length} Sources`);
+				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		// Checkbox change handler
+		$sourceDropdown.find("input[type=checkbox]").on("change", updateSourceText);
+
+		// Action buttons
+		$sourceDropdown.find("[data-action=all]").on("click", () => {
+			$sourceDropdown.find("input").prop("checked", true);
+			updateSourceText();
+		});
+		$sourceDropdown.find("[data-action=none]").on("click", () => {
+			$sourceDropdown.find("input").prop("checked", false);
+			updateSourceText();
+		});
+		$sourceDropdown.find("[data-action=official]").on("click", () => {
+			const official = ["PHB", "DMG", "MM", "XGE", "TCE", "FTD", "XPHB", "XDMG", "VGM", "MTF", "SCAG", "AI", "EGW", "MOT", "IDRotF"];
+			$sourceDropdown.find("input").each((_, el) => {
+				$(el).prop("checked", official.includes($(el).val()));
+			});
+			updateSourceText();
+		});
+
 		// Quick filter buttons row
-		const $quickFilters = $(`<div class="ve-flex gap-2 mt-2 w-100"></div>`).appendTo($modalInner);
+		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
 		
 		let filterAttunement = false;
 		let filterMagic = false;
+		let filterMundane = false;
 		let filterConsumable = false;
 
-		const $attuneBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🔗 Requires Attunement</button>`).appendTo($quickFilters);
-		const $magicBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">✨ Magic Items</button>`).appendTo($quickFilters);
-		const $consumeBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🧪 Consumables</button>`).appendTo($quickFilters);
+		const $attuneBtn = $(`<button class="charsheet__modal-filter-btn">🔗 Requires Attunement</button>`).appendTo($quickFilters);
+		const $magicBtn = $(`<button class="charsheet__modal-filter-btn">✨ Magical</button>`).appendTo($quickFilters);
+		const $mundaneBtn = $(`<button class="charsheet__modal-filter-btn">📦 Mundane</button>`).appendTo($quickFilters);
+		const $consumeBtn = $(`<button class="charsheet__modal-filter-btn">🧪 Consumables</button>`).appendTo($quickFilters);
 
 		// Results count
-		const $resultsCount = $(`<div class="ve-small ve-muted mt-2 mb-2"></div>`).appendTo($modalInner);
+		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);
 
 		// Item list
 		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
@@ -170,7 +273,7 @@ class CharacterSheetInventory {
 			const typeFilter = $typeSelect.val();
 			const rarityFilter = $raritySelect.val();
 
-			const filtered = items.filter(item => {
+			const filterItem = (item) => {
 				if (searchTerm && !item.name.toLowerCase().includes(searchTerm)) return false;
 				if (typeFilter !== "all") {
 					const itemType = this._getItemType(item);
@@ -180,19 +283,26 @@ class CharacterSheetInventory {
 					const itemRarity = (item.rarity || "").toLowerCase();
 					if (itemRarity !== rarityFilter) return false;
 				}
+				// Multi-select source filter
+				if (selectedSources.has("__NONE__")) return false; // No sources selected
+				if (selectedSources.size > 0 && !selectedSources.has(item.source)) return false;
 				if (filterAttunement && !item.reqAttune) return false;
 				if (filterMagic && !this._isMagicItem(item)) return false;
+				if (filterMundane && this._isMagicItem(item)) return false;
 				if (filterConsumable && !this._isConsumable(item)) return false;
 				return true;
-			}).slice(0, 150); // Limit for performance
+			};
 
-			$resultsCount.text(`${filtered.length}${filtered.length >= 150 ? "+" : ""} item${filtered.length !== 1 ? "s" : ""} found`);
+			const filtered = items.filter(filterItem).slice(0, 150); // Limit for performance
+			const totalMatches = items.filter(filterItem).length;
+
+			$resultsCount.html(`<span>${filtered.length}${totalMatches > 150 ? ` of ${totalMatches}` : ""} item${filtered.length !== 1 ? "s" : ""} found</span>${totalMatches > 150 ? `<span class="ml-2" style="opacity: 0.7;">(showing first 150)</span>` : ""}`);
 
 			if (!filtered.length) {
 				$list.html(`
 					<div class="charsheet__modal-empty">
-						<div class="charsheet__modal-empty-icon">🔍</div>
-						<div class="charsheet__modal-empty-text">No items match your filters</div>
+						<div class="charsheet__modal-empty-icon">🎒</div>
+						<div class="charsheet__modal-empty-text">No items match your filters.<br>Try adjusting your search or filters.</div>
 					</div>
 				`);
 				return;
@@ -207,13 +317,26 @@ class CharacterSheetInventory {
 			});
 
 			const typeOrder = ["Weapon", "Armor", "Shield", "Potion", "Scroll", "Wand", "Staff", "Ring", "Wondrous", "Tool", "Other"];
+			const typeEmojis = {
+				"Weapon": "⚔️",
+				"Armor": "🛡️",
+				"Shield": "🛡️",
+				"Potion": "🧪",
+				"Scroll": "📜",
+				"Wand": "🪄",
+				"Staff": "🏑",
+				"Ring": "💍",
+				"Wondrous": "✨",
+				"Tool": "🔧",
+				"Other": "📦",
+			};
 			Object.entries(grouped).sort((a, b) => {
 				const aIdx = typeOrder.indexOf(a[0]);
 				const bIdx = typeOrder.indexOf(b[0]);
 				return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
 			}).forEach(([type, typeItems]) => {
 				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
-				$(`<div class="charsheet__modal-section-title">${type} (${typeItems.length})</div>`).appendTo($section);
+				$(`<div class="charsheet__modal-section-title">${typeEmojis[type] || "📦"} ${type} <span style="opacity: 0.6;">(${typeItems.length})</span></div>`).appendTo($section);
 
 				typeItems.forEach(item => {
 					const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) 
@@ -221,18 +344,30 @@ class CharacterSheetInventory {
 						: "";
 					const isMagic = this._isMagicItem(item);
 					
-					// Build tags
-					const tags = [];
-					if (item.reqAttune) tags.push("🔗");
-					if (isMagic) tags.push("✨");
+					// Build tags string
+					const tagParts = [];
+					if (item.reqAttune) tagParts.push("🔗");
+					if (isMagic) tagParts.push("✨");
+					const tagsStr = tagParts.length ? ` ${tagParts.join(" ")}` : "";
+
+					// Get rarity color
+					const rarityColors = {
+						"common": "#9ca3af",
+						"uncommon": "#22c55e",
+						"rare": "#3b82f6",
+						"very rare": "#a855f7",
+						"legendary": "#f97316",
+						"artifact": "#ef4444",
+					};
+					const rarityColor = rarityColors[(item.rarity || "").toLowerCase()] || "";
 
 					const $item = $(`
 						<div class="charsheet__modal-list-item">
 							<div class="charsheet__modal-list-item-icon">${this._getItemTypeEmoji(item)}</div>
 							<div class="charsheet__modal-list-item-content">
-								<div class="charsheet__modal-list-item-title">${item.name} ${tags.join(" ")}</div>
+								<div class="charsheet__modal-list-item-title">${item.name}${tagsStr}</div>
 								<div class="charsheet__modal-list-item-subtitle">
-									${rarity ? `${rarity} • ` : ""}${item.value ? `${this._formatValue(item.value)} • ` : ""}${Parser.sourceJsonToAbv(item.source)}
+									${rarity ? `<span style="color: ${rarityColor}; font-weight: 500;">${rarity}</span> • ` : ""}${item.value ? `${this._formatValue(item.value)} • ` : ""}${Parser.sourceJsonToAbv(item.source)}
 								</div>
 							</div>
 							<button class="ve-btn ve-btn-primary ve-btn-xs item-picker-add">+ Add</button>
@@ -242,7 +377,7 @@ class CharacterSheetInventory {
 					$item.find(".item-picker-add").on("click", (e) => {
 						e.stopPropagation();
 						this._addItem(item);
-						JqueryUtil.doToast({type: "success", content: `Added ${item.name}`});
+						JqueryUtil.doToast({type: "success", content: `Added ${item.name} to your inventory!`});
 					});
 
 					// Click row to show info
@@ -256,7 +391,22 @@ class CharacterSheetInventory {
 		// Toggle quick filter buttons
 		const toggleBtn = ($btn, prop) => {
 			if (prop === "attunement") filterAttunement = !filterAttunement;
-			if (prop === "magic") filterMagic = !filterMagic;
+			if (prop === "magic") {
+				filterMagic = !filterMagic;
+				// If turning on magic filter, turn off mundane filter (mutually exclusive)
+				if (filterMagic && filterMundane) {
+					filterMundane = false;
+					$mundaneBtn.removeClass("active");
+				}
+			}
+			if (prop === "mundane") {
+				filterMundane = !filterMundane;
+				// If turning on mundane filter, turn off magic filter (mutually exclusive)
+				if (filterMundane && filterMagic) {
+					filterMagic = false;
+					$magicBtn.removeClass("active");
+				}
+			}
 			if (prop === "consumable") filterConsumable = !filterConsumable;
 			$btn.toggleClass("active");
 			renderList();
@@ -264,28 +414,32 @@ class CharacterSheetInventory {
 
 		$attuneBtn.on("click", () => toggleBtn($attuneBtn, "attunement"));
 		$magicBtn.on("click", () => toggleBtn($magicBtn, "magic"));
+		$mundaneBtn.on("click", () => toggleBtn($mundaneBtn, "mundane"));
 		$consumeBtn.on("click", () => toggleBtn($consumeBtn, "consumable"));
 
 		$search.on("input", renderList);
 		$typeSelect.on("change", renderList);
 		$raritySelect.on("change", renderList);
+		// Source filter is handled by checkbox change events above
 
+		// Initial render
 		renderList();
 
+		// Focus search on open
+		setTimeout(() => $search.focus(), 100);
+
 		// Custom item section
-		const $customSection = $(`<div class="charsheet__modal-section mt-3 pt-3" style="border-top: 1px solid var(--cs-border, rgba(99, 102, 241, 0.2));"></div>`).appendTo($modalInner);
-		$(`<div class="charsheet__modal-section-title">Custom Item</div>`).appendTo($customSection);
+		const $customSection = $(`<div class="charsheet__modal-custom-section"></div>`).appendTo($modalInner);
+		$(`<div class="charsheet__modal-section-title" style="margin-bottom: 0.75rem;">✏️ Create Custom Item</div>`).appendTo($customSection);
+		$(`<p class="ve-small ve-muted mb-2">Can't find what you're looking for? Add a custom item:</p>`).appendTo($customSection);
 		
-		const $customName = $(`<input type="text" class="form-control" placeholder="Item name" style="flex: 1;">`);
-		const $customQty = $(`<input type="number" class="form-control" placeholder="Qty" style="width: 60px;" value="1" min="1">`);
-		const $customWeight = $(`<input type="number" class="form-control" placeholder="Weight" style="width: 80px;" step="0.1" min="0">`);
+		const $customInputs = $(`<div class="charsheet__modal-custom-inputs"></div>`).appendTo($customSection);
+		const $customName = $(`<input type="text" class="form-control" placeholder="Item name..." style="flex: 1;">`).appendTo($customInputs);
+		const $customQty = $(`<input type="number" class="form-control" placeholder="Qty" style="width: 70px;" value="1" min="1">`).appendTo($customInputs);
+		const $customWeight = $(`<input type="number" class="form-control" placeholder="Weight" style="width: 90px;" step="0.1" min="0">`).appendTo($customInputs);
+		const $customAddBtn = $(`<button class="ve-btn ve-btn-primary">+ Add Custom</button>`).appendTo($customInputs);
 		
-		$$`<div class="ve-flex gap-2 mt-2">
-			${$customName}
-			${$customQty}
-			${$customWeight}
-			<button class="ve-btn ve-btn-primary">Add</button>
-		</div>`.appendTo($customSection).find("button").on("click", () => {
+		$customAddBtn.on("click", () => {
 			const name = $customName.val().trim();
 			if (name) {
 				const qty = parseInt($customQty.val()) || 1;
@@ -294,12 +448,17 @@ class CharacterSheetInventory {
 				$customName.val("");
 				$customQty.val("1");
 				$customWeight.val("");
-				JqueryUtil.doToast({type: "success", content: `Added ${name}`});
+				JqueryUtil.doToast({type: "success", content: `Added custom item: ${name}`});
 			}
 		});
 
+		// Enter to add custom item
+		$customName.on("keydown", (e) => {
+			if (e.key === "Enter") $customAddBtn.click();
+		});
+
 		// Close button
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		$$`<div class="charsheet__modal-footer">
 			<button class="ve-btn ve-btn-default">Close</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
 	}
@@ -509,7 +668,7 @@ class CharacterSheetInventory {
 		this._page.saveCharacter();
 	}
 
-	_addCustomItem (name, quantity = 1, weight = 0) {
+	_addCustomItem (name, quantity = 1, weight = 0, options = {}) {
 		const newItem = {
 			name,
 			source: "Custom",
@@ -517,9 +676,29 @@ class CharacterSheetInventory {
 			equipped: false,
 			attuned: false,
 			weight,
-			value: 0,
-			type: "gear",
-			requiresAttunement: false,
+			value: options.value || 0,
+			type: options.type || "gear",
+			requiresAttunement: options.requiresAttunement || false,
+			// Weapon stats
+			weaponCategory: options.weaponCategory,
+			dmg1: options.dmg1,
+			dmgType: options.dmgType,
+			property: options.property,
+			range: options.range,
+			// Armor stats
+			armor: options.armor,
+			ac: options.ac,
+			strength: options.strength,
+			stealth: options.stealth,
+			// Magic properties
+			rarity: options.rarity,
+			bonusAc: options.bonusAc,
+			bonusWeapon: options.bonusWeapon,
+			// Charges
+			charges: options.charges,
+			chargesCurrent: options.charges,
+			// Misc
+			entries: options.entries ? [options.entries] : undefined,
 		};
 
 		this._state.addItem(newItem);
@@ -528,11 +707,361 @@ class CharacterSheetInventory {
 	}
 
 	async _showAddCustomItem () {
-		const name = await InputUiUtil.pGetUserString({title: "Add Custom Item", default: ""});
-		if (!name || !name.trim()) return;
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "✨ Create Custom Item",
+			isMinHeight0: true,
+			isWidth100: true,
+		});
 
-		this._addCustomItem(name.trim());
-		JqueryUtil.doToast({type: "success", content: `Added ${name.trim()}`});
+		// Item types
+		const itemTypes = [
+			{value: "gear", label: "Gear/Equipment", icon: "🎒"},
+			{value: "weapon", label: "Weapon", icon: "⚔️"},
+			{value: "armor", label: "Armor", icon: "🛡️"},
+			{value: "shield", label: "Shield", icon: "🔰"},
+			{value: "wondrous", label: "Wondrous Item", icon: "✨"},
+			{value: "potion", label: "Potion", icon: "🧪"},
+			{value: "scroll", label: "Scroll", icon: "📜"},
+			{value: "ring", label: "Ring", icon: "💍"},
+			{value: "wand", label: "Wand/Rod/Staff", icon: "🪄"},
+		];
+
+		// Damage types
+		const damageTypes = ["bludgeoning", "piercing", "slashing", "acid", "cold", "fire", "force", "lightning", "necrotic", "poison", "psychic", "radiant", "thunder"];
+
+		// Weapon properties
+		const weaponProperties = [
+			{value: "A", label: "Ammunition"},
+			{value: "F", label: "Finesse"},
+			{value: "H", label: "Heavy"},
+			{value: "L", label: "Light"},
+			{value: "LD", label: "Loading"},
+			{value: "R", label: "Range"},
+			{value: "RN", label: "Reach"},
+			{value: "S", label: "Special"},
+			{value: "T", label: "Thrown"},
+			{value: "2H", label: "Two-Handed"},
+			{value: "V", label: "Versatile"},
+		];
+
+		// Rarities
+		const rarities = ["common", "uncommon", "rare", "very rare", "legendary", "artifact"];
+
+		// State
+		let selectedType = "gear";
+
+		// Build form
+		const $form = $(`<div class="charsheet__custom-item-form"></div>`);
+
+		// Basic Info Section
+		$form.append(`
+			<div class="charsheet__modal-info-banner charsheet__modal-info-banner--info">
+				<div class="charsheet__modal-info-banner-icon">✨</div>
+				<div class="charsheet__modal-info-banner-content">
+					<strong>Create Custom Item</strong>
+					<div class="ve-small">Fill in the details for your custom item. Required fields are marked with *</div>
+				</div>
+			</div>
+		`);
+
+		// Item Type Selection
+		const $typeGrid = $(`<div class="charsheet__custom-item-types"></div>`);
+		itemTypes.forEach(type => {
+			const $btn = $(`
+				<button type="button" class="charsheet__custom-item-type-btn ${type.value === selectedType ? "selected" : ""}" data-type="${type.value}">
+					<span class="charsheet__custom-item-type-icon">${type.icon}</span>
+					<span class="charsheet__custom-item-type-label">${type.label}</span>
+				</button>
+			`);
+			$btn.on("click", () => {
+				$typeGrid.find(".charsheet__custom-item-type-btn").removeClass("selected");
+				$btn.addClass("selected");
+				selectedType = type.value;
+				updateFieldVisibility();
+			});
+			$typeGrid.append($btn);
+		});
+
+		$form.append(`<div class="charsheet__custom-item-section">
+			<div class="charsheet__custom-item-section-title">📦 Item Type</div>
+			${$typeGrid.prop("outerHTML")}
+		</div>`);
+
+		// Rebind events after appending
+		$form.find(".charsheet__custom-item-type-btn").on("click", function() {
+			$form.find(".charsheet__custom-item-type-btn").removeClass("selected");
+			$(this).addClass("selected");
+			selectedType = $(this).data("type");
+			updateFieldVisibility();
+		});
+
+		// Basic Fields Section
+		const $basicFields = $(`
+			<div class="charsheet__custom-item-section">
+				<div class="charsheet__custom-item-section-title">📝 Basic Information</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<label>Name *</label>
+						<input type="text" id="custom-item-name" class="form-control" placeholder="e.g., Flaming Longsword">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Quantity</label>
+						<input type="number" id="custom-item-qty" class="form-control" value="1" min="1">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Weight (lbs)</label>
+						<input type="number" id="custom-item-weight" class="form-control" value="0" min="0" step="0.1">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Value (gp)</label>
+						<input type="number" id="custom-item-value" class="form-control" value="0" min="0">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Rarity</label>
+						<select id="custom-item-rarity" class="form-control">
+							<option value="">None</option>
+							${rarities.map(r => `<option value="${r}">${r.charAt(0).toUpperCase() + r.slice(1)}</option>`).join("")}
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--checkbox">
+						<label>
+							<input type="checkbox" id="custom-item-attunement">
+							Requires Attunement
+						</label>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($basicFields);
+
+		// Weapon Fields Section
+		const $weaponFields = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--weapon" style="display: none;">
+				<div class="charsheet__custom-item-section-title">⚔️ Weapon Statistics</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field">
+						<label>Weapon Type</label>
+						<select id="custom-item-weapon-cat" class="form-control">
+							<option value="simple melee">Simple Melee</option>
+							<option value="simple ranged">Simple Ranged</option>
+							<option value="martial melee">Martial Melee</option>
+							<option value="martial ranged">Martial Ranged</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Damage</label>
+						<input type="text" id="custom-item-damage" class="form-control" placeholder="e.g., 1d8">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Damage Type</label>
+						<select id="custom-item-dmg-type" class="form-control">
+							${damageTypes.map(d => `<option value="${d}">${d.charAt(0).toUpperCase() + d.slice(1)}</option>`).join("")}
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Range (if ranged)</label>
+						<input type="text" id="custom-item-range" class="form-control" placeholder="e.g., 80/320">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Magic Bonus</label>
+						<select id="custom-item-weapon-bonus" class="form-control">
+							<option value="0">None</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<label>Properties</label>
+						<div class="charsheet__custom-item-props">
+							${weaponProperties.map(p => `
+								<label class="charsheet__custom-item-prop-check">
+									<input type="checkbox" value="${p.value}" class="weapon-prop-check">
+									${p.label}
+								</label>
+							`).join("")}
+						</div>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($weaponFields);
+
+		// Armor Fields Section
+		const $armorFields = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--armor" style="display: none;">
+				<div class="charsheet__custom-item-section-title">🛡️ Armor Statistics</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field">
+						<label>Armor Type</label>
+						<select id="custom-item-armor-type" class="form-control">
+							<option value="light">Light Armor</option>
+							<option value="medium">Medium Armor</option>
+							<option value="heavy">Heavy Armor</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Base AC</label>
+						<input type="number" id="custom-item-ac" class="form-control" value="10" min="0">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Magic Bonus</label>
+						<select id="custom-item-armor-bonus" class="form-control">
+							<option value="0">None</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>STR Requirement</label>
+						<input type="number" id="custom-item-str-req" class="form-control" value="0" min="0">
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--checkbox">
+						<label>
+							<input type="checkbox" id="custom-item-stealth-dis">
+							Stealth Disadvantage
+						</label>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($armorFields);
+
+		// Shield Fields Section
+		const $shieldFields = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--shield" style="display: none;">
+				<div class="charsheet__custom-item-section-title">🔰 Shield Statistics</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field">
+						<label>AC Bonus</label>
+						<input type="number" id="custom-item-shield-ac" class="form-control" value="2" min="0">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Magic Bonus</label>
+						<select id="custom-item-shield-bonus" class="form-control">
+							<option value="0">None</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+						</select>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($shieldFields);
+
+		// Magic Item Fields Section (charges, etc.)
+		const $magicFields = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--magic" style="display: none;">
+				<div class="charsheet__custom-item-section-title">✨ Magic Properties</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field">
+						<label>Charges (0 = no charges)</label>
+						<input type="number" id="custom-item-charges" class="form-control" value="0" min="0">
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($magicFields);
+
+		// Description Section
+		const $descSection = $(`
+			<div class="charsheet__custom-item-section">
+				<div class="charsheet__custom-item-section-title">📖 Description (Optional)</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<textarea id="custom-item-desc" class="form-control" rows="3" placeholder="Describe any special properties, abilities, or lore..."></textarea>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($descSection);
+
+		$modalInner.append($form);
+
+		// Field visibility logic
+		const updateFieldVisibility = () => {
+			$form.find(".charsheet__custom-item-section--weapon").toggle(selectedType === "weapon");
+			$form.find(".charsheet__custom-item-section--armor").toggle(selectedType === "armor");
+			$form.find(".charsheet__custom-item-section--shield").toggle(selectedType === "shield");
+			$form.find(".charsheet__custom-item-section--magic").toggle(["wondrous", "wand", "ring", "potion", "scroll"].includes(selectedType));
+		};
+		updateFieldVisibility();
+
+		// Footer buttons
+		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
+			.on("click", () => doClose(false));
+		const $btnCreate = $(`<button class="ve-btn ve-btn-primary">✨ Create Item</button>`)
+			.on("click", () => {
+				const name = $form.find("#custom-item-name").val()?.trim();
+				if (!name) {
+					JqueryUtil.doToast({type: "warning", content: "Please enter an item name!"});
+					return;
+				}
+
+				const options = {
+					type: selectedType,
+					value: parseInt($form.find("#custom-item-value").val()) || 0,
+					rarity: $form.find("#custom-item-rarity").val() || undefined,
+					requiresAttunement: $form.find("#custom-item-attunement").is(":checked"),
+					entries: $form.find("#custom-item-desc").val()?.trim() || undefined,
+				};
+
+				// Weapon stats
+				if (selectedType === "weapon") {
+					options.weaponCategory = $form.find("#custom-item-weapon-cat").val();
+					options.dmg1 = $form.find("#custom-item-damage").val() || "1d6";
+					options.dmgType = $form.find("#custom-item-dmg-type").val();
+					const range = $form.find("#custom-item-range").val()?.trim();
+					if (range) options.range = range;
+					const bonus = parseInt($form.find("#custom-item-weapon-bonus").val());
+					if (bonus > 0) options.bonusWeapon = `+${bonus}`;
+					// Gather properties
+					const props = [];
+					$form.find(".weapon-prop-check:checked").each(function() {
+						props.push($(this).val());
+					});
+					if (props.length) options.property = props;
+				}
+
+				// Armor stats
+				if (selectedType === "armor") {
+					options.armor = true;
+					options.ac = parseInt($form.find("#custom-item-ac").val()) || 10;
+					const bonus = parseInt($form.find("#custom-item-armor-bonus").val());
+					if (bonus > 0) options.bonusAc = `+${bonus}`;
+					const strReq = parseInt($form.find("#custom-item-str-req").val());
+					if (strReq > 0) options.strength = strReq;
+					if ($form.find("#custom-item-stealth-dis").is(":checked")) options.stealth = true;
+				}
+
+				// Shield stats
+				if (selectedType === "shield") {
+					options.armor = true;
+					options.ac = parseInt($form.find("#custom-item-shield-ac").val()) || 2;
+					const bonus = parseInt($form.find("#custom-item-shield-bonus").val());
+					if (bonus > 0) options.bonusAc = `+${bonus}`;
+				}
+
+				// Magic item charges
+				if (["wondrous", "wand", "ring", "potion", "scroll"].includes(selectedType)) {
+					const charges = parseInt($form.find("#custom-item-charges").val());
+					if (charges > 0) options.charges = charges;
+				}
+
+				const quantity = parseInt($form.find("#custom-item-qty").val()) || 1;
+				const weight = parseFloat($form.find("#custom-item-weight").val()) || 0;
+
+				this._addCustomItem(name, quantity, weight, options);
+				JqueryUtil.doToast({type: "success", content: `Created ${name}!`});
+				doClose(true);
+			});
+
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3 gap-2">
+			${$btnCancel}
+			${$btnCreate}
+		</div>`.appendTo($modalInner);
 	}
 
 	_changeQuantity (itemId, delta) {
@@ -735,9 +1264,11 @@ class CharacterSheetInventory {
 		const items = this._state.getItems();
 		const totalWeight = items.reduce((sum, item) => sum + (item.weight || 0) * item.quantity, 0);
 
-		// Calculate carrying capacity
+		// Calculate carrying capacity using state method (respects Thelemar homebrew rules)
+		const carryingCapacity = this._state.getCarryingCapacity();
+		
+		// For encumbrance thresholds, use standard STR-based calculation
 		const strScore = this._state.getAbilityTotal("str");
-		const carryingCapacity = strScore * 15;
 		const encumberedThreshold = strScore * 5;
 		const heavilyEncumberedThreshold = strScore * 10;
 

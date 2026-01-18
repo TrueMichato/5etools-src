@@ -258,7 +258,7 @@ class CharacterSheetLevelUp {
 
 	async _pShowLevelUpModal ({classData, classEntry, newLevel, newFeatures, hasAsi, needsSubclass}) {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: `Level Up: ${classEntry.name} → Level ${newLevel}`,
+			title: `🎉 Level Up: ${classEntry.name} → Level ${newLevel}`,
 			isMinHeight0: true,
 			isWidth100: true,
 		});
@@ -457,7 +457,7 @@ class CharacterSheetLevelUp {
 		const $section = $(`
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
-					<span class="glyphicon glyphicon-book"></span> Choose ${classData.subclassTitle || "Subclass"}
+					📚 Choose ${classData.subclassTitle || "Subclass"}
 				</h5>
 				<div class="charsheet__levelup-subclasses"></div>
 			</div>
@@ -497,7 +497,7 @@ class CharacterSheetLevelUp {
 		const $section = $(`
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
-					<span class="glyphicon glyphicon-plus"></span> Ability Score Improvement
+					📈 Ability Score Improvement
 				</h5>
 				<div class="charsheet__levelup-asi-choice mb-3">
 					<label class="ve-flex-v-center mr-3">
@@ -627,7 +627,7 @@ class CharacterSheetLevelUp {
 		const $section = $(`
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
-					<span class="glyphicon glyphicon-star"></span> New Features
+					⭐ New Features
 				</h5>
 				<div class="charsheet__levelup-features"></div>
 			</div>
@@ -665,7 +665,7 @@ class CharacterSheetLevelUp {
 		const $section = $$`
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
-					<span class="glyphicon glyphicon-heart"></span> Hit Points
+					❤️ Hit Points
 				</h5>
 				<div class="charsheet__levelup-hp">
 					<label class="ve-flex-v-center mb-2">
@@ -2432,7 +2432,7 @@ class CharacterSheetLevelUp {
 		}
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Add New Class (Multiclass)",
+			title: "📚 Add New Class (Multiclass)",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
@@ -2440,13 +2440,16 @@ class CharacterSheetLevelUp {
 		let selectedClass = null;
 		let updateConfirmButton = null; // Will be assigned after button is created
 
-		const $search = $(`<input type="text" class="form-control" placeholder="Search classes...">`);
+		const $search = $(`<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search classes...">`);
 		const $list = $(`<div class="charsheet__levelup-subclasses" style="max-height: 350px;"></div>`);
 		
 		// Selection display showing which class is chosen
-		const $selectionDisplay = $(`<div class="alert alert-success mt-2" style="display: none;">
-			<strong>Selected:</strong> <span class="charsheet__multiclass-selection-name"></span>
-		</div>`);
+		const $selectionDisplay = $(`
+			<div class="charsheet__multiclass-selection" style="display: none;">
+				<span class="charsheet__multiclass-selection-icon">✅</span>
+				<strong>Selected:</strong> <span class="charsheet__multiclass-selection-name"></span>
+			</div>
+		`);
 
 		const renderList = (filter = "") => {
 			$list.empty();
@@ -2464,9 +2467,9 @@ class CharacterSheetLevelUp {
 				// Get hit die info
 				const hitDie = cls.hd?.faces ? `d${cls.hd.faces}` : "—";
 				// Get primary ability if available
-				const primaryAbility = cls.spellcastingAbility 
-					? Parser.attAbvToFull(cls.spellcastingAbility) 
-					: (cls.classTableGroups?.[0]?.colLabels?.[0] || "");
+				const spellcaster = cls.spellcastingAbility 
+					? `✨ Spellcaster (${Parser.attAbvToFull(cls.spellcastingAbility)})` 
+					: "";
 				
 				const $item = $$`
 					<div class="charsheet__levelup-option" data-class-name="${cls.name}">
@@ -2474,9 +2477,11 @@ class CharacterSheetLevelUp {
 							<input type="radio" name="multiclass-choice" value="${cls.name}">
 							<strong>${cls.name}</strong>
 							<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(cls.source)})</span>
-							<span class="ml-auto ve-small ve-muted">Hit Die: ${hitDie}</span>
 						</div>
-						${cls.fluff?.[0]?.entries?.[0] ? `<div class="charsheet__levelup-option-description ve-small ve-muted">${typeof cls.fluff[0].entries[0] === "string" ? cls.fluff[0].entries[0].substring(0, 150) + "..." : ""}</div>` : ""}
+						<div class="charsheet__levelup-option-description ve-small">
+							<span class="charsheet__class-stat">❤️ Hit Die: ${hitDie}</span>
+							${spellcaster ? `<span class="charsheet__class-stat">${spellcaster}</span>` : ""}
+						</div>
 					</div>
 				`;
 
@@ -2502,17 +2507,19 @@ class CharacterSheetLevelUp {
 		$search.on("input", (e) => renderList(e.target.value));
 		renderList();
 
-		$$`<div>
-			<div class="alert alert-info mb-3">
-				<strong>📚 Add a New Class</strong><br>
-				<span class="ve-small">Select a class to multiclass into. You'll start at level 1 in the new class. 
-				Make sure your character meets the ability score prerequisites for multiclassing.</span>
+		$$`<div class="charsheet__multiclass-body">
+			<div class="charsheet__modal-info-banner charsheet__modal-info-banner--info">
+				<div class="charsheet__modal-info-banner-icon">📚</div>
+				<div class="charsheet__modal-info-banner-content">
+					<strong>Add a New Class</strong>
+					<div class="ve-small">Select a class to multiclass into. You'll start at level 1 in the new class. 
+					Make sure your character meets the ability score prerequisites for multiclassing.</div>
+				</div>
 			</div>
-			<div class="form-group mb-2">
-				<label class="ve-small ve-bold">Filter Classes</label>
+			<div class="charsheet__modal-search-wrapper">
 				${$search}
+				<span class="charsheet__modal-search-count">${availableClasses.length} classes</span>
 			</div>
-			<div class="ve-small ve-muted mb-1">Available classes: ${availableClasses.length}</div>
 			${$list}
 			${$selectionDisplay}
 		</div>`.appendTo($modalInner);

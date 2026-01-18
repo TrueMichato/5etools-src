@@ -2886,6 +2886,174 @@ class CharacterSheetState {
 	// Alias for compatibility with export module
 	getArmorClass () { return this.getAc(); }
 
+	/**
+	 * Get a detailed breakdown of AC components for display
+	 * @returns {object} Object with total AC and array of components
+	 */
+	getAcBreakdown () {
+		const components = [];
+		const dexMod = this.getAbilityMod("dex");
+
+		// Check for Unarmored Defense class features
+		const hasUnarmoredDefense = this._hasUnarmoredDefense();
+
+		// Check for AC formulas from features (natural armor, homebrew unarmored defense, etc.)
+		const acFormulas = this._data.acFormulas || [];
+		const bestAcFormula = this._getBestAcFormula(acFormulas, dexMod);
+
+		let baseAcSource = null;
+		let baseAcValue = 10;
+		let usedDex = false;
+		let usedFormula = null;
+
+		// Determine base AC source
+		if (this._data.ac.armor) {
+			const armorAc = this._data.ac.armor.ac || 10;
+			const armorName = this._data.ac.armor.name || "Armor";
+			const armorType = this._data.ac.armor.type;
+			const armorMagicBonus = this._data.ac.armor.bonus || 0;
+
+			// Check if natural armor formula is better
+			if (bestAcFormula && bestAcFormula.ac > armorAc && bestAcFormula.formula.noDex) {
+				baseAcSource = bestAcFormula.formula.name || "Natural Armor";
+				baseAcValue = bestAcFormula.ac;
+				usedFormula = bestAcFormula.formula;
+				components.push({type: "base", name: baseAcSource, value: baseAcValue, icon: "🐢"});
+			} else {
+				// Use armor
+				baseAcSource = armorName;
+				baseAcValue = armorAc;
+
+				const typeLabel = armorType === "light" ? "Light" : armorType === "medium" ? "Medium" : armorType === "heavy" ? "Heavy" : "";
+				components.push({type: "armor", name: armorName, value: armorAc - armorMagicBonus, icon: "🛡️", subtype: typeLabel});
+
+				if (armorMagicBonus > 0) {
+					components.push({type: "magic", name: `+${armorMagicBonus} Armor`, value: armorMagicBonus, icon: "✨"});
+				}
+
+				// Add DEX modifier based on armor type
+				if (armorType === "light") {
+					if (dexMod !== 0) {
+						components.push({type: "dex", name: "DEX modifier", value: dexMod, icon: "🎯"});
+						usedDex = true;
+					}
+				} else if (armorType === "medium") {
+					const cappedDex = Math.min(2, dexMod);
+					if (cappedDex !== 0) {
+						const isCapped = dexMod > 2;
+						components.push({type: "dex", name: `DEX modifier${isCapped ? " (max 2)" : ""}`, value: cappedDex, icon: "🎯"});
+						usedDex = true;
+					}
+				}
+				// Heavy armor: no DEX
+			}
+		} else if (hasUnarmoredDefense || bestAcFormula) {
+			// Unarmored - find best option
+			const classUnarmoredAc = hasUnarmoredDefense ? this._calculateUnarmoredDefenseAc() : 0;
+			const formulaAc = bestAcFormula?.ac || 0;
+			const standardAc = 10 + dexMod;
+
+			if (classUnarmoredAc >= formulaAc && classUnarmoredAc >= standardAc) {
+				// Using class unarmored defense
+				if (this._hasBarbarianUnarmoredDefense()) {
+					const conMod = this.getAbilityMod("con");
+					components.push({type: "base", name: "Unarmored Defense", value: 10, icon: "💪", subtype: "Barbarian"});
+					if (dexMod !== 0) components.push({type: "dex", name: "DEX modifier", value: dexMod, icon: "🎯"});
+					if (conMod !== 0) components.push({type: "ability", name: "CON modifier", value: conMod, icon: "❤️"});
+					usedDex = true;
+				} else if (this._hasMonkUnarmoredDefense()) {
+					const wisMod = this.getAbilityMod("wis");
+					components.push({type: "base", name: "Unarmored Defense", value: 10, icon: "🧘", subtype: "Monk"});
+					if (dexMod !== 0) components.push({type: "dex", name: "DEX modifier", value: dexMod, icon: "🎯"});
+					if (wisMod !== 0) components.push({type: "ability", name: "WIS modifier", value: wisMod, icon: "👁️"});
+					usedDex = true;
+				}
+			} else if (formulaAc >= standardAc) {
+				// Using AC formula (natural armor, etc.)
+				usedFormula = bestAcFormula.formula;
+				const formulaName = usedFormula.name || "Special";
+				components.push({type: "base", name: formulaName, value: usedFormula.base || bestAcFormula.ac, icon: usedFormula.noDex ? "🐢" : "✨"});
+				if (usedFormula.addDex && !usedFormula.noDex && dexMod !== 0) {
+					components.push({type: "dex", name: "DEX modifier", value: dexMod, icon: "🎯"});
+					usedDex = true;
+				}
+				if (usedFormula.secondAbility) {
+					const secondMod = this.getAbilityMod(usedFormula.secondAbility);
+					if (secondMod !== 0) {
+						components.push({type: "ability", name: `${usedFormula.secondAbility.toUpperCase()} modifier`, value: secondMod, icon: "⭐"});
+					}
+				}
+			} else {
+				// Standard unarmored
+				components.push({type: "base", name: "Unarmored", value: 10, icon: "👤"});
+				if (dexMod !== 0) {
+					components.push({type: "dex", name: "DEX modifier", value: dexMod, icon: "🎯"});
+					usedDex = true;
+				}
+			}
+		} else {
+			// Standard unarmored: 10 + DEX
+			components.push({type: "base", name: "Unarmored", value: 10, icon: "👤"});
+			if (dexMod !== 0) {
+				components.push({type: "dex", name: "DEX modifier", value: dexMod, icon: "🎯"});
+				usedDex = true;
+			}
+		}
+
+		// Shield
+		if (this._data.ac.shield) {
+			const isMonkUnarmored = !this._data.ac.armor && this._hasMonkUnarmoredDefense();
+			const formulaForbidsShield = usedFormula?.formulaType === "unarmoredDefense" && 
+				(usedFormula.base || 10) + (usedFormula.addDex ? dexMod : 0) > (10 + dexMod);
+			
+			if (!isMonkUnarmored && !formulaForbidsShield) {
+				const baseShieldBonus = 2;
+				const magicBonus = (typeof this._data.ac.shield === "object") ? (this._data.ac.shield.bonus || 0) : 0;
+				const shieldName = (typeof this._data.ac.shield === "object") ? (this._data.ac.shield.name || "Shield") : "Shield";
+				
+				if (magicBonus > 0) {
+					components.push({type: "shield", name: shieldName, value: baseShieldBonus, icon: "🛡️"});
+					components.push({type: "magic", name: `+${magicBonus} Shield`, value: magicBonus, icon: "✨"});
+				} else {
+					components.push({type: "shield", name: shieldName, value: baseShieldBonus, icon: "🛡️"});
+				}
+			}
+		}
+
+		// Item bonuses (e.g., Ring of Protection, Cloak of Protection)
+		const itemBonus = this._data.ac.itemBonus || 0;
+		if (itemBonus !== 0) {
+			components.push({type: "item", name: "Magic Items", value: itemBonus, icon: "💎"});
+		}
+
+		// Custom modifiers
+		const customBonus = this._data.customModifiers.ac || 0;
+		if (customBonus !== 0) {
+			components.push({type: "custom", name: "Custom Modifier", value: customBonus, icon: "⚙️"});
+		}
+
+		// Active state bonuses
+		const stateBonus = this.getBonusFromStates("ac");
+		if (stateBonus !== 0) {
+			components.push({type: "state", name: "Active Effects", value: stateBonus, icon: "🔮"});
+		}
+
+		// Other bonuses
+		this._data.ac.bonuses.forEach(bonus => {
+			if (bonus.value) {
+				components.push({type: "bonus", name: bonus.name || "Bonus", value: bonus.value, icon: "➕"});
+			}
+		});
+
+		// Calculate total
+		const total = components.reduce((sum, comp) => sum + comp.value, 0);
+
+		return {
+			total,
+			components,
+		};
+	}
+
 	setBaseAc (ac) { this._data.ac.base = ac; }
 	setArmor (armor) { this._data.ac.armor = armor; }
 	setShield (hasShield) { this._data.ac.shield = hasShield; }
@@ -3924,10 +4092,11 @@ class CharacterSheetState {
 	getCarryingCapacity () {
 		let baseCapacity;
 		
-		// Thelemar rules: 50 + 25 * STR modifier (minimum 50)
+		// Thelemar rules: 50 + 25 * Might modifier (minimum 50)
+		// Might is a custom TGTT homebrew skill based on STR
 		if (this._data.settings?.thelemar_carryWeight) {
-			const strMod = this.getAbilityMod("str");
-			baseCapacity = Math.max(50, 50 + 25 * strMod);
+			const mightMod = this.getSkillMod("might");
+			baseCapacity = Math.max(50, 50 + 25 * mightMod);
 		} else {
 			// Standard rules: STR score * 15
 			baseCapacity = this.getAbilityScore("str") * 15;
@@ -4085,87 +4254,156 @@ class CharacterSheetState {
 	// #endregion
 
 	// #region Conditions
-	getConditions () { return [...this._data.conditions]; }
+	/**
+	 * Get all conditions as normalized {name, source} objects
+	 * @returns {Array} Array of {name, source} objects
+	 */
+	getConditions () { 
+		return this._data.conditions.map(c => this._normalizeCondition(c)); 
+	}
+
+	/**
+	 * Get condition names only (for backward compatibility)
+	 * @returns {Array} Array of condition names
+	 */
+	getConditionNames () {
+		return this._data.conditions.map(c => this._normalizeCondition(c).name);
+	}
 
 	/**
 	 * Add a condition and apply its effects
-	 * @param {string} condition - The condition name
+	 * Supports both old format (string) and new format ({name, source})
+	 * @param {string|object} condition - The condition name or {name, source} object
 	 */
 	addCondition (condition) {
-		if (!this._data.conditions.includes(condition)) {
-			this._data.conditions.push(condition);
-			this._applyConditionEffects(condition);
+		const condObj = this._normalizeCondition(condition);
+		
+		// Check if this exact condition (name + source) already exists
+		if (!this.hasConditionExact(condObj.name, condObj.source)) {
+			this._data.conditions.push(condObj);
+			this._applyConditionEffects(condObj.name, condObj.source);
 		}
 	}
 
 	/**
+	 * Normalize a condition to {name, source} format
+	 * @param {string|object} condition - String or object format
+	 * @returns {object} {name, source} object
+	 */
+	_normalizeCondition (condition) {
+		if (typeof condition === "string") {
+			// Legacy format - just a name, default to XPHB
+			return {name: condition, source: Parser.SRC_XPHB};
+		}
+		return {
+			name: condition.name || condition,
+			source: condition.source || Parser.SRC_XPHB,
+		};
+	}
+
+	/**
 	 * Remove a condition and its effects
-	 * @param {string} condition - The condition name
+	 * @param {string|object} condition - The condition name or {name, source} object
 	 */
 	removeCondition (condition) {
-		this._data.conditions = this._data.conditions.filter(c => c !== condition);
-		this._removeConditionEffects(condition);
+		const condObj = this._normalizeCondition(condition);
+		this._data.conditions = this._data.conditions.filter(c => {
+			const cObj = this._normalizeCondition(c);
+			return !(cObj.name.toLowerCase() === condObj.name.toLowerCase() && 
+			         cObj.source === condObj.source);
+		});
+		this._removeConditionEffects(condObj.name, condObj.source);
 	}
 
 	clearConditions () {
 		// Remove all condition effects first
 		for (const condition of this._data.conditions) {
-			this._removeConditionEffects(condition);
+			const condObj = this._normalizeCondition(condition);
+			this._removeConditionEffects(condObj.name, condObj.source);
 		}
 		this._data.conditions = [];
 	}
 
 	setConditions (conditions) {
+		const newConditions = conditions.map(c => this._normalizeCondition(c));
+		
 		// Remove old condition effects
 		for (const condition of this._data.conditions) {
-			if (!conditions.includes(condition)) {
-				this._removeConditionEffects(condition);
+			const oldObj = this._normalizeCondition(condition);
+			const stillExists = newConditions.some(nc => 
+				nc.name.toLowerCase() === oldObj.name.toLowerCase() && nc.source === oldObj.source
+			);
+			if (!stillExists) {
+				this._removeConditionEffects(oldObj.name, oldObj.source);
 			}
 		}
 		// Add new condition effects
-		for (const condition of conditions) {
-			if (!this._data.conditions.includes(condition)) {
-				this._applyConditionEffects(condition);
+		for (const condObj of newConditions) {
+			const wasPresent = this._data.conditions.some(c => {
+				const cObj = this._normalizeCondition(c);
+				return cObj.name.toLowerCase() === condObj.name.toLowerCase() && cObj.source === condObj.source;
+			});
+			if (!wasPresent) {
+				this._applyConditionEffects(condObj.name, condObj.source);
 			}
 		}
-		this._data.conditions = [...conditions];
+		this._data.conditions = [...newConditions];
 	}
 
 	/**
-	 * Check if character has a specific condition
-	 * @param {string} condition - The condition name
+	 * Check if character has a specific condition (by name only, any source)
+	 * @param {string} conditionName - The condition name
 	 * @returns {boolean}
 	 */
-	hasCondition (condition) {
-		const condKey = condition.toLowerCase();
-		return this._data.conditions.some(c => c.toLowerCase() === condKey);
+	hasCondition (conditionName) {
+		const condKey = conditionName.toLowerCase();
+		return this._data.conditions.some(c => {
+			const cObj = this._normalizeCondition(c);
+			return cObj.name.toLowerCase() === condKey;
+		});
+	}
+
+	/**
+	 * Check if character has a specific condition with exact name and source
+	 * @param {string} conditionName - The condition name
+	 * @param {string} source - The source (e.g., "PHB", "XPHB")
+	 * @returns {boolean}
+	 */
+	hasConditionExact (conditionName, source) {
+		return this._data.conditions.some(c => {
+			const cObj = this._normalizeCondition(c);
+			return cObj.name.toLowerCase() === conditionName.toLowerCase() && cObj.source === source;
+		});
 	}
 
 	/**
 	 * Apply effects for a condition by creating an active state
-	 * @param {string} condition - The condition name
+	 * @param {string} conditionName - The condition name
+	 * @param {string} source - The condition source
 	 */
-	_applyConditionEffects (condition) {
-		const condDef = CharacterSheetState.getConditionEffects(condition);
+	_applyConditionEffects (conditionName, source) {
+		const condDef = CharacterSheetState.getConditionEffects(conditionName);
 		if (!condDef) {
 			// Unknown condition - just track it without effects
-			console.log(`Unknown condition "${condition}" - no effects defined`);
+			console.log(`Unknown condition "${conditionName}" - no effects defined`);
 			return;
 		}
 
-		// Create an active state for this condition
-		const condKey = `condition_${condition.toLowerCase().replace(/\s+/g, "_")}`;
+		// Create an active state for this condition (include source in key for uniqueness)
+		const condKey = `condition_${conditionName.toLowerCase().replace(/\s+/g, "_")}_${source.toLowerCase()}`;
 		
 		// Add to active states with the condition's effects
 		const state = {
 			id: `${condKey}_${Date.now()}`,
 			stateTypeId: condKey,
-			name: condDef.name || condition,
+			name: condDef.name || conditionName,
+			source: source,
 			icon: condDef.icon || "❓",
 			active: true,
 			activatedAt: Date.now(),
 			isCondition: true, // Mark as condition-derived state
-			conditionName: condition,
+			conditionName: conditionName,
+			conditionSource: source,
 			customEffects: condDef.effects,
 		};
 
@@ -4174,13 +4412,17 @@ class CharacterSheetState {
 
 	/**
 	 * Remove effects for a condition by deactivating its active state
-	 * @param {string} condition - The condition name
+	 * @param {string} conditionName - The condition name
+	 * @param {string} source - The condition source
 	 */
-	_removeConditionEffects (condition) {
-		// Find and remove the active state for this condition
-		const condKey = condition.toLowerCase().replace(/\s+/g, "_");
+	_removeConditionEffects (conditionName, source) {
+		// Find and remove the active state for this condition (match both name and source)
+		const condKey = conditionName.toLowerCase().replace(/\s+/g, "_");
+		const sourceKey = source?.toLowerCase() || "";
 		const stateIndex = this._data.activeStates.findIndex(
-			s => s.isCondition && s.conditionName?.toLowerCase().replace(/\s+/g, "_") === condKey
+			s => s.isCondition && 
+			     s.conditionName?.toLowerCase().replace(/\s+/g, "_") === condKey &&
+			     (s.conditionSource?.toLowerCase() === sourceKey || (!s.conditionSource && !sourceKey))
 		);
 		if (stateIndex !== -1) {
 			this._data.activeStates.splice(stateIndex, 1);

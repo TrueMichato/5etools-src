@@ -119,93 +119,201 @@ class CharacterSheetCombat {
 		};
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: `${isEdit ? "Edit" : "Add"} Attack`,
+			title: `${isEdit ? "⚔️ Edit" : "➕ Add"} Attack`,
 			isMinHeight0: true,
+			cbClose: () => {
+				// Cleanup event listeners
+				$(document).off("click.attackModalQuickSelect");
+			},
 		});
 
-		// Build form
-		const $name = $(`<input type="text" class="form-control" value="${attack.name}" placeholder="Weapon or attack name">`);
-		const $type = $(`
-			<select class="form-control">
-				<option value="melee" ${attack.isMelee ? "selected" : ""}>Melee</option>
-				<option value="ranged" ${!attack.isMelee ? "selected" : ""}>Ranged</option>
-			</select>
-		`);
-		const $ability = $(`
-			<select class="form-control">
-				${Parser.ABIL_ABVS.map(a => `<option value="${a}" ${attack.abilityMod === a ? "selected" : ""}>${Parser.attAbvToFull(a)}</option>`).join("")}
-			</select>
-		`);
-		const $bonus = $(`<input type="number" class="form-control" value="${attack.attackBonus}">`);
-		const $range = $(`<input type="text" class="form-control" value="${attack.range || ""}" placeholder="e.g., 5 ft. or 30/120 ft.">`);
-		const $damage = $(`<input type="text" class="form-control" value="${attack.damage}" placeholder="e.g., 1d8">`);
-		const $damageType = $(`
-			<select class="form-control">
-				${["bludgeoning", "piercing", "slashing", "fire", "cold", "lightning", "thunder", "poison", "acid", "necrotic", "radiant", "force", "psychic"].map(t =>
-					`<option value="${t}" ${attack.damageType === t ? "selected" : ""}>${t.toTitleCase()}</option>`
-				).join("")}
-			</select>
-		`);
-		const $damageBonus = $(`<input type="number" class="form-control" value="${attack.damageBonus}">`);
-		const $properties = $(`<input type="text" class="form-control" value="${(attack.properties || []).join(", ")}" placeholder="e.g., versatile, finesse">`);
+		// Add custom modal class
+		$modalInner.addClass("charsheet__attack-modal");
 
-		// Quick add from inventory weapons (already owned by character)
+		// Build enhanced form with sections
+		const $content = $(`<div class="charsheet__attack-form"></div>`).appendTo($modalInner);
+
+		// Main Info Section
+		const $mainSection = $(`
+			<div class="charsheet__attack-section">
+				<div class="charsheet__attack-section-header">
+					<span class="charsheet__attack-section-icon">📋</span>
+					<span class="charsheet__attack-section-title">Basic Information</span>
+				</div>
+				<div class="charsheet__attack-field">
+					<label class="charsheet__attack-label">Attack Name</label>
+					<input type="text" class="charsheet__attack-input charsheet__attack-input--name" value="${attack.name}" placeholder="e.g., Longsword, Eldritch Blast">
+				</div>
+				<div class="charsheet__attack-field-row">
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Type</label>
+						<select class="charsheet__attack-select">
+							<option value="melee" ${attack.isMelee ? "selected" : ""}>⚔️ Melee</option>
+							<option value="ranged" ${!attack.isMelee ? "selected" : ""}>🏹 Ranged</option>
+						</select>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Ability</label>
+						<select class="charsheet__attack-select charsheet__attack-select--ability">
+							${Parser.ABIL_ABVS.map(a => `<option value="${a}" ${attack.abilityMod === a ? "selected" : ""}>${Parser.attAbvToFull(a)} (${a.toUpperCase()})</option>`).join("")}
+						</select>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Range</label>
+						<input type="text" class="charsheet__attack-input charsheet__attack-input--range" value="${attack.range || ""}" placeholder="5 ft. or 30/120 ft.">
+					</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Combat Stats Section
+		const $combatSection = $(`
+			<div class="charsheet__attack-section">
+				<div class="charsheet__attack-section-header">
+					<span class="charsheet__attack-section-icon">🎯</span>
+					<span class="charsheet__attack-section-title">Combat Statistics</span>
+				</div>
+				<div class="charsheet__attack-field-row">
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Attack Bonus</label>
+						<div class="charsheet__attack-number-input">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--minus" data-field="bonus">−</button>
+							<input type="number" class="charsheet__attack-input charsheet__attack-input--bonus" value="${attack.attackBonus}">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--plus" data-field="bonus">+</button>
+						</div>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Damage Dice</label>
+						<input type="text" class="charsheet__attack-input charsheet__attack-input--damage" value="${attack.damage}" placeholder="1d8, 2d6, etc.">
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Damage Type</label>
+						<select class="charsheet__attack-select charsheet__attack-select--dmgtype">
+							${["bludgeoning", "piercing", "slashing", "fire", "cold", "lightning", "thunder", "poison", "acid", "necrotic", "radiant", "force", "psychic"].map(t =>
+								`<option value="${t}" ${attack.damageType === t ? "selected" : ""}>${this._getDamageTypeEmoji(t)} ${t.toTitleCase()}</option>`
+							).join("")}
+						</select>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Damage Bonus</label>
+						<div class="charsheet__attack-number-input">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--minus" data-field="dmgbonus">−</button>
+							<input type="number" class="charsheet__attack-input charsheet__attack-input--dmgbonus" value="${attack.damageBonus}">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--plus" data-field="dmgbonus">+</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Properties Section
+		const $propsSection = $(`
+			<div class="charsheet__attack-section">
+				<div class="charsheet__attack-section-header">
+					<span class="charsheet__attack-section-icon">✨</span>
+					<span class="charsheet__attack-section-title">Properties</span>
+				</div>
+				<div class="charsheet__attack-field">
+					<label class="charsheet__attack-label">Weapon Properties</label>
+					<input type="text" class="charsheet__attack-input charsheet__attack-input--properties" value="${(attack.properties || []).join(", ")}" placeholder="e.g., versatile, finesse, light, two-handed">
+					<div class="charsheet__attack-properties-hint">Common: finesse, light, heavy, reach, thrown, two-handed, versatile</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Quick Add Section
 		const inventoryItems = this._state.getItems();
 		const inventoryWeapons = inventoryItems.filter(i => i.weapon);
 		
-		const $inventorySelect = $(`<select class="form-control"><option value="">-- Select from inventory --</option></select>`);
-		inventoryWeapons.forEach(weapon => {
-			const bonusInfo = [];
-			const totalAttackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
-			const totalDamageBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
-			if (totalAttackBonus > 0 || totalDamageBonus > 0) {
-				bonusInfo.push(`+${Math.max(totalAttackBonus, totalDamageBonus)}`);
-			}
-			const label = bonusInfo.length ? `${weapon.name} (${bonusInfo.join(", ")})` : weapon.name;
-			$inventorySelect.append(`<option value="inv:${weapon.name}">${label}</option>`);
+		const $quickSection = $(`
+			<div class="charsheet__attack-section charsheet__attack-section--quick">
+				<div class="charsheet__attack-section-header">
+					<span class="charsheet__attack-section-icon">⚡</span>
+					<span class="charsheet__attack-section-title">Quick Select</span>
+				</div>
+				<div class="charsheet__attack-quick-grid">
+					${inventoryWeapons.length ? `
+						<div class="charsheet__attack-quick-group">
+							<label class="charsheet__attack-label">🎒 From Inventory</label>
+							<select class="charsheet__attack-select charsheet__attack-select--inventory">
+								<option value="">— Select weapon —</option>
+								${inventoryWeapons.map(weapon => {
+									const bonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
+									const label = bonus > 0 ? `${weapon.name} (+${bonus})` : weapon.name;
+									return `<option value="inv:${weapon.name}">${label}</option>`;
+								}).join("")}
+							</select>
+						</div>
+					` : ""}
+					<div class="charsheet__attack-quick-group">
+						<label class="charsheet__attack-label">📚 From Catalog</label>
+						<select class="charsheet__attack-select charsheet__attack-select--catalog">
+							<option value="">— Select from all weapons —</option>
+							${this._allItems
+								.filter(i => i.weapon)
+								.sort((a, b) => a.name.localeCompare(b.name))
+								.map(weapon => {
+									const bonus = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponAttack);
+									const label = bonus > 0 ? `${weapon.name} (+${bonus})` : weapon.name;
+									return `<option value="${weapon.name}|${weapon.source}">${label}</option>`;
+								}).join("")}
+						</select>
+					</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Get form elements
+		const $name = $content.find(".charsheet__attack-input--name");
+		const $type = $content.find(".charsheet__attack-section:first-child .charsheet__attack-select:first");
+		const $ability = $content.find(".charsheet__attack-select--ability");
+		const $range = $content.find(".charsheet__attack-input--range");
+		const $bonus = $content.find(".charsheet__attack-input--bonus");
+		const $damage = $content.find(".charsheet__attack-input--damage");
+		const $damageType = $content.find(".charsheet__attack-select--dmgtype");
+		const $damageBonus = $content.find(".charsheet__attack-input--dmgbonus");
+		const $properties = $content.find(".charsheet__attack-input--properties");
+		const $inventorySelect = $content.find(".charsheet__attack-select--inventory");
+		const $weaponSelect = $content.find(".charsheet__attack-select--catalog");
+
+		// Number input +/- buttons
+		$content.find(".charsheet__attack-number-btn").on("click", function () {
+			const field = $(this).data("field");
+			const $input = field === "bonus" ? $bonus : $damageBonus;
+			const delta = $(this).hasClass("charsheet__attack-number-btn--plus") ? 1 : -1;
+			$input.val(parseInt($input.val() || 0) + delta);
 		});
 
-		$inventorySelect.on("change", () => {
-			if (!$inventorySelect.val()) return;
-			const weaponName = $inventorySelect.val().replace("inv:", "");
-			const weapon = inventoryWeapons.find(i => i.name === weaponName);
-			if (weapon) {
-				$name.val(weapon.name);
-				const isRanged = weapon.properties?.some(p => p.includes("A") || p.toLowerCase().includes("ammunition")) || weapon.range;
-				$type.val(isRanged ? "ranged" : "melee");
-				const hasFinesse = weapon.properties?.some(p => p.includes("F") || p.toLowerCase().includes("finesse"));
-				$ability.val(isRanged ? "dex" : (hasFinesse ? "dex" : "str"));
-				if (weapon.damage) {
-					// Parse damage string like "1d8 slashing"
-					const dmgMatch = weapon.damage.match(/(\d+d\d+)/);
-					if (dmgMatch) $damage.val(dmgMatch[1]);
-					const typeMatch = weapon.damage.match(/\d+d\d+\s*(\w+)/);
-					if (typeMatch) $damageType.val(typeMatch[1].toLowerCase());
+		// Inventory weapon select handler
+		if ($inventorySelect.length) {
+			$inventorySelect.on("change", () => {
+				if (!$inventorySelect.val()) return;
+				const weaponName = $inventorySelect.val().replace("inv:", "");
+				const weapon = inventoryWeapons.find(i => i.name === weaponName);
+				if (weapon) {
+					$name.val(weapon.name);
+					const isRanged = weapon.properties?.some(p => p.includes("A") || p.toLowerCase().includes("ammunition")) || weapon.range;
+					$type.val(isRanged ? "ranged" : "melee");
+					const hasFinesse = weapon.properties?.some(p => p.includes("F") || p.toLowerCase().includes("finesse"));
+					$ability.val(isRanged ? "dex" : (hasFinesse ? "dex" : "str"));
+					if (weapon.damage) {
+						const dmgMatch = weapon.damage.match(/(\d+d\d+)/);
+						if (dmgMatch) $damage.val(dmgMatch[1]);
+						const typeMatch = weapon.damage.match(/\d+d\d+\s*(\w+)/);
+						if (typeMatch) $damageType.val(typeMatch[1].toLowerCase());
+					}
+					if (weapon.range) $range.val(weapon.range);
+					if (weapon.properties) $properties.val(weapon.properties.map(p => typeof p === "string" ? p : Parser.itemPropertyToFull(p)).join(", "));
+					const attackBonusVal = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
+					const damageBonusVal = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
+					$bonus.val(attackBonusVal);
+					$damageBonus.val(damageBonusVal);
+					$weaponSelect.val("");
 				}
-				if (weapon.range) $range.val(weapon.range);
-				if (weapon.properties) $properties.val(weapon.properties.map(p => typeof p === "string" ? p : Parser.itemPropertyToFull(p)).join(", "));
-
-				// Apply magic weapon bonuses - use all three bonus types
-				const attackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
-				const damageBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
-				$bonus.val(attackBonus);
-				$damageBonus.val(damageBonus);
-			}
-		});
-
-		// Quick add from weapon catalog
-		const $weaponSelect = $(`<select class="form-control"><option value="">-- Select from catalog --</option></select>`);
-		this._allItems
-			.filter(i => i.weapon)
-			.sort((a, b) => a.name.localeCompare(b.name))
-			.forEach(weapon => {
-				const bonusInfo = [];
-				const totalBonus = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponAttack);
-				if (totalBonus > 0) bonusInfo.push(`+${totalBonus}`);
-				const label = bonusInfo.length ? `${weapon.name} (${bonusInfo.join(", ")})` : weapon.name;
-				$weaponSelect.append(`<option value="${weapon.name}|${weapon.source}">${label}</option>`);
 			});
+		}
 
+		// Catalog weapon select handler
 		$weaponSelect.on("change", () => {
 			if (!$weaponSelect.val()) return;
 			const [name, source] = $weaponSelect.val().split("|");
@@ -220,45 +328,24 @@ class CharacterSheetCombat {
 				if (weapon.dmgType) $damageType.val(Parser.dmgTypeToFull(weapon.dmgType).toLowerCase());
 				if (weapon.range) $range.val(weapon.range);
 				if (weapon.property) $properties.val(weapon.property.map(p => Parser.itemPropertyToFull(p)).join(", "));
-
-				// Apply magic weapon bonuses - use all three bonus types
-				const attackBonus = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponAttack);
-				const damageBonus = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponDamage);
-				$bonus.val(attackBonus);
-				$damageBonus.val(damageBonus);
+				const attackBonusVal = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponAttack);
+				const damageBonusVal = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponDamage);
+				$bonus.val(attackBonusVal);
+				$damageBonus.val(damageBonusVal);
+				if ($inventorySelect.length) $inventorySelect.val("");
 			}
 		});
 
-		$$`<div class="form-group"><label>Name</label>${$name}</div>`.appendTo($modalInner);
-		$$`<div class="ve-flex mb-3">
-			<div class="form-group mr-2" style="flex: 1;"><label>Attack Type</label>${$type}</div>
-			<div class="form-group" style="flex: 1;"><label>Ability</label>${$ability}</div>
-		</div>`.appendTo($modalInner);
-		$$`<div class="ve-flex mb-3">
-			<div class="form-group mr-2" style="flex: 1;"><label>Attack Bonus</label>${$bonus}</div>
-			<div class="form-group" style="flex: 1;"><label>Range</label>${$range}</div>
-		</div>`.appendTo($modalInner);
-		$$`<div class="ve-flex mb-3">
-			<div class="form-group mr-2" style="flex: 1;"><label>Damage</label>${$damage}</div>
-			<div class="form-group mr-2" style="flex: 1;"><label>Damage Type</label>${$damageType}</div>
-			<div class="form-group" style="flex: 1;"><label>Damage Bonus</label>${$damageBonus}</div>
-		</div>`.appendTo($modalInner);
-		$$`<div class="form-group"><label>Properties</label>${$properties}</div>`.appendTo($modalInner);
-		
-		// Show inventory weapons section if character has any
-		if (inventoryWeapons.length) {
-			$$`<hr><h5>Quick Add from Inventory</h5>
-			<p class="ve-muted small">Weapons in your inventory (bonuses already applied)</p>
-			${$inventorySelect}`.appendTo($modalInner);
-		}
-		
-		$$`<hr><h5>Quick Add from Weapon Catalog</h5>
-		<p class="ve-muted small">All weapons (magic weapons include bonuses)</p>
-		${$weaponSelect}`.appendTo($modalInner);
+		// Footer buttons
+		const $footer = $(`
+			<div class="charsheet__attack-footer">
+				<button class="charsheet__attack-btn charsheet__attack-btn--cancel">Cancel</button>
+				<button class="charsheet__attack-btn charsheet__attack-btn--save">${isEdit ? "💾 Save Changes" : "➕ Add Attack"}</button>
+			</div>
+		`).appendTo($content);
 
-		// Buttons
-		const $btnSave = $(`<button class="ve-btn ve-btn-primary">${isEdit ? "Save" : "Add"}</button>`);
-		$btnSave.on("click", () => {
+		$footer.find(".charsheet__attack-btn--cancel").on("click", () => doClose(false));
+		$footer.find(".charsheet__attack-btn--save").on("click", () => {
 			const newAttack = {
 				id: existingAttack?.id || CryptUtil.uid(),
 				name: $name.val().trim(),
@@ -288,10 +375,27 @@ class CharacterSheetCombat {
 			this._page.saveCharacter();
 		});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			<button class="ve-btn ve-btn-default mr-2">Cancel</button>
-			${$btnSave}
-		</div>`.appendTo($modalInner).find("button.ve-btn-default").on("click", () => doClose(false));
+		// Focus name field
+		setTimeout(() => $name.focus(), 100);
+	}
+
+	_getDamageTypeEmoji (type) {
+		const emojis = {
+			bludgeoning: "🔨",
+			piercing: "🗡️",
+			slashing: "⚔️",
+			fire: "🔥",
+			cold: "❄️",
+			lightning: "⚡",
+			thunder: "💥",
+			poison: "☠️",
+			acid: "🧪",
+			necrotic: "💀",
+			radiant: "✨",
+			force: "💫",
+			psychic: "🧠",
+		};
+		return emojis[type] || "⚔️";
 	}
 
 
@@ -1228,6 +1332,7 @@ class CharacterSheetCombat {
 		const $container = $("#charsheet-combat-conditions");
 		if (!$container.length) return;
 
+		// Now returns {name, source} objects
 		const conditions = this._state.getConditions?.() || [];
 
 		if (!conditions.length) {
@@ -1237,14 +1342,17 @@ class CharacterSheetCombat {
 
 		$container.empty();
 
-		for (const condition of conditions) {
-			const conditionDef = CharacterSheetState.getConditionEffects(condition);
+		for (const condObj of conditions) {
+			const conditionName = condObj.name;
+			const conditionSource = condObj.source;
+			const conditionDef = CharacterSheetState.getConditionEffects(conditionName);
 			
 			const icon = conditionDef?.icon || "⚠️";
-			const description = conditionDef?.description || condition;
+			const description = conditionDef?.description || conditionName;
+			const sourceAbbr = Parser.sourceJsonToAbv(conditionSource);
 			
 			// Build tooltip with effects
-			let tooltip = description;
+			let tooltip = `${conditionName} (${sourceAbbr}): ${description}`;
 			if (conditionDef?.effects?.length) {
 				const effectList = conditionDef.effects.map(e => {
 					if (e.type === "advantage") return `• Advantage on ${this._formatEffectTarget(e.target)}`;
@@ -1263,15 +1371,17 @@ class CharacterSheetCombat {
 			
 			const $condition = $(`
 				<div class="charsheet__combat-condition badge badge-warning mr-1 mb-1" 
-					title="${tooltip}" data-condition="${condition}">
-					${icon} ${condition}
+					title="${tooltip}" data-condition-name="${conditionName}" data-condition-source="${conditionSource}">
+					${icon} ${conditionName}
+					<span class="charsheet__condition-source-badge">${sourceAbbr}</span>
 					<span class="charsheet__condition-remove ml-1" title="Remove condition">&times;</span>
 				</div>
 			`);
 
 			$condition.find(".charsheet__condition-remove").on("click", (e) => {
 				e.stopPropagation();
-				this._state.removeCondition?.(condition);
+				// Now passes {name, source} object
+				this._state.removeCondition?.({name: conditionName, source: conditionSource});
 				this.renderCombatConditions();
 				this.renderCombatEffects();
 				this.renderCombatDefenses();
