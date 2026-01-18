@@ -426,6 +426,7 @@ class CharacterSheetPage {
 		$("#charsheet-btn-damage").on("click", () => this._onDamage());
 
 		// Combat
+		$("#charsheet-box-ac").on("click", () => this._showAcBreakdownModal());
 		$("#charsheet-box-initiative").on("click", (e) => this._rollInitiative(e));
 		$("#charsheet-btn-use-hitdie").on("click", () => this._onUseHitDie());
 		$("#charsheet-btn-deathsave").on("click", () => this._onDeathSave());
@@ -3060,9 +3061,10 @@ class CharacterSheetPage {
 	 * @param {Object} opts - Roll options
 	 * @param {Event} [opts.event] - The triggering event (to detect modifier keys)
 	 * @param {"advantage"|"disadvantage"|"normal"} [opts.mode] - Force a specific mode
-	 * @returns {{roll: number, roll1: number, roll2: number, mode: string}} Roll result
+	 * @param {boolean} [opts.isAttack=false] - Whether this is an attack roll (does not use Thelemar crit rules)
+	 * @returns {{roll: number, roll1: number, roll2: number, mode: string, thelemar_critBonus: number}} Roll result
 	 */
-	_rollD20 ({event, mode} = {}) {
+	_rollD20 ({event, mode, isAttack = false} = {}) {
 		// Determine roll mode from event modifier keys if not explicitly set
 		if (!mode && event) {
 			if (event.shiftKey) mode = "advantage";
@@ -3082,7 +3084,14 @@ class CharacterSheetPage {
 			roll = roll1;
 		}
 
-		return {roll, roll1, roll2, mode};
+		// Thelemar critical rolls rule: Nat 1 = -5, Nat 20 = +5 for non-attack rolls
+		let thelemar_critBonus = 0;
+		if (!isAttack && this._state.getSettings()?.thelemar_criticalRolls) {
+			if (roll === 1) thelemar_critBonus = -5;
+			else if (roll === 20) thelemar_critBonus = 5;
+		}
+
+		return {roll, roll1, roll2, mode, thelemar_critBonus};
 	}
 
 	/**
@@ -3094,13 +3103,16 @@ class CharacterSheetPage {
 	 */
 	_formatD20Breakdown (rollResult, modifier, extraStr = "") {
 		const modStr = modifier >= 0 ? `+ ${modifier}` : `- ${Math.abs(modifier)}`;
+		const thelemar_critStr = rollResult.thelemar_critBonus 
+			? (rollResult.thelemar_critBonus > 0 ? ` + ${rollResult.thelemar_critBonus} [Nat 20]` : ` - ${Math.abs(rollResult.thelemar_critBonus)} [Nat 1]`)
+			: "";
 		
 		if (rollResult.mode === "advantage") {
-			return `2d20kh (${rollResult.roll1}, ${rollResult.roll2}) → ${rollResult.roll} ${modStr}${extraStr}`;
+			return `2d20kh (${rollResult.roll1}, ${rollResult.roll2}) → ${rollResult.roll} ${modStr}${thelemar_critStr}${extraStr}`;
 		} else if (rollResult.mode === "disadvantage") {
-			return `2d20kl (${rollResult.roll1}, ${rollResult.roll2}) → ${rollResult.roll} ${modStr}${extraStr}`;
+			return `2d20kl (${rollResult.roll1}, ${rollResult.roll2}) → ${rollResult.roll} ${modStr}${thelemar_critStr}${extraStr}`;
 		}
-		return `1d20 (${rollResult.roll}) ${modStr}${extraStr}`;
+		return `1d20 (${rollResult.roll}) ${modStr}${thelemar_critStr}${extraStr}`;
 	}
 
 	/**
@@ -3138,7 +3150,18 @@ class CharacterSheetPage {
 		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
 		
 		const rollResult = this._rollD20({event, mode});
-		const total = rollResult.roll + mod - exhaustionPenalty;
+		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
+
+		// Thelemar crit visual cues
+		let resultClass = "";
+		let resultNote = "";
+		if (rollResult.thelemar_critBonus === 5) {
+			resultClass = "charsheet__dice-result-total--crit";
+			resultNote = "Natural 20! (+5 Thelemar)";
+		} else if (rollResult.thelemar_critBonus === -5) {
+			resultClass = "charsheet__dice-result-total--fumble";
+			resultNote = "Natural 1! (-5 Thelemar)";
+		}
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
@@ -3146,6 +3169,8 @@ class CharacterSheetPage {
 			`${Parser.attAbvToFull(ability)} Check${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
+			resultClass,
+			resultNote,
 		);
 	}
 
@@ -3162,7 +3187,18 @@ class CharacterSheetPage {
 		// If both, they cancel out - use normal (event can still override)
 		
 		const rollResult = this._rollD20({event, mode});
-		const total = rollResult.roll + mod - exhaustionPenalty;
+		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
+
+		// Thelemar crit visual cues
+		let resultClass = "";
+		let resultNote = "";
+		if (rollResult.thelemar_critBonus === 5) {
+			resultClass = "charsheet__dice-result-total--crit";
+			resultNote = "Natural 20! (+5 Thelemar)";
+		} else if (rollResult.thelemar_critBonus === -5) {
+			resultClass = "charsheet__dice-result-total--fumble";
+			resultNote = "Natural 1! (-5 Thelemar)";
+		}
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
@@ -3170,6 +3206,8 @@ class CharacterSheetPage {
 			`${Parser.attAbvToFull(ability)} Save${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
+			resultClass,
+			resultNote,
 		);
 	}
 
@@ -3179,7 +3217,18 @@ class CharacterSheetPage {
 			: this._state.getSkillMod(skillKey);
 		const exhaustionPenalty = this._getExhaustionPenalty();
 		const rollResult = this._rollD20({event});
-		const total = rollResult.roll + mod - exhaustionPenalty;
+		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
+
+		// Thelemar crit visual cues
+		let resultClass = "";
+		let resultNote = "";
+		if (rollResult.thelemar_critBonus === 5) {
+			resultClass = "charsheet__dice-result-total--crit";
+			resultNote = "Natural 20! (+5 Thelemar)";
+		} else if (rollResult.thelemar_critBonus === -5) {
+			resultClass = "charsheet__dice-result-total--fumble";
+			resultNote = "Natural 1! (-5 Thelemar)";
+		}
 
 		const abilityLabel = overrideAbility ? ` (${overrideAbility.toUpperCase()})` : "";
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
@@ -3187,6 +3236,8 @@ class CharacterSheetPage {
 			`${skillName}${abilityLabel} Check${this._getModeLabel(rollResult.mode)}`,
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
+			resultClass,
+			resultNote,
 		);
 	}
 
@@ -3280,13 +3331,26 @@ class CharacterSheetPage {
 		const mod = this._state.getInitiative();
 		const exhaustionPenalty = this._getExhaustionPenalty();
 		const rollResult = this._rollD20({event});
-		const total = rollResult.roll + mod - exhaustionPenalty;
+		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
+
+		// Thelemar crit visual cues
+		let resultClass = "";
+		let resultNote = "";
+		if (rollResult.thelemar_critBonus === 5) {
+			resultClass = "charsheet__dice-result-total--crit";
+			resultNote = "Natural 20! (+5 Thelemar)";
+		} else if (rollResult.thelemar_critBonus === -5) {
+			resultClass = "charsheet__dice-result-total--fumble";
+			resultNote = "Natural 1! (-5 Thelemar)";
+		}
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		this._showDiceResult(
 			`Initiative${this._getModeLabel(rollResult.mode)}`,
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
+			resultClass,
+			resultNote,
 		);
 	}
 
@@ -3307,7 +3371,7 @@ class CharacterSheetPage {
 		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
 		
-		const rollResult = this._rollD20({event, mode});
+		const rollResult = this._rollD20({event, mode, isAttack: true});
 		const attackTotal = rollResult.roll + attack.attackBonus - exhaustionPenalty;
 
 		// Check for crit/fumble
@@ -3469,6 +3533,81 @@ class CharacterSheetPage {
 				<span class="charsheet__ac-breakdown-value charsheet__ac-breakdown-value--total">${breakdown.total}</span>
 			</div>
 		`);
+	}
+
+	/**
+	 * Show AC breakdown in a modal dialog
+	 */
+	async _showAcBreakdownModal () {
+		const breakdown = this._state.getAcBreakdown();
+		
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "🛡️ Armor Class Breakdown",
+			isMinHeight0: true,
+		});
+
+		const $content = $(`<div class="charsheet__ac-modal-content"></div>`).appendTo($modalInner);
+
+		// Large AC display
+		const $acDisplay = $(`
+			<div class="charsheet__ac-modal-total">
+				<div class="charsheet__ac-modal-total-value">${breakdown.total}</div>
+				<div class="charsheet__ac-modal-total-label">Total AC</div>
+			</div>
+		`).appendTo($content);
+
+		// Breakdown list
+		const $breakdownList = $(`<div class="charsheet__ac-modal-breakdown"></div>`).appendTo($content);
+
+		if (!breakdown.components.length) {
+			$breakdownList.append(`
+				<div class="charsheet__ac-modal-item">
+					<span class="charsheet__ac-modal-item-name">
+						<span class="charsheet__ac-modal-item-icon">🧍</span>
+						Base AC (Unarmored)
+					</span>
+					<span class="charsheet__ac-modal-item-value">10</span>
+				</div>
+			`);
+		} else {
+			breakdown.components.forEach(comp => {
+				const valueClass = comp.value > 0 && comp.type !== "base" && comp.type !== "armor" ? "charsheet__ac-modal-item-value--positive" : 
+					comp.value < 0 ? "charsheet__ac-modal-item-value--negative" : "";
+				const displayValue = comp.type === "base" || comp.type === "armor" ? comp.value : this._formatMod(comp.value);
+				const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-modal-item-subtype">(${comp.subtype})</span>` : "";
+				
+				$breakdownList.append(`
+					<div class="charsheet__ac-modal-item">
+						<span class="charsheet__ac-modal-item-name">
+							<span class="charsheet__ac-modal-item-icon">${comp.icon || "📦"}</span>
+							${comp.name}${subtypeHtml}
+						</span>
+						<span class="charsheet__ac-modal-item-value ${valueClass}">${displayValue}</span>
+					</div>
+				`);
+			});
+		}
+
+		// Additional info
+		const equippedArmor = this._state.getItems().find(i => i.equipped && i._isArmor);
+		const equippedShield = this._state.getItems().find(i => i.equipped && i._isShield);
+
+		if (equippedArmor || equippedShield) {
+			const $equipment = $(`<div class="charsheet__ac-modal-equipment"></div>`).appendTo($content);
+			$equipment.append(`<div class="charsheet__ac-modal-equipment-title">⚔️ Equipped Protection</div>`);
+			
+			if (equippedArmor) {
+				$equipment.append(`<div class="charsheet__ac-modal-equipment-item">🛡️ ${equippedArmor.name}</div>`);
+			}
+			if (equippedShield) {
+				$equipment.append(`<div class="charsheet__ac-modal-equipment-item">🔰 ${equippedShield.name}</div>`);
+			}
+		}
+
+		// Close button
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-primary">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
 	}
 
 	/**
@@ -3635,23 +3774,46 @@ class CharacterSheetPage {
 		// Thelemar homebrew rules
 		const currentThelemar_carryWeight = this._state.getSettings()?.thelemar_carryWeight || false;
 		const currentThelemar_linguisticsBonus = this._state.getSettings()?.thelemar_linguisticsBonus || false;
+		const currentThelemar_criticalRolls = this._state.getSettings()?.thelemar_criticalRolls || false;
 		
-		const $thelemar_carryWeight = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+		// Master toggle for all Thelemar rules
+		const allThelemar = currentThelemar_carryWeight && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls;
+		const $thelemar_masterToggle = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--master">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-thelemar-all" ${allThelemar ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">🌍 Enable All Thelemar Rules</span>
+					<span class="charsheet__settings-checkbox-desc">Toggle all Thelemar homebrew rules at once</span>
+				</span>
+			</label>
+		</div>`;
+
+		const $thelemar_carryWeight = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-carry" ${currentThelemar_carryWeight ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
-					<span class="charsheet__settings-checkbox-title">🎒 Thelemar Carry Weight</span>
+					<span class="charsheet__settings-checkbox-title">🎒 Carry Weight</span>
 					<span class="charsheet__settings-checkbox-desc">50 + 25 × Might modifier (minimum 50)</span>
 				</span>
 			</label>
 		</div>`;
 
-		const $thelemar_linguisticsBonus = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+		const $thelemar_linguisticsBonus = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-linguistics" ${currentThelemar_linguisticsBonus ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
-					<span class="charsheet__settings-checkbox-title">📖 Thelemar Linguistics</span>
+					<span class="charsheet__settings-checkbox-title">📖 Linguistics</span>
 					<span class="charsheet__settings-checkbox-desc">+1 bonus per known language (except Common)</span>
+				</span>
+			</label>
+		</div>`;
+
+		const $thelemar_criticalRolls = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-thelemar-crits" ${currentThelemar_criticalRolls ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">🎲 Critical Rolls</span>
+					<span class="charsheet__settings-checkbox-desc">Non-attack rolls: Nat 1 = -5, Nat 20 = +5 to result</span>
 				</span>
 			</label>
 		</div>`;
@@ -3673,10 +3835,14 @@ class CharacterSheetPage {
 			</div>
 			
 			<div class="charsheet__settings-section">
-				<div class="charsheet__settings-section-title">🏠 Homebrew Rules</div>
-				<p class="charsheet__settings-section-intro">Optional house rules for customized gameplay.</p>
-				${$thelemar_carryWeight}
-				${$thelemar_linguisticsBonus}
+				<div class="charsheet__settings-section-title">🏠 Thelemar Homebrew Rules</div>
+				<p class="charsheet__settings-section-intro">Optional Thelemar house rules for customized gameplay.</p>
+				${$thelemar_masterToggle}
+				<div class="charsheet__settings-thelemar-sub">
+					${$thelemar_carryWeight}
+					${$thelemar_linguisticsBonus}
+					${$thelemar_criticalRolls}
+				</div>
 			</div>
 		</div>`.appendTo($modalInner);
 
@@ -3733,6 +3899,16 @@ class CharacterSheetPage {
 			this._updateAllowedSources($modalInner);
 		});
 
+		// Thelemar master toggle helper - defined early so exhaustion handler can use it
+		const updateMasterToggleState = () => {
+			const carryChecked = $modalInner.find("#settings-thelemar-carry").prop("checked");
+			const lingChecked = $modalInner.find("#settings-thelemar-linguistics").prop("checked");
+			const critsChecked = $modalInner.find("#settings-thelemar-crits").prop("checked");
+			const exhaustionRules = $modalInner.find("#settings-exhaustion-rules").val();
+			const exhaustionIsThelemar = exhaustionRules === "thelemar";
+			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && lingChecked && critsChecked && exhaustionIsThelemar);
+		};
+
 		// Exhaustion rules handler
 		$modalInner.find("#settings-exhaustion-rules").on("change", (e) => {
 			this._state.setExhaustionRules(e.target.value);
@@ -3742,6 +3918,19 @@ class CharacterSheetPage {
 			if (this._spellsModule) {
 				this._spellsModule.render();
 			}
+			// Update master toggle state since exhaustion is part of Thelemar rules
+			updateMasterToggleState();
+		});
+
+		// Thelemar master toggle handler
+		$modalInner.find("#settings-thelemar-all").on("change", (e) => {
+			const isChecked = e.target.checked;
+			// Set all sub-toggles
+			$modalInner.find("#settings-thelemar-carry").prop("checked", isChecked).trigger("change");
+			$modalInner.find("#settings-thelemar-linguistics").prop("checked", isChecked).trigger("change");
+			$modalInner.find("#settings-thelemar-crits").prop("checked", isChecked).trigger("change");
+			// Also set exhaustion rules
+			$modalInner.find("#settings-exhaustion-rules").val(isChecked ? "thelemar" : "2024").trigger("change");
 		});
 
 		// Thelemar carry weight handler
@@ -3751,12 +3940,20 @@ class CharacterSheetPage {
 			this._inventory?._updateEncumbrance?.();
 			// Also update combat stats which shows carry capacity
 			this._renderCombatStats();
+			updateMasterToggleState();
 		});
 
 		// Thelemar linguistics bonus handler
 		$modalInner.find("#settings-thelemar-linguistics").on("change", (e) => {
 			this._state.setSetting("thelemar_linguisticsBonus", e.target.checked);
 			this._renderSkills();
+			updateMasterToggleState();
+		});
+
+		// Thelemar critical rolls handler
+		$modalInner.find("#settings-thelemar-crits").on("change", (e) => {
+			this._state.setSetting("thelemar_criticalRolls", e.target.checked);
+			updateMasterToggleState();
 		});
 	}
 
