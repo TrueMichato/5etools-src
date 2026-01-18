@@ -189,32 +189,85 @@ class CharacterSheetSpells {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "Add Spell",
 			isMinHeight0: true,
+			isWidth100: true,
 		});
 
-		// Search and filter controls
-		const $search = $(`<input type="text" class="form-control form-control--minimal mr-2" placeholder="Search spells...">`);
+		// All available schools
+		const schools = [...new Set(spells.map(s => s.school).filter(Boolean))].sort();
+
+		// Build enhanced filter UI
+		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
+		
+		// Search input with icon
+		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
+		const $search = $(`<input type="text" class="form-control" placeholder="Search spells by name...">`).appendTo($searchWrapper);
+		
+		// Level filter
 		const $levelSelect = $(`
-			<select class="form-control form-control--minimal" style="width: auto;">
+			<select class="form-control" style="width: auto; min-width: 120px;">
 				<option value="all">All Levels</option>
 				<option value="0">Cantrips</option>
 				${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(l => `<option value="${l}">Level ${l}</option>`).join("")}
 			</select>
-		`);
+		`).appendTo($filterContainer);
 
-		const $controls = $$`<div class="ve-flex mb-3">${$search}${$levelSelect}</div>`.appendTo($modalInner);
-		const $list = $(`<div class="spell-picker-list" style="max-height: 400px; overflow-y: auto;"></div>`).appendTo($modalInner);
+		// School filter
+		const $schoolSelect = $(`
+			<select class="form-control" style="width: auto; min-width: 140px;">
+				<option value="all">All Schools</option>
+				${schools.map(s => `<option value="${s}">${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
+			</select>
+		`).appendTo($filterContainer);
 
-		const renderList = (filter = "", levelFilter = "all") => {
+		// Quick filter buttons row
+		const $quickFilters = $(`<div class="ve-flex gap-2 mt-2 w-100"></div>`).appendTo($modalInner);
+		
+		let filterRitual = false;
+		let filterConcentration = false;
+		let filterVerbal = false;
+		let filterSomatic = false;
+		let filterMaterial = false;
+
+		const $ritualBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🔮 Ritual</button>`).appendTo($quickFilters);
+		const $concBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">⏳ Concentration</button>`).appendTo($quickFilters);
+		const $verbalBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">🗣️ V</button>`).appendTo($quickFilters);
+		const $somaticBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">✋ S</button>`).appendTo($quickFilters);
+		const $materialBtn = $(`<button class="charsheet__modal-filter-btn ve-btn ve-btn-xs">💎 M</button>`).appendTo($quickFilters);
+
+		// Results count
+		const $resultsCount = $(`<div class="ve-small ve-muted mt-2 mb-2"></div>`).appendTo($modalInner);
+
+		// Spell list
+		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
+
+		const renderList = () => {
 			$list.empty();
 
+			const searchTerm = $search.val().toLowerCase();
+			const levelFilter = $levelSelect.val();
+			const schoolFilter = $schoolSelect.val();
+
 			const filtered = spells.filter(spell => {
-				if (filter && !spell.name.toLowerCase().includes(filter)) return false;
+				if (searchTerm && !spell.name.toLowerCase().includes(searchTerm)) return false;
 				if (levelFilter !== "all" && spell.level !== parseInt(levelFilter)) return false;
+				if (schoolFilter !== "all" && spell.school !== schoolFilter) return false;
+				if (filterRitual && !spell.ritual) return false;
+				if (filterConcentration && !spell.concentration) return false;
+				if (filterVerbal && (!spell.components?.v)) return false;
+				if (filterSomatic && (!spell.components?.s)) return false;
+				if (filterMaterial && (!spell.components?.m)) return false;
 				return true;
 			});
 
+			$resultsCount.text(`${filtered.length} spell${filtered.length !== 1 ? "s" : ""} found`);
+
 			if (!filtered.length) {
-				$list.append(`<p class="ve-muted text-center">No spells found</p>`);
+				$list.html(`
+					<div class="charsheet__modal-empty">
+						<div class="charsheet__modal-empty-icon">🔍</div>
+						<div class="charsheet__modal-empty-text">No spells match your filters</div>
+					</div>
+				`);
 				return;
 			}
 
@@ -231,47 +284,143 @@ class CharacterSheetSpells {
 				if (b[0] === "Cantrips") return 1;
 				return parseInt(a[0].split(" ")[1]) - parseInt(b[0].split(" ")[1]);
 			}).forEach(([level, levelSpells]) => {
-				$list.append(`<h5 class="mt-2">${level}</h5>`);
+				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
+				$(`<div class="charsheet__modal-section-title">${level} (${levelSpells.length})</div>`).appendTo($section);
 
 				levelSpells.forEach(spell => {
 					const spellId = `${spell.name}|${spell.source}`;
 					const isKnown = knownSpellIds.includes(spellId);
 					const school = Parser.spSchoolAbvToFull(spell.school);
+					
+					// Build component string
+					const components = [];
+					if (spell.components?.v) components.push("V");
+					if (spell.components?.s) components.push("S");
+					if (spell.components?.m) components.push("M");
+					const componentStr = components.join(", ");
+
+					// Build tags
+					const tags = [];
+					if (spell.ritual) tags.push("🔮");
+					if (spell.concentration) tags.push("⏳");
 
 					const $item = $(`
-						<div class="ve-flex-v-center p-2 clickable ${isKnown ? "ve-muted" : ""}" style="border-bottom: 1px solid var(--rgb-border-grey);">
-							<div class="ve-flex-col" style="flex: 1;">
-								<span class="bold">${spell.name}</span>
-								<span class="ve-small ve-muted">${school}${spell.ritual ? " (ritual)" : ""} • ${Parser.sourceJsonToAbv(spell.source)}</span>
+						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""}">
+							<div class="charsheet__modal-list-item-icon">${this._getSchoolEmoji(spell.school)}</div>
+							<div class="charsheet__modal-list-item-content">
+								<div class="charsheet__modal-list-item-title">${spell.name} ${tags.join(" ")}</div>
+								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr} • ${Parser.sourceJsonToAbv(spell.source)}</div>
 							</div>
 							${isKnown
-								? `<span class="ve-muted">Known</span>`
-								: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-picker-add">Add</button>`
+								? `<span class="charsheet__modal-list-item-badge">Known</span>`
+								: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-picker-add">+ Add</button>`
 							}
 						</div>
 					`);
 
 					if (!isKnown) {
-						$item.find(".spell-picker-add").on("click", () => {
+						$item.find(".spell-picker-add").on("click", (e) => {
+							e.stopPropagation();
 							this._addSpell(spell);
 							knownSpellIds.push(spellId);
 							$item.addClass("ve-muted");
-							$item.find(".spell-picker-add").replaceWith(`<span class="ve-muted">Known</span>`);
+							$item.find(".spell-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge">Known</span>`);
 							JqueryUtil.doToast({type: "success", content: `Added ${spell.name}`});
 						});
+
+						// Click row to show info
+						$item.on("click", () => this._showSpellInfoFromData(spell));
 					}
 
-					$list.append($item);
+					$section.append($item);
 				});
 			});
 		};
 
-		$search.on("input", () => renderList($search.val().toLowerCase(), $levelSelect.val()));
-		$levelSelect.on("change", () => renderList($search.val().toLowerCase(), $levelSelect.val()));
+		// Toggle quick filter buttons
+		const toggleBtn = ($btn, prop) => {
+			if (prop === "ritual") filterRitual = !filterRitual;
+			if (prop === "concentration") filterConcentration = !filterConcentration;
+			if (prop === "verbal") filterVerbal = !filterVerbal;
+			if (prop === "somatic") filterSomatic = !filterSomatic;
+			if (prop === "material") filterMaterial = !filterMaterial;
+			$btn.toggleClass("active");
+			renderList();
+		};
+
+		$ritualBtn.on("click", () => toggleBtn($ritualBtn, "ritual"));
+		$concBtn.on("click", () => toggleBtn($concBtn, "concentration"));
+		$verbalBtn.on("click", () => toggleBtn($verbalBtn, "verbal"));
+		$somaticBtn.on("click", () => toggleBtn($somaticBtn, "somatic"));
+		$materialBtn.on("click", () => toggleBtn($materialBtn, "material"));
+
+		$search.on("input", renderList);
+		$levelSelect.on("change", renderList);
+		$schoolSelect.on("change", renderList);
 
 		renderList();
 
 		// Close button
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
+	_getSchoolEmoji (school) {
+		const schoolEmojis = {
+			"A": "✨", // Abjuration
+			"C": "🌀", // Conjuration
+			"D": "👁️", // Divination
+			"E": "💫", // Enchantment
+			"V": "🔥", // Evocation
+			"I": "🎭", // Illusion
+			"N": "💀", // Necromancy
+			"T": "🔄", // Transmutation
+		};
+		return schoolEmojis[school] || "📜";
+	}
+
+	async _showSpellInfoFromData (spell) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: spell.name,
+			isMinHeight0: true,
+		});
+
+		const school = Parser.spSchoolAbvToFull(spell.school);
+		const level = spell.level === 0 ? "Cantrip" : `Level ${spell.level}`;
+		
+		// Build component string
+		const components = [];
+		if (spell.components?.v) components.push("V");
+		if (spell.components?.s) components.push("S");
+		if (spell.components?.m) {
+			const mStr = typeof spell.components.m === "string" ? spell.components.m : spell.components.m.text || "M";
+			components.push(`M (${mStr})`);
+		}
+
+		const $content = $(`
+			<div class="charsheet__spell-info-modal">
+				<div class="ve-flex gap-2 mb-2">
+					<span class="charsheet__modal-list-item-badge">${level}</span>
+					<span class="charsheet__modal-list-item-badge">${school}</span>
+					${spell.ritual ? `<span class="charsheet__modal-list-item-badge">🔮 Ritual</span>` : ""}
+					${spell.concentration ? `<span class="charsheet__modal-list-item-badge">⏳ Concentration</span>` : ""}
+				</div>
+				<div class="ve-small mb-3">
+					<div><strong>Casting Time:</strong> ${this._getCastingTime(spell)}</div>
+					<div><strong>Range:</strong> ${this._getRange(spell)}</div>
+					<div><strong>Components:</strong> ${components.join(", ")}</div>
+					<div><strong>Duration:</strong> ${this._getDuration(spell)}</div>
+				</div>
+				<hr>
+				<div class="rd__b">${Renderer.get().render({entries: spell.entries || []})}</div>
+				${spell.entriesHigherLevel ? `
+					<hr>
+					<div class="rd__b"><strong>At Higher Levels.</strong> ${Renderer.get().render({entries: spell.entriesHigherLevel})}</div>
+				` : ""}
+			</div>
+		`).appendTo($modalInner);
+
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
