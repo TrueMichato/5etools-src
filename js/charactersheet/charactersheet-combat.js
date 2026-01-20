@@ -72,6 +72,9 @@ class CharacterSheetCombat {
 		$(document).on("click", "#charsheet-exertion-add", () => this._modifyExertion(1));
 		$(document).on("click", "#charsheet-exertion-remove", () => this._modifyExertion(-1));
 
+		// Combat Methods: add/manage methods
+		$(document).on("click", "#charsheet-btn-add-method", () => this._showMethodPicker());
+
 		// Add condition button in combat tab
 		$(document).on("click", "#charsheet-combat-add-condition", () => this._onAddCondition());
 	}
@@ -2279,6 +2282,603 @@ class CharacterSheetCombat {
 				$(pip).toggleClass("used", i < used);
 			});
 		}
+	}
+
+	/**
+	 * Show the Combat Methods picker modal
+	 * Allows adding/removing combat methods from selected traditions
+	 */
+	async _showMethodPicker () {
+		const allOptFeatures = this._page.getOptionalFeatures() || [];
+		
+		// Get all combat method optional features
+		const allMethods = allOptFeatures.filter(opt => 
+			opt.featureType?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft))
+		);
+
+		if (allMethods.length === 0) {
+			JqueryUtil.doToast({type: "warning", content: "No combat methods available. Load the Thelemar homebrew source."});
+			return;
+		}
+
+		// Get character's selected traditions
+		let selectedTraditions = this._getCharacterTraditions();
+		
+		// Get currently known methods
+		const knownMethods = this._state.getFeatures().filter(f => 
+			f.featureType === "Optional Feature" &&
+			f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft))
+		);
+		const knownMethodNames = new Set(knownMethods.map(m => `${m.name}|${m.source || ""}`));
+
+		// Get max degree based on character level
+		const maxDegree = this._getCharacterMaxDegree();
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "⚔️ Combat Methods",
+			isMinHeight0: true,
+			isWidth100: true,
+			isMaxWidth640p: true,
+		});
+
+		$modalInner.addClass("charsheet__method-picker");
+
+		// Build modal content with improved layout
+		const $content = $(`<div class="charsheet__method-picker-content p-2"></div>`).appendTo($modalInner);
+
+		// Header with stats
+		const $header = $(`
+			<div class="charsheet__method-picker-header mb-3 p-2" style="background: var(--rgb-bg-alt); border-radius: 8px;">
+				<div class="ve-flex ve-flex-v-center ve-flex-h-space-between mb-2">
+					<div class="ve-flex ve-flex-v-center">
+						<span class="charsheet__method-picker-icon mr-2" style="font-size: 1.5rem;">⚔️</span>
+						<div>
+							<div class="bold">Combat Methods</div>
+							<div class="ve-small ve-muted">Max Degree: <span class="badge badge-info">${maxDegree > 0 ? maxDegree + this._getOrdinalSuffix(maxDegree) : "None"}</span></div>
+						</div>
+					</div>
+					<div class="ve-flex ve-flex-col ve-text-right">
+						<div class="ve-small">Known Methods: <span class="badge badge-primary" id="method-picker-known-count">${knownMethodNames.size}</span></div>
+						<div class="ve-small">Traditions: <span class="badge badge-secondary" id="method-picker-trad-count">${selectedTraditions.length}</span></div>
+					</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Traditions section with card-style selection
+		const $tradSection = $(`
+			<div class="charsheet__method-picker-section mb-3">
+				<div class="ve-flex ve-flex-v-center ve-flex-h-space-between mb-2">
+					<h6 class="m-0"><span class="mr-1">📜</span> Combat Traditions</h6>
+					<button class="ve-btn ve-btn-xs ve-btn-default" id="method-picker-toggle-trads" title="Toggle tradition selection">
+						<span class="glyphicon glyphicon-chevron-down"></span>
+					</button>
+				</div>
+				<div class="charsheet__method-picker-traditions" id="method-picker-traditions" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+			</div>
+		`).appendTo($content);
+
+		// Toggle traditions visibility
+		let tradsExpanded = selectedTraditions.length === 0;
+		const $tradContainer = $tradSection.find("#method-picker-traditions");
+		const $toggleBtn = $tradSection.find("#method-picker-toggle-trads");
+		
+		const updateTradsVisibility = () => {
+			$tradContainer.toggle(tradsExpanded);
+			$toggleBtn.find(".glyphicon")
+				.removeClass("glyphicon-chevron-down glyphicon-chevron-up")
+				.addClass(tradsExpanded ? "glyphicon-chevron-up" : "glyphicon-chevron-down");
+		};
+		
+		$toggleBtn.on("click", () => {
+			tradsExpanded = !tradsExpanded;
+			updateTradsVisibility();
+		});
+
+		// Populate traditions with card-style UI
+		this._renderTraditionSelection($tradContainer, selectedTraditions, () => {
+			selectedTraditions = this._getSelectedTraditionsFromUI($tradContainer);
+			$("#method-picker-trad-count").text(selectedTraditions.length);
+			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+		});
+		updateTradsVisibility();
+
+		// Filters section with better styling
+		const $filterSection = $(`
+			<div class="charsheet__method-picker-filters mb-3 p-2" style="background: var(--rgb-bg-alt); border-radius: 6px;">
+				<div class="ve-flex ve-flex-wrap ve-flex-v-center" style="gap: 0.5rem;">
+					<div class="ve-flex-grow-1" style="min-width: 150px; max-width: 250px;">
+						<div class="input-group input-group-sm">
+							<span class="input-group-addon"><span class="glyphicon glyphicon-search"></span></span>
+							<input type="text" class="form-control" id="method-picker-search" placeholder="Search methods...">
+						</div>
+					</div>
+					<select class="form-control form-control-sm" id="method-picker-degree" style="width: auto; min-width: 110px;">
+						<option value="all">All Degrees</option>
+						${[1, 2, 3, 4, 5].filter(d => d <= maxDegree).map(d => 
+							`<option value="${d}">${d}${this._getOrdinalSuffix(d)} Degree</option>`
+						).join("")}
+					</select>
+					<select class="form-control form-control-sm" id="method-picker-filter" style="width: auto; min-width: 100px;">
+						<option value="all">All</option>
+						<option value="known">Known</option>
+						<option value="available">Available</option>
+					</select>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Method list container with better styling
+		const $methodSection = $(`
+			<div class="charsheet__method-picker-list-container" style="max-height: 350px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 6px; background: var(--rgb-bg);"></div>
+		`).appendTo($content);
+		const $methodList = $methodSection;
+
+		// Initial render
+		this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+
+		// Filter event listeners
+		$filterSection.find("#method-picker-search").on("input", () => {
+			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+		});
+		$filterSection.find("#method-picker-degree, #method-picker-filter").on("change", () => {
+			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+		});
+
+		// Footer with buttons
+		const $footer = $(`
+			<div class="ve-flex ve-flex-v-center ve-flex-h-space-between mt-3 pt-2" style="border-top: 1px solid var(--rgb-border-grey);">
+				<div class="ve-small ve-muted">Click method names for details</div>
+				<button class="ve-btn ve-btn-primary">
+					<span class="glyphicon glyphicon-ok mr-1"></span> Done
+				</button>
+			</div>
+		`).appendTo($modalInner);
+
+		$footer.find("button").on("click", async () => {
+			this._saveSelectedTraditions(selectedTraditions);
+			await this._page.saveCharacter();
+			this._page.renderCharacter();
+			doClose(true);
+		});
+	}
+
+	/**
+	 * Render tradition selection with card-style UI
+	 */
+	_renderTraditionSelection ($container, selectedTraditions, onChange) {
+		$container.empty();
+
+		const allTraditions = [
+			{code: "AM", name: "Adamant Mountain", icon: "🏔️"},
+			{code: "AK", name: "Arcane Knight", icon: "✨"},
+			{code: "BU", name: "Beast Unity", icon: "🐺"},
+			{code: "BZ", name: "Biting Zephyr", icon: "💨"},
+			{code: "CJ", name: "Comedic Jabs", icon: "🎭"},
+			{code: "EB", name: "Eldritch Blackguard", icon: "🌑"},
+			{code: "GH", name: "Gallant Heart", icon: "💖"},
+			{code: "MG", name: "Mirror's Glint", icon: "🪞"},
+			{code: "MS", name: "Mist and Shade", icon: "🌫️"},
+			{code: "RC", name: "Rapid Current", icon: "🌊"},
+			{code: "RE", name: "Razor's Edge", icon: "🗡️"},
+			{code: "SK", name: "Sanguine Knot", icon: "🩸"},
+			{code: "SS", name: "Spirited Steed", icon: "🐎"},
+			{code: "TI", name: "Tempered Iron", icon: "⚔️"},
+			{code: "TC", name: "Tooth and Claw", icon: "🦷"},
+			{code: "UW", name: "Unending Wheel", icon: "☯️"},
+			{code: "UH", name: "Unerring Hawk", icon: "🦅"},
+		];
+
+		for (const trad of allTraditions) {
+			const isSelected = selectedTraditions.includes(trad.code);
+			const $card = $(`
+				<div class="charsheet__method-picker-trad-card" data-trad="${trad.code}" style="
+					cursor: pointer;
+					padding: 0.5rem 0.75rem;
+					border: 2px solid ${isSelected ? "var(--rgb-link)" : "var(--rgb-border-grey)"};
+					border-radius: 6px;
+					background: ${isSelected ? "var(--rgb-link-opacity-10)" : "var(--rgb-bg)"};
+					transition: all 0.15s ease;
+					display: flex;
+					align-items: center;
+					gap: 0.4rem;
+				">
+					<span style="font-size: 1.1rem;">${trad.icon}</span>
+					<span class="ve-small" style="font-weight: ${isSelected ? "bold" : "normal"};">${trad.name}</span>
+					${isSelected ? '<span class="glyphicon glyphicon-ok ml-1" style="color: var(--rgb-link); font-size: 0.7rem;"></span>' : ""}
+				</div>
+			`);
+
+			$card.on("click", function () {
+				const code = $(this).data("trad");
+				const wasSelected = selectedTraditions.includes(code);
+				
+				if (wasSelected) {
+					selectedTraditions = selectedTraditions.filter(t => t !== code);
+				} else {
+					selectedTraditions.push(code);
+				}
+				
+				// Update visual state
+				const nowSelected = !wasSelected;
+				$(this).css({
+					"border-color": nowSelected ? "var(--rgb-link)" : "var(--rgb-border-grey)",
+					"background": nowSelected ? "var(--rgb-link-opacity-10)" : "var(--rgb-bg)",
+				});
+				$(this).find("span:last").css("font-weight", nowSelected ? "bold" : "normal");
+				
+				// Toggle checkmark
+				if (nowSelected) {
+					$(this).append('<span class="glyphicon glyphicon-ok ml-1" style="color: var(--rgb-link); font-size: 0.7rem;"></span>');
+				} else {
+					$(this).find(".glyphicon-ok").remove();
+				}
+				
+				onChange();
+			});
+
+			$card.on("mouseenter", function () {
+				if (!selectedTraditions.includes($(this).data("trad"))) {
+					$(this).css("border-color", "var(--rgb-link-opacity-50)");
+				}
+			}).on("mouseleave", function () {
+				if (!selectedTraditions.includes($(this).data("trad"))) {
+					$(this).css("border-color", "var(--rgb-border-grey)");
+				}
+			});
+
+			$container.append($card);
+		}
+	}
+
+	/**
+	 * Get selected traditions from the UI cards
+	 */
+	_getSelectedTraditionsFromUI ($container) {
+		const selected = [];
+		$container.find(".charsheet__method-picker-trad-card").each(function () {
+			if ($(this).find(".glyphicon-ok").length > 0) {
+				selected.push($(this).data("trad"));
+			}
+		});
+		return selected;
+	}
+
+	/**
+	 * Render the method list with filtering and hoverable names
+	 */
+	_renderMethodList ($container, allMethods, selectedTraditions, maxDegree, knownMethodNames) {
+		$container.empty();
+
+		// Get filter values
+		const searchQuery = ($("#method-picker-search").val() || "").toLowerCase();
+		const degreeFilter = $("#method-picker-degree").val() || "all";
+		const statusFilter = $("#method-picker-filter").val() || "all";
+
+		// Filter methods
+		let filteredMethods = allMethods.filter(method => {
+			// Must match a selected tradition
+			const tradCode = this._getMethodTraditionFromOptFeature(method);
+			if (!selectedTraditions.includes(tradCode)) return false;
+
+			// Must be within max degree
+			const degree = this._getMethodDegreeFromOptFeature(method);
+			if (degree > maxDegree) return false;
+
+			// Search filter
+			if (searchQuery && !method.name.toLowerCase().includes(searchQuery)) return false;
+
+			// Degree filter
+			if (degreeFilter !== "all" && degree !== parseInt(degreeFilter)) return false;
+
+			// Status filter
+			const key = `${method.name}|${method.source || ""}`;
+			const isKnown = knownMethodNames.has(key);
+			if (statusFilter === "known" && !isKnown) return false;
+			if (statusFilter === "available" && isKnown) return false;
+
+			return true;
+		});
+
+		if (selectedTraditions.length === 0) {
+			$container.append(`
+				<div class="ve-text-center py-4">
+					<div style="font-size: 2rem; opacity: 0.5; margin-bottom: 0.5rem;">📜</div>
+					<p class="ve-muted">Select at least one tradition to see available methods.</p>
+				</div>
+			`);
+			return;
+		}
+
+		if (filteredMethods.length === 0) {
+			$container.append(`
+				<div class="ve-text-center py-4">
+					<div style="font-size: 2rem; opacity: 0.5; margin-bottom: 0.5rem;">🔍</div>
+					<p class="ve-muted">No methods match the current filters.</p>
+				</div>
+			`);
+			return;
+		}
+
+		// Group by tradition and degree
+		const methodsByTrad = new Map();
+		for (const method of filteredMethods) {
+			const tradCode = this._getMethodTraditionFromOptFeature(method);
+			if (!methodsByTrad.has(tradCode)) {
+				methodsByTrad.set(tradCode, []);
+			}
+			methodsByTrad.get(tradCode).push(method);
+		}
+
+		// Tradition icons mapping
+		const tradIcons = {
+			"AM": "🏔️", "AK": "✨", "BU": "🐺", "BZ": "💨", "CJ": "🎭",
+			"EB": "🌑", "GH": "💖", "MG": "🪞", "MS": "🌫️", "RC": "🌊",
+			"RE": "🗡️", "SK": "🩸", "SS": "🐎", "TI": "⚔️", "TC": "🦷",
+			"UW": "☯️", "UH": "🦅",
+		};
+
+		// Render grouped methods
+		for (const tradCode of selectedTraditions) {
+			const methods = methodsByTrad.get(tradCode) || [];
+			if (methods.length === 0) continue;
+
+			const $tradGroup = $(`
+				<div class="charsheet__method-picker-trad-group">
+					<div class="charsheet__method-picker-trad-header" style="
+						padding: 0.5rem 0.75rem;
+						background: linear-gradient(to right, var(--rgb-bg-alt), transparent);
+						border-bottom: 1px solid var(--rgb-border-grey);
+						display: flex;
+						align-items: center;
+						gap: 0.5rem;
+						position: sticky;
+						top: 0;
+						z-index: 1;
+					">
+						<span style="font-size: 1.1rem;">${tradIcons[tradCode] || "⚔️"}</span>
+						<span class="bold">${this._getTraditionName(tradCode)}</span>
+						<span class="badge badge-default ve-small ml-auto">${methods.length}</span>
+					</div>
+				</div>
+			`);
+
+			// Sort by degree then name
+			methods.sort((a, b) => {
+				const degA = this._getMethodDegreeFromOptFeature(a);
+				const degB = this._getMethodDegreeFromOptFeature(b);
+				return degA - degB || a.name.localeCompare(b.name);
+			});
+
+			for (const method of methods) {
+				const key = `${method.name}|${method.source || ""}`;
+				const isKnown = knownMethodNames.has(key);
+				const degree = this._getMethodDegreeFromOptFeature(method);
+				const cost = this._getMethodExertionCostFromOptFeature(method);
+
+				// Create hoverable method name link
+				let methodNameHtml = `<span class="bold">${method.name}</span>`;
+				try {
+					if (this._page?.getHoverLink && method.source) {
+						methodNameHtml = this._page.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, method.source);
+					}
+				} catch (e) {
+					// Fall back to plain text
+				}
+
+				// Get first entry as description preview
+				let descPreview = "";
+				if (method.entries?.[0]) {
+					const firstEntry = method.entries[0];
+					if (typeof firstEntry === "string") {
+						descPreview = firstEntry.length > 100 ? firstEntry.slice(0, 100) + "..." : firstEntry;
+					}
+				}
+
+				const $method = $(`
+					<div class="charsheet__method-picker-item" style="
+						display: flex;
+						align-items: flex-start;
+						justify-content: space-between;
+						padding: 0.6rem 0.75rem;
+						border-bottom: 1px solid var(--rgb-border-grey-trans);
+						background: ${isKnown ? "var(--rgb-link-opacity-5)" : "transparent"};
+						transition: background 0.15s ease;
+					">
+						<div class="ve-flex-col" style="flex: 1; min-width: 0; padding-right: 0.75rem;">
+							<div class="ve-flex ve-flex-v-center ve-flex-wrap" style="gap: 0.4rem; margin-bottom: 0.25rem;">
+								${isKnown ? '<span class="glyphicon glyphicon-ok" style="color: var(--rgb-link); font-size: 0.7rem;"></span>' : ""}
+								<span class="charsheet__method-picker-name">${methodNameHtml}</span>
+								<span class="badge badge-info ve-small">${degree}${this._getOrdinalSuffix(degree)}</span>
+								${cost > 0 ? `<span class="badge badge-warning ve-small">${cost} EP</span>` : ""}
+								${method.source ? `<span class="ve-muted ve-small">[${Parser.sourceJsonToAbv(method.source)}]</span>` : ""}
+							</div>
+							${descPreview ? `<div class="ve-small ve-muted" style="line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${descPreview}</div>` : ""}
+						</div>
+						<div class="ve-flex ve-flex-v-center" style="flex-shrink: 0;">
+							${isKnown 
+								? `<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__method-remove" data-method-key="${key}" style="white-space: nowrap;">
+									<span class="glyphicon glyphicon-minus mr-1"></span>Remove
+								</button>`
+								: `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__method-add" data-method-key="${key}" style="white-space: nowrap;">
+									<span class="glyphicon glyphicon-plus mr-1"></span>Add
+								</button>`
+							}
+						</div>
+					</div>
+				`);
+
+				// Hover effect
+				$method.on("mouseenter", function () {
+					$(this).css("background", isKnown ? "var(--rgb-link-opacity-10)" : "var(--rgb-bg-alt)");
+				}).on("mouseleave", function () {
+					$(this).css("background", isKnown ? "var(--rgb-link-opacity-5)" : "transparent");
+				});
+
+				// Store method data
+				$method.data("method", method);
+
+				// Event handlers
+				$method.find(".charsheet__method-add").on("click", (e) => {
+					e.stopPropagation();
+					this._addCombatMethod(method);
+					knownMethodNames.add(key);
+					this._renderMethodList($container, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+					// Update known count badge
+					$("#method-picker-known-count").text(knownMethodNames.size);
+				});
+
+				$method.find(".charsheet__method-remove").on("click", (e) => {
+					e.stopPropagation();
+					this._removeCombatMethod(method);
+					knownMethodNames.delete(key);
+					this._renderMethodList($container, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+					// Update known count badge
+					$("#method-picker-known-count").text(knownMethodNames.size);
+				});
+
+				$tradGroup.append($method);
+			}
+
+			$container.append($tradGroup);
+		}
+	}
+
+	/**
+	 * Get character's selected combat traditions
+	 */
+	_getCharacterTraditions () {
+		// Look for traditions in character data or features
+		const settings = this._state.getSettings?.() || {};
+		if (settings.combatTraditions?.length) {
+			return settings.combatTraditions;
+		}
+
+		// Infer from known combat methods
+		const knownMethods = this._state.getFeatures().filter(f => 
+			f.featureType === "Optional Feature" &&
+			f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft))
+		);
+
+		const traditions = new Set();
+		for (const method of knownMethods) {
+			for (const ft of (method.optionalFeatureTypes || [])) {
+				const match = ft.match(/^CTM:\d([A-Z]{2})$/);
+				if (match) traditions.add(match[1]);
+			}
+		}
+
+		return Array.from(traditions);
+	}
+
+	/**
+	 * Save selected traditions to character settings
+	 */
+	_saveSelectedTraditions (traditions) {
+		const settings = this._state.getSettings?.() || {};
+		settings.combatTraditions = traditions;
+		this._state.setSettings?.(settings);
+	}
+
+	/**
+	 * Get max method degree based on character class level
+	 */
+	_getCharacterMaxDegree () {
+		// Look for a class with Combat Methods progression
+		const classes = this._state.getClasses();
+		let maxDegree = 0;
+
+		for (const cls of classes) {
+			// Check if this class uses combat methods
+			const classData = this._page.getClasses?.().find(c => c.name === cls.name && c.source === cls.source);
+			if (!classData?.optionalfeatureProgression) continue;
+
+			const cmProg = classData.optionalfeatureProgression.find(prog => 
+				prog.featureType?.some(ft => ft.startsWith("CTM:"))
+			);
+			if (!cmProg) continue;
+
+			// Get max degree at current level
+			// Degrees are typically: 1st at 1-4, 2nd at 5-8, 3rd at 9-12, 4th at 13-16, 5th at 17+
+			const level = cls.level || 1;
+			let degree = 1;
+			if (level >= 17) degree = 5;
+			else if (level >= 13) degree = 4;
+			else if (level >= 9) degree = 3;
+			else if (level >= 5) degree = 2;
+			
+			maxDegree = Math.max(maxDegree, degree);
+		}
+
+		return maxDegree || 1; // Default to at least 1st degree
+	}
+
+	/**
+	 * Add a combat method to the character
+	 */
+	_addCombatMethod (method) {
+		const featureData = {
+			name: method.name,
+			source: method.source,
+			featureType: "Optional Feature",
+			optionalFeatureTypes: method.featureType,
+			description: method.entries ? Renderer.get().render({entries: method.entries}) : "",
+			entries: method.entries,
+		};
+		this._state.addFeature(featureData);
+		JqueryUtil.doToast({type: "success", content: `Learned ${method.name}!`});
+	}
+
+	/**
+	 * Remove a combat method from the character
+	 */
+	_removeCombatMethod (method) {
+		const features = this._state.getFeatures();
+		const idx = features.findIndex(f => 
+			f.name === method.name && 
+			(f.source === method.source || !method.source)
+		);
+		if (idx >= 0) {
+			features.splice(idx, 1);
+			this._state.setFeatures(features);
+			JqueryUtil.doToast({type: "info", content: `Removed ${method.name}.`});
+		}
+	}
+
+	/**
+	 * Get method tradition code from optional feature
+	 */
+	_getMethodTraditionFromOptFeature (method) {
+		if (!method.featureType) return "Unknown";
+		for (const ft of method.featureType) {
+			const match = ft.match(/^CTM:\d([A-Z]{2})$/);
+			if (match) return match[1];
+		}
+		return "Unknown";
+	}
+
+	/**
+	 * Get method degree from optional feature
+	 */
+	_getMethodDegreeFromOptFeature (method) {
+		if (!method.featureType) return 0;
+		for (const ft of method.featureType) {
+			const match = ft.match(/^CTM:(\d)[A-Z]{2}$/);
+			if (match) return parseInt(match[1]);
+		}
+		return 0;
+	}
+
+	/**
+	 * Get method exertion cost from optional feature
+	 */
+	_getMethodExertionCostFromOptFeature (method) {
+		if (!method.entries) return 1;
+		const entriesStr = JSON.stringify(method.entries).toLowerCase();
+		const costMatch = entriesStr.match(/costs?\s+(\d+)\s+exertion/i);
+		if (costMatch) return parseInt(costMatch[1]);
+		// Default to degree-based cost
+		return this._getMethodDegreeFromOptFeature(method) || 1;
 	}
 
 	_getMethodDegree (feature) {

@@ -1653,20 +1653,20 @@ class CharacterSheetPage {
 				</div>
 			`);
 
-			// Click handlers
+			// Click handlers - pass event for shift/ctrl (advantage/disadvantage)
 			$card.find(".charsheet__ability-roll-check").on("click", (e) => {
 				e.stopPropagation();
-				this._rollAbilityCheck(abl);
+				this._rollAbilityCheck(abl, e);
 			});
 			$card.find(".charsheet__ability-roll-save").on("click", (e) => {
 				e.stopPropagation();
-				this._rollSavingThrow(abl);
+				this._rollSavingThrow(abl, e);
 			});
 			$card.find(".charsheet__ability-skill-mini").on("click", (e) => {
 				e.stopPropagation();
 				const skillKey = $(e.currentTarget).data("skill");
 				const skill = skills.find(s => s.name.toLowerCase().replace(/\s+/g, "") === skillKey);
-				if (skill) this._rollSkillCheck(skillKey, skill.name);
+				if (skill) this._rollSkillCheck(skillKey, skill.name, e);
 			});
 
 			$heroGrid.append($card);
@@ -1983,7 +1983,7 @@ class CharacterSheetPage {
 					
 					const $row = $(`
 						<div class="charsheet__activatable-row ve-flex-v-center py-1 px-2 mb-1 rounded" 
-							style="background: var(--rgb-bg-alt, #f8f9fa);">
+							style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b));">
 							<span class="charsheet__state-icon mr-2">${icon}</span>
 							<div class="ve-flex-col flex-grow-1" style="min-width: 0;">
 								<span class="charsheet__state-name">${featureNameHtml}</span>
@@ -3060,13 +3060,16 @@ class CharacterSheetPage {
 	 * Roll a d20 with advantage/disadvantage support
 	 * @param {Object} opts - Roll options
 	 * @param {Event} [opts.event] - The triggering event (to detect modifier keys)
-	 * @param {"advantage"|"disadvantage"|"normal"} [opts.mode] - Force a specific mode
+	 * @param {"advantage"|"disadvantage"|"normal"} [opts.mode] - Force a specific mode (from states)
 	 * @param {boolean} [opts.isAttack=false] - Whether this is an attack roll (does not use Thelemar crit rules)
-	 * @returns {{roll: number, roll1: number, roll2: number, mode: string, thelemar_critBonus: number}} Roll result
+	 * @returns {{roll: number, roll1, roll2, mode, thelemar_critBonus, stateMode}} Roll result
 	 */
 	_rollD20 ({event, mode, isAttack = false} = {}) {
-		// Determine roll mode from event modifier keys if not explicitly set
-		if (!mode && event) {
+		const stateMode = mode; // Track the state-based mode separately
+		
+		// Event modifier keys take priority over state-based mode
+		// This allows users to manually override advantage/disadvantage
+		if (event) {
 			if (event.shiftKey) mode = "advantage";
 			else if (event.ctrlKey || event.metaKey) mode = "disadvantage";
 		}
@@ -3775,9 +3778,10 @@ class CharacterSheetPage {
 		const currentThelemar_carryWeight = this._state.getSettings()?.thelemar_carryWeight || false;
 		const currentThelemar_linguisticsBonus = this._state.getSettings()?.thelemar_linguisticsBonus || false;
 		const currentThelemar_criticalRolls = this._state.getSettings()?.thelemar_criticalRolls || false;
+		const currentThelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
 		
-		// Master toggle for all Thelemar rules
-		const allThelemar = currentThelemar_carryWeight && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls;
+		// Master toggle for all Thelemar rules (uses currentExhaustionRules from above)
+		const allThelemar = currentThelemar_carryWeight && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls && currentThelemar_asiFeat && currentExhaustionRules === "thelemar";
 		const $thelemar_masterToggle = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--master">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-all" ${allThelemar ? "checked" : ""}>
@@ -3818,6 +3822,16 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
+		const $thelemar_asiFeat = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-thelemar-asifeat" ${currentThelemar_asiFeat ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">📈 ASI + Feat at Level 4</span>
+					<span class="charsheet__settings-checkbox-desc">At level 4, gain both an ASI and a feat instead of choosing one</span>
+				</span>
+			</label>
+		</div>`;
+
 		// Build modal content
 		$$`<div class="charsheet__settings-modal">
 			<div class="charsheet__settings-section">
@@ -3842,6 +3856,7 @@ class CharacterSheetPage {
 					${$thelemar_carryWeight}
 					${$thelemar_linguisticsBonus}
 					${$thelemar_criticalRolls}
+					${$thelemar_asiFeat}
 				</div>
 			</div>
 		</div>`.appendTo($modalInner);
@@ -3904,9 +3919,10 @@ class CharacterSheetPage {
 			const carryChecked = $modalInner.find("#settings-thelemar-carry").prop("checked");
 			const lingChecked = $modalInner.find("#settings-thelemar-linguistics").prop("checked");
 			const critsChecked = $modalInner.find("#settings-thelemar-crits").prop("checked");
+			const asiFeatChecked = $modalInner.find("#settings-thelemar-asifeat").prop("checked");
 			const exhaustionRules = $modalInner.find("#settings-exhaustion-rules").val();
 			const exhaustionIsThelemar = exhaustionRules === "thelemar";
-			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && lingChecked && critsChecked && exhaustionIsThelemar);
+			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && lingChecked && critsChecked && asiFeatChecked && exhaustionIsThelemar);
 		};
 
 		// Exhaustion rules handler
@@ -3929,6 +3945,7 @@ class CharacterSheetPage {
 			$modalInner.find("#settings-thelemar-carry").prop("checked", isChecked).trigger("change");
 			$modalInner.find("#settings-thelemar-linguistics").prop("checked", isChecked).trigger("change");
 			$modalInner.find("#settings-thelemar-crits").prop("checked", isChecked).trigger("change");
+			$modalInner.find("#settings-thelemar-asifeat").prop("checked", isChecked).trigger("change");
 			// Also set exhaustion rules
 			$modalInner.find("#settings-exhaustion-rules").val(isChecked ? "thelemar" : "2024").trigger("change");
 		});
@@ -3953,6 +3970,12 @@ class CharacterSheetPage {
 		// Thelemar critical rolls handler
 		$modalInner.find("#settings-thelemar-crits").on("change", (e) => {
 			this._state.setSetting("thelemar_criticalRolls", e.target.checked);
+			updateMasterToggleState();
+		});
+
+		// Thelemar ASI+Feat at level 4 handler
+		$modalInner.find("#settings-thelemar-asifeat").on("change", (e) => {
+			this._state.setSetting("thelemar_asiFeat", e.target.checked);
 			updateMasterToggleState();
 		});
 	}
@@ -4849,45 +4872,49 @@ class CharacterSheetPage {
 	_getFeatureSuggestions () {
 		const features = [];
 
-		// Add class features (deduplicated by name)
-		const classFeatureNames = new Set();
-		this._classFeatures.forEach(f => {
-			if (!classFeatureNames.has(f.name)) {
-				classFeatureNames.add(f.name);
+		try {
+			// Add class features (deduplicated by name)
+			const classFeatureNames = new Set();
+			(this._classFeatures || []).forEach(f => {
+				if (!classFeatureNames.has(f.name)) {
+					classFeatureNames.add(f.name);
+					features.push({
+						name: f.name,
+						source: f.source,
+						description: f.entries ? Renderer.get().render({entries: f.entries}) : null,
+						featureType: `Class (${f.className})`,
+					});
+				}
+			});
+
+			// Add optional features (invocations, fighting styles, etc.)
+			(this._optionalFeaturesData || []).forEach(f => {
 				features.push({
 					name: f.name,
 					source: f.source,
 					description: f.entries ? Renderer.get().render({entries: f.entries}) : null,
-					featureType: `Class (${f.className})`,
+					featureType: f.featureType?.join(", ") || "Optional Feature",
 				});
-			}
-		});
-
-		// Add optional features (invocations, fighting styles, etc.)
-		this._optionalFeaturesData.forEach(f => {
-			features.push({
-				name: f.name,
-				source: f.source,
-				description: f.entries ? Renderer.get().render({entries: f.entries}) : null,
-				featureType: f.featureType?.join(", ") || "Optional Feature",
 			});
-		});
 
-		// Add racial traits from race data
-		this._races.forEach(race => {
-			if (race.entries) {
-				race.entries.forEach(entry => {
-					if (entry.name && entry.entries) {
-						features.push({
-							name: entry.name,
-							source: race.source,
-							description: Renderer.get().render({entries: entry.entries}),
-							featureType: `Race (${race.name})`,
-						});
-					}
-				});
-			}
-		});
+			// Add racial traits from race data
+			(this._races || []).forEach(race => {
+				if (race.entries) {
+					race.entries.forEach(entry => {
+						if (entry.name && entry.entries) {
+							features.push({
+								name: entry.name,
+								source: race.source,
+								description: Renderer.get().render({entries: entry.entries}),
+								featureType: `Race (${race.name})`,
+							});
+						}
+					});
+				}
+			});
+		} catch (e) {
+			console.error("[CharSheet] Error getting feature suggestions:", e);
+		}
 
 		// Sort by name and deduplicate
 		const seen = new Set();
@@ -4904,35 +4931,81 @@ class CharacterSheetPage {
 	 */
 	async _showAddCustomFeatureModal () {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Add Feature",
+			title: "✨ Add Custom Feature",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
-		const featureSuggestions = this._getFeatureSuggestions();
+		let featureSuggestions = [];
+		try {
+			featureSuggestions = this._getFeatureSuggestions();
+		} catch (e) {
+			console.error("[CharSheet] Error getting feature suggestions:", e);
+		}
 
-		const $form = $$`<div class="ve-flex-col">
-			<div class="mb-2" style="position: relative;">
-				<label class="mb-1">Search existing features or enter custom name:</label>
-				<input type="text" class="form-control" id="custom-feature-name" placeholder="Type to search features...">
-				<div class="charsheet__autocomplete-dropdown" id="custom-feature-dropdown" style="display: none; max-height: 200px;"></div>
+		// Intro text
+		$modalInner.append(`
+			<p class="ve-small ve-muted mb-3">
+				Add a custom feature to your character. You can search existing features for inspiration or create something entirely new.
+			</p>
+		`);
+
+		const $form = $$`<div class="charsheet__custom-feature-form">
+			<div class="charsheet__form-group">
+				<label class="charsheet__form-label">
+					<span class="charsheet__form-label-icon">📝</span>
+					Feature Name
+				</label>
+				<div class="charsheet__form-input-wrapper">
+					<input type="text" class="form-control charsheet__form-input" id="custom-feature-name" placeholder="Search features or enter custom name...">
+					<div class="charsheet__autocomplete-dropdown" id="custom-feature-dropdown"></div>
+				</div>
 			</div>
-			<div class="ve-flex-v-center mb-2">
-				<label class="mr-2 w-100p">Source:</label>
-				<input type="text" class="form-control" id="custom-feature-source" placeholder="e.g. Race, Feat, Item" value="Custom">
+			
+			<div class="charsheet__form-row">
+				<div class="charsheet__form-group charsheet__form-group--half">
+					<label class="charsheet__form-label">
+						<span class="charsheet__form-label-icon">📚</span>
+						Source
+					</label>
+					<input type="text" class="form-control charsheet__form-input" id="custom-feature-source" placeholder="e.g. Race, Feat, Item" value="Custom">
+				</div>
+				<div class="charsheet__form-group charsheet__form-group--half">
+					<label class="charsheet__form-label">
+						<span class="charsheet__form-label-icon">🏷️</span>
+						Type
+					</label>
+					<select class="form-control charsheet__form-input" id="custom-feature-type">
+						<option value="Custom">Custom</option>
+						<option value="Racial">Racial Feature</option>
+						<option value="Class">Class Feature</option>
+						<option value="Feat">Feat</option>
+						<option value="Item">Item Property</option>
+						<option value="Boon">Boon/Blessing</option>
+						<option value="Other">Other</option>
+					</select>
+				</div>
 			</div>
-			<div class="mb-2">
-				<label class="mb-1">Description (optional):</label>
-				<textarea class="form-control" id="custom-feature-desc" rows="4" placeholder="Enter feature description..."></textarea>
+			
+			<div class="charsheet__form-group">
+				<label class="charsheet__form-label">
+					<span class="charsheet__form-label-icon">📖</span>
+					Description <span class="ve-muted">(optional)</span>
+				</label>
+				<textarea class="form-control charsheet__form-input charsheet__form-textarea" id="custom-feature-desc" rows="5" placeholder="Enter feature description... You can use basic formatting."></textarea>
 			</div>
-			<div class="ve-flex-h-right">
-				<button class="ve-btn ve-btn-default mr-2" id="custom-feature-cancel">Cancel</button>
-				<button class="ve-btn ve-btn-primary" id="custom-feature-add">Add Feature</button>
+			
+			<div class="charsheet__form-actions">
+				<button class="ve-btn ve-btn-default" id="custom-feature-cancel">Cancel</button>
+				<button class="ve-btn ve-btn-primary" id="custom-feature-add">
+					<span class="glyphicon glyphicon-plus mr-1"></span> Add Feature
+				</button>
 			</div>
 		</div>`.appendTo($modalInner);
 
 		const $name = $form.find("#custom-feature-name");
 		const $source = $form.find("#custom-feature-source");
+		const $type = $form.find("#custom-feature-type");
 		const $desc = $form.find("#custom-feature-desc");
 		const $dropdown = $form.find("#custom-feature-dropdown");
 		const $addBtn = $form.find("#custom-feature-add");
@@ -4942,45 +5015,61 @@ class CharacterSheetPage {
 			const filtered = featureSuggestions.filter(f => {
 				if (!filter) return false; // Don't show all when empty
 				return f.name.toLowerCase().includes(filter.toLowerCase());
-			}).slice(0, 15);
+			}).slice(0, 10);
 
 			$dropdown.empty();
 			if (!filtered.length) {
-				$dropdown.hide();
+				$dropdown.removeClass("open");
 				return;
 			}
 
 			filtered.forEach(feature => {
 				const $item = $(`
 					<div class="charsheet__autocomplete-item">
-						<span class="charsheet__autocomplete-item-name">${feature.name}</span>
-						<span class="charsheet__autocomplete-item-type ve-muted">${feature.featureType}</span>
+						<div class="charsheet__autocomplete-item-icon">✨</div>
+						<div class="charsheet__autocomplete-item-content">
+							<span class="charsheet__autocomplete-item-name">${feature.name}</span>
+							<span class="charsheet__autocomplete-item-type">${feature.featureType}</span>
+						</div>
 					</div>
 				`);
 				$item.on("click", () => {
 					$name.val(feature.name);
 					$source.val(feature.featureType);
+					// Try to match type
+					const typeMap = {
+						"Race": "Racial",
+						"Racial": "Racial",
+						"Class": "Class",
+						"Subclass": "Class",
+						"Feat": "Feat",
+						"Background": "Other",
+					};
+					const mappedType = Object.entries(typeMap).find(([k]) => feature.featureType.includes(k))?.[1] || "Custom";
+					$type.val(mappedType);
 					if (feature.description) $desc.val(feature.description.replace(/<[^>]*>/g, "")); // Strip HTML
-					$dropdown.hide();
+					$dropdown.removeClass("open");
 				});
 				$dropdown.append($item);
 			});
-			$dropdown.show();
+			$dropdown.addClass("open");
 		};
 
 		$name.on("input", () => renderDropdown($name.val()));
 		$name.on("focus", () => renderDropdown($name.val()));
-		$name.on("blur", () => setTimeout(() => $dropdown.hide(), 200));
+		$name.on("blur", () => setTimeout(() => $dropdown.removeClass("open"), 200));
 
 		$cancelBtn.on("click", () => doClose());
 
 		$addBtn.on("click", () => {
 			const name = $name.val().trim();
 			const source = $source.val().trim() || "Custom";
+			const type = $type.val();
 			const description = $desc.val().trim();
 
 			if (!name) {
 				JqueryUtil.doToast({type: "warning", content: "Please enter a feature name."});
+				$name.focus();
 				return;
 			}
 
@@ -4989,7 +5078,7 @@ class CharacterSheetPage {
 				name,
 				source,
 				description: description || null,
-				featureType: "Custom",
+				featureType: type,
 				isCustom: true,
 			});
 
@@ -5002,9 +5091,19 @@ class CharacterSheetPage {
 			doClose();
 		});
 
-		// Allow Enter in name to submit
+		// Allow Enter in name to move to description, Ctrl+Enter to submit
 		$name.on("keypress", (e) => {
-			if (e.which === 13) $addBtn.click();
+			if (e.which === 13) {
+				e.preventDefault();
+				$desc.focus();
+			}
+		});
+
+		$desc.on("keydown", (e) => {
+			if (e.which === 13 && (e.ctrlKey || e.metaKey)) {
+				e.preventDefault();
+				$addBtn.click();
+			}
 		});
 
 		$name.focus();
