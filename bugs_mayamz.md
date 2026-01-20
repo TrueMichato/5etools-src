@@ -2,7 +2,6 @@
 This file is used to track known bugs in the 5etools character sheet code.
 
 ### Critial notes
-- [] rangers give favoured enemy even on rangers without it like TGTT - maybe because they're optional features?
 - [] Can the sheet be moved or shared to another comupter? Only through import/export?
 - [] Level 3 does not provide both ASI and feat.
 - [] Combat methods does not support Refresh and Replace.
@@ -24,3 +23,4 @@ This file is used to track known bugs in the 5etools character sheet code.
 - [X] Custom background (sadly Lunaria is a custom)
 - [X] In specialties choices in builder it's not quite clear which box is for which feature. Spacing a bit off.
 - [X] In Abilitied in builder - the placeholder 10 are returned to the score list.
+- [X] rangers give favoured enemy even on rangers without it like TGTT - maybe because they're optional features?
