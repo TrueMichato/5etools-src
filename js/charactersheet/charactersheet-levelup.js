@@ -168,6 +168,198 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
+	 * Get expertise grants from features at the new level
+	 * Features like Deft Explorer Improvement grant expertise at levels 6 and 10
+	 * @param {Array} features - Features gained at the new level
+	 * @returns {Array} Array of {featureName, count, allowTools, toolName} objects
+	 */
+	_getExpertiseGrantsForLevel (features) {
+		const grants = [];
+
+		for (const feature of features) {
+			const expertiseInfo = this._findExpertiseInFeature(feature);
+			if (expertiseInfo) {
+				grants.push({
+					featureName: feature.name,
+					...expertiseInfo,
+				});
+			}
+		}
+
+		return grants;
+	}
+
+	/**
+	 * Find expertise grant in a feature's entries
+	 * @param {Object} feature - Feature with entries
+	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
+	 */
+	_findExpertiseInFeature (feature) {
+		if (!feature?.entries) return null;
+
+		// Check if feature name is "Expertise"
+		if (feature.name === "Expertise") {
+			return this._parseExpertiseEntries(feature.entries);
+		}
+
+		// Search nested entries for Expertise grants
+		return this._findExpertiseInEntries(feature.entries);
+	}
+
+	/**
+	 * Recursively search entries for nested Expertise grants
+	 * @param {Array} entries - Feature entries
+	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
+	 */
+	_findExpertiseInEntries (entries) {
+		for (const entry of entries) {
+			if (typeof entry === "object" && entry.type === "entries") {
+				// Check if this sub-entry's name is "Expertise"
+				if (entry.name === "Expertise") {
+					return this._parseExpertiseEntries(entry.entries || []);
+				}
+				// Check if this sub-entry's text grants expertise
+				if (this._entryGrantsExpertise(entry.entries || [])) {
+					return this._parseExpertiseEntries(entry.entries || []);
+				}
+				// Recursively check nested entries
+				if (entry.entries) {
+					const result = this._findExpertiseInEntries(entry.entries);
+					if (result) return result;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Check if entries text indicates an expertise grant
+	 * @param {Array} entries - Feature entries to check
+	 * @returns {boolean}
+	 */
+	_entryGrantsExpertise (entries) {
+		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
+		return entriesText.includes("proficiency bonus is doubled")
+			|| entriesText.includes("gain expertise")
+			|| entriesText.includes("double your proficiency bonus");
+	}
+
+	/**
+	 * Parse expertise entries to determine count and tool allowance
+	 * @param {Array} entries - Expertise feature entries
+	 * @returns {{count: number, allowTools: boolean, toolName: string}}
+	 */
+	_parseExpertiseEntries (entries) {
+		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
+
+		// Determine count
+		let count = 2; // Default
+		if (entriesText.includes("one ") || entriesText.includes("one of") || entriesText.includes("another")) count = 1;
+		if (entriesText.includes("two")) count = 2;
+		if (entriesText.includes("three")) count = 3;
+		if (entriesText.includes("four")) count = 4;
+
+		// Check if tools are allowed
+		const allowTools = entriesText.includes("thieves' tools") && !entriesText.includes("variantrule");
+
+		return {
+			count,
+			allowTools,
+			toolName: allowTools ? "Thieves' Tools" : null,
+		};
+	}
+
+	/**
+	 * Get language grants from features at the new level
+	 * Features like Deft Explorer Improvement grant languages at levels 6 and 10
+	 * @param {Array} features - Features gained at the new level
+	 * @returns {Array} Array of {featureName, count} objects
+	 */
+	_getLanguageGrantsForLevel (features) {
+		const grants = [];
+
+		for (const feature of features) {
+			const langInfo = this._findLanguageGrantsInFeature(feature);
+			if (langInfo) {
+				grants.push({
+					featureName: feature.name,
+					count: langInfo.count,
+				});
+			}
+		}
+
+		return grants;
+	}
+
+	/**
+	 * Find language grant in a feature's entries
+	 * @param {Object} feature - Feature with entries
+	 * @returns {{count: number}|null}
+	 */
+	_findLanguageGrantsInFeature (feature) {
+		if (!feature?.entries) return null;
+		return this._findLanguageGrantsInEntries(feature.entries, feature.name);
+	}
+
+	/**
+	 * Recursively search entries for language grants
+	 * @param {Array} entries - Feature entries
+	 * @param {string} featureName - Name of the feature for reference
+	 * @returns {{count: number}|null}
+	 */
+	_findLanguageGrantsInEntries (entries, featureName) {
+		const entriesText = entries.map(e => {
+			if (typeof e === "string") return e;
+			if (typeof e === "object" && e.type === "list" && e.items) {
+				return e.items.map(item => typeof item === "string" ? item : JSON.stringify(item)).join(" ");
+			}
+			return JSON.stringify(e);
+		}).join(" ").toLowerCase();
+
+		// Check for language-granting patterns
+		const langPatterns = [
+			/learn\s+(one|two|three|four|\d+)\s+(?:additional\s+)?languages?/i,
+			/speak,?\s*read,?\s*and\s*write\s+(one|two|three|four|\d+)\s+(?:additional\s+)?languages?/i,
+			/two\s+(?:additional\s+)?languages?\s+of\s+your\s+choice/i,
+			/one\s+(?:additional\s+)?language\s+of\s+your\s+choice/i,
+			/\{@b Languages?\.\}\s*You\s+learn\s+(one|two|three|four|\d+)\s+languages?/i,
+		];
+
+		for (const pattern of langPatterns) {
+			const match = entriesText.match(pattern);
+			if (match) {
+				let count = 0;
+				const numWord = match[1]?.toLowerCase();
+				if (numWord === "one" || numWord === "1") count = 1;
+				else if (numWord === "two" || numWord === "2") count = 2;
+				else if (numWord === "three" || numWord === "3") count = 3;
+				else if (numWord === "four" || numWord === "4") count = 4;
+				else if (/^\d+$/.test(numWord)) count = parseInt(numWord);
+				
+				// Special cases for patterns without capture groups
+				if (count === 0 && entriesText.includes("two additional languages")) count = 2;
+				if (count === 0 && entriesText.includes("two languages of your choice")) count = 2;
+				if (count === 0 && entriesText.includes("one additional language")) count = 1;
+				if (count === 0 && entriesText.includes("one language of your choice")) count = 1;
+
+				if (count > 0) {
+					return {count};
+				}
+			}
+		}
+
+		// Recursively check nested entries
+		for (const entry of entries) {
+			if (typeof entry === "object" && entry.entries) {
+				const result = this._findLanguageGrantsInEntries(entry.entries, featureName);
+				if (result) return result;
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Show level up dialog for a specific class
 	 * @param {string} className - The class to level up (optional, prompts if multiple classes)
 	 */
@@ -341,12 +533,19 @@ class CharacterSheetLevelUp {
 				currentFeatures = this._getLevelFeatures(classData, newLevel, subclass);
 				updateFeaturesDisplay();
 				updateFeatureOptionsDisplay();
+				// Note: updateExpertiseDisplay and updateLanguageDisplay are defined after this block
+				// They will be called on initial render, but subclass selection at levels with
+				// expertise/language grants is uncommon (usually level 3 when these features come at 6+)
 			});
 			$content.append($subclassSection);
 		}
 
 		// ASI / Feat selection
 		if (hasAsi) {
+			// Check if Thelemar ASI+Feat rule is enabled and this is level 4
+			const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
+			const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
+			
 			const $asiSection = this._renderAsiSelection(
 				(ability, delta) => {
 					asiChoices[ability] = (asiChoices[ability] || 0) + delta;
@@ -354,6 +553,7 @@ class CharacterSheetLevelUp {
 				(feat) => {
 					selectedFeat = feat;
 				},
+				isBothAsiAndFeat, // Pass flag to show both
 			);
 			$content.append($asiSection);
 		}
@@ -375,6 +575,72 @@ class CharacterSheetLevelUp {
 				selectedFeatureOptions[featureKey] = options;
 			});
 			$content.append($featOptSection);
+		}
+
+		// Expertise grants from features like Deft Explorer Improvement
+		let selectedExpertise = {};
+		let expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
+		let $expertiseSection = null;
+		
+		const updateExpertiseDisplay = () => {
+			if ($expertiseSection) {
+				$expertiseSection.remove();
+				$expertiseSection = null;
+			}
+			selectedExpertise = {}; // Reset selections when features change
+			expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
+			if (expertiseGrants.length) {
+				$expertiseSection = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
+					selectedExpertise[featureKey] = skills;
+				});
+				// Insert before HP section
+				const $hpSection = $content.find(".charsheet__levelup-section").last();
+				if ($hpSection.length) {
+					$expertiseSection.insertBefore($hpSection);
+				} else {
+					$content.append($expertiseSection);
+				}
+			}
+		};
+		
+		if (expertiseGrants.length) {
+			$expertiseSection = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
+				selectedExpertise[featureKey] = skills;
+			});
+			$content.append($expertiseSection);
+		}
+
+		// Language grants from features like Deft Explorer Improvement
+		let selectedLanguages = {};
+		let languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
+		let $languageSection = null;
+		
+		const updateLanguageDisplay = () => {
+			if ($languageSection) {
+				$languageSection.remove();
+				$languageSection = null;
+			}
+			selectedLanguages = {}; // Reset selections when features change
+			languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
+			if (languageGrants.length) {
+				$languageSection = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
+					selectedLanguages[featureKey] = languages;
+				});
+				// Insert before HP section
+				const $hpSection = $content.find(".charsheet__levelup-section").last();
+				if ($hpSection.length) {
+					$languageSection.insertBefore($hpSection);
+				} else {
+					$content.append($languageSection);
+				}
+			}
+		};
+		
+		if (languageGrants.length) {
+			$languageSection = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
+				selectedLanguages[featureKey] = languages;
+			});
+			$content.append($languageSection);
 		}
 
 		// New features (initial render with ASI features filtered)
@@ -400,11 +666,28 @@ class CharacterSheetLevelUp {
 				}
 
 				// Validate ASI if applicable
-				if (hasAsi && !selectedFeat) {
+				if (hasAsi) {
+					const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
+					const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
+					
 					const totalAsi = Object.values(asiChoices).reduce((sum, v) => sum + v, 0);
-					if (totalAsi !== 2) {
-						JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points (2 total)."});
-						return;
+					
+					if (isBothAsiAndFeat) {
+						// Need both ASI points spent AND a feat selected
+						if (totalAsi !== 2) {
+							JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points (2 total)."});
+							return;
+						}
+						if (!selectedFeat) {
+							JqueryUtil.doToast({type: "warning", content: "Please also select a feat (Thelemar rules: ASI + Feat at level 4)."});
+							return;
+						}
+					} else if (!selectedFeat) {
+						// Normal rules: either ASI or Feat
+						if (totalAsi !== 2) {
+							JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points (2 total)."});
+							return;
+						}
 					}
 				}
 
@@ -428,6 +711,24 @@ class CharacterSheetLevelUp {
 					}
 				}
 
+				// Validate expertise selections if applicable
+				for (const grant of expertiseGrants) {
+					const selected = selectedExpertise[grant.featureName] || [];
+					if (selected.length < grant.count) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} skill(s) for expertise from ${grant.featureName}.`});
+						return;
+					}
+				}
+
+				// Validate language selections if applicable
+				for (const grant of languageGrants) {
+					const selected = selectedLanguages[grant.featureName] || [];
+					if (selected.length < grant.count) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} language(s) from ${grant.featureName}.`});
+						return;
+					}
+				}
+
 				// Apply level up
 				await this._applyLevelUp({
 					classEntry,
@@ -437,6 +738,8 @@ class CharacterSheetLevelUp {
 					selectedSubclass,
 					selectedOptionalFeatures,
 					selectedFeatureOptions,
+					selectedExpertise,
+					selectedLanguages,
 					newFeatures: currentFeatures, // Use updated features if subclass was selected
 					hpMethod,
 					classData,
@@ -493,41 +796,60 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	_renderAsiSelection (onAsiChange, onFeatSelect) {
+	_renderAsiSelection (onAsiChange, onFeatSelect, isBothAsiAndFeat = false) {
+		// When Thelemar rules give both ASI and Feat at level 4
+		const sectionTitle = isBothAsiAndFeat 
+			? "📈 Ability Score Improvement + Feat (Thelemar)" 
+			: "📈 Ability Score Improvement";
+		
 		const $section = $(`
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
-					📈 Ability Score Improvement
+					${sectionTitle}
 				</h5>
-				<div class="charsheet__levelup-asi-choice mb-3">
-					<label class="ve-flex-v-center mr-3">
-						<input type="radio" name="asi-type" value="asi" checked class="mr-1">
-						<span>Increase Ability Scores (+2 total)</span>
-					</label>
-					<label class="ve-flex-v-center">
-						<input type="radio" name="asi-type" value="feat" class="mr-1">
-						<span>Take a Feat</span>
-					</label>
-				</div>
+				${isBothAsiAndFeat ? `
+					<div class="alert alert-info ve-small mb-3">
+						<strong>🌍 Thelemar Rule:</strong> At level 4, you gain both an ASI <em>and</em> a feat!
+					</div>
+				` : `
+					<div class="charsheet__levelup-asi-choice mb-3">
+						<label class="ve-flex-v-center mr-3">
+							<input type="radio" name="asi-type" value="asi" checked class="mr-1">
+							<span>Increase Ability Scores (+2 total)</span>
+						</label>
+						<label class="ve-flex-v-center">
+							<input type="radio" name="asi-type" value="feat" class="mr-1">
+							<span>Take a Feat</span>
+						</label>
+					</div>
+				`}
 				<div id="asi-abilities-container"></div>
-				<div id="asi-feats-container" style="display: none;"></div>
+				<div id="asi-feats-container" style="${isBothAsiAndFeat ? '' : 'display: none;'}"></div>
 			</div>
 		`);
 
 		const $abilitiesContainer = $section.find("#asi-abilities-container");
 		const $featsContainer = $section.find("#asi-feats-container");
 
-		// Toggle between ASI and Feat
-		$section.find('input[name="asi-type"]').on("change", (e) => {
-			if (e.target.value === "asi") {
-				$abilitiesContainer.show();
-				$featsContainer.hide();
-				onFeatSelect(null);
-			} else {
-				$abilitiesContainer.hide();
-				$featsContainer.show();
-			}
-		});
+		// Toggle between ASI and Feat (only if not both)
+		if (!isBothAsiAndFeat) {
+			$section.find('input[name="asi-type"]').on("change", (e) => {
+				if (e.target.value === "asi") {
+					$abilitiesContainer.show();
+					$featsContainer.hide();
+					onFeatSelect(null);
+				} else {
+					$abilitiesContainer.hide();
+					$featsContainer.show();
+				}
+			});
+		}
+
+		// Add section labels when both are shown
+		if (isBothAsiAndFeat) {
+			$abilitiesContainer.prepend(`<h6 class="ve-bold mb-2">📊 Ability Score Increase (+2 points)</h6>`);
+			$featsContainer.prepend(`<h6 class="ve-bold mb-2 mt-3">🎭 Select a Feat</h6>`);
+		}
 
 		// Ability score selectors
 		let pointsRemaining = 2;
@@ -1244,14 +1566,18 @@ class CharacterSheetLevelUp {
 		});
 
 		const availableOptions = allMatchingOptions.map(opt => {
-			const alreadyHas = existingOptFeatures.some(
+			// Count how many times this option has been taken
+			const timesKnown = existingOptFeatures.filter(
 				existing => existing.name === opt.name && existing.source === opt.source,
-			);
+			).length;
+			const alreadyHas = timesKnown > 0;
 			const repeatable = isRepeatable(opt);
 			return {
 				...opt,
 				_alreadyKnown: alreadyHas,
+				_timesKnown: timesKnown,
 				_selectable: !alreadyHas || repeatable,
+				_repeatable: repeatable,
 			};
 		});
 
@@ -1269,18 +1595,38 @@ class CharacterSheetLevelUp {
 		if (!selectableOptions.length && !availableOptions.some(opt => opt._alreadyKnown)) {
 			$list.append(`<div class="ve-muted">No options available at this level.</div>`);
 		} else {
+			// Add legend for badges
+			const hasKnownOptions = availableOptions.some(opt => opt._alreadyKnown);
+			if (hasKnownOptions) {
+				$list.prepend(`
+					<div class="ve-small ve-muted mb-2 pb-2" style="border-bottom: 1px solid var(--rgb-border-grey);">
+						<span class="badge badge-success mr-1">✓ Known</span> = Already selected
+						<span class="badge badge-info ml-2 mr-1">↺ Repeatable</span> = Can be taken again
+					</div>
+				`);
+			}
+			
 			availableOptions.sort((a, b) => {
+				// Selectable options first, then by name
 				if (a._selectable !== b._selectable) return a._selectable ? -1 : 1;
+				// Known options at the top of their section so players can see what they have
+				if (a._alreadyKnown !== b._alreadyKnown) return a._alreadyKnown ? -1 : 1;
 				return a.name.localeCompare(b.name);
 			}).forEach(opt => {
 				const isDisabled = !opt._selectable;
-				const knownBadge = opt._alreadyKnown ? `<span class="badge badge-secondary ml-1" title="Already known">Known</span>` : "";
-				const repeatableBadge = opt._alreadyKnown && opt._selectable ? `<span class="badge badge-info ml-1" title="Can be taken multiple times">Repeatable</span>` : "";
+				// Show count if taken multiple times
+				const knownText = opt._timesKnown > 1 ? `Known ×${opt._timesKnown}` : "Known";
+				const knownBadge = opt._alreadyKnown 
+					? `<span class="badge badge-success ml-1" title="Already selected${opt._timesKnown > 1 ? ` (${opt._timesKnown} times)` : ""}">✓ ${knownText}</span>` 
+					: "";
+				const repeatableBadge = opt._repeatable 
+					? `<span class="badge badge-info ml-1" title="Can be taken multiple times">↺ Repeatable</span>` 
+					: "";
 				
 				const $item = $(`
-					<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.25rem; border-radius: 4px;${isDisabled ? " opacity: 0.6;" : ""}">
+					<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}${opt._alreadyKnown ? " charsheet__levelup-opt-item--known" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.5rem; border-radius: 4px;${isDisabled ? " opacity: 0.5;" : ""}${opt._alreadyKnown && opt._selectable ? " background: rgba(var(--rgb-success-rgb), 0.1); border-left: 3px solid var(--rgb-success);" : ""}${opt._alreadyKnown && !opt._selectable ? " background: rgba(128, 128, 128, 0.1);" : ""}">
 						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
-						<strong class="opt-name">${opt.name}</strong>
+						<strong class="opt-name" style="cursor: help; text-decoration: underline dotted;">${opt.name}</strong>
 						${knownBadge}${repeatableBadge}
 						<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 					</label>
@@ -1700,6 +2046,201 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
+	/**
+	 * Render expertise selection UI for level up
+	 * @param {Array} expertiseGrants - Array of {featureName, count, allowTools, toolName} objects
+	 * @param {Function} onSelect - Callback(featureKey, selectedSkills)
+	 * @returns {jQuery} The section element
+	 */
+	_renderExpertiseSelectionForLevelUp (expertiseGrants, onSelect) {
+		const $section = $(`
+			<div class="charsheet__levelup-section">
+				<h5 class="charsheet__levelup-section-title">
+					<span class="glyphicon glyphicon-star-empty"></span> Expertise
+				</h5>
+				<div class="charsheet__levelup-expertise-grants"></div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__levelup-expertise-grants");
+
+		// Get character's current skill proficiencies
+		const skillProficiencies = this._state.getSkillProficiencies();
+		const existingExpertise = this._state.getExpertise() || [];
+
+		expertiseGrants.forEach(grant => {
+			const featureKey = grant.featureName;
+			const selectedForGrant = [];
+
+			const $grantSection = $(`
+				<div class="charsheet__levelup-expertise-grant mb-3">
+					<p><strong>${grant.featureName}:</strong> Choose ${grant.count} skill${grant.count > 1 ? "s" : ""} for expertise:</p>
+					${grant.allowTools && grant.toolName ? `<p class="ve-small ve-muted">You may also choose ${grant.toolName} if you're proficient with it.</p>` : ""}
+					<div class="charsheet__levelup-expertise-checkboxes"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="expertise-count">0</span>/${grant.count}</div>
+				</div>
+			`);
+
+			const $checkboxes = $grantSection.find(".charsheet__levelup-expertise-checkboxes");
+
+			// Get eligible skills (proficient but not already expertise)
+			const eligibleSkills = Object.keys(skillProficiencies)
+				.filter(skill => skillProficiencies[skill])
+				.filter(skill => !existingExpertise.includes(skill))
+				.map(skill => skill.toTitleCase());
+
+			// Optionally add thieves' tools
+			if (grant.allowTools && grant.toolName) {
+				const toolProficiencies = this._state.getToolProficiencies?.() || [];
+				if (toolProficiencies.some(t => t.toLowerCase().includes("thieves"))) {
+					if (!existingExpertise.includes(grant.toolName)) {
+						eligibleSkills.push(grant.toolName);
+					}
+				}
+			}
+
+			if (eligibleSkills.length === 0) {
+				$checkboxes.append(`<p class="ve-muted">No eligible skills available (already have expertise in all proficient skills).</p>`);
+			} else {
+				eligibleSkills.forEach(skill => {
+					const $label = $(`
+						<label class="charsheet__levelup-skill-checkbox mr-3 mb-1 d-inline-block" style="cursor: pointer;">
+							<input type="checkbox" class="mr-1" value="${skill}">
+							${skill}
+						</label>
+					`);
+
+					$label.find("input").on("change", (e) => {
+						if (e.target.checked) {
+							if (selectedForGrant.length < grant.count) {
+								selectedForGrant.push(skill);
+							} else {
+								e.target.checked = false;
+								JqueryUtil.doToast({type: "warning", content: `You can only choose ${grant.count} skills for expertise.`});
+							}
+						} else {
+							const idx = selectedForGrant.indexOf(skill);
+							if (idx >= 0) selectedForGrant.splice(idx, 1);
+						}
+						$grantSection.find(".expertise-count").text(selectedForGrant.length);
+						onSelect(featureKey, [...selectedForGrant]);
+					});
+
+					$checkboxes.append($label);
+				});
+			}
+
+			$container.append($grantSection);
+		});
+
+		return $section;
+	}
+
+	/**
+	 * Render language selection UI for level up
+	 * @param {Array} languageGrants - Array of {featureName, count} objects
+	 * @param {Function} onSelect - Callback(featureKey, selectedLanguages)
+	 * @returns {jQuery} The section element
+	 */
+	_renderLanguageSelectionForLevelUp (languageGrants, onSelect) {
+		const $section = $(`
+			<div class="charsheet__levelup-section">
+				<h5 class="charsheet__levelup-section-title">
+					<span class="glyphicon glyphicon-comment"></span> Languages
+				</h5>
+				<div class="charsheet__levelup-language-grants"></div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__levelup-language-grants");
+
+		// Get current character languages
+		const currentLanguages = (this._state.getLanguages() || []).map(l => l.toLowerCase());
+
+		// Get all available languages
+		const languages = this._page.getLanguages?.() || [];
+		const languageNames = languages.map(l => l.name).filter(n => !currentLanguages.includes(n.toLowerCase()));
+
+		// Add standard languages if not already in list
+		const standardLanguages = ["Common", "Dwarvish", "Elvish", "Giant", "Gnomish", "Goblin", "Halfling", "Orc"];
+		const exoticLanguages = ["Abyssal", "Celestial", "Draconic", "Deep Speech", "Infernal", "Primordial", "Sylvan", "Undercommon"];
+		const allLanguages = [...new Set([...standardLanguages, ...exoticLanguages, ...languageNames])]
+			.filter(l => !currentLanguages.includes(l.toLowerCase()))
+			.sort();
+
+		languageGrants.forEach(grant => {
+			const featureKey = grant.featureName;
+			const selectedForGrant = [];
+
+			const $grantSection = $(`
+				<div class="charsheet__levelup-language-grant mb-3">
+					<p><strong>${grant.featureName}:</strong> Choose ${grant.count} language${grant.count > 1 ? "s" : ""}:</p>
+					<div class="charsheet__levelup-language-dropdowns"></div>
+					<div class="ve-small ve-muted mt-1">Selected: <span class="lang-count">0</span>/${grant.count}</div>
+				</div>
+			`);
+
+			const $dropdowns = $grantSection.find(".charsheet__levelup-language-dropdowns");
+
+			// Create dropdowns for each language selection
+			for (let i = 0; i < grant.count; i++) {
+				const $select = $(`
+					<select class="form-control form-control-sm mb-1" style="max-width: 200px; display: inline-block; margin-right: 0.5rem;">
+						<option value="">-- Select Language ${i + 1} --</option>
+					</select>
+				`);
+
+				// Add language options
+				$select.append(`<optgroup label="Standard Languages">`);
+				standardLanguages.forEach(lang => {
+					if (!currentLanguages.includes(lang.toLowerCase())) {
+						$select.append(`<option value="${lang}">${lang}</option>`);
+					}
+				});
+				$select.append(`</optgroup>`);
+				
+				$select.append(`<optgroup label="Exotic Languages">`);
+				exoticLanguages.forEach(lang => {
+					if (!currentLanguages.includes(lang.toLowerCase())) {
+						$select.append(`<option value="${lang}">${lang}</option>`);
+					}
+				});
+				$select.append(`</optgroup>`);
+
+				// Add any other languages from data
+				const otherLangs = languageNames.filter(l => 
+					!standardLanguages.includes(l) && 
+					!exoticLanguages.includes(l) &&
+					!currentLanguages.includes(l.toLowerCase())
+				);
+				if (otherLangs.length) {
+					$select.append(`<optgroup label="Other Languages">`);
+					otherLangs.forEach(lang => {
+						$select.append(`<option value="${lang}">${lang}</option>`);
+					});
+					$select.append(`</optgroup>`);
+				}
+
+				$select.on("change", () => {
+					// Rebuild selected languages from all dropdowns
+					selectedForGrant.length = 0;
+					$dropdowns.find("select").each(function () {
+						const val = $(this).val();
+						if (val) selectedForGrant.push(val);
+					});
+					$grantSection.find(".lang-count").text(selectedForGrant.length);
+					onSelect(featureKey, [...selectedForGrant]);
+				});
+
+				$dropdowns.append($select);
+			}
+
+			$container.append($grantSection);
+		});
+
+		return $section;
+	}
+
 	_getClassHitDie (classData) {
 		const hitDieMap = {
 			"Barbarian": 12,
@@ -1718,7 +2259,7 @@ class CharacterSheetLevelUp {
 		return classData.hd?.faces || hitDieMap[classData.name] || 8;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, selectedExpertise, selectedLanguages, newFeatures, hpMethod, classData}) {
 		console.log(`[LevelUp] _applyLevelUp called: selectedSubclass=${selectedSubclass?.name || "null"}`);
 		console.log(`[LevelUp] Initial newFeatures:`, newFeatures?.map(f => f.name));
 
@@ -1755,8 +2296,46 @@ class CharacterSheetLevelUp {
 		// Update unarmed strike (monk martial arts die progression)
 		this._state.ensureUnarmedStrike();
 
-		// Apply ASI or feat
-		if (selectedFeat) {
+		// Check if Thelemar ASI+Feat rule applies
+		const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
+		const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
+
+		// Apply ASI and/or feat
+		if (isBothAsiAndFeat) {
+			// Thelemar rule: Apply BOTH ASI and Feat at level 4
+			// Apply ability score increases
+			const increases = [];
+			Parser.ABIL_ABVS.forEach(abl => {
+				if (asiChoices[abl]) {
+					const currentBase = this._state.getAbilityBase(abl);
+					this._state.setAbilityBase(abl, Math.min(20, currentBase + asiChoices[abl]));
+					increases.push(`${Parser.attAbvToFull(abl)} +${asiChoices[abl]}`);
+				}
+			});
+
+			// Add a tracking feature for the ASI choice
+			if (increases.length > 0) {
+				const asiFeature = {
+					name: "Ability Score Improvement",
+					source: classData.source,
+					className: classEntry.name,
+					classSource: classEntry.source,
+					level: newLevel,
+					featureType: "Class",
+					description: `<p><strong>Ability Score Increases:</strong> ${increases.join(", ")}</p>`,
+					isAsiChoice: true,
+				};
+				this._state.addFeature(asiFeature);
+			}
+
+			// Also apply the feat
+			if (selectedFeat) {
+				this._state.addFeat(selectedFeat);
+				this._applyFeatBonuses(selectedFeat);
+				await this._processFeatSpellChoices();
+			}
+		} else if (selectedFeat) {
+			// Normal rules: Feat chosen instead of ASI
 			this._state.addFeat(selectedFeat);
 			// Apply feat bonuses if any
 			this._applyFeatBonuses(selectedFeat);
@@ -1886,6 +2465,26 @@ class CharacterSheetLevelUp {
 						});
 					}
 				});
+			});
+		}
+
+		// Apply selected expertise from features like Deft Explorer Improvement
+		if (selectedExpertise) {
+			Object.entries(selectedExpertise).forEach(([featureName, skills]) => {
+				skills.forEach(skill => {
+					this._state.addExpertise(skill.toLowerCase());
+				});
+				console.log(`[LevelUp] Applied expertise from ${featureName}:`, skills);
+			});
+		}
+
+		// Apply selected languages from features like Deft Explorer Improvement
+		if (selectedLanguages) {
+			Object.entries(selectedLanguages).forEach(([featureName, languages]) => {
+				languages.forEach(lang => {
+					this._state.addLanguage(lang);
+				});
+				console.log(`[LevelUp] Applied languages from ${featureName}:`, languages);
 			});
 		}
 

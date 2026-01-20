@@ -26,6 +26,7 @@ class CharacterSheetBuilder {
 		this._selectedOptionalFeatures = {}; // For class optional features like invocations {featureType: [features]}
 		this._selectedToolProficiencies = []; // For background tool proficiency choices
 		this._selectedLanguages = []; // For background language choices
+		this._selectedClassFeatureLanguages = []; // For class feature language choices (like Deft Explorer)
 		this._selectedFeatureOptions = {}; // For class/subclass features with embedded options (like Specialties)
 		this._selectedCombatTraditions = []; // For combat tradition proficiency choices (Thelemar homebrew)
 		this._selectedRacialSkills = []; // For racial skill proficiency choices (e.g., Elf)
@@ -304,6 +305,15 @@ class CharacterSheetBuilder {
 				if (expertiseInfo && expertiseInfo.count > 0) {
 					if (this._selectedExpertise.length < expertiseInfo.count) {
 						JqueryUtil.doToast({type: "warning", content: `Please select ${expertiseInfo.count} skills for expertise.`});
+						return false;
+					}
+				}
+				// Validate class feature language selection (like Deft Explorer)
+				const classLangInfo = this._getClassFeatureLanguageGrants(this._selectedClass);
+				if (classLangInfo && classLangInfo.count > 0) {
+					const selectedCount = this._selectedClassFeatureLanguages.filter(l => l).length;
+					if (selectedCount < classLangInfo.count) {
+						JqueryUtil.doToast({type: "warning", content: `Please select ${classLangInfo.count} languages from ${classLangInfo.featureName}.`});
 						return false;
 					}
 				}
@@ -1013,6 +1023,15 @@ class CharacterSheetBuilder {
 				} else {
 					// Skills get expertise level (2)
 					this._state.setSkillProficiency(skillKey, 2);
+				}
+			});
+		}
+
+		// Class feature languages (from user selection - like Deft Explorer)
+		if (this._selectedClassFeatureLanguages?.length) {
+			this._selectedClassFeatureLanguages.forEach(lang => {
+				if (lang) {
+					this._state.addLanguage(lang);
 				}
 			});
 		}
@@ -2333,6 +2352,8 @@ class CharacterSheetBuilder {
 						this._selectedSkills = [];
 						// Reset expertise selections when changing class
 						this._selectedExpertise = [];
+						// Reset class feature language selections when changing class
+						this._selectedClassFeatureLanguages = [];
 						// Reset weapon mastery selections when changing class
 						this._selectedWeaponMasteries = [];
 						// Reset equipment choices when changing class
@@ -2421,6 +2442,13 @@ class CharacterSheetBuilder {
 		if (expertiseInfo && expertiseInfo.count > 0) {
 			const $expertiseSection = this._renderExpertiseSelection(cls, expertiseInfo);
 			$content.append($expertiseSection);
+		}
+
+		// Class feature language grants (like Deft Explorer)
+		const classLangInfo = this._getClassFeatureLanguageGrants(cls);
+		if (classLangInfo && classLangInfo.count > 0) {
+			const $langSection = this._renderClassFeatureLanguageSelection(cls, classLangInfo);
+			$content.append($langSection);
 		}
 
 		// Weapon Mastery selection (for Fighter, Paladin, Ranger, Rogue at level 1)
@@ -2814,6 +2842,185 @@ class CharacterSheetBuilder {
 
 				$checkboxes.append($label);
 			});
+		}
+
+		return $section;
+	}
+
+	/**
+	 * Get language grants from class features at early levels (1-2)
+	 * Features like Deft Explorer grant additional languages.
+	 * @param {Object} cls - Class data
+	 * @returns {{count: number, featureName: string}|null}
+	 */
+	_getClassFeatureLanguageGrants (cls) {
+		// Check levels 1 and 2 for language-granting features
+		for (const level of [1, 2]) {
+			const langInfo = this._getClassFeatureLanguageGrantsAtLevel(cls, level);
+			if (langInfo) return langInfo;
+		}
+		return null;
+	}
+
+	/**
+	 * Get language grants from class features at a specific level
+	 * @param {Object} cls - Class data
+	 * @param {number} level - Level to check
+	 * @returns {{count: number, featureName: string}|null}
+	 */
+	_getClassFeatureLanguageGrantsAtLevel (cls, level) {
+		const classFeatures = this._page.getClassFeatures();
+		if (!classFeatures?.length || !cls.classFeatures?.length) return null;
+
+		// Get the class's feature references for this level
+		const levelFeatures = this._getClassFeatureRefsAtLevel(cls, level);
+		if (!levelFeatures.length) return null;
+
+		// Look for language grants in these features
+		for (const featureRef of levelFeatures) {
+			const langInfo = this._extractLanguageGrantsFromFeatureRef(featureRef, classFeatures, cls);
+			if (langInfo) return langInfo;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Extract language grants from a feature reference
+	 * @param {string} featureRef - Feature reference string
+	 * @param {Array} allFeatures - All loaded class features
+	 * @param {Object} cls - Class data for context
+	 * @returns {{count: number, featureName: string}|null}
+	 */
+	_extractLanguageGrantsFromFeatureRef (featureRef, allFeatures, cls) {
+		const parts = featureRef.split("|");
+		const featureName = parts[0];
+		const className = parts[1] || cls.name;
+		const classSource = parts[2] || cls.source || Parser.SRC_PHB;
+		const featureLevel = parseInt(parts[3]) || 1;
+		const featureSource = parts[4] || classSource;
+
+		// Find the actual feature data
+		const featureData = allFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.level !== featureLevel) return false;
+			const fClassSource = f.classSource || Parser.SRC_PHB;
+			if (classSource && fClassSource !== classSource) return false;
+			if (featureSource && f.source && f.source !== featureSource) return false;
+			return true;
+		});
+
+		if (!featureData) return null;
+
+		// Search feature entries for language grants
+		return this._findLanguageGrantsInEntries(featureData.entries || [], featureName);
+	}
+
+	/**
+	 * Recursively search entries for language grants
+	 * @param {Array} entries - Feature entries
+	 * @param {string} featureName - Name of the feature for reference
+	 * @returns {{count: number, featureName: string}|null}
+	 */
+	_findLanguageGrantsInEntries (entries, featureName) {
+		const entriesText = entries.map(e => {
+			if (typeof e === "string") return e;
+			if (typeof e === "object" && e.type === "list" && e.items) {
+				return e.items.map(item => typeof item === "string" ? item : JSON.stringify(item)).join(" ");
+			}
+			return JSON.stringify(e);
+		}).join(" ").toLowerCase();
+
+		// Check for language-granting patterns
+		// - "you learn two languages" (TGTT Deft Explorer)
+		// - "speak, read, and write two additional languages" (TCE Deft Explorer)
+		// - "learn X languages"
+		const langPatterns = [
+			/learn\s+(one|two|three|four|\d+)\s+(?:additional\s+)?languages?/i,
+			/speak,?\s*read,?\s*and\s*write\s+(one|two|three|four|\d+)\s+(?:additional\s+)?languages?/i,
+			/two\s+(?:additional\s+)?languages\s+of\s+your\s+choice/i,
+			/\{@b Languages\.\}\s*You\s+learn\s+(one|two|three|four|\d+)\s+languages?/i,
+		];
+
+		for (const pattern of langPatterns) {
+			const match = entriesText.match(pattern);
+			if (match) {
+				let count = 0;
+				const numWord = match[1]?.toLowerCase();
+				if (numWord === "one" || numWord === "1") count = 1;
+				else if (numWord === "two" || numWord === "2") count = 2;
+				else if (numWord === "three" || numWord === "3") count = 3;
+				else if (numWord === "four" || numWord === "4") count = 4;
+				else if (/^\d+$/.test(numWord)) count = parseInt(numWord);
+				
+				// Special case for "two additional languages of your choice" without capture group
+				if (count === 0 && entriesText.includes("two additional languages")) count = 2;
+				if (count === 0 && entriesText.includes("two languages of your choice")) count = 2;
+
+				if (count > 0) {
+					return {count, featureName};
+				}
+			}
+		}
+
+		// Recursively check nested entries
+		for (const entry of entries) {
+			if (typeof entry === "object" && entry.entries) {
+				const result = this._findLanguageGrantsInEntries(entry.entries, featureName);
+				if (result) return result;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Render language selection UI for class features
+	 * @param {Object} cls - Class data
+	 * @param {{count: number, featureName: string}} langInfo - Language grant info
+	 */
+	_renderClassFeatureLanguageSelection (cls, langInfo) {
+		const {count, featureName} = langInfo;
+
+		const $section = $(`
+			<div class="charsheet__builder-class-lang-selection mt-3">
+				<p><strong>Languages (${featureName}):</strong> Choose ${count} language${count > 1 ? "s" : ""}:</p>
+				<div class="charsheet__builder-class-lang-dropdowns"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="class-lang-count">${this._selectedClassFeatureLanguages.length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $dropdowns = $section.find(".charsheet__builder-class-lang-dropdowns");
+
+		// Get available languages (all standard + exotic)
+		const availableLanguages = [...Parser.LANGUAGES_ALL].sort();
+
+		for (let i = 0; i < count; i++) {
+			const selectId = `class-lang-choice-${i}`;
+			const $select = $(`
+				<select class="form-control form-control--minimal mb-1" id="${selectId}">
+					<option value="">-- Select Language --</option>
+				</select>
+			`);
+
+			availableLanguages.forEach(lang => {
+				$select.append(`<option value="${lang}">${lang}</option>`);
+			});
+
+			const existingChoice = this._selectedClassFeatureLanguages[i];
+			if (existingChoice) {
+				$select.val(existingChoice);
+			}
+
+			$select.on("change", (e) => {
+				this._selectedClassFeatureLanguages[i] = e.target.value || null;
+				// Count non-null selections
+				const selectedCount = this._selectedClassFeatureLanguages.filter(l => l).length;
+				$section.find(".class-lang-count").text(selectedCount);
+			});
+
+			$dropdowns.append($select);
 		}
 
 		return $section;

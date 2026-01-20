@@ -2553,6 +2553,19 @@ class CharacterSheetState {
 	// Alias for compatibility with levelup module
 	addSkillProficiency (skill) { this.setSkillProficiency(skill, 1); }
 
+	// Add expertise (level 2 proficiency) to a skill
+	addExpertise (skill) {
+		const normalizedSkill = skill.toLowerCase().replace(/\s+/g, "").replace(/'s?/g, "");
+		// Only add expertise if already proficient or becoming proficient
+		this.setSkillProficiency(normalizedSkill, 2);
+	}
+
+	// Get list of skills with expertise
+	getExpertise () {
+		return Object.keys(this._data.skillProficiencies)
+			.filter(skill => this._data.skillProficiencies[skill] === 2);
+	}
+
 	getSkillProficiency (skill) {
 		return this._data.skillProficiencies[skill] || 0;
 	}
@@ -3261,11 +3274,58 @@ class CharacterSheetState {
 		const classes = this._data.classes || [];
 		if (!classes.length) return null;
 
-		const primaryClass = classes[0];
-		const className = primaryClass.name;
-		const level = primaryClass.level || 1;
+		// For multiclass: aggregate spell info from all caster classes
+		const spellcastingByClass = [];
+		let totalCantripsKnown = 0;
+
+		for (const cls of classes) {
+			const classInfo = this._getClassSpellcastingInfo(cls);
+			if (classInfo) {
+				spellcastingByClass.push({
+					className: cls.name,
+					...classInfo,
+				});
+				totalCantripsKnown += classInfo.cantripsKnown || 0;
+			}
+		}
+
+		if (spellcastingByClass.length === 0) return null;
+
+		// If single class, return simple format for backwards compatibility
+		if (spellcastingByClass.length === 1) {
+			return {
+				type: spellcastingByClass[0].type,
+				max: spellcastingByClass[0].max,
+				cantripsKnown: spellcastingByClass[0].cantripsKnown || 0,
+			};
+		}
+
+		// Multiclass: return aggregated info
+		// Each class's spells are tracked separately
+		// Total is sum of all known/prepared from each class
+		const totalMax = spellcastingByClass.reduce((sum, c) => sum + (c.max || 0), 0);
+		const hasKnown = spellcastingByClass.some(c => c.type === "known");
+		const hasPrepared = spellcastingByClass.some(c => c.type === "prepared");
+
+		return {
+			type: hasKnown && hasPrepared ? "mixed" : (hasKnown ? "known" : "prepared"),
+			max: totalMax,
+			cantripsKnown: totalCantripsKnown,
+			isMulticlass: true,
+			byClass: spellcastingByClass,
+		};
+	}
+
+	/**
+	 * Get spellcasting info for a single class
+	 * @param {Object} cls - Class entry with name, level, subclass, _classData
+	 * @returns {{type: string, max: number, cantripsKnown: number}|null}
+	 */
+	_getClassSpellcastingInfo (cls) {
+		const className = cls.name;
+		const level = cls.level || 1;
 		const levelIndex = Math.min(level, 20) - 1;
-		const classData = primaryClass._classData; // Full class data if available
+		const classData = cls._classData;
 
 		// Try to get progression from class data first (supports 2024 and homebrew)
 		if (classData) {
@@ -3291,16 +3351,13 @@ class CharacterSheetState {
 
 			// Check for prepared caster without explicit progression (2014 Cleric, Druid, etc.)
 			if (classData.casterProgression && classData.spellcastingAbility) {
-				// These use level + ability mod formula
 				const ability = classData.spellcastingAbility;
 				const abilityMod = this.getAbilityMod(ability);
 				let preparedCount;
 
 				if (classData.casterProgression === "1/2") {
-					// Half casters: half level + mod
 					preparedCount = Math.max(1, Math.floor(level / 2) + abilityMod);
 				} else {
-					// Full casters: level + mod
 					preparedCount = Math.max(1, level + abilityMod);
 				}
 
@@ -3313,7 +3370,6 @@ class CharacterSheetState {
 		}
 
 		// Fallback: hardcoded tables for when class data isn't available
-		// Spells Known tables (2014 rules)
 		const spellsKnownTables = {
 			"Bard": [4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 15, 16, 18, 19, 19, 20, 22, 22, 22],
 			"Sorcerer": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 13, 13, 14, 14, 15, 15, 15, 15],
@@ -3321,7 +3377,6 @@ class CharacterSheetState {
 			"Ranger": [0, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11],
 		};
 
-		// Cantrips known
 		const cantripsKnownTables = {
 			"Bard": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
 			"Cleric": [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
@@ -3331,13 +3386,10 @@ class CharacterSheetState {
 			"Wizard": [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
 		};
 
-		// Prepared casters (2014 rules)
 		const preparedCasters = ["Cleric", "Druid", "Paladin", "Wizard", "Artificer"];
 
-		// Get cantrips known
 		let cantripsKnown = cantripsKnownTables[className]?.[levelIndex] || 0;
 
-		// Check if spells known class
 		if (spellsKnownTables[className]) {
 			return {
 				type: "known",
@@ -3346,7 +3398,6 @@ class CharacterSheetState {
 			};
 		}
 
-		// Check if prepared caster
 		if (preparedCasters.includes(className)) {
 			const abilityMap = {
 				"Cleric": "wis",
@@ -3376,7 +3427,7 @@ class CharacterSheetState {
 		}
 
 		// Check for third-caster subclasses
-		const subclassName = primaryClass.subclass?.name;
+		const subclassName = cls.subclass?.name;
 		if (subclassName === "Eldritch Knight" || subclassName === "Arcane Trickster") {
 			const ekAtSpellsKnown = [0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13];
 			return {

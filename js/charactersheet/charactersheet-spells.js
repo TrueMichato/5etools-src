@@ -112,8 +112,10 @@ class CharacterSheetSpells {
 		const className = classes[0].name;
 		const filteredSpells = this._page.filterByAllowedSources(this._allSpells);
 		const classSpells = filteredSpells.filter(spell => {
-			if (!spell.classes?.fromClassList) return false;
-			return spell.classes.fromClassList.some(c => c.name.toLowerCase() === className.toLowerCase());
+			// Use Renderer.spell.getCombinedClasses to get properly merged class data
+			const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
+			if (!fromClassList?.length) return false;
+			return fromClassList.some(c => c.name.toLowerCase() === className.toLowerCase());
 		});
 
 		// Filter by level
@@ -213,12 +215,296 @@ class CharacterSheetSpells {
 			</p>
 		`);
 
-		// Build enhanced filter UI
-		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
+		// Build enhanced filter UI - single row with source pushed to right
+		const $filterRow = $(`<div class="charsheet__modal-filter-row"></div>`).appendTo($modalInner);
+		
+		// Helper function to position dropdown towards center of modal
+		const positionDropdown = ($dropdown, $btn) => {
+			const btnRect = $btn[0].getBoundingClientRect();
+			const modalRect = $modalInner[0].getBoundingClientRect();
+			const btnCenterX = btnRect.left + btnRect.width / 2;
+			const modalCenterX = modalRect.left + modalRect.width / 2;
+			
+			// If button is to the left of center, open dropdown to the right
+			// If button is to the right of center, open dropdown to the left
+			if (btnCenterX < modalCenterX) {
+				$dropdown.addClass("open-right").removeClass("open-left");
+			} else {
+				$dropdown.removeClass("open-right").addClass("open-left");
+			}
+		};
 		
 		// Search input with icon
-		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
+		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterRow);
 		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search spells by name...">`).appendTo($searchWrapper);
+		
+		// Get all unique classes and subclasses from spells for the filters
+		// Use Renderer.spell.getCombinedClasses to get properly merged class/subclass data
+		const allSpellClasses = new Set(); // Class names only
+		const allSpellSubclasses = new Map(); // Map of "ClassName: SubclassName" -> Set of sources
+		spells.forEach(spell => {
+			// Get combined class list (includes _tmpClasses populated by Renderer.spell)
+			const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
+			if (fromClassList?.length) {
+				fromClassList.forEach(c => {
+					allSpellClasses.add(c.name);
+				});
+			}
+			// Get combined subclass list (includes _tmpClasses populated by Renderer.spell)
+			const fromSubclass = Renderer.spell.getCombinedClasses(spell, "fromSubclass");
+			if (fromSubclass?.length) {
+				fromSubclass.forEach(sc => {
+					const key = `${sc.class.name}: ${sc.subclass.name}`;
+					if (!allSpellSubclasses.has(key)) {
+						allSpellSubclasses.set(key, new Set());
+					}
+					allSpellSubclasses.get(key).add(sc.subclass.source);
+				});
+			}
+		});
+		
+		// Get character's classes and subclasses for default filtering
+		const characterClasses = this._state.getClasses();
+		const characterClassNames = characterClasses.map(c => c.name);
+		const characterSubclassNames = characterClasses
+			.filter(c => c.subclass)
+			.map(c => `${c.name}: ${c.subclass}`);
+		
+		// Sort class names - character classes first, then alphabetically
+		const sortedClassNames = [...allSpellClasses].sort((a, b) => {
+			const aIsChar = characterClassNames.includes(a);
+			const bIsChar = characterClassNames.includes(b);
+			if (aIsChar && !bIsChar) return -1;
+			if (!aIsChar && bIsChar) return 1;
+			return a.localeCompare(b);
+		});
+		
+		// Show ALL subclasses that have spell lists, but highlight player's class's subclasses
+		// Sort: player's subclass first, then player's class's other subclasses, then rest alphabetically
+		const sortedSubclassNames = [...allSpellSubclasses.keys()].sort((a, b) => {
+			const [aClass] = a.split(": ");
+			const [bClass] = b.split(": ");
+			const aIsCharSubclass = characterSubclassNames.includes(a);
+			const bIsCharSubclass = characterSubclassNames.includes(b);
+			const aIsCharClass = characterClassNames.includes(aClass);
+			const bIsCharClass = characterClassNames.includes(bClass);
+			
+			// Player's actual subclass first
+			if (aIsCharSubclass && !bIsCharSubclass) return -1;
+			if (!aIsCharSubclass && bIsCharSubclass) return 1;
+			// Then player's class's other subclasses
+			if (aIsCharClass && !bIsCharClass) return -1;
+			if (!aIsCharClass && bIsCharClass) return 1;
+			// Then alphabetically by class, then subclass
+			if (aClass !== bClass) return aClass.localeCompare(bClass);
+			const [, aSub] = a.split(": ");
+			const [, bSub] = b.split(": ");
+			return aSub.localeCompare(bSub);
+		});
+		
+		// ===== CLASS FILTER =====
+		let selectedClasses = new Set(characterClassNames.length > 0 ? characterClassNames : []); // Default to character's classes
+		const $classDropdown = $(`
+			<div class="charsheet__source-multiselect charsheet__class-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">⚔️</span>
+					<span class="charsheet__source-multiselect-text">${characterClassNames.length > 0 ? characterClassNames.join(", ") : "All Classes"}</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown charsheet__class-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">All Classes</button>
+						<button class="charsheet__source-action-btn" data-action="myclass">My Classes</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${sortedClassNames.map(className => {
+							const isCharClass = characterClassNames.includes(className);
+							const defaultChecked = isCharClass || characterClassNames.length === 0;
+							return `
+								<label class="charsheet__source-multiselect-item${isCharClass ? " charsheet__source-multiselect-item--highlight" : ""}">
+									<input type="checkbox" value="${className}"${defaultChecked ? " checked" : ""}>
+									<span class="charsheet__source-multiselect-check">✓</span>
+									<span class="charsheet__source-multiselect-label">${className}${isCharClass ? " ★" : ""}</span>
+								</label>
+							`;
+						}).join("")}
+					</div>
+				</div>
+			</div>
+		`).appendTo($filterRow);
+		
+		// Class dropdown behavior
+		const $classBtn = $classDropdown.find(".charsheet__source-multiselect-btn");
+		const $classDropdownMenu = $classDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $classText = $classDropdown.find(".charsheet__source-multiselect-text");
+		
+		$classBtn.on("click", (e) => {
+			e.stopPropagation();
+			positionDropdown($classDropdownMenu, $classBtn);
+			$classDropdownMenu.toggleClass("open");
+			// Close other dropdowns
+			$levelDropdownMenu?.removeClass("open");
+			$schoolDropdownMenu?.removeClass("open");
+			$sourceDropdownMenu?.removeClass("open");
+			$subschoolDropdownMenu?.removeClass("open");
+			$subclassDropdownMenu?.removeClass("open");
+		});
+		
+		const updateClassText = () => {
+			const checked = $classDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$classText.text("No Classes");
+				selectedClasses = new Set(["__NONE__"]);
+			} else if (checked.length === sortedClassNames.length) {
+				$classText.text("All Classes");
+				selectedClasses = new Set(); // Empty = all
+			} else if (checked.length <= 2) {
+				$classText.text(checked.map((_, el) => $(el).val()).get().join(", "));
+				selectedClasses = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$classText.text(`${checked.length} Classes`);
+				selectedClasses = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+		
+		$classDropdown.find("input[type=checkbox]").on("change", updateClassText);
+		$classDropdown.find("[data-action=all]").on("click", () => {
+			$classDropdown.find("input").prop("checked", true);
+			updateClassText();
+		});
+		$classDropdown.find("[data-action=myclass]").on("click", () => {
+			$classDropdown.find("input").each((_, el) => {
+				const val = $(el).val();
+				const isCharClass = characterClassNames.includes(val);
+				$(el).prop("checked", isCharClass);
+			});
+			updateClassText();
+		});
+		$classDropdown.find("[data-action=none]").on("click", () => {
+			$classDropdown.find("input").prop("checked", false);
+			updateClassText();
+		});
+		
+		$classDropdownMenu.on("click", (e) => e.stopPropagation());
+		
+		// ===== SUBCLASS FILTER (SEPARATE) =====
+		// Calculate which subclasses will be checked by default (same logic as the HTML)
+		const defaultCheckedSubclasses = sortedSubclassNames.filter(subclassName => {
+			const isCharSubclass = characterSubclassNames.includes(subclassName);
+			const [className] = subclassName.split(": ");
+			const isCharClass = characterClassNames.includes(className);
+			return isCharSubclass || (characterSubclassNames.length === 0 && isCharClass);
+		});
+		// If all would be checked, use empty set (= all). Otherwise use the specific ones.
+		let selectedSubclasses = defaultCheckedSubclasses.length === sortedSubclassNames.length 
+			? new Set() 
+			: new Set(defaultCheckedSubclasses.length > 0 ? defaultCheckedSubclasses : ["__NONE__"]);
+		const $subclassDropdown = sortedSubclassNames.length > 0 ? $(`
+			<div class="charsheet__source-multiselect charsheet__subclass-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">📚</span>
+					<span class="charsheet__source-multiselect-text">${
+						defaultCheckedSubclasses.length === sortedSubclassNames.length 
+							? "All Expanded Lists"
+							: defaultCheckedSubclasses.length === 0 
+								? "No Expanded Lists" 
+								: defaultCheckedSubclasses.length === 1
+									? defaultCheckedSubclasses[0].split(": ")[1]
+									: `${defaultCheckedSubclasses.length} Expanded Lists`
+					}</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown charsheet__subclass-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">All Expanded</button>
+						<button class="charsheet__source-action-btn" data-action="mysubclass">My Subclass</button>
+						<button class="charsheet__source-action-btn" data-action="none">None</button>
+					</div>
+					<div class="charsheet__source-multiselect-list" style="max-height: 300px;">
+						<div class="charsheet__source-multiselect-hint">Subclasses that add extra spells:</div>
+						${sortedSubclassNames.map(subclassName => {
+							const isCharSubclass = characterSubclassNames.includes(subclassName);
+							const [className, subName] = subclassName.split(": ");
+							const isCharClass = characterClassNames.includes(className);
+							// Default checked: player's actual subclass, or all if player has no subclass
+							const defaultChecked = isCharSubclass || (characterSubclassNames.length === 0 && isCharClass);
+							return `
+								<label class="charsheet__source-multiselect-item${isCharSubclass ? " charsheet__source-multiselect-item--highlight" : isCharClass ? " charsheet__source-multiselect-item--related" : ""}">
+									<input type="checkbox" value="${subclassName}"${defaultChecked ? " checked" : ""}>
+									<span class="charsheet__source-multiselect-check">✓</span>
+									<span class="charsheet__source-multiselect-label">
+										<span class="ve-muted">${className}:</span> ${subName}${isCharSubclass ? " ★" : ""}
+									</span>
+								</label>
+							`;
+						}).join("")}
+					</div>
+				</div>
+			</div>
+		`).appendTo($filterRow) : null;
+		
+		// Subclass dropdown behavior
+		let $subclassDropdownMenu = null;
+		const $subclassText = $subclassDropdown?.find(".charsheet__source-multiselect-text");
+		
+		if ($subclassDropdown) {
+			const $subclassBtn = $subclassDropdown.find(".charsheet__source-multiselect-btn");
+			$subclassDropdownMenu = $subclassDropdown.find(".charsheet__source-multiselect-dropdown");
+			
+			$subclassBtn.on("click", (e) => {
+				e.stopPropagation();
+				positionDropdown($subclassDropdownMenu, $subclassBtn);
+				$subclassDropdownMenu.toggleClass("open");
+				// Close other dropdowns
+				$classDropdownMenu.removeClass("open");
+				$levelDropdownMenu?.removeClass("open");
+				$schoolDropdownMenu?.removeClass("open");
+				$sourceDropdownMenu?.removeClass("open");
+				$subschoolDropdownMenu?.removeClass("open");
+			});
+			
+			const updateSubclassText = () => {
+				const checked = $subclassDropdown.find("input:checked");
+				if (checked.length === 0) {
+					$subclassText.text("No Expanded Lists");
+					selectedSubclasses = new Set(["__NONE__"]);
+				} else if (checked.length === sortedSubclassNames.length) {
+					$subclassText.text("All Expanded Lists");
+					selectedSubclasses = new Set(); // Empty = all
+				} else if (checked.length === 1) {
+					const val = checked.first().val();
+					const [, subName] = val.split(": ");
+					$subclassText.text(subName);
+					selectedSubclasses = new Set(checked.map((_, el) => $(el).val()).get());
+				} else {
+					$subclassText.text(`${checked.length} Expanded Lists`);
+					selectedSubclasses = new Set(checked.map((_, el) => $(el).val()).get());
+				}
+				renderList();
+			};
+			
+			$subclassDropdown.find("input[type=checkbox]").on("change", updateSubclassText);
+			$subclassDropdown.find("[data-action=all]").on("click", () => {
+				$subclassDropdown.find("input").prop("checked", true);
+				updateSubclassText();
+			});
+			$subclassDropdown.find("[data-action=mysubclass]").on("click", () => {
+				$subclassDropdown.find("input").each((_, el) => {
+					const val = $(el).val();
+					const isCharSubclass = characterSubclassNames.includes(val);
+					$(el).prop("checked", isCharSubclass);
+				});
+				updateSubclassText();
+			});
+			$subclassDropdown.find("[data-action=none]").on("click", () => {
+				$subclassDropdown.find("input").prop("checked", false);
+				updateSubclassText();
+			});
+			
+			$subclassDropdownMenu.on("click", (e) => e.stopPropagation());
+		}
 		
 		// Multi-select level filter
 		let selectedLevels = new Set(); // Empty = all levels
@@ -258,7 +544,7 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`).appendTo($filterRow);
 
 		// Level dropdown behavior
 		const $levelBtn = $levelDropdown.find(".charsheet__source-multiselect-btn");
@@ -267,8 +553,10 @@ class CharacterSheetSpells {
 		
 		$levelBtn.on("click", (e) => {
 			e.stopPropagation();
+			positionDropdown($levelDropdownMenu, $levelBtn);
 			$levelDropdownMenu.toggleClass("open");
 			// Close other dropdowns
+			$classDropdownMenu.removeClass("open");
 			$schoolDropdownMenu.removeClass("open");
 			$sourceDropdownMenu.removeClass("open");
 		});
@@ -327,7 +615,7 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`).appendTo($filterRow);
 
 		// School dropdown behavior
 		const $schoolBtn = $schoolDropdown.find(".charsheet__source-multiselect-btn");
@@ -336,8 +624,10 @@ class CharacterSheetSpells {
 		
 		$schoolBtn.on("click", (e) => {
 			e.stopPropagation();
+			positionDropdown($schoolDropdownMenu, $schoolBtn);
 			$schoolDropdownMenu.toggleClass("open");
 			// Close other dropdowns
+			$classDropdownMenu.removeClass("open");
 			$levelDropdownMenu.removeClass("open");
 			$sourceDropdownMenu.removeClass("open");
 		});
@@ -412,7 +702,7 @@ class CharacterSheetSpells {
 						</div>
 					</div>
 				</div>
-			`).appendTo($filterContainer);
+			`).appendTo($filterRow);
 
 			$subschoolDropdownMenu = $subschoolDropdown.find(".charsheet__source-multiselect-dropdown");
 			const $subschoolBtn = $subschoolDropdown.find(".charsheet__source-multiselect-btn");
@@ -420,8 +710,10 @@ class CharacterSheetSpells {
 			
 			$subschoolBtn.on("click", (e) => {
 				e.stopPropagation();
+				positionDropdown($subschoolDropdownMenu, $subschoolBtn);
 				$subschoolDropdownMenu.toggleClass("open");
 				// Close other dropdowns
+				$classDropdownMenu.removeClass("open");
 				$levelDropdownMenu.removeClass("open");
 				$schoolDropdownMenu.removeClass("open");
 				$sourceDropdownMenu.removeClass("open");
@@ -458,12 +750,12 @@ class CharacterSheetSpells {
 			$subschoolDropdownMenu.on("click", (e) => e.stopPropagation());
 		}
 
-		// Multi-select source filter
+		// Multi-select source filter (positioned on the right)
 		let selectedSources = new Set(); // Empty = all sources
 		const $sourceDropdown = $(`
-			<div class="charsheet__source-multiselect">
+			<div class="charsheet__source-multiselect charsheet__source-multiselect--right">
 				<button class="charsheet__source-multiselect-btn">
-					<span class="charsheet__source-multiselect-icon">📚</span>
+					<span class="charsheet__source-multiselect-icon">📖</span>
 					<span class="charsheet__source-multiselect-text">All Sources</span>
 					<span class="charsheet__source-multiselect-arrow">▼</span>
 				</button>
@@ -485,7 +777,7 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`).appendTo($filterRow);
 
 		// Source dropdown toggle behavior
 		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
@@ -494,8 +786,10 @@ class CharacterSheetSpells {
 		
 		$sourceBtn.on("click", (e) => {
 			e.stopPropagation();
+			positionDropdown($sourceDropdownMenu, $sourceBtn);
 			$sourceDropdownMenu.toggleClass("open");
 			// Close other dropdowns
+			$classDropdownMenu.removeClass("open");
 			$levelDropdownMenu.removeClass("open");
 			$schoolDropdownMenu.removeClass("open");
 			$subschoolDropdownMenu?.removeClass("open");
@@ -503,6 +797,7 @@ class CharacterSheetSpells {
 
 		// Close all dropdowns when clicking outside
 		$(document).on("click.spellSourceFilter", () => {
+			$classDropdownMenu.removeClass("open");
 			$sourceDropdownMenu.removeClass("open");
 			$levelDropdownMenu.removeClass("open");
 			$schoolDropdownMenu.removeClass("open");
@@ -579,6 +874,23 @@ class CharacterSheetSpells {
 
 			const filtered = spells.filter(spell => {
 				if (searchTerm && !spell.name.toLowerCase().includes(searchTerm)) return false;
+				// Class filter (separate from subclass)
+				if (selectedClasses.has("__NONE__") && selectedSubclasses.has("__NONE__")) return false;
+				
+				// Get spell's class and subclass sources using Renderer.spell.getCombinedClasses
+				const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
+				const fromSubclass = Renderer.spell.getCombinedClasses(spell, "fromSubclass");
+				const spellClasses = fromClassList?.map(c => c.name) || [];
+				const spellSubclasses = fromSubclass?.map(sc => `${sc.class.name}: ${sc.subclass.name}`) || [];
+				
+				// Check class filter (if classes are selected)
+				const passesClassFilter = selectedClasses.size === 0 || spellClasses.some(c => selectedClasses.has(c));
+				// Check subclass filter (if subclasses are selected)
+				const passesSubclassFilter = selectedSubclasses.size === 0 || spellSubclasses.some(sc => selectedSubclasses.has(sc));
+				
+				// Spell passes if it matches EITHER the class filter OR the subclass filter (union)
+				if (!passesClassFilter && !passesSubclassFilter) return false;
+				
 				// Multi-select level filter
 				if (selectedLevels.has("__NONE__")) return false;
 				if (selectedLevels.size > 0 && !selectedLevels.has(String(spell.level))) return false;
@@ -1675,7 +1987,37 @@ class CharacterSheetSpells {
 			const cantrips = spells.filter(s => s.level === 0);
 			const preparedSpells = leveledSpells.filter(s => s.prepared);
 
-			if (spellcastingInfo.type === "known") {
+			// Handle multiclass spellcasting display
+			if (spellcastingInfo.isMulticlass && spellcastingInfo.byClass) {
+				// Build display string showing each class's spells
+				const parts = [];
+				for (const classInfo of spellcastingInfo.byClass) {
+					const classSpells = leveledSpells.filter(s => s.class === classInfo.className);
+					const classPrepared = classSpells.filter(s => s.prepared);
+					
+					if (classInfo.type === "known") {
+						parts.push(`${classInfo.className}: ${classSpells.length}/${classInfo.max}`);
+					} else {
+						parts.push(`${classInfo.className}: ${classPrepared.length}/${classInfo.max}`);
+					}
+				}
+
+				// Show both containers for multiclass with combined info
+				if (spellcastingInfo.type === "known" || spellcastingInfo.type === "mixed") {
+					$knownContainer.show();
+					const currentKnown = leveledSpells.length;
+					const maxKnown = spellcastingInfo.max;
+					const knownColor = currentKnown > maxKnown ? "color: #c9302c;" : "";
+					$("#charsheet-spells-known").html(`<span style="${knownColor}" title="${parts.join(', ')}">${currentKnown}/${maxKnown}</span>`);
+				}
+				if (spellcastingInfo.type === "prepared" || spellcastingInfo.type === "mixed") {
+					$preparedContainer.show();
+					const currentPrepared = preparedSpells.length;
+					const maxPrepared = spellcastingInfo.max;
+					const preparedColor = currentPrepared > maxPrepared ? "color: #c9302c;" : "";
+					$("#charsheet-spells-prepared").html(`<span style="${preparedColor}" title="${parts.join(', ')}">${currentPrepared}/${maxPrepared}</span>`);
+				}
+			} else if (spellcastingInfo.type === "known") {
 				// Spells known caster (Bard, Sorcerer, Warlock, Ranger)
 				$knownContainer.show();
 				const currentKnown = leveledSpells.length;

@@ -162,75 +162,320 @@ class CharacterSheetFeatures {
 		const knownFeatNames = this._state.getFeats().map(f => f.name.toLowerCase());
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Add Feat",
+			title: "🎖️ Add Feat",
 			isMinHeight0: true,
+			isWidth100: true,
 		});
-
-		const $search = $(`<input type="text" class="form-control form-control--minimal mb-3" placeholder="Search feats...">`);
-		$search.appendTo($modalInner);
-		const $list = $(`<div class="feat-picker-list" style="max-height: 400px; overflow-y: auto;"></div>`).appendTo($modalInner);
 
 		// Filter feats by allowed sources
 		const sourceFilteredFeats = this._page.filterByAllowedSources(this._allFeats);
 
-		const renderList = (filter = "") => {
+		// Unique sources from feats
+		const uniqueSources = [...new Set(sourceFilteredFeats.map(f => f.source))].sort((a, b) => {
+			const priority = ["PHB", "XGE", "TCE", "FTD", "XPHB"];
+			const aIdx = priority.indexOf(a);
+			const bIdx = priority.indexOf(b);
+			if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+			if (aIdx !== -1) return -1;
+			if (bIdx !== -1) return 1;
+			return a.localeCompare(b);
+		});
+
+		// Get unique categories from feats
+		const categories = [...new Set(sourceFilteredFeats.map(f => f.category || "General"))].sort();
+
+		// Intro text
+		$modalInner.append(`
+			<p class="ve-small ve-muted mb-3">
+				Browse and add feats to your character. Click a feat to view details, or click <strong>+ Add</strong> to add it directly.
+			</p>
+		`);
+
+		// Build enhanced filter UI (matching spell picker)
+		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
+		
+		// Helper function to position dropdown towards center of modal
+		const positionDropdown = ($dropdown, $btn) => {
+			const btnRect = $btn[0].getBoundingClientRect();
+			const modalRect = $modalInner[0].getBoundingClientRect();
+			const btnCenterX = btnRect.left + btnRect.width / 2;
+			const modalCenterX = modalRect.left + modalRect.width / 2;
+			
+			if (btnCenterX < modalCenterX) {
+				$dropdown.addClass("open-right").removeClass("open-left");
+			} else {
+				$dropdown.removeClass("open-right").addClass("open-left");
+			}
+		};
+		
+		// Search input with icon
+		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
+		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search feats by name...">`).appendTo($searchWrapper);
+
+		// Category filter
+		let selectedCategories = new Set(); // Empty = all
+		const $categoryDropdown = $(`
+			<div class="charsheet__source-multiselect charsheet__category-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">📂</span>
+					<span class="charsheet__source-multiselect-text">All Categories</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${categories.map(c => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${c}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${c}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
+		`).appendTo($filterContainer);
+
+		// Category dropdown behavior
+		const $categoryBtn = $categoryDropdown.find(".charsheet__source-multiselect-btn");
+		const $categoryDropdownMenu = $categoryDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $categoryText = $categoryDropdown.find(".charsheet__source-multiselect-text");
+
+		$categoryBtn.on("click", (e) => {
+			e.stopPropagation();
+			positionDropdown($categoryDropdownMenu, $categoryBtn);
+			$categoryDropdownMenu.toggleClass("open");
+			$sourceDropdownMenu?.removeClass("open");
+		});
+
+		const updateCategoryText = () => {
+			const checked = $categoryDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$categoryText.text("No Categories");
+				selectedCategories = new Set(["__NONE__"]);
+			} else if (checked.length === categories.length) {
+				$categoryText.text("All Categories");
+				selectedCategories = new Set();
+			} else if (checked.length <= 2) {
+				$categoryText.text(checked.map((_, el) => $(el).val()).get().join(", "));
+				selectedCategories = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$categoryText.text(`${checked.length} Categories`);
+				selectedCategories = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		$categoryDropdown.find("input[type=checkbox]").on("change", updateCategoryText);
+		$categoryDropdown.find("[data-action=all]").on("click", () => {
+			$categoryDropdown.find("input").prop("checked", true);
+			updateCategoryText();
+		});
+		$categoryDropdown.find("[data-action=none]").on("click", () => {
+			$categoryDropdown.find("input").prop("checked", false);
+			updateCategoryText();
+		});
+		$categoryDropdownMenu.on("click", (e) => e.stopPropagation());
+
+		// Spacer to push source filter to the right
+		$(`<div class="charsheet__filter-spacer" style="flex: 1;"></div>`).appendTo($filterContainer);
+
+		// Source filter (on the right)
+		let selectedSources = new Set(); // Empty = all
+		const $sourceDropdown = $(`
+			<div class="charsheet__source-multiselect">
+				<button class="charsheet__source-multiselect-btn">
+					<span class="charsheet__source-multiselect-icon">📖</span>
+					<span class="charsheet__source-multiselect-text">All Sources</span>
+					<span class="charsheet__source-multiselect-arrow">▼</span>
+				</button>
+				<div class="charsheet__source-multiselect-dropdown charsheet__source-dropdown--right">
+					<div class="charsheet__source-multiselect-actions">
+						<button class="charsheet__source-action-btn" data-action="all">Select All</button>
+						<button class="charsheet__source-action-btn" data-action="none">Clear All</button>
+						<button class="charsheet__source-action-btn" data-action="official">Official</button>
+					</div>
+					<div class="charsheet__source-multiselect-list">
+						${uniqueSources.map(s => `
+							<label class="charsheet__source-multiselect-item">
+								<input type="checkbox" value="${s}" checked>
+								<span class="charsheet__source-multiselect-check">✓</span>
+								<span class="charsheet__source-multiselect-label">${Parser.sourceJsonToAbv(s)}</span>
+								<span class="charsheet__source-multiselect-full">${Parser.sourceJsonToFull(s)}</span>
+							</label>
+						`).join("")}
+					</div>
+				</div>
+			</div>
+		`).appendTo($filterContainer);
+
+		// Source dropdown behavior
+		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
+		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
+		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
+
+		$sourceBtn.on("click", (e) => {
+			e.stopPropagation();
+			positionDropdown($sourceDropdownMenu, $sourceBtn);
+			$sourceDropdownMenu.toggleClass("open");
+			$categoryDropdownMenu.removeClass("open");
+		});
+
+		$(document).on("click.featSourceFilter", () => {
+			$categoryDropdownMenu.removeClass("open");
+			$sourceDropdownMenu.removeClass("open");
+		});
+		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
+
+		const updateSourceText = () => {
+			const checked = $sourceDropdown.find("input:checked");
+			if (checked.length === 0) {
+				$sourceText.text("No Sources");
+				selectedSources = new Set(["__NONE__"]);
+			} else if (checked.length === uniqueSources.length) {
+				$sourceText.text("All Sources");
+				selectedSources = new Set();
+			} else if (checked.length <= 2) {
+				$sourceText.text(checked.map((_, el) => Parser.sourceJsonToAbv($(el).val())).get().join(", "));
+				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+			} else {
+				$sourceText.text(`${checked.length} Sources`);
+				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+			}
+			renderList();
+		};
+
+		$sourceDropdown.find("input[type=checkbox]").on("change", updateSourceText);
+		$sourceDropdown.find("[data-action=all]").on("click", () => {
+			$sourceDropdown.find("input").prop("checked", true);
+			updateSourceText();
+		});
+		$sourceDropdown.find("[data-action=none]").on("click", () => {
+			$sourceDropdown.find("input").prop("checked", false);
+			updateSourceText();
+		});
+		$sourceDropdown.find("[data-action=official]").on("click", () => {
+			const official = ["PHB", "XGE", "TCE", "FTD", "XPHB"];
+			$sourceDropdown.find("input").each((_, el) => {
+				$(el).prop("checked", official.includes($(el).val()));
+			});
+			updateSourceText();
+		});
+
+		// Quick filter: Prerequisites
+		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
+		let filterNoPrereq = false;
+		const $noPrereqBtn = $(`<button class="charsheet__modal-filter-btn">🆓 No Prerequisites</button>`).appendTo($quickFilters);
+
+		// Results count
+		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);
+
+		// Feat list
+		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
+
+		const renderList = () => {
 			$list.empty();
+			const searchTerm = $search.val().toLowerCase();
 
 			const filtered = sourceFilteredFeats.filter(feat => {
-				if (filter && !feat.name.toLowerCase().includes(filter.toLowerCase())) return false;
+				if (searchTerm && !feat.name.toLowerCase().includes(searchTerm)) return false;
+				// Category filter
+				if (selectedCategories.has("__NONE__")) return false;
+				const featCategory = feat.category || "General";
+				if (selectedCategories.size > 0 && !selectedCategories.has(featCategory)) return false;
+				// Source filter
+				if (selectedSources.has("__NONE__")) return false;
+				if (selectedSources.size > 0 && !selectedSources.has(feat.source)) return false;
+				// No prereq filter
+				if (filterNoPrereq && feat.prerequisite?.length) return false;
 				return true;
 			});
 
+			const knownCount = filtered.filter(f => knownFeatNames.includes(f.name.toLowerCase())).length;
+			$resultsCount.html(`<span>${filtered.length} feat${filtered.length !== 1 ? "s" : ""} found</span>${knownCount > 0 ? `<span class="ml-2" style="color: var(--cs-success);">(${knownCount} already known)</span>` : ""}`);
+
 			if (!filtered.length) {
-				$list.append(`<p class="ve-muted text-center">No feats found</p>`);
+				$list.html(`
+					<div class="charsheet__modal-empty">
+						<div class="charsheet__modal-empty-icon">🎖️</div>
+						<div class="charsheet__modal-empty-text">No feats match your filters.<br>Try adjusting your search or filters.</div>
+					</div>
+				`);
 				return;
 			}
 
+			// Group by category
+			const grouped = {};
 			filtered.forEach(feat => {
-				const isKnown = knownFeatNames.includes(feat.name.toLowerCase());
+				const category = feat.category || "General";
+				if (!grouped[category]) grouped[category] = [];
+				grouped[category].push(feat);
+			});
 
-				const $item = $(`
-					<div class="ve-flex-v-center p-2 ${isKnown ? "ve-muted" : "clickable"}" style="border-bottom: 1px solid var(--rgb-border-grey);">
-						<div class="ve-flex-col" style="flex: 1;">
-							<span class="bold">${feat.name}</span>
-							<span class="ve-small ve-muted">
-								${feat.prerequisite ? `Prereq: ${this._formatPrerequisite(feat.prerequisite)}` : ""}
-								${Parser.sourceJsonToAbv(feat.source)}
-							</span>
+			Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0])).forEach(([category, categoryFeats]) => {
+				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
+				$(`<div class="charsheet__modal-section-title">📂 ${category} <span style="opacity: 0.6;">(${categoryFeats.length})</span></div>`).appendTo($section);
+
+				categoryFeats.forEach(feat => {
+					const isKnown = knownFeatNames.includes(feat.name.toLowerCase());
+					const prereqStr = feat.prerequisite ? this._formatPrerequisite(feat.prerequisite) : "";
+
+					const $item = $(`
+						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""}">
+							<div class="charsheet__modal-list-item-icon">🎖️</div>
+							<div class="charsheet__modal-list-item-content">
+								<div class="charsheet__modal-list-item-title">${feat.name}</div>
+								<div class="charsheet__modal-list-item-subtitle">${prereqStr ? `Prereq: ${prereqStr} • ` : ""}${Parser.sourceJsonToAbv(feat.source)}</div>
+							</div>
+							${isKnown
+								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
+								: `<button class="ve-btn ve-btn-primary ve-btn-xs feat-picker-add">+ Add</button>`
+							}
 						</div>
-						${isKnown
-							? `<span class="ve-muted">Known</span>`
-							: `<button class="ve-btn ve-btn-primary ve-btn-xs feat-picker-add">Add</button>`
-						}
-					</div>
-				`);
+					`);
 
-				if (!isKnown) {
-					$item.find(".feat-picker-add").on("click", async () => {
-						await this._addFeat(feat);
-						knownFeatNames.push(feat.name.toLowerCase());
-						$item.addClass("ve-muted");
-						$item.find(".feat-picker-add").replaceWith(`<span class="ve-muted">Known</span>`);
-						JqueryUtil.doToast({type: "success", content: `Added ${feat.name}`});
-					});
+					if (!isKnown) {
+						$item.find(".feat-picker-add").on("click", async (e) => {
+							e.stopPropagation();
+							await this._addFeat(feat);
+							knownFeatNames.push(feat.name.toLowerCase());
+							$item.addClass("ve-muted");
+							$item.find(".feat-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`);
+							JqueryUtil.doToast({type: "success", content: `Added ${feat.name}`});
+						});
 
-					$item.on("click", (e) => {
-						if (!$(e.target).is("button")) {
-							this._showFeatInfo(feat);
-						}
-					});
-				}
+						$item.on("click", (e) => {
+							if (!$(e.target).is("button")) {
+								this._showFeatInfo(feat);
+							}
+						});
+					}
 
-				$list.append($item);
+					$section.append($item);
+				});
 			});
 		};
 
-		$search.on("input", () => renderList($search.val()));
+		// Toggle quick filter button
+		$noPrereqBtn.on("click", () => {
+			filterNoPrereq = !filterNoPrereq;
+			$noPrereqBtn.toggleClass("active", filterNoPrereq);
+			renderList();
+		});
+
+		$search.on("input", () => renderList());
 		renderList();
 
+		// Close button
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`.appendTo($modalInner).find("button").on("click", () => {
+			$(document).off("click.featSourceFilter");
+			doClose(false);
+		});
 	}
 
 	_formatPrerequisite (prereq) {
