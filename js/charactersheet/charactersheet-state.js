@@ -4651,6 +4651,24 @@ class CharacterSheetState {
 		if (!priority) return false;
 		return priority.includes(source);
 	}
+
+	// Section layout - stores the order of sections within each tab
+	// Structure: { tabId: { containerId: [sectionId1, sectionId2, ...], ... }, ... }
+	getSectionLayout () {
+		return this._data.settings?.sectionLayout || null;
+	}
+
+	setSectionLayout (layout) {
+		if (!this._data.settings) this._data.settings = {
+			exhaustionRules: "2024", 
+			allowedSources: null, 
+			includeCoreSpellsForHomebrew: true, 
+			allowExoticLanguages: true, 
+			prioritySources: null,
+			sectionLayout: null,
+		};
+		this._data.settings.sectionLayout = layout && Object.keys(layout).length ? layout : null;
+	}
 	// #endregion
 
 	// #region Resources

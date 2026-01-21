@@ -63,54 +63,89 @@
 		<!-- Character Selection Bar -->
 		<div class="ve-flex-col w-100 charsheet__main-header" id="charsheet-header">
 			<div class="charsheet__header-row charsheet__header-row--primary">
-				<div class="charsheet__header-section charsheet__header-section--character">
-					<label class="charsheet__header-label">
-						<span class="charsheet__header-label-icon">👤</span>
-						<span class="charsheet__header-label-text">Character:</span>
-						<select class="form-control form-control--minimal input-sm charsheet__header-select" id="charsheet-sel-character">
-							<option value="">-- New Character --</option>
-						</select>
-					</label>
-					<div class="charsheet__header-actions">
-						<button class="ve-btn ve-btn-primary ve-btn-xs charsheet__header-btn" id="charsheet-btn-new" title="Create New Character"><span class="charsheet__btn-icon">➕</span></button>
-						<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-duplicate" title="Duplicate Character"><span class="charsheet__btn-icon">📋</span></button>
-						<button class="ve-btn ve-btn-danger ve-btn-xs charsheet__header-btn" id="charsheet-btn-delete" title="Delete Character"><span class="charsheet__btn-icon">🗑️</span></button>
+				<div class="charsheet__header-group charsheet__header-group--character">
+					<span class="charsheet__header-group-icon">👤</span>
+					<select class="form-control form-control--minimal input-sm charsheet__header-select" id="charsheet-sel-character">
+						<option value="">-- New Character --</option>
+					</select>
+					<div class="charsheet__header-btn-group">
+						<button class="charsheet__icon-btn charsheet__icon-btn--primary" id="charsheet-btn-new" title="Create New Character">➕</button>
+						<button class="charsheet__icon-btn" id="charsheet-btn-duplicate" title="Duplicate Character">📋</button>
+						<button class="charsheet__icon-btn charsheet__icon-btn--danger" id="charsheet-btn-delete" title="Delete Character">🗑️</button>
 					</div>
 				</div>
-				<div class="charsheet__header-section charsheet__header-section--progression">
-					<button class="ve-btn ve-btn-success ve-btn-xs charsheet__header-btn charsheet__header-btn--action" id="charsheet-btn-levelup" title="Level Up"><span class="charsheet__btn-icon">⬆️</span> Level Up</button>
-					<button class="ve-btn ve-btn-info ve-btn-xs charsheet__header-btn charsheet__header-btn--action" id="charsheet-btn-multiclass" title="Add Multiclass"><span class="charsheet__btn-icon">➕</span> Multiclass</button>
+
+				<div class="charsheet__header-divider"></div>
+
+				<div class="charsheet__header-group charsheet__header-group--progression">
+					<button class="charsheet__action-btn charsheet__action-btn--success" id="charsheet-btn-levelup" title="Level Up">
+						<span class="charsheet__action-btn-icon">⬆️</span>
+						<span class="charsheet__action-btn-text">Level Up</span>
+					</button>
+					<button class="charsheet__action-btn charsheet__action-btn--info" id="charsheet-btn-multiclass" title="Add Multiclass">
+						<span class="charsheet__action-btn-icon">➕</span>
+						<span class="charsheet__action-btn-text">Multiclass</span>
+					</button>
 				</div>
-				<div class="charsheet__header-section charsheet__header-section--tools">
+
+				<div class="charsheet__header-spacer"></div>
+
+				<div class="charsheet__header-group charsheet__header-group--status">
 					<span class="charsheet__save-indicator" id="charsheet-save-indicator" title="Auto-save status">
-						<span class="charsheet__save-icon charsheet__save-icon--saved">✓</span>
+						<span class="charsheet__save-icon">✓</span>
 						<span class="charsheet__save-text">Saved</span>
 					</span>
-					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-modifiers" title="Custom Modifiers"><span class="charsheet__btn-icon">🎯</span> Modifiers</button>
-					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-settings" title="Sheet Settings"><span class="charsheet__btn-icon">⚙️</span> Settings</button>
-					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-import" title="Import character from a JSON file (from another device or backup)"><span class="charsheet__btn-icon">📥</span> Import</button>
-					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-export" title="Export character to JSON file (for backup or sharing)"><span class="charsheet__btn-icon">📤</span> Export</button>
-					<button class="ve-btn ve-btn-default ve-btn-xs charsheet__header-btn" id="charsheet-btn-print" title="Print Character Sheet"><span class="charsheet__btn-icon">🖨️</span> Print</button>
+					<div class="charsheet__layout-editing-banner" id="charsheet-layout-banner">
+						<span class="charsheet__layout-banner-icon">✨</span>
+						<span>Editing Layout</span>
+					</div>
+				</div>
+
+				<div class="charsheet__header-divider"></div>
+
+				<div class="charsheet__header-group charsheet__header-group--tools">
+					<button class="charsheet__tool-btn" id="charsheet-btn-modifiers" title="Custom Modifiers">🎯 Modifiers</button>
+					<button class="charsheet__tool-btn" id="charsheet-btn-settings" title="Sheet Settings">⚙️ Settings</button>
+					<span class="charsheet__tool-separator"></span>
+					<button class="charsheet__tool-btn" id="charsheet-btn-import" title="Import character from a JSON file">📥</button>
+					<button class="charsheet__tool-btn" id="charsheet-btn-export" title="Export character to JSON file">📤</button>
+					<button class="charsheet__tool-btn" id="charsheet-btn-print" title="Print Character Sheet">🖨️</button>
 				</div>
 			</div>
-			<div class="charsheet__header-row charsheet__header-row--help-wrapper">
+
+			<div class="charsheet__header-row charsheet__header-row--secondary">
 				<div class="charsheet__help-tips" id="charsheet-help-bar">
 					<div class="charsheet__help-tip">
-						<span class="charsheet__help-key">Shift+Click</span>
-						<span class="charsheet__help-desc">= Advantage</span>
+						<kbd>Shift</kbd><span>+click = Advantage</span>
 					</div>
 					<div class="charsheet__help-tip">
-						<span class="charsheet__help-key">Ctrl/Cmd +Click</span>
-						<span class="charsheet__help-desc">= Disadvantage</span>
+						<kbd>Ctrl/⌘</kbd><span>+click = Disadvantage</span>
 					</div>
 					<div class="charsheet__help-tip">
-						<span class="charsheet__help-key">Right-Click</span>
-						<span class="charsheet__help-desc">= Options (if available)</span>
+						<kbd>Right-click</kbd><span>= Options</span>
 					</div>
 				</div>
+
+				<div class="charsheet__header-layout-controls">
+					<button class="charsheet__layout-toggle" id="charsheet-btn-layout" title="Customize section layout by dragging">
+						<span class="charsheet__layout-toggle-icon">📐</span>
+						<span class="charsheet__layout-toggle-text">Layout</span>
+					</button>
+					<div class="charsheet__layout-edit-actions">
+						<button class="charsheet__layout-action" id="charsheet-btn-reset-layout" title="Reset this tab's layout">
+							<span class="charsheet__layout-action-icon">↺</span>
+							<span class="charsheet__layout-action-text">Reset Tab</span>
+						</button>
+						<button class="charsheet__layout-action charsheet__layout-action--default" id="charsheet-btn-default-layout" title="Reset all tabs to default">
+							<span class="charsheet__layout-action-icon">🏠</span>
+							<span class="charsheet__layout-action-text">Default</span>
+						</button>
+					</div>
+				</div>
+
 				<button class="charsheet__help-toggle" id="charsheet-help-toggle" title="Toggle help tips">
 					<span class="charsheet__help-toggle-icon">❓</span>
-					<span class="charsheet__help-toggle-text">Help</span>
+					<span class="charsheet__help-toggle-text">Tips</span>
 				</button>
 			</div>
 		</div>
