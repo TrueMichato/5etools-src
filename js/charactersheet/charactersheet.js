@@ -502,12 +502,19 @@ class CharacterSheetPage {
 		}
 
 		this._$selCharacter.empty();
-		this._$selCharacter.append(`<option value="">-- New Character --</option>`);
+		this._$selCharacter.append(`<option value="">➕ Create New Character</option>`);
+
+		if (characters.length) {
+			this._$selCharacter.append(`<option disabled>────── Saved Characters ──────</option>`);
+		}
 
 		characters.forEach(char => {
 			const name = char.name || "Unnamed Character";
-			const classInfo = char.classes?.[0] ? `${char.classes[0].name} ${char.classes[0].level}` : "";
-			const label = classInfo ? `${name} (${classInfo})` : name;
+			// Show class info with total level
+			const totalLevel = char.classes?.reduce((sum, c) => sum + (c.level || 0), 0) || 0;
+			const classNames = char.classes?.map(c => c.name).join("/") || "";
+			const classInfo = classNames ? `${classNames} ${totalLevel}` : "";
+			const label = classInfo ? `${name} — ${classInfo}` : name;
 			this._$selCharacter.append(`<option value="${char.id}">${label}</option>`);
 		});
 
@@ -615,18 +622,57 @@ class CharacterSheetPage {
 	async _saveCurrentCharacter () {
 		if (!this._currentCharacterId) return;
 
-		let characters = await StorageUtil.pGet("charsheet-characters") || [];
-		const charData = this._state.toJson();
-		charData.id = this._currentCharacterId;
+		// Show saving indicator
+		this._updateSaveIndicator("saving");
 
-		const existingIndex = characters.findIndex(c => c.id === this._currentCharacterId);
-		if (existingIndex >= 0) {
-			characters[existingIndex] = charData;
-		} else {
-			characters.push(charData);
+		try {
+			let characters = await StorageUtil.pGet("charsheet-characters") || [];
+			const charData = this._state.toJson();
+			charData.id = this._currentCharacterId;
+
+			const existingIndex = characters.findIndex(c => c.id === this._currentCharacterId);
+			if (existingIndex >= 0) {
+				characters[existingIndex] = charData;
+			} else {
+				characters.push(charData);
+			}
+
+			await StorageUtil.pSet("charsheet-characters", characters);
+			
+			// Show saved indicator
+			this._updateSaveIndicator("saved");
+		} catch (err) {
+			console.error("Save error:", err);
+			this._updateSaveIndicator("error");
 		}
+	}
 
-		await StorageUtil.pSet("charsheet-characters", characters);
+	/**
+	 * Update the save indicator UI
+	 * @param {"saving"|"saved"|"error"} status
+	 */
+	_updateSaveIndicator (status) {
+		const $indicator = $("#charsheet-save-indicator");
+		if (!$indicator.length) return;
+
+		$indicator.removeClass("charsheet__save-indicator--saving charsheet__save-indicator--error");
+
+		switch (status) {
+			case "saving":
+				$indicator.addClass("charsheet__save-indicator--saving");
+				$indicator.find(".charsheet__save-icon").text("⟳");
+				$indicator.find(".charsheet__save-text").text("Saving...");
+				break;
+			case "saved":
+				$indicator.find(".charsheet__save-icon").text("✓");
+				$indicator.find(".charsheet__save-text").text("Saved");
+				break;
+			case "error":
+				$indicator.addClass("charsheet__save-indicator--error");
+				$indicator.find(".charsheet__save-icon").text("✗");
+				$indicator.find(".charsheet__save-text").text("Error");
+				break;
+		}
 	}
 
 	async _onImportCharacter () {
@@ -3863,6 +3909,33 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
+		// Priority sources section
+		const currentPriority = this._state.getPrioritySources() || [];
+		const homebrewSources = allSources.filter(src => BrewUtil2.hasSourceJson(src.json) || PrereleaseUtil.hasSourceJson(src.json));
+		
+		let $prioritySection = null;
+		if (homebrewSources.length) {
+			const $prioritySelect = $(`<select class="form-control" id="settings-priority-source">
+				<option value="">None (show all versions)</option>
+				${homebrewSources.map(src => `<option value="${src.json}" ${currentPriority.includes(src.json) ? "selected" : ""}>${src.full || src.abbr}</option>`).join("")}
+			</select>`);
+
+			$prioritySection = $$`<div class="charsheet__settings-section">
+				<div class="charsheet__settings-section-title">⭐ Priority Source</div>
+				<p class="charsheet__settings-section-intro">Choose a homebrew source to prioritize. When set, if a spell, item, class, or feature with the same name exists in both this source and another source, only the version from this source will appear. Other unique options from all sources will still be shown.</p>
+				<div class="charsheet__settings-option">
+					<label class="charsheet__settings-option-label">
+						<span class="charsheet__settings-option-icon">🏆</span>
+						<span class="charsheet__settings-option-name">Prioritize Homebrew Source</span>
+					</label>
+					${$prioritySelect}
+				</div>
+				<p class="charsheet__settings-section-note ve-muted mt-2" style="font-size: 0.8rem;">
+					<strong>Example:</strong> If your homebrew has a custom "Fireball" spell and you prioritize it, the PHB version of Fireball won't appear in spell lists—but all other PHB spells will still show.
+				</p>
+			</div>`;
+		}
+
 		// Build modal content
 		$$`<div class="charsheet__settings-modal">
 			<div class="charsheet__settings-section">
@@ -3873,6 +3946,8 @@ class CharacterSheetPage {
 					${$sourceFilter}
 				</div>
 			</div>
+			
+			${$prioritySection || ""}
 			
 			<div class="charsheet__settings-section">
 				<div class="charsheet__settings-section-title">🎮 Game Rules</div>
@@ -3893,6 +3968,12 @@ class CharacterSheetPage {
 				</div>
 			</div>
 		</div>`.appendTo($modalInner);
+
+		// Priority source handler
+		$modalInner.find("#settings-priority-source").on("change", (e) => {
+			const value = e.target.value;
+			this._state.setPrioritySources(value ? [value] : null);
+		});
 
 		// Quick select handlers
 		$modalInner.find("#settings-source-all").on("click", () => {
@@ -4107,14 +4188,50 @@ class CharacterSheetPage {
 	}
 
 	/**
-	 * Filter an array of entities by allowed sources
-	 * @param {Array} entities - Array of entities with `source` property
+	 * Filter an array of entities by allowed sources and priority sources
+	 * Priority sources hide duplicates (same name) from non-priority sources
+	 * @param {Array} entities - Array of entities with `source` and `name` properties
 	 * @returns {Array} Filtered array
 	 */
 	filterByAllowedSources (entities) {
+		// First filter by allowed sources
 		const allowed = this._state.getAllowedSources();
-		if (!allowed) return entities; // null = all allowed
-		return entities.filter(e => allowed.includes(e.source));
+		let filtered = allowed ? entities.filter(e => allowed.includes(e.source)) : entities;
+
+		// Then apply priority filtering if set
+		const priority = this._state.getPrioritySources();
+		if (priority?.length) {
+			filtered = this._applyPriorityFilter(filtered, priority);
+		}
+
+		return filtered;
+	}
+
+	/**
+	 * Apply priority source filtering - hide entities from non-priority sources
+	 * if a matching entity (same name) exists in a priority source
+	 * @param {Array} entities - Array of entities
+	 * @param {Array} prioritySources - Array of priority source strings
+	 * @returns {Array} Filtered array
+	 */
+	_applyPriorityFilter (entities, prioritySources) {
+		// Build a map of names that exist in priority sources
+		const priorityNames = new Set();
+		entities.forEach(e => {
+			if (prioritySources.includes(e.source)) {
+				priorityNames.add(e.name?.toLowerCase());
+			}
+		});
+
+		// Filter out non-priority entities that have a priority equivalent
+		return entities.filter(e => {
+			// Always keep entities from priority sources
+			if (prioritySources.includes(e.source)) return true;
+
+			// Keep non-priority entities only if no priority version exists
+			const lowerName = e.name?.toLowerCase();
+			return !priorityNames.has(lowerName);
+		});
 	}
 	// #endregion
 

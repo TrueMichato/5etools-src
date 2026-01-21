@@ -2190,8 +2190,8 @@ class CharacterSheetLevelUp {
 					</select>
 				`);
 
-				// Add language options
-				$select.append(`<optgroup label="Standard Languages">`);
+				// Add language options grouped by type
+				$select.append(`<optgroup label="──── Standard Languages ────">`);
 				standardLanguages.forEach(lang => {
 					if (!currentLanguages.includes(lang.toLowerCase())) {
 						$select.append(`<option value="${lang}">${lang}</option>`);
@@ -2199,7 +2199,7 @@ class CharacterSheetLevelUp {
 				});
 				$select.append(`</optgroup>`);
 				
-				$select.append(`<optgroup label="Exotic Languages">`);
+				$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
 				exoticLanguages.forEach(lang => {
 					if (!currentLanguages.includes(lang.toLowerCase())) {
 						$select.append(`<option value="${lang}">${lang}</option>`);
@@ -2214,7 +2214,7 @@ class CharacterSheetLevelUp {
 					!currentLanguages.includes(l.toLowerCase())
 				);
 				if (otherLangs.length) {
-					$select.append(`<optgroup label="Other Languages">`);
+					$select.append(`<optgroup label="──── Other Languages ────">`);
 					otherLangs.forEach(lang => {
 						$select.append(`<option value="${lang}">${lang}</option>`);
 					});

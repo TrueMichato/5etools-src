@@ -34,14 +34,14 @@ class CharacterSheetExport {
 		const characterName = this._state.getName() || "character";
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Export Character",
+			title: "📤 Export Character",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
 		let isPdfFormat = false;
 
-		const $btnJson = $(`<button class="ve-btn ve-btn-default active">JSON</button>`)
+		const $btnJson = $(`<button class="ve-btn ve-btn-default active">JSON File</button>`)
 			.on("click", () => {
 				isPdfFormat = false;
 				$btnJson.addClass("active");
@@ -50,7 +50,7 @@ class CharacterSheetExport {
 				$pdfSection.hide();
 			});
 
-		const $btnPdf = $(`<button class="ve-btn ve-btn-default">PDF</button>`)
+		const $btnPdf = $(`<button class="ve-btn ve-btn-default">Print / PDF</button>`)
 			.on("click", () => {
 				isPdfFormat = true;
 				$btnPdf.addClass("active");
@@ -60,17 +60,33 @@ class CharacterSheetExport {
 			});
 
 		const $jsonSection = $$`<div>
-			<h5>Character Data (JSON)</h5>
-			<textarea class="form-control" rows="15" readonly>${jsonStr}</textarea>
+			<div class="charsheet__export-info mb-3">
+				<p class="ve-muted mb-1"><strong>💾 JSON Export</strong> - Create a backup file to:</p>
+				<ul class="ve-muted" style="margin: 0; padding-left: 1.5rem;">
+					<li>Transfer your character to another device</li>
+					<li>Share your character with another player</li>
+					<li>Keep a backup of your character</li>
+				</ul>
+			</div>
+			<div class="charsheet__export-preview">
+				<label class="ve-muted mb-1">Character Data Preview:</label>
+				<textarea class="form-control" rows="12" readonly style="font-family: monospace; font-size: 0.8rem;">${jsonStr}</textarea>
+			</div>
 		</div>`;
 
 		const $pdfSection = $$`<div style="display: none;">
-			<p>PDF export will open a print dialog with a print-optimized character sheet.</p>
+			<div class="charsheet__export-info">
+				<p class="ve-muted mb-1"><strong>🖨️ Print / PDF</strong> - Opens print dialog to:</p>
+				<ul class="ve-muted" style="margin: 0; padding-left: 1.5rem;">
+					<li>Print a physical character sheet</li>
+					<li>Save as PDF (choose "Save as PDF" in print dialog)</li>
+				</ul>
+			</div>
 		</div>`;
 
 		$$`<div>
 			<div class="mb-3">
-				<h5>Export Format</h5>
+				<div class="charsheet__export-format-label mb-2">Export Format:</div>
 				<div class="ve-btn-group">
 					${$btnJson}
 					${$btnPdf}
@@ -112,12 +128,12 @@ class CharacterSheetExport {
 
 	async _showImportDialog () {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "Import Character",
+			title: "📥 Import Character",
 			isMinHeight0: true,
 		});
 
 		const $fileInput = $(`<input type="file" class="form-control" accept=".json">`);
-		const $jsonTextarea = $(`<textarea class="form-control" rows="10" placeholder="Paste character JSON here..."></textarea>`);
+		const $jsonTextarea = $(`<textarea class="form-control" rows="8" placeholder="Paste character JSON data here..." style="font-family: monospace; font-size: 0.85rem;"></textarea>`);
 		const $cbReplace = $(`<input type="checkbox" class="mr-2">`);
 
 		// File input handler
@@ -128,27 +144,36 @@ class CharacterSheetExport {
 			const reader = new FileReader();
 			reader.onload = (evt) => {
 				$jsonTextarea.val(evt.target.result);
+				JqueryUtil.doToast({type: "info", content: `Loaded: ${file.name}`});
 			};
 			reader.readAsText(file);
 		});
 
 		$$`<div>
+			<div class="charsheet__import-info mb-3">
+				<p class="ve-muted mb-1"><strong>📂 Import a character</strong> from a previously exported JSON file.</p>
+				<p class="ve-muted" style="font-size: 0.85rem;">Characters are saved locally in your browser. Use this to restore a backup or import a character from another device.</p>
+			</div>
+			
 			<div class="mb-3">
-				<h5>Import from File</h5>
+				<label class="ve-muted mb-1"><strong>Option 1:</strong> Select a file</label>
 				${$fileInput}
 			</div>
 			
-			<div class="text-center ve-muted mb-3">— or —</div>
+			<div class="text-center ve-muted mb-3" style="font-size: 0.85rem;">— or —</div>
 			
-			<div>
-				<h5>Paste JSON Data</h5>
+			<div class="mb-3">
+				<label class="ve-muted mb-1"><strong>Option 2:</strong> Paste JSON data</label>
 				${$jsonTextarea}
 			</div>
 			
-			<div class="mt-3">
+			<div class="charsheet__import-option mt-3">
 				<label class="ve-flex-v-center">
 					${$cbReplace}
-					Replace current character (cannot be undone)
+					<span>
+						<strong>Replace current character</strong>
+						<span class="ve-muted" style="font-size: 0.85rem;"> — Overwrites the character you're currently editing (cannot be undone)</span>
+					</span>
 				</label>
 			</div>
 		</div>`.appendTo($modalInner);
