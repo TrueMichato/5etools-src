@@ -8,6 +8,7 @@ import {CharacterSheetFeatures} from "./charactersheet-features.js";
 import {CharacterSheetRest} from "./charactersheet-rest.js";
 import {CharacterSheetExport} from "./charactersheet-export.js";
 import {CharacterSheetLevelUp} from "./charactersheet-levelup.js";
+import {CharacterSheetLayout} from "./charactersheet-layout.js";
 
 /**
  * Character Sheet - Main Controller
@@ -24,6 +25,7 @@ class CharacterSheetPage {
 		this._rest = null;
 		this._export = null;
 		this._levelUp = null;
+		this._layout = null;
 
 		this._$selCharacter = null;
 		this._currentCharacterId = null;
@@ -95,6 +97,11 @@ class CharacterSheetPage {
 			this._levelUp = new CharacterSheetLevelUp(this);
 			console.log("CharacterSheetPage.pInit: LevelUp module initialized");
 		} catch (e) { console.error("Failed to init levelUp:", e); }
+
+		try {
+			this._layout = new CharacterSheetLayout(this);
+			console.log("CharacterSheetPage.pInit: Layout module initialized");
+		} catch (e) { console.error("Failed to init layout:", e); }
 
 		// Pass loaded data to modules
 		if (this._inventory) this._inventory.setItems(this._itemsData);
@@ -439,6 +446,11 @@ class CharacterSheetPage {
 		// Help toggle
 		$("#charsheet-help-toggle").on("click", () => this._toggleHelpTips());
 
+		// Layout editing
+		$("#charsheet-btn-layout").on("click", () => this._toggleLayoutEditMode());
+		$("#charsheet-btn-reset-layout").on("click", () => this._resetLayout());
+		$("#charsheet-btn-default-layout").on("click", () => this._resetToDefaultLayout());
+
 		// Conditions
 		$("#charsheet-btn-add-condition").on("click", () => this._onAddCondition());
 
@@ -540,6 +552,11 @@ class CharacterSheetPage {
 			this._currentCharacterId = charId;
 			this._state.loadFromJson(character);
 			this._renderCharacter();
+
+			// Apply saved section layout
+			if (this._layout) {
+				this._layout.applySavedLayout();
+			}
 
 			// Update URL
 			const url = new URL(window.location);
@@ -2787,6 +2804,56 @@ class CharacterSheetPage {
 		StorageUtil.pSet("charsheet-help-visible", !isVisible);
 	}
 
+	/**
+	 * Toggle layout edit mode on/off
+	 * When enabled, users can drag sections to reorder them
+	 */
+	_toggleLayoutEditMode () {
+		if (!this._layout) return;
+		
+		const isNowEditing = this._layout.toggleEditMode();
+		const $btn = $("#charsheet-btn-layout");
+		const $btnText = $btn.find(".charsheet__layout-toggle-text");
+		
+		if (isNowEditing) {
+			$btn.addClass("active");
+			$btnText.text("Done");
+			$btn.attr("title", "Finish editing layout");
+		} else {
+			$btn.removeClass("active");
+			$btnText.text("Layout");
+			$btn.attr("title", "Customize section layout by dragging");
+			// Save character to persist layout
+			this._saveCurrentCharacter();
+		}
+	}
+	
+	/**
+	 * Reset section layout to default for current tab
+	 */
+	_resetLayout () {
+		if (!this._layout) return;
+		
+		// Show confirmation dialog
+		if (confirm("Reset layout to default for this tab? This cannot be undone.")) {
+			this._layout.resetLayout(false); // false = current tab only
+			this._saveCurrentCharacter();
+		}
+	}
+	
+	/**
+	 * Reset all tabs to the default sheet layout
+	 */
+	_resetToDefaultLayout () {
+		if (!this._layout) return;
+		
+		// Show confirmation dialog
+		if (confirm("Reset ALL tabs to the default sheet layout? This will clear any custom section ordering you've done.")) {
+			this._layout.resetLayout(true); // true = all tabs
+			this._saveCurrentCharacter();
+		}
+	}
+
 	async _onAddCondition () {
 		// Get conditions from loaded data (dynamic, supports homebrew)
 		// Now returns {name, source, sourceAbbr} objects
@@ -4525,6 +4592,7 @@ class CharacterSheetPage {
 	getSkillsData () { return this._skillsData; }
 	getConditionsData () { return this._conditionsData; }
 	getState () { return this._state; }
+	getLayout () { return this._layout; }
 
 	/**
 	 * Get unique skills list, preferring 2024 (XPHB) versions, including custom skills
