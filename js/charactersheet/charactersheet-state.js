@@ -4625,7 +4625,7 @@ class CharacterSheetState {
 	}
 
 	setAllowedSources (sources) {
-		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null, includeCoreSpellsForHomebrew: true, allowExoticLanguages: true};
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null, includeCoreSpellsForHomebrew: true, allowExoticLanguages: true, prioritySources: null};
 		this._data.settings.allowedSources = sources?.length ? sources : null;
 	}
 
@@ -4633,6 +4633,23 @@ class CharacterSheetState {
 		const allowed = this.getAllowedSources();
 		if (!allowed) return true; // null/empty = all sources allowed
 		return allowed.includes(source);
+	}
+
+	// Priority sources - when set, entities from these sources take precedence
+	// If an entity exists in a priority source and also in a non-priority source, the non-priority version is hidden
+	getPrioritySources () {
+		return this._data.settings?.prioritySources || null; // null means no priority
+	}
+
+	setPrioritySources (sources) {
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null, includeCoreSpellsForHomebrew: true, allowExoticLanguages: true, prioritySources: null};
+		this._data.settings.prioritySources = sources?.length ? sources : null;
+	}
+
+	hasPrioritySource (source) {
+		const priority = this.getPrioritySources();
+		if (!priority) return false;
+		return priority.includes(source);
 	}
 	// #endregion
 

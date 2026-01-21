@@ -2993,9 +2993,6 @@ class CharacterSheetBuilder {
 
 		const $dropdowns = $section.find(".charsheet__builder-class-lang-dropdowns");
 
-		// Get available languages (all standard + exotic)
-		const availableLanguages = [...Parser.LANGUAGES_ALL].sort();
-
 		for (let i = 0; i < count; i++) {
 			const selectId = `class-lang-choice-${i}`;
 			const $select = $(`
@@ -3004,9 +3001,24 @@ class CharacterSheetBuilder {
 				</select>
 			`);
 
-			availableLanguages.forEach(lang => {
+			// Add language options grouped by type
+			$select.append(`<optgroup label="──── Standard Languages ────">`);
+			Parser.LANGUAGES_STANDARD.forEach(lang => {
 				$select.append(`<option value="${lang}">${lang}</option>`);
 			});
+			$select.append(`</optgroup>`);
+
+			$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
+			Parser.LANGUAGES_EXOTIC.forEach(lang => {
+				$select.append(`<option value="${lang}">${lang}</option>`);
+			});
+			$select.append(`</optgroup>`);
+
+			$select.append(`<optgroup label="──── Secret Languages ────">`);
+			Parser.LANGUAGES_SECRET.forEach(lang => {
+				$select.append(`<option value="${lang}">${lang}</option>`);
+			});
+			$select.append(`</optgroup>`);
 
 			const existingChoice = this._selectedClassFeatureLanguages[i];
 			if (existingChoice) {
@@ -4720,11 +4732,23 @@ class CharacterSheetBuilder {
 			$toolSelect.append(`<option value="${tool}" ${this._customBackgroundData.tools[0] === tool ? "selected" : ""}>${tool}</option>`);
 		});
 
-		// Populate language dropdown
+		// Populate language dropdown with grouped options
 		const $langSelect = $("#custom-bg-lang1");
-		allLanguages.forEach(lang => {
+		$langSelect.append(`<optgroup label="──── Standard Languages ────">`);
+		Parser.LANGUAGES_STANDARD.forEach(lang => {
 			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
 		});
+		$langSelect.append(`</optgroup>`);
+		$langSelect.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
+		Parser.LANGUAGES_EXOTIC.forEach(lang => {
+			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+		});
+		$langSelect.append(`</optgroup>`);
+		$langSelect.append(`<optgroup label="──── Secret Languages ────">`);
+		Parser.LANGUAGES_SECRET.forEach(lang => {
+			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+		});
+		$langSelect.append(`</optgroup>`);
 
 		// Populate extra dropdown (combined tools and languages)
 		const $extraToolsGroup = $("#custom-bg-extra-tools");
@@ -4732,9 +4756,22 @@ class CharacterSheetBuilder {
 		allTools.forEach(tool => {
 			$extraToolsGroup.append(`<option value="tool:${tool}">${tool}</option>`);
 		});
-		allLanguages.forEach(lang => {
+		// Add grouped languages to extra dropdown
+		$extraLangsGroup.append(`<optgroup label="Standard">`);
+		Parser.LANGUAGES_STANDARD.forEach(lang => {
 			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
 		});
+		$extraLangsGroup.append(`</optgroup>`);
+		$extraLangsGroup.append(`<optgroup label="Exotic/Rare">`);
+		Parser.LANGUAGES_EXOTIC.forEach(lang => {
+			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+		});
+		$extraLangsGroup.append(`</optgroup>`);
+		$extraLangsGroup.append(`<optgroup label="Secret">`);
+		Parser.LANGUAGES_SECRET.forEach(lang => {
+			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+		});
+		$extraLangsGroup.append(`</optgroup>`);
 
 		// Event handlers
 		$("#custom-bg-name").on("input", (e) => {
@@ -5213,11 +5250,6 @@ class CharacterSheetBuilder {
 			const choiceLabel = anyCount > 0 ? "any language" : (allowExoticByDefault ? "any language" : "standard language");
 			$choiceSection.append(`<p class="mb-1"><strong>Choose ${totalLangChoices} ${choiceLabel}${totalLangChoices > 1 ? "s" : ""}:</strong></p>`);
 			
-			// Get available languages - allow all languages if setting is enabled
-			const availableLanguages = allowAllLanguages
-				? Parser.LANGUAGES_ALL 
-				: Parser.LANGUAGES_STANDARD;
-			
 			for (let i = 0; i < totalLangChoices; i++) {
 				const selectId = `bg-lang-choice-${i}`;
 				const $select = $(`
@@ -5226,9 +5258,26 @@ class CharacterSheetBuilder {
 					</select>
 				`);
 				
-				availableLanguages.forEach(lang => {
+				// Add language options grouped by type
+				$select.append(`<optgroup label="──── Standard Languages ────">`);
+				Parser.LANGUAGES_STANDARD.forEach(lang => {
 					$select.append(`<option value="${lang}">${lang}</option>`);
 				});
+				$select.append(`</optgroup>`);
+
+				if (allowAllLanguages) {
+					$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
+					Parser.LANGUAGES_EXOTIC.forEach(lang => {
+						$select.append(`<option value="${lang}">${lang}</option>`);
+					});
+					$select.append(`</optgroup>`);
+
+					$select.append(`<optgroup label="──── Secret Languages ────">`);
+					Parser.LANGUAGES_SECRET.forEach(lang => {
+						$select.append(`<option value="${lang}">${lang}</option>`);
+					});
+					$select.append(`</optgroup>`);
+				}
 
 				const existingChoice = this._selectedLanguages.find(l => l.selectIdx === i);
 				if (existingChoice) {
