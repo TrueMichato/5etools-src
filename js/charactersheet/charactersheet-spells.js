@@ -109,13 +109,39 @@ class CharacterSheetSpells {
 		}
 
 		// Get class spell list, filtered by allowed sources
-		const className = classes[0].name;
+		const characterClass = classes[0];
+		const className = characterClass.name;
+		const classSource = characterClass.source;
 		const filteredSpells = this._page.filterByAllowedSources(this._allSpells);
+		
+		// Check if we should include core spell lists for homebrew classes
+		const settings = this._state.getSettings?.() || {};
+		const includeCoreSpells = settings.includeCoreSpellsForHomebrew !== false; // Default true
+		
+		// Determine if this is a non-standard source (homebrew/third-party)
+		const isNonStandardSource = classSource && !["PHB", "XPHB", "TCE", "XGE"].includes(classSource);
+		
 		const classSpells = filteredSpells.filter(spell => {
 			// Use Renderer.spell.getCombinedClasses to get properly merged class data
 			const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
 			if (!fromClassList?.length) return false;
-			return fromClassList.some(c => c.name.toLowerCase() === className.toLowerCase());
+			
+			// Check if spell is on this class's list
+			const matchesExact = fromClassList.some(c => c.name.toLowerCase() === className.toLowerCase());
+			if (matchesExact) return true;
+			
+			// For homebrew/third-party classes: also include spells from the equivalent core class
+			// if the setting is enabled
+			if (includeCoreSpells && isNonStandardSource) {
+				// Check if any PHB/XPHB class with the same name has this spell
+				const matchesCore = fromClassList.some(c => 
+					c.name.toLowerCase() === className.toLowerCase() && 
+					["PHB", "XPHB"].includes(c.source)
+				);
+				if (matchesCore) return true;
+			}
+			
+			return false;
 		});
 
 		// Filter by level
