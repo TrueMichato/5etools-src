@@ -2224,6 +2224,9 @@ class CharacterSheetCombat {
 	 * Check if a combat method is a stance (has duration) vs instant effect
 	 */
 	_isMethodStance (method) {
+		// Quick check: if "Stance" is in the name
+		if (method.name?.toLowerCase().includes("stance")) return true;
+		
 		if (!method.entries) return false;
 		const entriesStr = JSON.stringify(method.entries).toLowerCase();
 		
@@ -2235,8 +2238,8 @@ class CharacterSheetCombat {
 			"for the duration",
 			"while this stance",
 			"while in this stance",
+			"this stance lasts",
 			"you enter",
-			"stance",
 			"you maintain",
 			"concentration",
 		];
@@ -2311,129 +2314,183 @@ class CharacterSheetCombat {
 		);
 		const knownMethodNames = new Set(knownMethods.map(m => `${m.name}|${m.source || ""}`));
 
-		// Get max degree based on character level
+		// Get max degree and max methods based on character level
 		const maxDegree = this._getCharacterMaxDegree();
+		const maxMethods = this._getCharacterMaxMethods();
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "⚔️ Combat Methods",
+			title: "Combat Methods",
 			isMinHeight0: true,
 			isWidth100: true,
 			isMaxWidth640p: true,
+			zIndex: 1500, // Higher z-index to ensure hover popups work
 		});
 
+		// Add class for styling and make sure hovers appear above
 		$modalInner.addClass("charsheet__method-picker");
+		$modalInner.closest(".ui-modal__inner").css("z-index", "1500");
 
-		// Build modal content with improved layout
-		const $content = $(`<div class="charsheet__method-picker-content p-2"></div>`).appendTo($modalInner);
+		// Create content container
+		const $content = $(`<div class="ve-flex-col h-100"></div>`).appendTo($modalInner);
 
-		// Header with stats
+		// === HEADER: Stats summary ===
 		const $header = $(`
-			<div class="charsheet__method-picker-header mb-3 p-2" style="background: var(--rgb-bg-alt); border-radius: 8px;">
-				<div class="ve-flex ve-flex-v-center ve-flex-h-space-between mb-2">
-					<div class="ve-flex ve-flex-v-center">
-						<span class="charsheet__method-picker-icon mr-2" style="font-size: 1.5rem;">⚔️</span>
-						<div>
-							<div class="bold">Combat Methods</div>
-							<div class="ve-small ve-muted">Max Degree: <span class="badge badge-info">${maxDegree > 0 ? maxDegree + this._getOrdinalSuffix(maxDegree) : "None"}</span></div>
+			<div class="charsheet__method-picker-header">
+				<div class="charsheet__method-picker-header-left">
+					<span class="charsheet__method-picker-header-icon">⚔️</span>
+					<div>
+						<div class="charsheet__method-picker-header-title">Combat Methods</div>
+						<div class="charsheet__method-picker-header-stat" style="display: flex; align-items: center; gap: 0.6rem; margin-top: 0.15rem;">
+							<span>Max Degree: <span class="charsheet__method-picker-header-stat-value">${maxDegree > 0 ? maxDegree + this._getOrdinalSuffix(maxDegree) : "—"}</span></span>
+							<span style="opacity: 0.4;">•</span>
+							<span>Traditions: <span class="charsheet__method-picker-header-stat-value" id="method-picker-trad-count">${selectedTraditions.length}</span></span>
 						</div>
 					</div>
-					<div class="ve-flex ve-flex-col ve-text-right">
-						<div class="ve-small">Known Methods: <span class="badge badge-primary" id="method-picker-known-count">${knownMethodNames.size}</span></div>
-						<div class="ve-small">Traditions: <span class="badge badge-secondary" id="method-picker-trad-count">${selectedTraditions.length}</span></div>
+				</div>
+				<div class="charsheet__method-picker-header-right">
+					<div class="charsheet__method-picker-header-known-row">
+						<span class="charsheet__method-picker-header-stat">Known:</span>
+						<span class="charsheet__method-picker-header-known" id="method-picker-known-count">${knownMethodNames.size}</span>
+						<span class="charsheet__method-picker-header-stat">/ ${maxMethods > 0 ? maxMethods : "∞"}</span>
 					</div>
 				</div>
 			</div>
 		`).appendTo($content);
 
-		// Traditions section with card-style selection
+		// === TRADITIONS SECTION ===
 		const $tradSection = $(`
-			<div class="charsheet__method-picker-section mb-3">
-				<div class="ve-flex ve-flex-v-center ve-flex-h-space-between mb-2">
-					<h6 class="m-0"><span class="mr-1">📜</span> Combat Traditions</h6>
-					<button class="ve-btn ve-btn-xs ve-btn-default" id="method-picker-toggle-trads" title="Toggle tradition selection">
-						<span class="glyphicon glyphicon-chevron-down"></span>
+			<div class="charsheet__method-picker-trads-section">
+				<div class="charsheet__method-picker-trads-header">
+					<span class="charsheet__method-picker-trads-title">Your Traditions</span>
+					<button class="ve-btn ve-btn-xs ve-btn-default" id="method-picker-toggle-trads" title="Edit traditions">
+						<span class="glyphicon glyphicon-pencil"></span> Edit
 					</button>
 				</div>
-				<div class="charsheet__method-picker-traditions" id="method-picker-traditions" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+				<div id="method-picker-trads-display" class="charsheet__method-picker-trads-display"></div>
+				<div id="method-picker-trads-edit" style="display: none;"></div>
 			</div>
 		`).appendTo($content);
 
-		// Toggle traditions visibility
-		let tradsExpanded = selectedTraditions.length === 0;
-		const $tradContainer = $tradSection.find("#method-picker-traditions");
+		// Render tradition display (compact pills)
+		const $tradsDisplay = $tradSection.find("#method-picker-trads-display");
+		const $tradsEdit = $tradSection.find("#method-picker-trads-edit");
 		const $toggleBtn = $tradSection.find("#method-picker-toggle-trads");
-		
-		const updateTradsVisibility = () => {
-			$tradContainer.toggle(tradsExpanded);
-			$toggleBtn.find(".glyphicon")
-				.removeClass("glyphicon-chevron-down glyphicon-chevron-up")
-				.addClass(tradsExpanded ? "glyphicon-chevron-up" : "glyphicon-chevron-down");
+		let editMode = false;
+
+		const tradIcons = this._getTraditionIcons();
+
+		const renderTradsDisplay = () => {
+			$tradsDisplay.empty();
+			if (selectedTraditions.length === 0) {
+				$tradsDisplay.append(`<span class="charsheet__method-picker-header-stat" style="font-style: italic;">No traditions selected. Click Edit to choose.</span>`);
+			} else {
+				for (const code of selectedTraditions) {
+					$tradsDisplay.append(`
+						<span class="charsheet__method-picker-trad-pill">
+							<span class="charsheet__method-picker-trad-icon">${tradIcons[code] || "⚔️"}</span>
+							${this._getTraditionName(code)}
+						</span>
+					`);
+				}
+			}
 		};
-		
+		renderTradsDisplay();
+
+		// Toggle edit mode
 		$toggleBtn.on("click", () => {
-			tradsExpanded = !tradsExpanded;
-			updateTradsVisibility();
+			editMode = !editMode;
+			$tradsDisplay.toggle(!editMode);
+			$tradsEdit.toggle(editMode);
+			$toggleBtn.html(editMode 
+				? '<span class="glyphicon glyphicon-ok"></span> Done' 
+				: '<span class="glyphicon glyphicon-pencil"></span> Edit'
+			);
+			if (!editMode) {
+				renderTradsDisplay();
+				$("#method-picker-trad-count").text(selectedTraditions.length);
+				this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
+			}
 		});
 
-		// Populate traditions with card-style UI
-		this._renderTraditionSelection($tradContainer, selectedTraditions, () => {
-			selectedTraditions = this._getSelectedTraditionsFromUI($tradContainer);
-			$("#method-picker-trad-count").text(selectedTraditions.length);
-			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+		// Render tradition editor
+		this._renderTraditionSelection($tradsEdit, selectedTraditions, () => {
+			selectedTraditions = this._getSelectedTraditionsFromUI($tradsEdit);
 		});
-		updateTradsVisibility();
 
-		// Filters section with better styling
+		// === FILTERS SECTION ===
+		let filterTrad = "all";
+		let filterDegree = "all";
+		let filterStatus = "all";
+		let searchQuery = "";
+
 		const $filterSection = $(`
-			<div class="charsheet__method-picker-filters mb-3 p-2" style="background: var(--rgb-bg-alt); border-radius: 6px;">
-				<div class="ve-flex ve-flex-wrap ve-flex-v-center" style="gap: 0.5rem;">
-					<div class="ve-flex-grow-1" style="min-width: 150px; max-width: 250px;">
-						<div class="input-group input-group-sm">
-							<span class="input-group-addon"><span class="glyphicon glyphicon-search"></span></span>
-							<input type="text" class="form-control" id="method-picker-search" placeholder="Search methods...">
-						</div>
-					</div>
-					<select class="form-control form-control-sm" id="method-picker-degree" style="width: auto; min-width: 110px;">
-						<option value="all">All Degrees</option>
-						${[1, 2, 3, 4, 5].filter(d => d <= maxDegree).map(d => 
-							`<option value="${d}">${d}${this._getOrdinalSuffix(d)} Degree</option>`
-						).join("")}
-					</select>
-					<select class="form-control form-control-sm" id="method-picker-filter" style="width: auto; min-width: 100px;">
-						<option value="all">All</option>
-						<option value="known">Known</option>
-						<option value="available">Available</option>
-					</select>
+			<div class="charsheet__method-picker-filters">
+				<div class="charsheet__method-picker-search">
+					<input type="text" class="form-control form-control-sm" id="method-picker-search" placeholder="🔍 Search methods...">
 				</div>
+				<select class="form-control form-control-sm charsheet__method-picker-filter-select" id="method-picker-trad-filter" style="min-width: 130px;">
+					<option value="all">All Traditions</option>
+				</select>
+				<select class="form-control form-control-sm charsheet__method-picker-filter-select" id="method-picker-degree" style="min-width: 100px;">
+					<option value="all">All Degrees</option>
+					${[1, 2, 3, 4, 5].filter(d => d <= maxDegree).map(d => 
+						`<option value="${d}">${d}${this._getOrdinalSuffix(d)} Degree</option>`
+					).join("")}
+				</select>
+				<select class="form-control form-control-sm charsheet__method-picker-filter-select" id="method-picker-filter" style="min-width: 90px;">
+					<option value="all">All</option>
+					<option value="known">Known</option>
+					<option value="available">Available</option>
+				</select>
 			</div>
 		`).appendTo($content);
 
-		// Method list container with better styling
-		const $methodSection = $(`
-			<div class="charsheet__method-picker-list-container" style="max-height: 350px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 6px; background: var(--rgb-bg);"></div>
+		// Populate tradition filter dropdown
+		const $tradFilter = $filterSection.find("#method-picker-trad-filter");
+		const updateTradFilterOptions = () => {
+			$tradFilter.find("option:not(:first)").remove();
+			for (const code of selectedTraditions) {
+				$tradFilter.append(`<option value="${code}">${tradIcons[code] || "⚔️"} ${this._getTraditionName(code)}</option>`);
+			}
+		};
+		updateTradFilterOptions();
+
+		// === METHOD LIST ===
+		const $methodList = $(`
+			<div class="charsheet__method-picker-list"></div>
 		`).appendTo($content);
-		const $methodList = $methodSection;
 
 		// Initial render
-		this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+		this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
 
 		// Filter event listeners
-		$filterSection.find("#method-picker-search").on("input", () => {
-			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
-		});
-		$filterSection.find("#method-picker-degree, #method-picker-filter").on("change", () => {
-			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames);
-		});
+		$filterSection.find("#method-picker-search").on("input", function () {
+			searchQuery = $(this).val().toLowerCase();
+			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
+		}.bind(this));
 
-		// Footer with buttons
+		$filterSection.find("#method-picker-trad-filter").on("change", function () {
+			filterTrad = $(this).val();
+			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
+		}.bind(this));
+
+		$filterSection.find("#method-picker-degree").on("change", function () {
+			filterDegree = $(this).val();
+			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
+		}.bind(this));
+
+		$filterSection.find("#method-picker-filter").on("change", function () {
+			filterStatus = $(this).val();
+			this._renderMethodList($methodList, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
+		}.bind(this));
+
+		// === FOOTER ===
 		const $footer = $(`
-			<div class="ve-flex ve-flex-v-center ve-flex-h-space-between mt-3 pt-2" style="border-top: 1px solid var(--rgb-border-grey);">
-				<div class="ve-small ve-muted">Click method names for details</div>
-				<button class="ve-btn ve-btn-primary">
-					<span class="glyphicon glyphicon-ok mr-1"></span> Done
-				</button>
+			<div class="charsheet__method-picker-footer">
+				<span class="charsheet__method-picker-footer-hint">💡 Hover method names for details</span>
+				<button class="charsheet__method-picker-footer-btn">Done</button>
 			</div>
-		`).appendTo($modalInner);
+		`).appendTo($content);
 
 		$footer.find("button").on("click", async () => {
 			this._saveSelectedTraditions(selectedTraditions);
@@ -2444,102 +2501,127 @@ class CharacterSheetCombat {
 	}
 
 	/**
+	 * Get tradition icons mapping
+	 */
+	_getTraditionIcons () {
+		return {
+			"AM": "🏔️", "AK": "✨", "BU": "🐺", "BZ": "💨", "CJ": "🎭",
+			"EB": "🌑", "GH": "💖", "MG": "🪞", "MS": "🌫️", "RC": "🌊",
+			"RE": "🗡️", "SK": "🩸", "SS": "🐎", "TI": "⚔️", "TC": "🦷",
+			"UW": "☯️", "UH": "🦅",
+		};
+	}
+
+	/**
+	 * Calculate max methods character can know
+	 */
+	_getCharacterMaxMethods () {
+		// Look for a class with Combat Methods progression
+		const classes = this._state.getClasses();
+		let maxMethods = 0;
+
+		for (const cls of classes) {
+			const classData = this._page.getClasses?.().find(c => c.name === cls.name && c.source === cls.source);
+			if (!classData?.optionalfeatureProgression) continue;
+
+			const cmProg = classData.optionalfeatureProgression.find(prog => 
+				prog.featureType?.some(ft => ft.startsWith("CTM:"))
+			);
+			if (!cmProg?.progression) continue;
+
+			// Get methods at current level
+			const level = cls.level || 1;
+			const levelKey = String(level);
+			if (cmProg.progression[levelKey]) {
+				maxMethods += cmProg.progression[levelKey];
+			} else {
+				// Find the highest level <= current level
+				const levels = Object.keys(cmProg.progression).map(Number).filter(l => l <= level).sort((a, b) => b - a);
+				if (levels.length > 0) {
+					maxMethods += cmProg.progression[String(levels[0])];
+				}
+			}
+		}
+
+		return maxMethods;
+	}
+
+	/**
 	 * Render tradition selection with card-style UI
 	 */
 	_renderTraditionSelection ($container, selectedTraditions, onChange) {
 		$container.empty();
+		$container.css({"display": "flex", "flex-wrap": "wrap", "gap": "0.4rem", "padding": "0.5rem", "background": "var(--rgb-bg-alt)", "border-radius": "4px"});
 
 		const allTraditions = [
-			{code: "AM", name: "Adamant Mountain", icon: "🏔️"},
-			{code: "AK", name: "Arcane Knight", icon: "✨"},
-			{code: "BU", name: "Beast Unity", icon: "🐺"},
-			{code: "BZ", name: "Biting Zephyr", icon: "💨"},
-			{code: "CJ", name: "Comedic Jabs", icon: "🎭"},
-			{code: "EB", name: "Eldritch Blackguard", icon: "🌑"},
-			{code: "GH", name: "Gallant Heart", icon: "💖"},
-			{code: "MG", name: "Mirror's Glint", icon: "🪞"},
-			{code: "MS", name: "Mist and Shade", icon: "🌫️"},
-			{code: "RC", name: "Rapid Current", icon: "🌊"},
-			{code: "RE", name: "Razor's Edge", icon: "🗡️"},
-			{code: "SK", name: "Sanguine Knot", icon: "🩸"},
-			{code: "SS", name: "Spirited Steed", icon: "🐎"},
-			{code: "TI", name: "Tempered Iron", icon: "⚔️"},
-			{code: "TC", name: "Tooth and Claw", icon: "🦷"},
-			{code: "UW", name: "Unending Wheel", icon: "☯️"},
-			{code: "UH", name: "Unerring Hawk", icon: "🦅"},
+			{code: "AM", name: "Adamant Mountain"},
+			{code: "AK", name: "Arcane Knight"},
+			{code: "BU", name: "Beast Unity"},
+			{code: "BZ", name: "Biting Zephyr"},
+			{code: "CJ", name: "Comedic Jabs"},
+			{code: "EB", name: "Eldritch Blackguard"},
+			{code: "GH", name: "Gallant Heart"},
+			{code: "MG", name: "Mirror's Glint"},
+			{code: "MS", name: "Mist and Shade"},
+			{code: "RC", name: "Rapid Current"},
+			{code: "RE", name: "Razor's Edge"},
+			{code: "SK", name: "Sanguine Knot"},
+			{code: "SS", name: "Spirited Steed"},
+			{code: "TI", name: "Tempered Iron"},
+			{code: "TC", name: "Tooth and Claw"},
+			{code: "UW", name: "Unending Wheel"},
+			{code: "UH", name: "Unerring Hawk"},
 		];
+
+		const tradIcons = this._getTraditionIcons();
 
 		for (const trad of allTraditions) {
 			const isSelected = selectedTraditions.includes(trad.code);
-			const $card = $(`
-				<div class="charsheet__method-picker-trad-card" data-trad="${trad.code}" style="
+			const $chip = $(`
+				<label class="ve-flex ve-flex-v-center" style="
 					cursor: pointer;
-					padding: 0.5rem 0.75rem;
-					border: 2px solid ${isSelected ? "var(--rgb-link)" : "var(--rgb-border-grey)"};
-					border-radius: 6px;
-					background: ${isSelected ? "var(--rgb-link-opacity-10)" : "var(--rgb-bg)"};
-					transition: all 0.15s ease;
-					display: flex;
-					align-items: center;
-					gap: 0.4rem;
-				">
-					<span style="font-size: 1.1rem;">${trad.icon}</span>
-					<span class="ve-small" style="font-weight: ${isSelected ? "bold" : "normal"};">${trad.name}</span>
-					${isSelected ? '<span class="glyphicon glyphicon-ok ml-1" style="color: var(--rgb-link); font-size: 0.7rem;"></span>' : ""}
-				</div>
+					padding: 0.25rem 0.5rem;
+					border: 1px solid ${isSelected ? "var(--rgb-link)" : "var(--rgb-border-grey)"};
+					border-radius: 4px;
+					background: ${isSelected ? "rgba(51,122,183,0.15)" : "transparent"};
+					font-size: 0.85rem;
+					transition: all 0.15s;
+				" data-trad="${trad.code}">
+					<input type="checkbox" class="mr-1" style="margin: 0;" ${isSelected ? "checked" : ""}>
+					<span>${tradIcons[trad.code] || "⚔️"}</span>
+					<span class="ml-1">${trad.name}</span>
+				</label>
 			`);
 
-			$card.on("click", function () {
-				const code = $(this).data("trad");
-				const wasSelected = selectedTraditions.includes(code);
+			$chip.find("input").on("change", function () {
+				const code = $chip.data("trad");
+				const checked = $(this).is(":checked");
 				
-				if (wasSelected) {
-					selectedTraditions = selectedTraditions.filter(t => t !== code);
-				} else {
+				if (checked && !selectedTraditions.includes(code)) {
 					selectedTraditions.push(code);
+				} else if (!checked) {
+					const idx = selectedTraditions.indexOf(code);
+					if (idx >= 0) selectedTraditions.splice(idx, 1);
 				}
-				
-				// Update visual state
-				const nowSelected = !wasSelected;
-				$(this).css({
-					"border-color": nowSelected ? "var(--rgb-link)" : "var(--rgb-border-grey)",
-					"background": nowSelected ? "var(--rgb-link-opacity-10)" : "var(--rgb-bg)",
+
+				$chip.css({
+					"border-color": checked ? "var(--rgb-link)" : "var(--rgb-border-grey)",
+					"background": checked ? "rgba(51,122,183,0.15)" : "transparent",
 				});
-				$(this).find("span:last").css("font-weight", nowSelected ? "bold" : "normal");
-				
-				// Toggle checkmark
-				if (nowSelected) {
-					$(this).append('<span class="glyphicon glyphicon-ok ml-1" style="color: var(--rgb-link); font-size: 0.7rem;"></span>');
-				} else {
-					$(this).find(".glyphicon-ok").remove();
-				}
-				
 				onChange();
 			});
 
-			$card.on("mouseenter", function () {
-				if (!selectedTraditions.includes($(this).data("trad"))) {
-					$(this).css("border-color", "var(--rgb-link-opacity-50)");
-				}
-			}).on("mouseleave", function () {
-				if (!selectedTraditions.includes($(this).data("trad"))) {
-					$(this).css("border-color", "var(--rgb-border-grey)");
-				}
-			});
-
-			$container.append($card);
+			$container.append($chip);
 		}
 	}
 
 	/**
-	 * Get selected traditions from the UI cards
+	 * Get selected traditions from the UI checkboxes
 	 */
 	_getSelectedTraditionsFromUI ($container) {
 		const selected = [];
-		$container.find(".charsheet__method-picker-trad-card").each(function () {
-			if ($(this).find(".glyphicon-ok").length > 0) {
-				selected.push($(this).data("trad"));
-			}
+		$container.find("input:checked").each(function () {
+			selected.push($(this).closest("label").data("trad"));
 		});
 		return selected;
 	}
@@ -2547,13 +2629,8 @@ class CharacterSheetCombat {
 	/**
 	 * Render the method list with filtering and hoverable names
 	 */
-	_renderMethodList ($container, allMethods, selectedTraditions, maxDegree, knownMethodNames) {
+	_renderMethodList ($container, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad = "all", filterDegree = "all", filterStatus = "all", searchQuery = "") {
 		$container.empty();
-
-		// Get filter values
-		const searchQuery = ($("#method-picker-search").val() || "").toLowerCase();
-		const degreeFilter = $("#method-picker-degree").val() || "all";
-		const statusFilter = $("#method-picker-filter").val() || "all";
 
 		// Filter methods
 		let filteredMethods = allMethods.filter(method => {
@@ -2561,30 +2638,33 @@ class CharacterSheetCombat {
 			const tradCode = this._getMethodTraditionFromOptFeature(method);
 			if (!selectedTraditions.includes(tradCode)) return false;
 
+			// Tradition filter (if specific tradition selected in dropdown)
+			if (filterTrad !== "all" && tradCode !== filterTrad) return false;
+
 			// Must be within max degree
 			const degree = this._getMethodDegreeFromOptFeature(method);
 			if (degree > maxDegree) return false;
 
 			// Search filter
-			if (searchQuery && !method.name.toLowerCase().includes(searchQuery)) return false;
+			if (searchQuery && !method.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
 
 			// Degree filter
-			if (degreeFilter !== "all" && degree !== parseInt(degreeFilter)) return false;
+			if (filterDegree !== "all" && degree !== parseInt(filterDegree)) return false;
 
 			// Status filter
 			const key = `${method.name}|${method.source || ""}`;
 			const isKnown = knownMethodNames.has(key);
-			if (statusFilter === "known" && !isKnown) return false;
-			if (statusFilter === "available" && isKnown) return false;
+			if (filterStatus === "known" && !isKnown) return false;
+			if (filterStatus === "available" && isKnown) return false;
 
 			return true;
 		});
 
 		if (selectedTraditions.length === 0) {
 			$container.append(`
-				<div class="ve-text-center py-4">
-					<div style="font-size: 2rem; opacity: 0.5; margin-bottom: 0.5rem;">📜</div>
-					<p class="ve-muted">Select at least one tradition to see available methods.</p>
+				<div class="charsheet__method-picker-empty">
+					<div class="charsheet__method-picker-empty-icon">📜</div>
+					<p class="charsheet__method-picker-empty-text">Select at least one tradition to see available methods.</p>
 				</div>
 			`);
 			return;
@@ -2592,9 +2672,9 @@ class CharacterSheetCombat {
 
 		if (filteredMethods.length === 0) {
 			$container.append(`
-				<div class="ve-text-center py-4">
-					<div style="font-size: 2rem; opacity: 0.5; margin-bottom: 0.5rem;">🔍</div>
-					<p class="ve-muted">No methods match the current filters.</p>
+				<div class="charsheet__method-picker-empty">
+					<div class="charsheet__method-picker-empty-icon">🔍</div>
+					<p class="charsheet__method-picker-empty-text">No methods match the current filters.</p>
 				</div>
 			`);
 			return;
@@ -2625,20 +2705,10 @@ class CharacterSheetCombat {
 
 			const $tradGroup = $(`
 				<div class="charsheet__method-picker-trad-group">
-					<div class="charsheet__method-picker-trad-header" style="
-						padding: 0.5rem 0.75rem;
-						background: linear-gradient(to right, var(--rgb-bg-alt), transparent);
-						border-bottom: 1px solid var(--rgb-border-grey);
-						display: flex;
-						align-items: center;
-						gap: 0.5rem;
-						position: sticky;
-						top: 0;
-						z-index: 1;
-					">
-						<span style="font-size: 1.1rem;">${tradIcons[tradCode] || "⚔️"}</span>
-						<span class="bold">${this._getTraditionName(tradCode)}</span>
-						<span class="badge badge-default ve-small ml-auto">${methods.length}</span>
+					<div class="charsheet__method-picker-trad-group-header">
+						<span class="charsheet__method-picker-trad-group-icon">${tradIcons[tradCode] || "⚔️"}</span>
+						<span class="charsheet__method-picker-trad-group-name">${this._getTraditionName(tradCode)}</span>
+						<span class="charsheet__method-picker-trad-group-count">${methods.length}</span>
 					</div>
 				</div>
 			`);
@@ -2655,6 +2725,8 @@ class CharacterSheetCombat {
 				const isKnown = knownMethodNames.has(key);
 				const degree = this._getMethodDegreeFromOptFeature(method);
 				const cost = this._getMethodExertionCostFromOptFeature(method);
+				const activation = this._getMethodActivationTime(method);
+				const isStance = this._isMethodStance(method);
 
 				// Create hoverable method name link
 				let methodNameHtml = `<span class="bold">${method.name}</span>`;
@@ -2666,54 +2738,37 @@ class CharacterSheetCombat {
 					// Fall back to plain text
 				}
 
-				// Get first entry as description preview
-				let descPreview = "";
-				if (method.entries?.[0]) {
-					const firstEntry = method.entries[0];
-					if (typeof firstEntry === "string") {
-						descPreview = firstEntry.length > 100 ? firstEntry.slice(0, 100) + "..." : firstEntry;
-					}
-				}
+				// Activation badge class
+				const activationBadgeClass = {
+					"A": "charsheet__method-badge--action",
+					"BA": "charsheet__method-badge--bonus",
+					"R": "charsheet__method-badge--reaction",
+				};
+				const actClass = activation ? activationBadgeClass[activation] : null;
+				const activationLabels = {"A": "Action", "BA": "Bonus", "R": "React"};
 
 				const $method = $(`
-					<div class="charsheet__method-picker-item" style="
-						display: flex;
-						align-items: flex-start;
-						justify-content: space-between;
-						padding: 0.6rem 0.75rem;
-						border-bottom: 1px solid var(--rgb-border-grey-trans);
-						background: ${isKnown ? "var(--rgb-link-opacity-5)" : "transparent"};
-						transition: background 0.15s ease;
-					">
-						<div class="ve-flex-col" style="flex: 1; min-width: 0; padding-right: 0.75rem;">
-							<div class="ve-flex ve-flex-v-center ve-flex-wrap" style="gap: 0.4rem; margin-bottom: 0.25rem;">
-								${isKnown ? '<span class="glyphicon glyphicon-ok" style="color: var(--rgb-link); font-size: 0.7rem;"></span>' : ""}
-								<span class="charsheet__method-picker-name">${methodNameHtml}</span>
-								<span class="badge badge-info ve-small">${degree}${this._getOrdinalSuffix(degree)}</span>
-								${cost > 0 ? `<span class="badge badge-warning ve-small">${cost} EP</span>` : ""}
-								${method.source ? `<span class="ve-muted ve-small">[${Parser.sourceJsonToAbv(method.source)}]</span>` : ""}
-							</div>
-							${descPreview ? `<div class="ve-small ve-muted" style="line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${descPreview}</div>` : ""}
+					<div class="charsheet__method-picker-item ${isKnown ? "charsheet__method-picker-item--known" : ""}">
+						<div class="charsheet__method-picker-item-content">
+							${isKnown ? '<span class="glyphicon glyphicon-ok charsheet__method-picker-item-known-icon"></span>' : ""}
+							<span class="charsheet__method-picker-item-name">${methodNameHtml}</span>
+							<span class="charsheet__method-badge charsheet__method-badge--degree">${degree}${this._getOrdinalSuffix(degree)}</span>
+							${actClass ? `<span class="charsheet__method-badge ${actClass}">${activationLabels[activation]}</span>` : ""}
+							${cost > 0 ? `<span class="charsheet__method-badge charsheet__method-badge--ep">${cost} EP</span>` : ""}
+							${isStance ? `<span class="charsheet__method-badge charsheet__method-badge--stance">Stance</span>` : ""}
 						</div>
-						<div class="ve-flex ve-flex-v-center" style="flex-shrink: 0;">
+						<div class="charsheet__method-picker-item-actions">
 							${isKnown 
-								? `<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__method-remove" data-method-key="${key}" style="white-space: nowrap;">
-									<span class="glyphicon glyphicon-minus mr-1"></span>Remove
+								? `<button class="charsheet__method-picker-btn charsheet__method-picker-btn--remove charsheet__method-remove" data-method-key="${key}">
+									<span class="glyphicon glyphicon-minus"></span>
 								</button>`
-								: `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__method-add" data-method-key="${key}" style="white-space: nowrap;">
-									<span class="glyphicon glyphicon-plus mr-1"></span>Add
+								: `<button class="charsheet__method-picker-btn charsheet__method-picker-btn--add charsheet__method-add" data-method-key="${key}">
+									<span class="glyphicon glyphicon-plus"></span>
 								</button>`
 							}
 						</div>
 					</div>
 				`);
-
-				// Hover effect
-				$method.on("mouseenter", function () {
-					$(this).css("background", isKnown ? "var(--rgb-link-opacity-10)" : "var(--rgb-bg-alt)");
-				}).on("mouseleave", function () {
-					$(this).css("background", isKnown ? "var(--rgb-link-opacity-5)" : "transparent");
-				});
 
 				// Store method data
 				$method.data("method", method);
@@ -2723,7 +2778,7 @@ class CharacterSheetCombat {
 					e.stopPropagation();
 					this._addCombatMethod(method);
 					knownMethodNames.add(key);
-					this._renderMethodList($container, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+					this._renderMethodList($container, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
 					// Update known count badge
 					$("#method-picker-known-count").text(knownMethodNames.size);
 				});
@@ -2732,7 +2787,7 @@ class CharacterSheetCombat {
 					e.stopPropagation();
 					this._removeCombatMethod(method);
 					knownMethodNames.delete(key);
-					this._renderMethodList($container, allMethods, selectedTraditions, maxDegree, knownMethodNames);
+					this._renderMethodList($container, allMethods, selectedTraditions, maxDegree, knownMethodNames, filterTrad, filterDegree, filterStatus, searchQuery);
 					// Update known count badge
 					$("#method-picker-known-count").text(knownMethodNames.size);
 				});
@@ -2767,6 +2822,7 @@ class CharacterSheetCombat {
 				if (match) traditions.add(match[1]);
 			}
 		}
+
 
 		return Array.from(traditions);
 	}
@@ -2873,12 +2929,32 @@ class CharacterSheetCombat {
 	 * Get method exertion cost from optional feature
 	 */
 	_getMethodExertionCostFromOptFeature (method) {
-		if (!method.entries) return 1;
-		const entriesStr = JSON.stringify(method.entries).toLowerCase();
-		const costMatch = entriesStr.match(/costs?\s+(\d+)\s+exertion/i);
+		// First check consumes.amount
+		if (method.consumes?.amount) return method.consumes.amount;
+		
+		if (!method.entries) return 0;
+		const entriesStr = JSON.stringify(method.entries);
+		
+		// Parse from entries like "{@b Action (2 Exertion Points)}"
+		const costMatch = entriesStr.match(/\((\d+)\s+exertion\s+points?\)/i);
 		if (costMatch) return parseInt(costMatch[1]);
-		// Default to degree-based cost
-		return this._getMethodDegreeFromOptFeature(method) || 1;
+		
+		return 0;
+	}
+
+	/**
+	 * Get method activation time from entries
+	 */
+	_getMethodActivationTime (method) {
+		if (!method.entries) return null;
+		const entriesStr = JSON.stringify(method.entries);
+		
+		// Look for patterns like "{@b Action", "{@b Bonus Action", "{@b Reaction"
+		if (entriesStr.includes("{@b Reaction")) return "R";
+		if (entriesStr.includes("{@b Bonus Action")) return "BA";
+		if (entriesStr.includes("{@b Action")) return "A";
+		
+		return null;
 	}
 
 	_getMethodDegree (feature) {
