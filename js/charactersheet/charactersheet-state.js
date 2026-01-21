@@ -1940,6 +1940,8 @@ class CharacterSheetState {
 			settings: {
 				exhaustionRules: "2024", // "2024" or "2014"
 				allowedSources: null, // null = all sources, array = only these sources
+				includeCoreSpellsForHomebrew: true, // Include PHB/XPHB spells for homebrew classes
+				allowExoticLanguages: true, // Allow exotic/rare languages in language selection by default
 			},
 		};
 	}
@@ -2880,20 +2882,25 @@ class CharacterSheetState {
 
 	_calculateUnarmoredDefenseAc () {
 		const dexMod = this.getAbilityMod("dex");
+		let bestAc = 10 + dexMod; // Base unarmored
 
 		// Barbarian: 10 + DEX + CON
 		if (this._hasBarbarianUnarmoredDefense()) {
 			const conMod = this.getAbilityMod("con");
-			return 10 + dexMod + conMod;
+			const barbarianAc = 10 + dexMod + conMod;
+			bestAc = Math.max(bestAc, barbarianAc);
 		}
 
-		// Monk: 10 + DEX + WIS (no shield)
+		// Monk: 10 + DEX + WIS (note: no shield allowed, but that's handled elsewhere)
 		if (this._hasMonkUnarmoredDefense()) {
 			const wisMod = this.getAbilityMod("wis");
-			return 10 + dexMod + wisMod;
+			const monkAc = 10 + dexMod + wisMod;
+			bestAc = Math.max(bestAc, monkAc);
 		}
 
-		return 10 + dexMod;
+		// As per rules: "If you have multiple ways to calculate your Armor Class, 
+		// you can benefit from only one at a time" - we automatically use the best one
+		return bestAc;
 	}
 
 	// Alias for compatibility with export module
@@ -3527,13 +3534,13 @@ class CharacterSheetState {
 				// Full casters: each level counts
 				casterLevel += level;
 			} else if (progression === "1/2") {
-				// Half casters: round down
-				casterLevel += Math.floor(level / 2);
+				// Half casters (Paladin, Ranger): round UP per 2024 multiclass rules
+				casterLevel += Math.ceil(level / 2);
 			} else if (progression === "1/3") {
-				// Third casters: round down
+				// Third casters (Eldritch Knight, Arcane Trickster): round DOWN
 				casterLevel += Math.floor(level / 3);
 			} else if (progression === "artificer") {
-				// Artificer progression: round up instead of down
+				// Artificer progression: round up (same as half caster)
 				casterLevel += Math.ceil(level / 2);
 			}
 			// Non-caster classes (no progression) don't contribute
@@ -4575,7 +4582,12 @@ class CharacterSheetState {
 	}
 
 	setSetting (key, value) {
-		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null};
+		if (!this._data.settings) this._data.settings = {
+			exhaustionRules: "2024", 
+			allowedSources: null, 
+			includeCoreSpellsForHomebrew: true,
+			allowExoticLanguages: true,
+		};
 		this._data.settings[key] = value;
 	}
 
@@ -4584,7 +4596,7 @@ class CharacterSheetState {
 	}
 
 	setExhaustionRules (rules) {
-		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null};
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null, includeCoreSpellsForHomebrew: true, allowExoticLanguages: true};
 		this._data.settings.exhaustionRules = rules;
 		// Clamp current exhaustion to new max when switching rules
 		const max = this.getMaxExhaustion();
@@ -4613,7 +4625,7 @@ class CharacterSheetState {
 	}
 
 	setAllowedSources (sources) {
-		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null};
+		if (!this._data.settings) this._data.settings = {exhaustionRules: "2024", allowedSources: null, includeCoreSpellsForHomebrew: true, allowExoticLanguages: true};
 		this._data.settings.allowedSources = sources?.length ? sources : null;
 	}
 

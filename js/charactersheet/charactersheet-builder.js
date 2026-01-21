@@ -5202,11 +5202,19 @@ class CharacterSheetBuilder {
 		const totalLangChoices = anyStandardCount + anyCount;
 		if (totalLangChoices > 0) {
 			const $choiceSection = $(`<div class="charsheet__builder-lang-choice mt-1"></div>`);
-			const choiceLabel = anyCount > 0 ? "any language" : "standard language";
+			
+			// Check setting for allowing exotic languages by default
+			const settings = this._state?.getSettings?.() || {};
+			const allowExoticByDefault = settings.allowExoticLanguages !== false; // Default true
+			
+			// If anyCount > 0, always allow all languages
+			// If only anyStandardCount, check setting - if allowExoticByDefault, still allow all
+			const allowAllLanguages = anyCount > 0 || allowExoticByDefault;
+			const choiceLabel = anyCount > 0 ? "any language" : (allowExoticByDefault ? "any language" : "standard language");
 			$choiceSection.append(`<p class="mb-1"><strong>Choose ${totalLangChoices} ${choiceLabel}${totalLangChoices > 1 ? "s" : ""}:</strong></p>`);
 			
-			// Get available languages
-			const availableLanguages = anyCount > 0 
+			// Get available languages - allow all languages if setting is enabled
+			const availableLanguages = allowAllLanguages
 				? Parser.LANGUAGES_ALL 
 				: Parser.LANGUAGES_STANDARD;
 			

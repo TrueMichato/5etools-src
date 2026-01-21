@@ -2713,24 +2713,38 @@ class CharacterSheetLevelUp {
 		const spellcastingAbility = this._getSpellcastingAbility(classData);
 		if (!spellcastingAbility) return;
 
-		// Get spell slot progression based on class type
-		const slots = this._getSpellSlotsForLevel(classData, newLevel);
+		// For multiclass characters, always use the proper multiclass spell slot calculation
+		// This correctly handles full/half/third casters according to 2024 rules
+		const classes = this._state.getClasses();
+		const isMulticlass = classes.length > 1;
 		
-		// Update spellcasting
-		const spellcasting = this._state.getSpellcasting();
-		spellcasting.ability = spellcastingAbility;
-		
-		Object.entries(slots).forEach(([level, count]) => {
-			if (!spellcasting.spellSlots[level]) {
-				spellcasting.spellSlots[level] = {current: count, max: count};
-			} else {
-				const diff = count - spellcasting.spellSlots[level].max;
-				if (diff > 0) {
-					spellcasting.spellSlots[level].max = count;
-					spellcasting.spellSlots[level].current += diff;
+		if (isMulticlass) {
+			// Use the state's multiclass spell slot calculator which handles:
+			// - Full casters: all levels count
+			// - Half casters (Paladin, Ranger): half levels rounded UP
+			// - Third casters (Eldritch Knight, Arcane Trickster): third levels rounded DOWN
+			// - Warlock Pact Magic: separate from other casters
+			this._state.calculateSpellSlots();
+		} else {
+			// Single class: use class-specific progression tables
+			const slots = this._getSpellSlotsForLevel(classData, newLevel);
+			
+			// Update spellcasting
+			const spellcasting = this._state.getSpellcasting();
+			spellcasting.ability = spellcastingAbility;
+			
+			Object.entries(slots).forEach(([level, count]) => {
+				if (!spellcasting.spellSlots[level]) {
+					spellcasting.spellSlots[level] = {current: count, max: count};
+				} else {
+					const diff = count - spellcasting.spellSlots[level].max;
+					if (diff > 0) {
+						spellcasting.spellSlots[level].max = count;
+						spellcasting.spellSlots[level].current += diff;
+					}
 				}
-			}
-		});
+			});
+		}
 	}
 
 	_getSpellcastingAbility (classData) {
@@ -3013,22 +3027,90 @@ class CharacterSheetLevelUp {
 	 */
 	async showMulticlass () {
 		const classes = this._page.getClasses();
-		const currentClasses = this._state.getClasses().map(c => c.name);
+		const currentClasses = this._state.getClasses();
 
 		// Filter out classes character already has
-		const availableClasses = classes.filter(c => !currentClasses.includes(c.name));
+		const availableClasses = classes.filter(c => !currentClasses.some(cc => cc.name === c.name));
 
 		if (!availableClasses.length) {
 			JqueryUtil.doToast({type: "warning", content: "No additional classes available."});
 			return;
 		}
 
-		// Check multiclass prerequisites (simplified)
+		// Check total level cap
 		const totalLevel = this._state.getTotalLevel();
 		if (totalLevel >= 20) {
 			JqueryUtil.doToast({type: "warning", content: "Character has reached maximum total level (20)."});
 			return;
 		}
+
+		// Helper to get primary ability for a class (for multiclass prerequisites)
+		const getPrimaryAbility = (classData) => {
+			if (!classData.primaryAbility) return null;
+			// primaryAbility is an array of ability options
+			// Each option is an object like {str: true} or {str: true, dex: true} for "or" choice
+			return classData.primaryAbility.map(abilityObj => {
+				return Object.keys(abilityObj).filter(k => Parser.ABIL_ABVS.includes(k));
+			});
+		};
+
+		// Check if character meets prerequisites for a class
+		// Must have 13+ in new class's primary ability AND current class(es) primary abilities
+		const checkPrerequisites = (newClassData) => {
+			const result = {met: true, failedAbilities: [], warnings: []};
+			
+			// Check new class requirements
+			const newClassAbilities = getPrimaryAbility(newClassData);
+			if (newClassAbilities) {
+				for (const abilityOptions of newClassAbilities) {
+					// For "or" choices, need at least one to meet 13
+					const meetsRequirement = abilityOptions.some(abl => this._state.getAbilityScore(abl) >= 13);
+					if (!meetsRequirement) {
+						result.met = false;
+						const abilityNames = abilityOptions.map(a => Parser.attAbvToFull(a)).join(" or ");
+						result.failedAbilities.push(`${newClassData.name} requires ${abilityNames} 13+`);
+					}
+				}
+			}
+			
+			// Check current class(es) requirements
+			for (const currentCls of currentClasses) {
+				const currentClassData = classes.find(c => c.name === currentCls.name);
+				if (currentClassData) {
+					const currentAbilities = getPrimaryAbility(currentClassData);
+					if (currentAbilities) {
+						for (const abilityOptions of currentAbilities) {
+							const meetsRequirement = abilityOptions.some(abl => this._state.getAbilityScore(abl) >= 13);
+							if (!meetsRequirement) {
+								result.met = false;
+								const abilityNames = abilityOptions.map(a => Parser.attAbvToFull(a)).join(" or ");
+								result.failedAbilities.push(`${currentCls.name} requires ${abilityNames} 13+`);
+							}
+						}
+					}
+				}
+			}
+			
+			return result;
+		};
+
+		// Format prerequisite display for a class
+		const formatPrerequisiteDisplay = (classData) => {
+			const abilities = getPrimaryAbility(classData);
+			if (!abilities?.length) return null;
+			
+			return abilities.map(abilityOptions => {
+				const abilityChecks = abilityOptions.map(abl => {
+					const score = this._state.getAbilityScore(abl);
+					const met = score >= 13;
+					return {abl, score, met, name: Parser.attAbvToFull(abl)};
+				});
+				
+				// For "or" choices, at least one needs to be met
+				const groupMet = abilityChecks.some(c => c.met);
+				return {abilityChecks, groupMet};
+			});
+		};
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "📚 Add New Class (Multiclass)",
@@ -3047,6 +3129,7 @@ class CharacterSheetLevelUp {
 			<div class="charsheet__multiclass-selection" style="display: none;">
 				<span class="charsheet__multiclass-selection-icon">✅</span>
 				<strong>Selected:</strong> <span class="charsheet__multiclass-selection-name"></span>
+				<div class="charsheet__multiclass-prereq-status"></div>
 			</div>
 		`);
 
@@ -3070,6 +3153,20 @@ class CharacterSheetLevelUp {
 					? `✨ Spellcaster (${Parser.attAbvToFull(cls.spellcastingAbility)})` 
 					: "";
 				
+				// Get prerequisite info
+				const prereqInfo = formatPrerequisiteDisplay(cls);
+				let prereqHtml = "";
+				if (prereqInfo) {
+					const prereqParts = prereqInfo.map(group => {
+						const abilityStrs = group.abilityChecks.map(c => {
+							const icon = c.met ? "✅" : "❌";
+							return `${icon} ${c.name} ${c.score}/13`;
+						}).join(" or ");
+						return abilityStrs;
+					});
+					prereqHtml = `<div class="charsheet__multiclass-prereq ve-small ve-muted">📋 Prerequisite: ${prereqParts.join(", ")}</div>`;
+				}
+				
 				const $item = $$`
 					<div class="charsheet__levelup-option" data-class-name="${cls.name}">
 						<div class="charsheet__levelup-option-header">
@@ -3081,6 +3178,7 @@ class CharacterSheetLevelUp {
 							<span class="charsheet__class-stat">❤️ Hit Die: ${hitDie}</span>
 							${spellcaster ? `<span class="charsheet__class-stat">${spellcaster}</span>` : ""}
 						</div>
+						${prereqHtml}
 					</div>
 				`;
 
@@ -3093,10 +3191,19 @@ class CharacterSheetLevelUp {
 					
 					// Update selection display
 					$selectionDisplay.find(".charsheet__multiclass-selection-name").text(cls.name);
+					
+					// Check and display prerequisite status
+					const prereqCheck = checkPrerequisites(cls);
+					const $prereqStatus = $selectionDisplay.find(".charsheet__multiclass-prereq-status");
+					if (prereqCheck.met) {
+						$prereqStatus.html(`<span class="text-success">✅ Prerequisites met</span>`);
+					} else {
+						$prereqStatus.html(`<span class="text-danger">❌ ${prereqCheck.failedAbilities.join("; ")}</span>`);
+					}
 					$selectionDisplay.show();
 					
 					// Update confirm button (will be set after button is created)
-					if (typeof updateConfirmButton === "function") updateConfirmButton(cls);
+					if (typeof updateConfirmButton === "function") updateConfirmButton(cls, prereqCheck);
 				});
 
 				$list.append($item);
@@ -3128,19 +3235,41 @@ class CharacterSheetLevelUp {
 			.on("click", () => doClose(false));
 		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select a Class</span></button>`);
 		
+		let currentPrereqCheck = null;
+		
 		// Assign update function now that button exists
-		updateConfirmButton = (cls) => {
+		updateConfirmButton = (cls, prereqCheck) => {
+			currentPrereqCheck = prereqCheck;
 			if (cls) {
-				$btnConfirm.find(".btn-text").text(`Add ${cls.name} (Level 1)`);
+				const prereqsMet = prereqCheck?.met !== false;
+				if (prereqsMet) {
+					$btnConfirm.find(".btn-text").text(`Add ${cls.name} (Level 1)`);
+					$btnConfirm.removeClass("ve-btn-warning").addClass("ve-btn-primary");
+				} else {
+					$btnConfirm.find(".btn-text").text(`Add ${cls.name} Anyway`);
+					$btnConfirm.removeClass("ve-btn-primary").addClass("ve-btn-warning");
+				}
 				$btnConfirm.prop("disabled", false);
 			} else {
 				$btnConfirm.find(".btn-text").text("Select a Class");
+				$btnConfirm.removeClass("ve-btn-warning").addClass("ve-btn-primary");
 				$btnConfirm.prop("disabled", true);
 			}
 		};
 		
 		$btnConfirm.on("click", async () => {
 				if (!selectedClass) return;
+				
+				// Warn if prerequisites not met
+				if (currentPrereqCheck && !currentPrereqCheck.met) {
+					const confirmAnyway = confirm(
+						`Warning: Your character does not meet the multiclass prerequisites:\n\n` +
+						`${currentPrereqCheck.failedAbilities.join("\n")}\n\n` +
+						`The rules require 13+ in the primary ability of both your current class(es) and the new class. ` +
+						`Add this class anyway?`
+					);
+					if (!confirmAnyway) return;
+				}
 
 				// Close class selection modal
 				doClose(true);
@@ -3175,9 +3304,17 @@ class CharacterSheetLevelUp {
 		// Get feature options (choices within features)
 		const featureOptionGroups = this._getFeatureOptionsForLevel(features, 1);
 		
+		// Get multiclass skill grant info
+		const multiclassSkillGrants = {
+			"Bard": {count: 1, from: Object.keys(Parser.SKILL_TO_ATB_ABV)}, // Any skill
+			"Ranger": {count: 1, from: ["animal handling", "athletics", "insight", "investigation", "nature", "perception", "stealth", "survival"]},
+			"Rogue": {count: 1, from: ["acrobatics", "athletics", "deception", "insight", "intimidation", "investigation", "perception", "performance", "persuasion", "sleight of hand", "stealth"]},
+		};
+		const skillGrant = multiclassSkillGrants[selectedClass.name];
+		
 		// If no choices needed, add the class directly
-		if (!optionalFeatureGains.length && !featureOptionGroups.length) {
-			await this._applyMulticlass(selectedClass, features, {}, {});
+		if (!optionalFeatureGains.length && !featureOptionGroups.length && !skillGrant) {
+			await this._applyMulticlass(selectedClass, features, {}, {}, []);
 			return true;
 		}
 		
@@ -3190,6 +3327,7 @@ class CharacterSheetLevelUp {
 		
 		let selectedOptionalFeatures = {};
 		let selectedFeatureOptions = {};
+		let selectedSkills = [];
 		
 		const $content = $(`<div></div>`);
 		
@@ -3201,6 +3339,9 @@ class CharacterSheetLevelUp {
 		if (featureOptionGroups.length) {
 			featureOptionGroups.forEach(g => choicesList.push(`${g.count} option(s) for ${g.featureName}`));
 		}
+		if (skillGrant) {
+			choicesList.push(`${skillGrant.count} skill proficiency`);
+		}
 		
 		$content.append(`
 			<div class="alert alert-info mb-3">
@@ -3208,6 +3349,47 @@ class CharacterSheetLevelUp {
 				<span class="ve-small">As a level 1 ${selectedClass.name}, you need to select: ${choicesList.join(", ")}</span>
 			</div>
 		`);
+		
+		// Render skill selection for multiclass (if applicable)
+		if (skillGrant) {
+			const currentSkills = this._state.getSkillProficiencies();
+			const availableSkills = skillGrant.from.filter(s => !currentSkills.includes(s));
+			
+			const $skillSection = $(`<div class="charsheet__levelup-section mb-3">
+				<h5>🎓 Skill Proficiency</h5>
+				<p class="ve-small ve-muted">Select ${skillGrant.count} skill${skillGrant.count > 1 ? "s" : ""} to gain proficiency in:</p>
+				<div class="charsheet__skill-choice-list"></div>
+			</div>`);
+			
+			const $skillList = $skillSection.find(".charsheet__skill-choice-list");
+			availableSkills.forEach(skill => {
+				const skillName = skill.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+				const $checkbox = $(`<label class="charsheet__skill-choice-item">
+					<input type="checkbox" value="${skill}">
+					<span>${skillName}</span>
+				</label>`);
+				
+				$checkbox.find("input").on("change", function () {
+					const isChecked = $(this).is(":checked");
+					const value = $(this).val();
+					
+					if (isChecked) {
+						if (selectedSkills.length < skillGrant.count) {
+							selectedSkills.push(value);
+						} else {
+							$(this).prop("checked", false);
+							JqueryUtil.doToast({type: "warning", content: `You can only select ${skillGrant.count} skill${skillGrant.count > 1 ? "s" : ""}.`});
+						}
+					} else {
+						selectedSkills = selectedSkills.filter(s => s !== value);
+					}
+				});
+				
+				$skillList.append($checkbox);
+			});
+			
+			$content.append($skillSection);
+		}
 		
 		// Render optional features selection (Fighting Style, etc.)
 		if (optionalFeatureGains.length) {
@@ -3252,8 +3434,14 @@ class CharacterSheetLevelUp {
 					}
 				}
 				
+				// Validate skill selections
+				if (skillGrant && selectedSkills.length < skillGrant.count) {
+					JqueryUtil.doToast({type: "warning", content: `Please select ${skillGrant.count} skill proficiency.`});
+					return;
+				}
+				
 				// Apply multiclass with selections
-				await this._applyMulticlass(selectedClass, features, selectedOptionalFeatures, selectedFeatureOptions);
+				await this._applyMulticlass(selectedClass, features, selectedOptionalFeatures, selectedFeatureOptions, selectedSkills);
 				
 				doClose(true);
 			});
@@ -3279,7 +3467,7 @@ class CharacterSheetLevelUp {
 	/**
 	 * Apply multiclass - add class, features, proficiencies, and selected optional features
 	 */
-	async _applyMulticlass (selectedClass, features, selectedOptionalFeatures, selectedFeatureOptions) {
+	async _applyMulticlass (selectedClass, features, selectedOptionalFeatures, selectedFeatureOptions, selectedSkills = []) {
 		// Add class at level 1 with caster info for multiclass spell slot calculation
 		this._state.addClass({
 			name: selectedClass.name,
@@ -3355,8 +3543,20 @@ class CharacterSheetLevelUp {
 		// Add hit die (don't add first level HP for multiclass - only on level up)
 		this._updateHitDice(selectedClass);
 
-		// Add proficiencies from multiclass
+		// Add proficiencies from multiclass (armor/weapons)
 		this._applyMulticlassProficiencies(selectedClass);
+		
+		// Add selected skill proficiencies
+		if (selectedSkills && selectedSkills.length) {
+			selectedSkills.forEach(skill => {
+				this._state.addSkillProficiency(skill.toLowerCase().replace(/\s+/g, ""));
+			});
+		}
+
+		// Recalculate spell slots for multiclass using the proper multiclass rules
+		// This is important even if the new class isn't a caster - it updates
+		// the spellcasting info display to show correct multiclass caster level
+		this._state.calculateSpellSlots();
 
 		await this._page.saveCharacter();
 		this._page.renderCharacter();

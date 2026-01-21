@@ -1101,11 +1101,18 @@ class CharacterSheetPage {
 		$("#charsheet-prof-weapons").html(`${Renderer.get().render(weapons)}` || "—");
 		$("#charsheet-prof-tools").html(`${Renderer.get().render(tools)}` || "—");
 
-		// Languages with hover links
+		// Languages with hover links - look up correct source from language data
 		if (profs.languages?.length) {
 			const langHtml = profs.languages.map(lang => {
 				try {
-					return this.getHoverLink(UrlUtil.PG_LANGUAGES, lang, Parser.SRC_XPHB);
+					// Look up language in data to get correct source, preferring XPHB
+					const langData = this._languagesData?.find(l => 
+						l.name.toLowerCase() === lang.toLowerCase() && l.source === Parser.SRC_XPHB
+					) || this._languagesData?.find(l => 
+						l.name.toLowerCase() === lang.toLowerCase()
+					);
+					const source = langData?.source || Parser.SRC_XPHB;
+					return this.getHoverLink(UrlUtil.PG_LANGUAGES, lang, source);
 				} catch (e) {
 					return lang;
 				}
@@ -3832,6 +3839,30 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
+		// Spell list settings
+		const currentIncludeCoreSpells = this._state.getSettings()?.includeCoreSpellsForHomebrew !== false;
+		const $includeCoreSpells = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-include-core-spells" ${currentIncludeCoreSpells ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">📜 Include Core Spells for Homebrew Classes</span>
+					<span class="charsheet__settings-checkbox-desc">When using a homebrew class with the same name as an official class, also include spells from the matching PHB/XPHB class spell list</span>
+				</span>
+			</label>
+		</div>`;
+
+		// Language settings
+		const currentAllowExoticLanguages = this._state.getSettings()?.allowExoticLanguages !== false;
+		const $allowExoticLanguages = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-allow-exotic-languages" ${currentAllowExoticLanguages ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">🗣️ Allow Exotic Languages</span>
+					<span class="charsheet__settings-checkbox-desc">Allow selection of exotic/rare languages (Abyssal, Infernal, etc.) even when feature grants "standard" languages</span>
+				</span>
+			</label>
+		</div>`;
+
 		// Build modal content
 		$$`<div class="charsheet__settings-modal">
 			<div class="charsheet__settings-section">
@@ -3846,6 +3877,8 @@ class CharacterSheetPage {
 			<div class="charsheet__settings-section">
 				<div class="charsheet__settings-section-title">🎮 Game Rules</div>
 				${$exhaustionToggle}
+				${$includeCoreSpells}
+				${$allowExoticLanguages}
 			</div>
 			
 			<div class="charsheet__settings-section">
@@ -3977,6 +4010,16 @@ class CharacterSheetPage {
 		$modalInner.find("#settings-thelemar-asifeat").on("change", (e) => {
 			this._state.setSetting("thelemar_asiFeat", e.target.checked);
 			updateMasterToggleState();
+		});
+
+		// Include core spells for homebrew classes handler
+		$modalInner.find("#settings-include-core-spells").on("change", (e) => {
+			this._state.setSetting("includeCoreSpellsForHomebrew", e.target.checked);
+		});
+
+		// Allow exotic languages handler
+		$modalInner.find("#settings-allow-exotic-languages").on("change", (e) => {
+			this._state.setSetting("allowExoticLanguages", e.target.checked);
 		});
 	}
 
