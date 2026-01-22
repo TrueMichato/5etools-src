@@ -116,6 +116,82 @@
 }
 
 /* ========================================================================
+   Background Theme System
+   Customizable page background colors
+   ======================================================================== */
+
+/* Theme: Default (matches site night mode background) */
+[data-theme="default"] {
+	--cs-theme-bg: #1c1c1c;
+}
+
+/* Theme: Indigo */
+[data-theme="indigo"] {
+	--cs-theme-bg: #1e1b4b;
+}
+
+/* Theme: Crimson */
+[data-theme="crimson"] {
+	--cs-theme-bg: #450a0a;
+}
+
+/* Theme: Emerald */
+[data-theme="emerald"] {
+	--cs-theme-bg: #052e16;
+}
+
+/* Theme: Amber */
+[data-theme="amber"] {
+	--cs-theme-bg: #451a03;
+}
+
+/* Theme: Sapphire */
+[data-theme="sapphire"] {
+	--cs-theme-bg: #172554;
+}
+
+/* Theme: Amethyst */
+[data-theme="amethyst"] {
+	--cs-theme-bg: #2e1065;
+}
+
+/* Theme: Rose */
+[data-theme="rose"] {
+	--cs-theme-bg: #4c0519;
+}
+
+/* Theme: Teal */
+[data-theme="teal"] {
+	--cs-theme-bg: #042f2e;
+}
+
+/* Theme: Slate */
+[data-theme="slate"] {
+	--cs-theme-bg: #1e293b;
+}
+
+/* Theme: Copper */
+[data-theme="copper"] {
+	--cs-theme-bg: #431407;
+}
+
+/* Theme: Forest */
+[data-theme="forest"] {
+	--cs-theme-bg: #14532d;
+}
+
+/* Theme: Midnight */
+[data-theme="midnight"] {
+	--cs-theme-bg: #0c1929;
+}
+
+/* Apply theme background to the entire page body */
+body[data-theme] {
+	background-color: var(--cs-theme-bg, #1c1c1c) !important;
+	transition: background-color 0.3s ease;
+}
+
+/* ========================================================================
    Base Resets & Typography
    ======================================================================== */
 .charsheet-modern {

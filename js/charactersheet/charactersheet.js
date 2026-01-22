@@ -117,6 +117,9 @@ class CharacterSheetPage {
 		if (charId) {
 			await this._pLoadCharacter(charId);
 		}
+
+		// Apply background theme (will use default if no character loaded)
+		this._applyBackgroundTheme(this._state.getBackgroundTheme());
 	}
 
 	async _pLoadData () {
@@ -451,6 +454,9 @@ class CharacterSheetPage {
 		$("#charsheet-btn-reset-layout").on("click", () => this._resetLayout());
 		$("#charsheet-btn-default-layout").on("click", () => this._resetToDefaultLayout());
 
+		// Theme picker
+		this._initThemePicker();
+
 		// Conditions
 		$("#charsheet-btn-add-condition").on("click", () => this._onAddCondition());
 
@@ -557,6 +563,11 @@ class CharacterSheetPage {
 			if (this._layout) {
 				this._layout.applySavedLayout();
 			}
+
+			// Apply saved background theme and update picker
+			const currentTheme = this._state.getBackgroundTheme();
+			this._applyBackgroundTheme(currentTheme);
+			this._updateThemePickerSelection(currentTheme);
 
 			// Update URL
 			const url = new URL(window.location);
@@ -2827,6 +2838,102 @@ class CharacterSheetPage {
 			this._saveCurrentCharacter();
 		}
 	}
+
+	/**
+	 * Initialize theme picker dropdown in header
+	 */
+	_initThemePicker () {
+		const $btn = $("#charsheet-btn-theme");
+		const $dropdown = $("#charsheet-theme-dropdown");
+		const $content = $dropdown.find(".charsheet__theme-dropdown-content");
+		
+		const themes = [
+			{id: "default", name: "Default", color: "#1c1c1c"},
+			{id: "indigo", name: "Indigo", color: "#1e1b4b"},
+			{id: "crimson", name: "Crimson", color: "#450a0a"},
+			{id: "emerald", name: "Emerald", color: "#052e16"},
+			{id: "amber", name: "Amber", color: "#451a03"},
+			{id: "sapphire", name: "Sapphire", color: "#172554"},
+			{id: "amethyst", name: "Amethyst", color: "#2e1065"},
+			{id: "rose", name: "Rose", color: "#4c0519"},
+			{id: "teal", name: "Teal", color: "#042f2e"},
+			{id: "slate", name: "Slate", color: "#1e293b"},
+			{id: "copper", name: "Copper", color: "#431407"},
+			{id: "forest", name: "Forest", color: "#14532d"},
+			{id: "midnight", name: "Midnight", color: "#0c1929"},
+		];
+		
+		// Build swatches
+		const currentTheme = this._state.getBackgroundTheme();
+		const swatchesHtml = themes.map(theme => {
+			const isSelected = currentTheme === theme.id;
+			return `<button class="charsheet__theme-swatch ${isSelected ? "charsheet__theme-swatch--selected" : ""}" 
+				data-theme="${theme.id}" 
+				title="${theme.name}"
+				style="--swatch-color: ${theme.color}">
+				<span class="charsheet__theme-swatch-color"></span>
+				<span class="charsheet__theme-swatch-name">${theme.name}</span>
+			</button>`;
+		}).join("");
+		
+		$content.html(swatchesHtml);
+		
+		// Position dropdown relative to button (using fixed positioning)
+		const positionDropdown = () => {
+			const btnRect = $btn[0].getBoundingClientRect();
+			const dropdownWidth = 280; // min-width from CSS
+			
+			// Position below button, aligned to right edge
+			let left = btnRect.right - dropdownWidth;
+			const top = btnRect.bottom + 8;
+			
+			// Ensure it doesn't go off-screen left
+			if (left < 8) left = 8;
+			
+			$dropdown.css({
+				top: `${top}px`,
+				left: `${left}px`,
+			});
+		};
+		
+		// Toggle dropdown
+		$btn.on("click", (e) => {
+			e.stopPropagation();
+			const isOpen = $dropdown.hasClass("active");
+			if (!isOpen) {
+				positionDropdown();
+			}
+			$dropdown.toggleClass("active", !isOpen);
+			$btn.toggleClass("active", !isOpen);
+		});
+		
+		// Handle swatch click
+		$content.on("click", ".charsheet__theme-swatch", (e) => {
+			const $swatch = $(e.currentTarget);
+			const theme = $swatch.data("theme");
+			
+			// Update selection visuals
+			$content.find(".charsheet__theme-swatch").removeClass("charsheet__theme-swatch--selected");
+			$swatch.addClass("charsheet__theme-swatch--selected");
+			
+			// Save and apply theme
+			this._state.setBackgroundTheme(theme);
+			this._applyBackgroundTheme(theme);
+			this._saveCurrentCharacter();
+			
+			// Close dropdown
+			$dropdown.removeClass("active");
+			$btn.removeClass("active");
+		});
+		
+		// Close dropdown when clicking outside
+		$(document).on("click", (e) => {
+			if (!$(e.target).closest(".charsheet__header-theme-controls").length) {
+				$dropdown.removeClass("active");
+				$btn.removeClass("active");
+			}
+		});
+	}
 	
 	/**
 	 * Reset section layout to default for current tab
@@ -4252,6 +4359,25 @@ class CharacterSheetPage {
 		} else {
 			this._state.setAllowedSources(checkedSources);
 		}
+	}
+
+	/**
+	 * Apply a background theme to the page
+	 * @param {string} theme - The theme ID (default, indigo, crimson, etc.)
+	 */
+	_applyBackgroundTheme (theme) {
+		document.body.setAttribute("data-theme", theme || "default");
+	}
+
+	/**
+	 * Update theme picker UI to reflect current selection
+	 */
+	_updateThemePickerSelection (theme) {
+		const $dropdown = $("#charsheet-theme-dropdown");
+		if (!$dropdown.length) return;
+		
+		$dropdown.find(".charsheet__theme-swatch").removeClass("charsheet__theme-swatch--selected");
+		$dropdown.find(`.charsheet__theme-swatch[data-theme="${theme || "default"}"]`).addClass("charsheet__theme-swatch--selected");
 	}
 
 	/**
