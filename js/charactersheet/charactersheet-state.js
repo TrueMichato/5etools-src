@@ -4669,6 +4669,25 @@ class CharacterSheetState {
 		};
 		this._data.settings.sectionLayout = layout && Object.keys(layout).length ? layout : null;
 	}
+
+	// Background theme - customizable page background color
+	// Available themes: default, indigo, crimson, emerald, amber, sapphire, amethyst, rose, teal, slate, copper, forest, midnight
+	getBackgroundTheme () {
+		return this._data.settings?.backgroundTheme || "default";
+	}
+
+	setBackgroundTheme (theme) {
+		if (!this._data.settings) this._data.settings = {
+			exhaustionRules: "2024", 
+			allowedSources: null, 
+			includeCoreSpellsForHomebrew: true, 
+			allowExoticLanguages: true, 
+			prioritySources: null,
+			sectionLayout: null,
+			backgroundTheme: "default",
+		};
+		this._data.settings.backgroundTheme = theme || "default";
+	}
 	// #endregion
 
 	// #region Resources
