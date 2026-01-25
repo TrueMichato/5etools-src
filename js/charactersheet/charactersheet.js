@@ -457,6 +457,12 @@ class CharacterSheetPage {
 		// Theme picker
 		this._initThemePicker();
 
+		// Text size picker
+		this._initTextSizePicker();
+
+		// Font picker
+		this._initFontPicker();
+
 		// Conditions
 		$("#charsheet-btn-add-condition").on("click", () => this._onAddCondition());
 
@@ -557,6 +563,10 @@ class CharacterSheetPage {
 		if (character) {
 			this._currentCharacterId = charId;
 			this._state.loadFromJson(character);
+
+			// Ensure Linguistics skill exists if Thelemar linguistics bonus is enabled
+			this._ensureLinguisticsSkillIfNeeded();
+
 			this._renderCharacter();
 
 			// Apply saved section layout
@@ -2934,7 +2944,272 @@ class CharacterSheetPage {
 			}
 		});
 	}
-	
+
+	/**
+	 * Initialize text size picker dropdown in header
+	 * Text size is stored globally (not per-character) for consistent UX
+	 */
+	_initTextSizePicker () {
+		const $btn = $("#charsheet-btn-textsize");
+		const $dropdown = $("#charsheet-textsize-dropdown");
+		const $slider = $("#charsheet-textsize-slider");
+		const $valueDisplay = $("#charsheet-textsize-value");
+		const $decreaseBtn = $("#charsheet-textsize-decrease");
+		const $increaseBtn = $("#charsheet-textsize-increase");
+		const $resetBtn = $("#charsheet-textsize-reset");
+		const $presets = $dropdown.find(".charsheet__textsize-preset");
+
+		const STORAGE_KEY = "charsheet-text-size";
+		const DEFAULT_SIZE = 100;
+		const MIN_SIZE = 80;
+		const MAX_SIZE = 120;
+		const STEP = 5;
+
+		// Load saved text size (global setting)
+		const loadTextSize = () => {
+			try {
+				const saved = localStorage.getItem(STORAGE_KEY);
+				return saved ? parseInt(saved, 10) : DEFAULT_SIZE;
+			} catch (e) {
+				return DEFAULT_SIZE;
+			}
+		};
+
+		// Save text size (global setting)
+		const saveTextSize = (size) => {
+			try {
+				localStorage.setItem(STORAGE_KEY, String(size));
+			} catch (e) {
+				// Storage may be unavailable
+			}
+		};
+
+		// Apply text size to the page
+		const applyTextSize = (size) => {
+			const $page = $(".charsheet-page");
+			$page.attr("data-textsize", size);
+
+			// Update UI
+			$slider.val(size);
+			$valueDisplay.text(size);
+
+			// Update preset buttons
+			$presets.removeClass("charsheet__textsize-preset--active");
+			$presets.filter(`[data-size="${size}"]`).addClass("charsheet__textsize-preset--active");
+		};
+
+		// Set text size (apply + save)
+		const setTextSize = (size) => {
+			// Clamp to valid range
+			size = Math.max(MIN_SIZE, Math.min(MAX_SIZE, size));
+			// Round to step
+			size = Math.round(size / STEP) * STEP;
+
+			applyTextSize(size);
+			saveTextSize(size);
+		};
+
+		// Position dropdown relative to button
+		const positionDropdown = () => {
+			const btnRect = $btn[0].getBoundingClientRect();
+			const dropdownWidth = 240;
+
+			let left = btnRect.right - dropdownWidth;
+			const top = btnRect.bottom + 8;
+
+			if (left < 8) left = 8;
+
+			$dropdown.css({
+				top: `${top}px`,
+				left: `${left}px`,
+			});
+		};
+
+		// Toggle dropdown
+		$btn.on("click", (e) => {
+			e.stopPropagation();
+			const isOpen = $dropdown.hasClass("active");
+			if (!isOpen) {
+				positionDropdown();
+			}
+			$dropdown.toggleClass("active", !isOpen);
+			$btn.toggleClass("active", !isOpen);
+		});
+
+		// Slider input
+		$slider.on("input", (e) => {
+			const size = parseInt(e.target.value, 10);
+			setTextSize(size);
+		});
+
+		// Decrease button
+		$decreaseBtn.on("click", (e) => {
+			e.stopPropagation();
+			const currentSize = parseInt($slider.val(), 10);
+			setTextSize(currentSize - STEP);
+		});
+
+		// Increase button
+		$increaseBtn.on("click", (e) => {
+			e.stopPropagation();
+			const currentSize = parseInt($slider.val(), 10);
+			setTextSize(currentSize + STEP);
+		});
+
+		// Preset buttons
+		$presets.on("click", (e) => {
+			e.stopPropagation();
+			const size = parseInt($(e.currentTarget).data("size"), 10);
+			setTextSize(size);
+		});
+
+		// Reset button
+		$resetBtn.on("click", (e) => {
+			e.stopPropagation();
+			setTextSize(DEFAULT_SIZE);
+		});
+
+		// Close dropdown when clicking outside
+		$(document).on("click", (e) => {
+			if (!$(e.target).closest(".charsheet__header-textsize-controls").length) {
+				$dropdown.removeClass("active");
+				$btn.removeClass("active");
+			}
+		});
+
+		// Apply saved text size on init
+		const savedSize = loadTextSize();
+		applyTextSize(savedSize);
+	}
+
+	/**
+	 * Initialize font picker dropdown in header
+	 * Font is stored globally (not per-character) for consistent UX
+	 */
+	_initFontPicker () {
+		const $btn = $("#charsheet-btn-font");
+		const $dropdown = $("#charsheet-font-dropdown");
+		const $options = $("#charsheet-font-options");
+		const $resetBtn = $("#charsheet-font-reset");
+
+		const STORAGE_KEY = "charsheet-font";
+		const DEFAULT_FONT = "system";
+
+		// Available fonts
+		const FONTS = [
+			{id: "system", name: "System Default", preview: "System"},
+			{id: "serif", name: "Serif (Classic)", preview: "Serif"},
+			{id: "mono", name: "Monospace", preview: "Mono"},
+			{id: "fantasy", name: "Fantasy", preview: "Fantasy"},
+			{id: "hubot", name: "Hubot Sans", preview: "Hubot"},
+			{id: "readable", name: "High Readability", preview: "Readable"},
+		];
+
+		// Load saved font (global setting)
+		const loadFont = () => {
+			try {
+				const saved = localStorage.getItem(STORAGE_KEY);
+				return saved || DEFAULT_FONT;
+			} catch (e) {
+				return DEFAULT_FONT;
+			}
+		};
+
+		// Save font (global setting)
+		const saveFont = (font) => {
+			try {
+				localStorage.setItem(STORAGE_KEY, font);
+			} catch (e) {
+				// Storage may be unavailable
+			}
+		};
+
+		// Apply font to the page
+		const applyFont = (font) => {
+			const $page = $(".charsheet-page");
+			$page.attr("data-font", font);
+
+			// Update UI
+			$options.find(".charsheet__font-option").removeClass("charsheet__font-option--active");
+			$options.find(`[data-font="${font}"]`).addClass("charsheet__font-option--active");
+		};
+
+		// Set font (apply + save)
+		const setFont = (font) => {
+			applyFont(font);
+			saveFont(font);
+		};
+
+		// Build font options
+		FONTS.forEach(font => {
+			const fontFamily = font.id === "system" ? "inherit" :
+				font.id === "serif" ? "Georgia, serif" :
+				font.id === "mono" ? "monospace" :
+				font.id === "fantasy" ? "Cinzel, serif" :
+				font.id === "hubot" ? "'Hubot Sans', 'Mona Sans', -apple-system, sans-serif" :
+				font.id === "readable" ? "Verdana, sans-serif" : "inherit";
+
+			const $option = $(`
+				<button class="charsheet__font-option" data-font="${font.id}" style="font-family: ${fontFamily};">
+					<span class="charsheet__font-option-preview">${font.name}</span>
+					<span class="charsheet__font-option-check">✓</span>
+				</button>
+			`);
+
+			$option.on("click", (e) => {
+				e.stopPropagation();
+				setFont(font.id);
+			});
+
+			$options.append($option);
+		});
+
+		// Position dropdown relative to button
+		const positionDropdown = () => {
+			const btnRect = $btn[0].getBoundingClientRect();
+			const dropdownWidth = 200;
+
+			let left = btnRect.right - dropdownWidth;
+			const top = btnRect.bottom + 8;
+
+			if (left < 8) left = 8;
+
+			$dropdown.css({
+				top: `${top}px`,
+				left: `${left}px`,
+			});
+		};
+
+		// Toggle dropdown
+		$btn.on("click", (e) => {
+			e.stopPropagation();
+			const isOpen = $dropdown.hasClass("active");
+			if (!isOpen) {
+				positionDropdown();
+			}
+			$dropdown.toggleClass("active", !isOpen);
+			$btn.toggleClass("active", !isOpen);
+		});
+
+		// Reset button
+		$resetBtn.on("click", (e) => {
+			e.stopPropagation();
+			setFont(DEFAULT_FONT);
+		});
+
+		// Close dropdown when clicking outside
+		$(document).on("click", (e) => {
+			if (!$(e.target).closest(".charsheet__header-font-controls").length) {
+				$dropdown.removeClass("active");
+				$btn.removeClass("active");
+			}
+		});
+
+		// Apply saved font on init
+		const savedFont = loadFont();
+		applyFont(savedFont);
+	}
+
 	/**
 	 * Reset section layout to default for current tab
 	 */
@@ -4251,6 +4526,20 @@ class CharacterSheetPage {
 		// Thelemar linguistics bonus handler
 		$modalInner.find("#settings-thelemar-linguistics").on("change", (e) => {
 			this._state.setSetting("thelemar_linguisticsBonus", e.target.checked);
+			
+			// Auto-add/remove Linguistics custom skill when setting is toggled
+			const hasLinguisticsSkill = this._state.getCustomSkills().some(
+				s => s.name.toLowerCase() === "linguistics"
+			);
+			
+			if (e.target.checked && !hasLinguisticsSkill) {
+				// Add Linguistics skill when setting is enabled
+				this._state.addCustomSkill("Linguistics", "int");
+			} else if (!e.target.checked && hasLinguisticsSkill) {
+				// Remove Linguistics skill when setting is disabled
+				this._state.removeCustomSkill("Linguistics");
+			}
+			
 			this._renderSkills();
 			updateMasterToggleState();
 		});
@@ -4358,6 +4647,23 @@ class CharacterSheetPage {
 			this._state.setAllowedSources(null);
 		} else {
 			this._state.setAllowedSources(checkedSources);
+		}
+	}
+
+	/**
+	 * Ensure the Linguistics custom skill exists if the Thelemar linguistics bonus setting is enabled.
+	 * This is called when loading a character to ensure data consistency.
+	 */
+	_ensureLinguisticsSkillIfNeeded () {
+		const settings = this._state.getSettings();
+		if (!settings?.thelemar_linguisticsBonus) return;
+
+		const hasLinguisticsSkill = this._state.getCustomSkills().some(
+			s => s.name.toLowerCase() === "linguistics"
+		);
+
+		if (!hasLinguisticsSkill) {
+			this._state.addCustomSkill("Linguistics", "int");
 		}
 	}
 

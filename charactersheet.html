@@ -153,6 +153,45 @@
 					</div>
 				</div>
 
+				<div class="charsheet__header-textsize-controls">
+					<button class="charsheet__textsize-toggle" id="charsheet-btn-textsize" title="Adjust text size">
+						<span class="charsheet__textsize-toggle-icon">Aa</span>
+						<span class="charsheet__textsize-toggle-text">Size</span>
+					</button>
+					<div class="charsheet__textsize-dropdown" id="charsheet-textsize-dropdown">
+						<div class="charsheet__textsize-dropdown-content">
+							<div class="charsheet__textsize-header">Text Size</div>
+							<div class="charsheet__textsize-slider-container">
+								<button class="charsheet__textsize-btn charsheet__textsize-btn--decrease" id="charsheet-textsize-decrease" title="Decrease text size">−</button>
+								<input type="range" class="charsheet__textsize-slider" id="charsheet-textsize-slider" min="80" max="120" value="100" step="5">
+								<button class="charsheet__textsize-btn charsheet__textsize-btn--increase" id="charsheet-textsize-increase" title="Increase text size">+</button>
+							</div>
+							<div class="charsheet__textsize-value"><span id="charsheet-textsize-value">100</span>%</div>
+							<div class="charsheet__textsize-presets">
+								<button class="charsheet__textsize-preset" data-size="85">Small</button>
+								<button class="charsheet__textsize-preset charsheet__textsize-preset--active" data-size="100">Normal</button>
+								<button class="charsheet__textsize-preset" data-size="110">Large</button>
+								<button class="charsheet__textsize-preset" data-size="120">X-Large</button>
+							</div>
+							<button class="charsheet__textsize-reset" id="charsheet-textsize-reset">Reset to Default</button>
+						</div>
+					</div>
+				</div>
+
+				<div class="charsheet__header-font-controls">
+					<button class="charsheet__font-toggle" id="charsheet-btn-font" title="Change font">
+						<span class="charsheet__font-toggle-icon">𝔽</span>
+						<span class="charsheet__font-toggle-text">Font</span>
+					</button>
+					<div class="charsheet__font-dropdown" id="charsheet-font-dropdown">
+						<div class="charsheet__font-dropdown-content">
+							<div class="charsheet__font-header">Font Style</div>
+							<div class="charsheet__font-options" id="charsheet-font-options"></div>
+							<button class="charsheet__font-reset" id="charsheet-font-reset">Reset to Default</button>
+						</div>
+					</div>
+				</div>
+
 				<button class="charsheet__help-toggle" id="charsheet-help-toggle" title="Toggle help tips">
 					<span class="charsheet__help-toggle-icon">❓</span>
 					<span class="charsheet__help-toggle-text">Tips</span>

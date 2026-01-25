@@ -536,8 +536,8 @@ class CharacterSheetLayout {
 	 * Apply saved layout to all tabs (call on initial load)
 	 */
 	applySavedLayout () {
-		// First, capture defaults before applying any changes
-		this._captureDefaultOrders();
+		// Do NOT recapture defaults here - they were captured in _init() before any modifications
+		// If we recapture here, we might capture already-modified layout as "default"
 		
 		const savedLayout = this._state.getSectionLayout();
 		if (!savedLayout) return;

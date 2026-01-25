@@ -4744,10 +4744,14 @@ class CharacterSheetState {
 					// Metamagic - handled by resources
 					break;
 				}
-				case "Cleric":
-				case "Druid": {
+				case "Cleric": {
 					// Channel Divinity DC is spell save DC
 					calculations.channelDivinityDc = this.getSpellSaveDc();
+					break;
+				}
+				case "Druid": {
+					// Wild Shape DC is spell save DC
+					calculations.wildShapeDc = this.getSpellSaveDc();
 					break;
 				}
 				case "Bard": {

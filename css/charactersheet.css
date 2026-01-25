@@ -538,6 +538,824 @@
 }
 
 /* ========================================================================
+   Text Size Controls
+   ======================================================================== */
+.charsheet__header-textsize-controls {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.charsheet__textsize-toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.375rem 0.625rem;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--cs-radius-md, 6px);
+	color: var(--cs-text-secondary, #94a3b8);
+	font-size: var(--cs-text-sm, 0.875rem);
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.charsheet__textsize-toggle:hover {
+	background: var(--cs-bg-hover, rgba(255,255,255,0.05));
+	border-color: var(--cs-border, rgba(255,255,255,0.1));
+	color: var(--cs-text-primary, #e2e8f0);
+}
+
+.charsheet__textsize-toggle.active {
+	background: rgba(var(--cs-primary-rgb, 99, 102, 241), 0.15);
+	border-color: rgba(var(--cs-primary-rgb, 99, 102, 241), 0.3);
+	color: var(--cs-primary, #6366f1);
+}
+
+.charsheet__textsize-toggle-icon {
+	font-size: 1rem;
+	font-weight: 700;
+	font-family: serif;
+}
+
+.charsheet__textsize-dropdown {
+	position: fixed;
+	margin-top: 8px;
+	padding: 16px;
+	background: var(--cs-bg-surface, #1e293b);
+	border: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+	border-radius: var(--cs-radius-md, 8px);
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+	z-index: 10000;
+	min-width: 240px;
+	opacity: 0;
+	visibility: hidden;
+	transform: translateY(-8px);
+	transition: all 0.2s ease;
+	pointer-events: none;
+}
+
+.charsheet__textsize-dropdown.active {
+	opacity: 1;
+	visibility: visible;
+	transform: translateY(0);
+	pointer-events: auto;
+}
+
+.charsheet__textsize-header {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--cs-text-primary, #e2e8f0);
+	margin-bottom: 12px;
+	text-align: center;
+}
+
+.charsheet__textsize-slider-container {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.charsheet__textsize-btn {
+	width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--cs-bg-elevated, rgba(255,255,255,0.05));
+	border: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text-secondary, #94a3b8);
+	font-size: 1.1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.charsheet__textsize-btn:hover {
+	background: var(--cs-primary, #6366f1);
+	border-color: var(--cs-primary, #6366f1);
+	color: white;
+}
+
+.charsheet__textsize-btn:active {
+	transform: scale(0.95);
+}
+
+.charsheet__textsize-slider {
+	flex: 1;
+	-webkit-appearance: none;
+	appearance: none;
+	height: 6px;
+	background: var(--cs-bg-elevated, rgba(255,255,255,0.1));
+	border-radius: 3px;
+	outline: none;
+	cursor: pointer;
+}
+
+.charsheet__textsize-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 18px;
+	height: 18px;
+	background: var(--cs-primary, #6366f1);
+	border-radius: 50%;
+	cursor: pointer;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+	transition: transform 0.15s ease;
+}
+
+.charsheet__textsize-slider::-webkit-slider-thumb:hover {
+	transform: scale(1.1);
+}
+
+.charsheet__textsize-slider::-moz-range-thumb {
+	width: 18px;
+	height: 18px;
+	background: var(--cs-primary, #6366f1);
+	border: none;
+	border-radius: 50%;
+	cursor: pointer;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.charsheet__textsize-value {
+	text-align: center;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: var(--cs-primary, #6366f1);
+	margin-bottom: 12px;
+}
+
+.charsheet__textsize-presets {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+.charsheet__textsize-preset {
+	padding: 6px 4px;
+	background: transparent;
+	border: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text-secondary, #94a3b8);
+	font-size: 0.6875rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.charsheet__textsize-preset:hover {
+	background: var(--cs-bg-hover, rgba(255,255,255,0.05));
+	border-color: rgba(255,255,255,0.2);
+	color: var(--cs-text-primary, #e2e8f0);
+}
+
+.charsheet__textsize-preset--active {
+	background: rgba(var(--cs-primary-rgb, 99, 102, 241), 0.15);
+	border-color: rgba(var(--cs-primary-rgb, 99, 102, 241), 0.4);
+	color: var(--cs-primary, #6366f1);
+}
+
+.charsheet__textsize-reset {
+	width: 100%;
+	padding: 8px;
+	background: transparent;
+	border: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text-muted, #64748b);
+	font-size: 0.75rem;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.charsheet__textsize-reset:hover {
+	background: var(--cs-bg-hover, rgba(255,255,255,0.05));
+	color: var(--cs-text-secondary, #94a3b8);
+}
+
+/* ========================================================================
+   Font Picker Dropdown Styles
+   ======================================================================== */
+.charsheet__header-font-controls {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.charsheet__font-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	background: var(--cs-bg-tertiary, rgba(255,255,255,0.05));
+	border: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+	border-radius: var(--cs-radius-md, 6px);
+	color: var(--cs-text-secondary, #94a3b8);
+	font-size: 0.8rem;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.charsheet__font-toggle:hover {
+	background: var(--cs-bg-hover, rgba(255,255,255,0.08));
+	border-color: var(--cs-border-hover, rgba(255,255,255,0.2));
+	color: var(--cs-text-primary, #e2e8f0);
+}
+
+.charsheet__font-toggle.active {
+	background: var(--cs-accent-bg, rgba(99, 102, 241, 0.2));
+	border-color: var(--cs-accent, #6366f1);
+	color: var(--cs-accent, #6366f1);
+}
+
+.charsheet__font-toggle-icon {
+	font-size: 1rem;
+	font-weight: bold;
+}
+
+.charsheet__font-dropdown {
+	position: fixed;
+	background: var(--cs-bg-elevated, rgba(30, 41, 59, 0.98));
+	border: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+	border-radius: var(--cs-radius-lg, 8px);
+	box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+	z-index: 10001;
+	min-width: 200px;
+	display: none;
+}
+
+.charsheet__font-dropdown.active {
+	display: block;
+}
+
+.charsheet__font-dropdown-content {
+	padding: 12px;
+}
+
+.charsheet__font-header {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--cs-text-muted, #64748b);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-bottom: 10px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+}
+
+.charsheet__font-options {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 12px;
+}
+
+.charsheet__font-option {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text-secondary, #94a3b8);
+	font-size: 0.875rem;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	text-align: left;
+	width: 100%;
+}
+
+.charsheet__font-option:hover {
+	background: var(--cs-bg-hover, rgba(255,255,255,0.05));
+	color: var(--cs-text-primary, #e2e8f0);
+}
+
+.charsheet__font-option--active {
+	background: var(--cs-accent-bg, rgba(99, 102, 241, 0.2));
+	border-color: var(--cs-accent, #6366f1);
+	color: var(--cs-accent, #6366f1);
+}
+
+.charsheet__font-option-preview {
+	flex: 1;
+}
+
+.charsheet__font-option-check {
+	width: 16px;
+	height: 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75rem;
+	opacity: 0;
+}
+
+.charsheet__font-option--active .charsheet__font-option-check {
+	opacity: 1;
+}
+
+.charsheet__font-reset {
+	width: 100%;
+	padding: 8px;
+	background: transparent;
+	border: 1px solid var(--cs-border, rgba(255,255,255,0.1));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text-muted, #64748b);
+	font-size: 0.75rem;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.charsheet__font-reset:hover {
+	background: var(--cs-bg-hover, rgba(255,255,255,0.05));
+	color: var(--cs-text-secondary, #94a3b8);
+}
+
+/* Font family application */
+.charsheet-page[data-font="system"] {
+	--cs-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.charsheet-page[data-font="serif"] {
+	--cs-font-family: Georgia, "Times New Roman", Times, serif;
+}
+
+.charsheet-page[data-font="mono"] {
+	--cs-font-family: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+}
+
+.charsheet-page[data-font="fantasy"] {
+	--cs-font-family: "Cinzel", "Palatino Linotype", "Book Antiqua", serif;
+}
+
+.charsheet-page[data-font="hubot"] {
+	--cs-font-family: "Hubot Sans", "Mona Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.charsheet-page[data-font="readable"] {
+	--cs-font-family: "Atkinson Hyperlegible", "Verdana", "Trebuchet MS", sans-serif;
+}
+
+.charsheet-page[data-font] .tab-content {
+	font-family: var(--cs-font-family, inherit);
+}
+
+.charsheet-page[data-font] .charsheet__main-tabs {
+	font-family: var(--cs-font-family, inherit);
+}
+
+/* Text Size Scaling - Applied via CSS custom property */
+.charsheet-page {
+	--cs-text-scale: 1;
+}
+
+.charsheet-page[data-textsize] {
+	font-size: calc(1rem * var(--cs-text-scale, 1));
+}
+
+/* Scale the CSS text variables based on the scale factor */
+.charsheet-page[data-textsize="80"] { --cs-text-scale: 0.8; }
+.charsheet-page[data-textsize="85"] { --cs-text-scale: 0.85; }
+.charsheet-page[data-textsize="90"] { --cs-text-scale: 0.9; }
+.charsheet-page[data-textsize="95"] { --cs-text-scale: 0.95; }
+.charsheet-page[data-textsize="100"] { --cs-text-scale: 1; }
+.charsheet-page[data-textsize="105"] { --cs-text-scale: 1.05; }
+.charsheet-page[data-textsize="110"] { --cs-text-scale: 1.1; }
+.charsheet-page[data-textsize="115"] { --cs-text-scale: 1.15; }
+.charsheet-page[data-textsize="120"] { --cs-text-scale: 1.2; }
+.charsheet-page[data-textsize="125"] { --cs-text-scale: 1.25; }
+.charsheet-page[data-textsize="130"] { --cs-text-scale: 1.3; }
+
+/* Apply scaling to the entire character sheet content area */
+.charsheet-page[data-textsize] .tab-content {
+	font-size: calc(1rem * var(--cs-text-scale, 1));
+}
+
+/* Scale all text within character sheet sections */
+.charsheet-page[data-textsize] .charsheet__section,
+.charsheet-page[data-textsize] .charsheet__panel,
+.charsheet-page[data-textsize] .charsheet__card,
+.charsheet-page[data-textsize] .cs-card {
+	font-size: calc(1rem * var(--cs-text-scale, 1));
+}
+
+/* Large display values - ability scores, HP, AC, etc. */
+.charsheet-page[data-textsize] .charsheet__ability-score,
+.charsheet-page[data-textsize] .charsheet__ability-mod,
+.charsheet-page[data-textsize] .charsheet__hp-current,
+.charsheet-page[data-textsize] .charsheet__hp-max,
+.charsheet-page[data-textsize] .charsheet__hp-temp,
+.charsheet-page[data-textsize] .charsheet__combat-stat-value,
+.charsheet-page[data-textsize] .charsheet__ac-value,
+.charsheet-page[data-textsize] .charsheet__initiative-value,
+.charsheet-page[data-textsize] .charsheet__speed-value,
+.charsheet-page[data-textsize] .charsheet__proficiency-value,
+.charsheet-page[data-textsize] .charsheet__passive-value {
+	font-size: calc(var(--cs-text-3xl, 2rem) * var(--cs-text-scale, 1));
+}
+
+/* Medium display values */
+.charsheet-page[data-textsize] .charsheet__hit-dice-value,
+.charsheet-page[data-textsize] .charsheet__resource-value,
+.charsheet-page[data-textsize] .charsheet__currency-value,
+.charsheet-page[data-textsize] .charsheet__level-value {
+	font-size: calc(var(--cs-text-2xl, 1.5rem) * var(--cs-text-scale, 1));
+}
+
+/* Section headers and titles */
+.charsheet-page[data-textsize] .charsheet__section-header,
+.charsheet-page[data-textsize] .charsheet__panel-title,
+.charsheet-page[data-textsize] .charsheet__card-title,
+.charsheet-page[data-textsize] .cs-card__title,
+.charsheet-page[data-textsize] h3,
+.charsheet-page[data-textsize] h4 {
+	font-size: calc(var(--cs-text-lg, 1.125rem) * var(--cs-text-scale, 1));
+}
+
+/* Item/entry names */
+.charsheet-page[data-textsize] .charsheet__skill-name,
+.charsheet-page[data-textsize] .charsheet__save-name,
+.charsheet-page[data-textsize] .charsheet__attack-name,
+.charsheet-page[data-textsize] .charsheet__spell-name,
+.charsheet-page[data-textsize] .charsheet__feature-name,
+.charsheet-page[data-textsize] .charsheet__item-name,
+.charsheet-page[data-textsize] .charsheet__resource-name,
+.charsheet-page[data-textsize] .charsheet__condition-name,
+.charsheet-page[data-textsize] .charsheet__method-name,
+.charsheet-page[data-textsize] .charsheet__proficiency-item,
+.charsheet-page[data-textsize] .charsheet__language-item {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Bonus/modifier values */
+.charsheet-page[data-textsize] .charsheet__skill-bonus,
+.charsheet-page[data-textsize] .charsheet__save-bonus,
+.charsheet-page[data-textsize] .charsheet__attack-bonus,
+.charsheet-page[data-textsize] .charsheet__attack-damage,
+.charsheet-page[data-textsize] .charsheet__spell-level,
+.charsheet-page[data-textsize] .charsheet__item-quantity {
+	font-size: calc(var(--cs-text-base, 1rem) * var(--cs-text-scale, 1));
+}
+
+/* Description/body text */
+.charsheet-page[data-textsize] .charsheet__feature-description,
+.charsheet-page[data-textsize] .charsheet__spell-description,
+.charsheet-page[data-textsize] .charsheet__item-description,
+.charsheet-page[data-textsize] .charsheet__notes-content,
+.charsheet-page[data-textsize] .charsheet__backstory,
+.charsheet-page[data-textsize] .rd__b,
+.charsheet-page[data-textsize] .rd__p,
+.charsheet-page[data-textsize] p {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Small/muted text */
+.charsheet-page[data-textsize] .charsheet__ability-label,
+.charsheet-page[data-textsize] .charsheet__stat-label,
+.charsheet-page[data-textsize] .charsheet__skill-ability,
+.charsheet-page[data-textsize] .charsheet__spell-school,
+.charsheet-page[data-textsize] .charsheet__spell-components,
+.charsheet-page[data-textsize] .charsheet__item-type,
+.charsheet-page[data-textsize] .charsheet__item-weight,
+.charsheet-page[data-textsize] .charsheet__source-tag,
+.charsheet-page[data-textsize] .ve-small,
+.charsheet-page[data-textsize] .ve-muted,
+.charsheet-page[data-textsize] small {
+	font-size: calc(var(--cs-text-xs, 0.75rem) * var(--cs-text-scale, 1));
+}
+
+/* Form inputs and selects within character sheet */
+.charsheet-page[data-textsize] .tab-content input:not([type="checkbox"]):not([type="radio"]),
+.charsheet-page[data-textsize] .tab-content select,
+.charsheet-page[data-textsize] .tab-content textarea {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Buttons within character sheet content (not header) */
+.charsheet-page[data-textsize] .tab-content .ve-btn,
+.charsheet-page[data-textsize] .tab-content .btn,
+.charsheet-page[data-textsize] .tab-content button:not(.charsheet__textsize-btn):not(.charsheet__theme-swatch) {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Badges and tags */
+.charsheet-page[data-textsize] .badge,
+.charsheet-page[data-textsize] .charsheet__tag,
+.charsheet-page[data-textsize] .charsheet__badge {
+	font-size: calc(var(--cs-text-xs, 0.75rem) * var(--cs-text-scale, 1));
+}
+
+/* Lists */
+.charsheet-page[data-textsize] .charsheet__list-item,
+.charsheet-page[data-textsize] ul li,
+.charsheet-page[data-textsize] ol li {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Tables */
+.charsheet-page[data-textsize] table,
+.charsheet-page[data-textsize] .charsheet__table {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Tabs - scale tab text */
+.charsheet-page[data-textsize] .charsheet__main-tabs a,
+.charsheet-page[data-textsize] .nav-tabs a,
+.charsheet-page[data-textsize] .charsheet__tab-icon,
+.charsheet-page[data-textsize] .charsheet__tab-text {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Character info in overview */
+.charsheet-page[data-textsize] .charsheet__char-name,
+.charsheet-page[data-textsize] .charsheet__char-info {
+	font-size: calc(var(--cs-text-xl, 1.25rem) * var(--cs-text-scale, 1));
+}
+
+/* Spell slots */
+.charsheet-page[data-textsize] .charsheet__spell-slot-level,
+.charsheet-page[data-textsize] .charsheet__spell-slot-count {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Combat methods */
+.charsheet-page[data-textsize] .charsheet__method-item,
+.charsheet-page[data-textsize] .charsheet__method-badge {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Inventory sections */
+.charsheet-page[data-textsize] .charsheet__inventory-section,
+.charsheet-page[data-textsize] .charsheet__equipment-slot {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Ability cards and hero elements */
+.charsheet-page[data-textsize] .charsheet__ability,
+.charsheet-page[data-textsize] .charsheet__ability-name,
+.charsheet-page[data-textsize] .charsheet__ability-hero-card,
+.charsheet-page[data-textsize] .charsheet__ability-hero-full,
+.charsheet-page[data-textsize] .charsheet__ability-hero-abbr,
+.charsheet-page[data-textsize] .charsheet__ability-hero-base,
+.charsheet-page[data-textsize] .charsheet__ability-hero-bonus,
+.charsheet-page[data-textsize] .charsheet__ability-save-label,
+.charsheet-page[data-textsize] .charsheet__ability-save-value,
+.charsheet-page[data-textsize] .charsheet__ability-skill-mini,
+.charsheet-page[data-textsize] .charsheet__ability-skill-name,
+.charsheet-page[data-textsize] .charsheet__ability-skill-mod,
+.charsheet-page[data-textsize] .charsheet__ability-roll-btn {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+.charsheet-page[data-textsize] .charsheet__ability-hero-total,
+.charsheet-page[data-textsize] .charsheet__ability-hero-mod {
+	font-size: calc(var(--cs-text-2xl, 1.5rem) * var(--cs-text-scale, 1));
+}
+
+/* Skills full grid and headers */
+.charsheet-page[data-textsize] .charsheet__skills-header,
+.charsheet-page[data-textsize] .charsheet__skills-header-prof,
+.charsheet-page[data-textsize] .charsheet__skills-header-name,
+.charsheet-page[data-textsize] .charsheet__skills-header-ability,
+.charsheet-page[data-textsize] .charsheet__skills-header-mod,
+.charsheet-page[data-textsize] .charsheet__skills-header-passive,
+.charsheet-page[data-textsize] .charsheet__skills-ability-header,
+.charsheet-page[data-textsize] .charsheet__skills-ability-name,
+.charsheet-page[data-textsize] .charsheet__skills-column-name,
+.charsheet-page[data-textsize] .charsheet__skills-column-mod,
+.charsheet-page[data-textsize] .charsheet__skills-column-passive,
+.charsheet-page[data-textsize] .charsheet__skill-row,
+.charsheet-page[data-textsize] .charsheet__skill-mod,
+.charsheet-page[data-textsize] .charsheet__skill-passive,
+.charsheet-page[data-textsize] .charsheet__skill-add,
+.charsheet-page[data-textsize] .charsheet__skill-add-text,
+.charsheet-page[data-textsize] .charsheet__skill-full-row,
+.charsheet-page[data-textsize] .charsheet__skill-full-name,
+.charsheet-page[data-textsize] .charsheet__skill-full-mod,
+.charsheet-page[data-textsize] .charsheet__skill-full-passive {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Saving throws */
+.charsheet-page[data-textsize] .charsheet__save-row,
+.charsheet-page[data-textsize] .charsheet__save-mod {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Resources */
+.charsheet-page[data-textsize] .charsheet__resource-row,
+.charsheet-page[data-textsize] .charsheet__resource-name,
+.charsheet-page[data-textsize] .charsheet__resource-recharge,
+.charsheet-page[data-textsize] .charsheet__resource-current,
+.charsheet-page[data-textsize] .charsheet__resource-max,
+.charsheet-page[data-textsize] .charsheet__resource-pip {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Conditions and exhaustion */
+.charsheet-page[data-textsize] .charsheet__condition-badge,
+.charsheet-page[data-textsize] .charsheet__condition-icon,
+.charsheet-page[data-textsize] .charsheet__condition-source-badge,
+.charsheet-page[data-textsize] .charsheet__conditions-list,
+.charsheet-page[data-textsize] .charsheet__condition-item,
+.charsheet-page[data-textsize] .charsheet__condition-item-name,
+.charsheet-page[data-textsize] .charsheet__condition-item-desc,
+.charsheet-page[data-textsize] .charsheet__condition-item-effects,
+.charsheet-page[data-textsize] .charsheet__exhaustion-pip {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Senses */
+.charsheet-page[data-textsize] .charsheet__sense-item,
+.charsheet-page[data-textsize] .charsheet__sense-name,
+.charsheet-page[data-textsize] .charsheet__sense-range {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Attacks */
+.charsheet-page[data-textsize] .charsheet__attack-row,
+.charsheet-page[data-textsize] .charsheet__attack-info,
+.charsheet-page[data-textsize] .charsheet__attack-range,
+.charsheet-page[data-textsize] .charsheet__attack-stats,
+.charsheet-page[data-textsize] .charsheet__attack-btn,
+.charsheet-page[data-textsize] .charsheet__mastery-badge,
+.charsheet-page[data-textsize] .charsheet__mastery-prop {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Spells */
+.charsheet-page[data-textsize] .charsheet__spell-stats,
+.charsheet-page[data-textsize] .charsheet__spell-slots-row,
+.charsheet-page[data-textsize] .charsheet__spell-slots-label,
+.charsheet-page[data-textsize] .charsheet__spell-slot-box {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Features */
+.charsheet-page[data-textsize] .charsheet__feature,
+.charsheet-page[data-textsize] .charsheet__feature-header,
+.charsheet-page[data-textsize] .charsheet__feature-name,
+.charsheet-page[data-textsize] .charsheet__feature-body,
+.charsheet-page[data-textsize] .charsheet__feature-toggle,
+.charsheet-page[data-textsize] .charsheet__feature-actions,
+.charsheet-page[data-textsize] .charsheet__feature-group,
+.charsheet-page[data-textsize] .charsheet__feature-group-header,
+.charsheet-page[data-textsize] .charsheet__feature-group-body,
+.charsheet-page[data-textsize] .charsheet__feature-summary-item,
+.charsheet-page[data-textsize] .charsheet__feat,
+.charsheet-page[data-textsize] .charsheet__feat-header,
+.charsheet-page[data-textsize] .charsheet__feat-name,
+.charsheet-page[data-textsize] .charsheet__feat-body {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* AC breakdown */
+.charsheet-page[data-textsize] .charsheet__ac-breakdown-item,
+.charsheet-page[data-textsize] .charsheet__ac-breakdown-name,
+.charsheet-page[data-textsize] .charsheet__ac-breakdown-value {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Active states and activatable features */
+.charsheet-page[data-textsize] .charsheet__active-states-section,
+.charsheet-page[data-textsize] .charsheet__activatable-section,
+.charsheet-page[data-textsize] .charsheet__activatable-row {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Abilities tab sections */
+.charsheet-page[data-textsize] .charsheet__abilities-tab,
+.charsheet-page[data-textsize] .charsheet__abilities-section,
+.charsheet-page[data-textsize] .charsheet__abilities-section-header,
+.charsheet-page[data-textsize] .charsheet__abilities-section-title,
+.charsheet-page[data-textsize] .charsheet__abilities-hero-grid {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Proficiency indicators */
+.charsheet-page[data-textsize] .charsheet__prof-indicator {
+	font-size: calc(var(--cs-text-xs, 0.75rem) * var(--cs-text-scale, 1));
+}
+
+/* Inventory items */
+.charsheet-page[data-textsize] .charsheet__inventory-list,
+.charsheet-page[data-textsize] .charsheet__inventory-pagination,
+.charsheet-page[data-textsize] .charsheet__inventory-pagination-info,
+.charsheet-page[data-textsize] .charsheet__item,
+.charsheet-page[data-textsize] .charsheet__item-main,
+.charsheet-page[data-textsize] .charsheet__item-name,
+.charsheet-page[data-textsize] .charsheet__item-meta,
+.charsheet-page[data-textsize] .charsheet__item-details,
+.charsheet-page[data-textsize] .charsheet__item-charges,
+.charsheet-page[data-textsize] .charsheet__item-qty,
+.charsheet-page[data-textsize] .charsheet__item-actions button {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Currency/wallet */
+.charsheet-page[data-textsize] .charsheet__currency-box,
+.charsheet-page[data-textsize] .charsheet__currency-label,
+.charsheet-page[data-textsize] .charsheet__currency-input {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* CS-card system classes */
+.charsheet-page[data-textsize] .cs-card__body,
+.charsheet-page[data-textsize] .cs-card__header,
+.charsheet-page[data-textsize] .cs-card__footer,
+.charsheet-page[data-textsize] .cs-stat,
+.charsheet-page[data-textsize] .cs-stat__value,
+.charsheet-page[data-textsize] .cs-stat__label {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* HP section elements */
+.charsheet-page[data-textsize] .charsheet__hp-label,
+.charsheet-page[data-textsize] .charsheet__hp-separator,
+.charsheet-page[data-textsize] .charsheet__hp-max,
+.charsheet-page[data-textsize] .charsheet__hp-temp-hint,
+.charsheet-page[data-textsize] .charsheet__hp-box,
+.charsheet-page[data-textsize] .charsheet__hp-btn,
+.charsheet-page[data-textsize] .charsheet__hp-bar-label,
+.charsheet-page[data-textsize] .charsheet__ipt-hp {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Physical stats - Jump and Carry */
+.charsheet-page[data-textsize] .charsheet__physical-stat-group,
+.charsheet-page[data-textsize] .charsheet__physical-stat-header,
+.charsheet-page[data-textsize] .charsheet__physical-stat-title,
+.charsheet-page[data-textsize] .charsheet__physical-stat-grid,
+.charsheet-page[data-textsize] .charsheet__physical-stat-item,
+.charsheet-page[data-textsize] .charsheet__physical-stat-value,
+.charsheet-page[data-textsize] .charsheet__physical-stat-unit,
+.charsheet-page[data-textsize] .charsheet__physical-stat-label,
+.charsheet-page[data-textsize] .charsheet__jump-row,
+.charsheet-page[data-textsize] .charsheet__jump-stat,
+.charsheet-page[data-textsize] .charsheet__jump-value,
+.charsheet-page[data-textsize] .charsheet__jump-label,
+.charsheet-page[data-textsize] .charsheet__carry-row,
+.charsheet-page[data-textsize] .charsheet__carry-stat,
+.charsheet-page[data-textsize] .charsheet__carry-value,
+.charsheet-page[data-textsize] .charsheet__carry-label,
+.charsheet-page[data-textsize] .charsheet__carry-bar-mini,
+.charsheet-page[data-textsize] .charsheet__carry-bar-text,
+.charsheet-page[data-textsize] .charsheet__carrying,
+.charsheet-page[data-textsize] .charsheet__carrying-text {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Combat stats */
+.charsheet-page[data-textsize] .charsheet__combat-stat,
+.charsheet-page[data-textsize] .charsheet__combat-stat-label,
+.charsheet-page[data-textsize] .charsheet__combat-stats-row {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Hit dice and death saves */
+.charsheet-page[data-textsize] .charsheet__hitdice-box,
+.charsheet-page[data-textsize] .charsheet__hitdice-display,
+.charsheet-page[data-textsize] .charsheet__hitdice-type,
+.charsheet-page[data-textsize] .charsheet__hitdice-btn,
+.charsheet-page[data-textsize] .charsheet__survival-header,
+.charsheet-page[data-textsize] .charsheet__deathsaves-box,
+.charsheet-page[data-textsize] .charsheet__deathsaves-row {
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+}
+
+/* Picker modals - inside modals should not scale */
+.charsheet-page[data-textsize] .charsheet__method-picker,
+.charsheet-page[data-textsize] .charsheet__theme-picker {
+	font-size: 1rem;
+}
+
+/* Ensure header controls are NOT scaled */
+.charsheet-page[data-textsize] .charsheet__main-header,
+.charsheet-page[data-textsize] .charsheet__header-row {
+	font-size: 1rem;
+}
+
+/* Ensure modals and dropdowns aren't affected by text scaling */
+.charsheet__theme-dropdown,
+.charsheet__textsize-dropdown,
+.ui-modal__inner,
+.ui-modal__wrapper {
+	font-size: 1rem !important;
+	--cs-text-scale: 1 !important;
+}
+
+/* Reset scaling inside modals */
+.ui-modal__inner *,
+.ui-modal__wrapper * {
+	--cs-text-scale: 1 !important;
+}
+
+/* ========================================================================
    Header Responsive Adjustments
    ======================================================================== */
 @media (max-width: 992px) {
@@ -650,19 +1468,23 @@
 	.charsheet__layout-toggle-text {
 		display: none;
 	}
-	
+
 	.charsheet__layout-action-text {
 		display: none;
 	}
-	
+
 	.charsheet__help-toggle-text {
 		display: none;
 	}
-	
+
 	.charsheet__theme-toggle-text {
 		display: none;
 	}
-	
+
+	.charsheet__textsize-toggle-text {
+		display: none;
+	}
+
 	.charsheet__header-theme-controls {
 		margin-left: auto;
 	}
