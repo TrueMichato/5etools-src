@@ -2634,16 +2634,20 @@ class CharacterSheetCombat {
 
 		// Filter methods
 		let filteredMethods = allMethods.filter(method => {
-			// Must match a selected tradition
 			const tradCode = this._getMethodTraditionFromOptFeature(method);
-			if (!selectedTraditions.includes(tradCode)) return false;
+			const key = `${method.name}|${method.source || ""}`;
+			const isKnown = knownMethodNames.has(key);
+			
+			// Known methods should always appear (so they can be removed), 
+			// even if their tradition is no longer selected
+			if (!isKnown && !selectedTraditions.includes(tradCode)) return false;
 
 			// Tradition filter (if specific tradition selected in dropdown)
 			if (filterTrad !== "all" && tradCode !== filterTrad) return false;
 
-			// Must be within max degree
+			// Must be within max degree (but known methods are exempt)
 			const degree = this._getMethodDegreeFromOptFeature(method);
-			if (degree > maxDegree) return false;
+			if (!isKnown && degree > maxDegree) return false;
 
 			// Search filter
 			if (searchQuery && !method.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -2652,8 +2656,6 @@ class CharacterSheetCombat {
 			if (filterDegree !== "all" && degree !== parseInt(filterDegree)) return false;
 
 			// Status filter
-			const key = `${method.name}|${method.source || ""}`;
-			const isKnown = knownMethodNames.has(key);
 			if (filterStatus === "known" && !isKnown) return false;
 			if (filterStatus === "available" && isKnown) return false;
 
@@ -2698,16 +2700,30 @@ class CharacterSheetCombat {
 			"UW": "☯️", "UH": "🦅",
 		};
 
-		// Render grouped methods
-		for (const tradCode of selectedTraditions) {
+		// Get all tradition codes that have methods to show (selected + those with known methods)
+		const traditionsToRender = new Set(selectedTraditions);
+		for (const [tradCode] of methodsByTrad) {
+			traditionsToRender.add(tradCode);
+		}
+
+		// Render grouped methods - selected traditions first, then others
+		const sortedTraditions = [...traditionsToRender].sort((a, b) => {
+			const aSelected = selectedTraditions.includes(a);
+			const bSelected = selectedTraditions.includes(b);
+			if (aSelected !== bSelected) return aSelected ? -1 : 1;
+			return this._getTraditionName(a).localeCompare(this._getTraditionName(b));
+		});
+
+		for (const tradCode of sortedTraditions) {
 			const methods = methodsByTrad.get(tradCode) || [];
 			if (methods.length === 0) continue;
 
+			const isSelectedTradition = selectedTraditions.includes(tradCode);
 			const $tradGroup = $(`
-				<div class="charsheet__method-picker-trad-group">
+				<div class="charsheet__method-picker-trad-group ${!isSelectedTradition ? 'charsheet__method-picker-trad-group--unselected' : ''}">
 					<div class="charsheet__method-picker-trad-group-header">
 						<span class="charsheet__method-picker-trad-group-icon">${tradIcons[tradCode] || "⚔️"}</span>
-						<span class="charsheet__method-picker-trad-group-name">${this._getTraditionName(tradCode)}</span>
+						<span class="charsheet__method-picker-trad-group-name">${this._getTraditionName(tradCode)}${!isSelectedTradition ? ' (not selected)' : ''}</span>
 						<span class="charsheet__method-picker-trad-group-count">${methods.length}</span>
 					</div>
 				</div>

@@ -252,12 +252,27 @@ class CharacterSheetLevelUp {
 	_parseExpertiseEntries (entries) {
 		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
 
-		// Determine count
-		let count = 2; // Default
-		if (entriesText.includes("one ") || entriesText.includes("one of") || entriesText.includes("another")) count = 1;
-		if (entriesText.includes("two")) count = 2;
-		if (entriesText.includes("three")) count = 3;
-		if (entriesText.includes("four")) count = 4;
+		// Determine count - look for expertise-specific patterns
+		// We need to be careful: "two languages" shouldn't affect expertise count
+		// Look for patterns like "one of your skill proficiencies" or "two skill proficiencies"
+		let count = 1; // Default to 1 for safety
+		
+		// Check for specific expertise-granting patterns
+		// "choose two skills" or "two of your skill proficiencies"
+		if (entriesText.match(/(?:choose|pick|select|gain|get)\s+(?:two|2)\s+(?:skills?|proficienc)/i)
+			|| entriesText.match(/two\s+(?:of\s+)?(?:your\s+)?skill(?:\s+proficienc)?/i)) {
+			count = 2;
+		}
+		// "choose one skill" or "one of your skill proficiencies" (this should take precedence)
+		if (entriesText.match(/(?:choose|pick|select|gain|get)\s+(?:one|1|a)\s+(?:skill|proficienc)/i)
+			|| entriesText.match(/one\s+(?:of\s+)?(?:your\s+)?skill(?:\s+proficienc)?/i)) {
+			count = 1;
+		}
+		// "another" typically means 1 additional
+		if (entriesText.includes("another")) count = 1;
+		// Explicit number mentions with expertise
+		if (entriesText.includes("three") && entriesText.includes("expertise")) count = 3;
+		if (entriesText.includes("four") && entriesText.includes("expertise")) count = 4;
 
 		// Check if tools are allowed
 		const allowTools = entriesText.includes("thieves' tools") && !entriesText.includes("variantrule");

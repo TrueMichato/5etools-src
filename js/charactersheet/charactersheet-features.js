@@ -1136,6 +1136,14 @@ class CharacterSheetFeatures {
 			});
 		}
 
+		if (calculations.wildShapeDc) {
+			stats.push({
+				label: "Wild Shape DC",
+				value: calculations.wildShapeDc,
+				title: "8 + Proficiency + Wisdom modifier",
+			});
+		}
+
 		if (calculations.favoredFoeDamage) {
 			stats.push({
 				label: "Favored Foe",
