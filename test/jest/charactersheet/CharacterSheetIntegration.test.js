@@ -3,6 +3,7 @@
  * End-to-end tests for full character flows and complex scenarios
  */
 
+import "./setup.js";
 import "../../../js/charactersheet/charactersheet-state.js";
 
 const CharacterSheetState = globalThis.CharacterSheetState;

@@ -3,6 +3,7 @@
  * Tests for level progression, feature acquisition, ASI/feat selection
  */
 
+import "./setup.js";
 import "../../../js/charactersheet/charactersheet-state.js";
 
 const CharacterSheetState = globalThis.CharacterSheetState;
