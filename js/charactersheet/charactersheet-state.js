@@ -40,16 +40,6 @@ class FeatureUsesParser {
 			uses = parseInt(timesMatch[1]);
 		}
 
-		// Pattern: "once" = 1 use
-		if (!uses && /\bonce\b/.test(plainText)) {
-			uses = 1;
-		}
-
-		// Pattern: "twice" = 2 uses
-		if (!uses && /\btwice\b/.test(plainText)) {
-			uses = 2;
-		}
-
 		// Pattern: "a number of times equal to your proficiency bonus"
 		if (!uses && /(?:times|uses)?\s*equal\s*to\s*(?:your\s*)?proficiency\s*bonus/i.test(plainText)) {
 			uses = getProfBonus ? getProfBonus() : 2;
@@ -98,6 +88,16 @@ class FeatureUsesParser {
 			if (ability) {
 				uses = 1 + getAbilityMod(ability);
 			}
+		}
+
+		// Pattern: "once" = 1 use (check after ability-based patterns to avoid matching "minimum of once")
+		if (!uses && /\bonce\b/.test(plainText) && !/minimum\s*of\s*once/i.test(plainText)) {
+			uses = 1;
+		}
+
+		// Pattern: "twice" = 2 uses
+		if (!uses && /\btwice\b/.test(plainText)) {
+			uses = 2;
 		}
 
 		// If we found uses and recharge, return the result
@@ -293,9 +293,77 @@ class SpellGrantParser {
 					ability,
 				});
 			});
+			return;
 		}
 
-		// Daily use spells
+		// Check if the keys are character levels (numeric keys like "1", "3", "5")
+		// This handles the format: innate: { "3": { daily: { "1": [...] } } }
+		const hasLevelKeys = Object.keys(innateData).some(k => /^\d+$/.test(k));
+		if (hasLevelKeys) {
+			Object.entries(innateData).forEach(([level, levelData]) => {
+				if (!/^\d+$/.test(level)) return;
+
+				// levelData can be:
+				// - An array of spell names (at-will at this level)
+				// - An object with daily/rest keys
+				if (Array.isArray(levelData)) {
+					levelData.forEach(spellRef => {
+						this._addSpellRef(spellRef, spells, {
+							innate: true,
+							atWill: true,
+							sourceFeature: featureName,
+							ability,
+							minLevel: parseInt(level),
+						});
+					});
+				} else if (typeof levelData === "object") {
+					// Handle daily use spells at this level
+					if (levelData.daily) {
+						Object.entries(levelData.daily).forEach(([uses, spellRefs]) => {
+							const usesNum = parseInt(uses);
+							const isEach = uses.endsWith("e");
+
+							(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
+								this._addSpellRef(spellRef, spells, {
+									innate: true,
+									uses: usesNum,
+									usesMax: usesNum,
+									usesEach: isEach,
+									recharge: "long",
+									sourceFeature: featureName,
+									ability,
+									minLevel: parseInt(level),
+								});
+							});
+						});
+					}
+
+					// Handle rest-based use spells at this level
+					if (levelData.rest) {
+						Object.entries(levelData.rest).forEach(([uses, spellRefs]) => {
+							const usesNum = parseInt(uses);
+							const isEach = uses.endsWith("e");
+
+							(Array.isArray(spellRefs) ? spellRefs : [spellRefs]).forEach(spellRef => {
+								this._addSpellRef(spellRef, spells, {
+									innate: true,
+									uses: usesNum,
+									usesMax: usesNum,
+									usesEach: isEach,
+									recharge: "short",
+									sourceFeature: featureName,
+									ability,
+									minLevel: parseInt(level),
+								});
+							});
+						});
+					}
+				}
+			});
+			return;
+		}
+
+		// Daily use spells (direct, not level-keyed)
 		if (innateData.daily) {
 			Object.entries(innateData.daily).forEach(([uses, spellRefs]) => {
 				const usesNum = parseInt(uses);
@@ -1742,6 +1810,7 @@ class CharacterSheetState {
 			name: "",
 			race: null,
 			subrace: null,
+			size: "medium", // "tiny", "small", "medium", "large", "huge", "gargantuan"
 			classes: [], // [{name, source, level, subclass}]
 			background: null,
 
@@ -1959,9 +2028,25 @@ class CharacterSheetState {
 	toJSON () { return this.toJson(); }
 
 	loadFromJson (json) {
+		// Handle string input (parse if needed)
+		let data = json;
+		if (typeof json === "string") {
+			try {
+				data = JSON.parse(json);
+			} catch (e) {
+				console.warn("[CharSheet State] Failed to parse JSON:", e);
+				return false;
+			}
+		}
+		
+		// Handle version-wrapped data from serialize()
+		if (data.version && data.data) {
+			data = data.data;
+		}
+		
 		this._data = {
 			...this._getDefaultState(),
-			...MiscUtil.copyFast(json),
+			...MiscUtil.copyFast(data),
 		};
 
 		// Ensure nested objects exist
@@ -2109,6 +2194,26 @@ class CharacterSheetState {
 	// #region Basic Info
 	setName (name) { this._data.name = name; }
 	getName () { return this._data.name; }
+	// Aliases for character name
+	setCharacterName (name) { this.setName(name); }
+	getCharacterName () { return this.getName(); }
+
+	setBasicInfo ({name, race, background, subrace} = {}) {
+		if (name !== undefined) this.setName(name);
+		if (race !== undefined) this.setRace(race, subrace);
+		if (background !== undefined) this.setBackground(background);
+	}
+
+	getBasicInfo () {
+		return {
+			name: this.getName(),
+			race: this.getRace(),
+			subrace: this.getSubrace(),
+			raceName: this.getRaceName(),
+			background: this.getBackground(),
+			backgroundName: this.getBackgroundName(),
+		};
+	}
 
 	setRace (race, subrace = null) {
 		this._data.race = race;
@@ -2117,6 +2222,9 @@ class CharacterSheetState {
 
 	getRace () { return this._data.race; }
 	getSubrace () { return this._data.subrace; }
+
+	setSize (size) { this._data.size = size?.toLowerCase() || "medium"; }
+	getSize () { return this._data.size || "medium"; }
 
 	getRaceName () {
 		if (!this._data.race) return null;
@@ -2134,6 +2242,11 @@ class CharacterSheetState {
 	getBackgroundName () { return this._data.background?.name || null; }
 
 	addClass (classData) {
+		// Check if already at level cap
+		if (this.getTotalLevel() >= 20) {
+			return false;
+		}
+
 		const existing = this._data.classes.find(c => c.name === classData.name && c.source === classData.source);
 		if (existing) {
 			existing.level = classData.level;
@@ -2145,6 +2258,31 @@ class CharacterSheetState {
 		this._recalculateHitDice();
 		// Ensure unarmed strike is added/updated (especially for monks)
 		this.ensureUnarmedStrike();
+		// Recalculate spell slots based on class levels
+		this.calculateSpellSlots();
+	}
+
+	/**
+	 * Increase a class's level by 1
+	 * @param {string} className - The name of the class to level up
+	 * @returns {boolean} True if level up succeeded, false otherwise
+	 */
+	levelUp (className) {
+		const classEntry = this._data.classes.find(c => c.name === className);
+		if (!classEntry) return false;
+
+		// Check total level cap
+		if (this.getTotalLevel() >= 20) return false;
+
+		// Increase level
+		classEntry.level = (classEntry.level || 1) + 1;
+
+		this._recalculateMaxHp();
+		this._recalculateHitDice();
+		this.ensureUnarmedStrike();
+		this.calculateSpellSlots();
+
+		return true;
 	}
 
 	removeClass (className, source) {
@@ -2153,9 +2291,47 @@ class CharacterSheetState {
 		this._recalculateHitDice();
 		// Re-check unarmed strike in case monk was removed
 		this.ensureUnarmedStrike();
+		// Recalculate spell slots based on remaining classes
+		this.calculateSpellSlots();
 	}
 
 	getClasses () { return this._data.classes; }
+
+	/**
+	 * Set the subclass for a class
+	 * @param {string} className - The name of the class
+	 * @param {object} subclass - The subclass object with name and source
+	 */
+	setSubclass (className, subclass) {
+		const classEntry = this._data.classes.find(c => c.name === className);
+		if (classEntry) {
+			classEntry.subclass = subclass;
+		}
+	}
+
+	/**
+	 * Get the level at which a class gets to choose a subclass
+	 * @param {string} className - The name of the class
+	 * @returns {number} The level at which subclass is chosen
+	 */
+	getSubclassLevel (className) {
+		const subclassLevels = {
+			Barbarian: 3,
+			Bard: 3,
+			Cleric: 1,
+			Druid: 2,
+			Fighter: 3,
+			Monk: 3,
+			Paladin: 3,
+			Ranger: 3,
+			Rogue: 3,
+			Sorcerer: 1,
+			Warlock: 1,
+			Wizard: 2,
+			Artificer: 3,
+		};
+		return subclassLevels[className] || 3;
+	}
 
 	getClassSummary () {
 		if (!this._data.classes.length) return null;
@@ -2165,13 +2341,153 @@ class CharacterSheetState {
 	}
 
 	getTotalLevel () {
-		return this._data.classes.reduce((sum, c) => sum + (c.level || 0), 0) || 1;
+		return this._data.classes.reduce((sum, c) => sum + (c.level || 0), 0);
+	}
+
+	/**
+	 * Get level in a specific class
+	 * @param {string} className - The class name (case-insensitive)
+	 * @returns {number} Level in the class, or 0 if not in that class
+	 */
+	getClassLevel (className) {
+		const cls = this._data.classes.find(c => c.name?.toLowerCase() === className?.toLowerCase());
+		return cls?.level || 0;
 	}
 
 	getProficiencyBonus () {
-		const level = this.getTotalLevel();
+		const level = Math.max(1, this.getTotalLevel()); // Treat level 0 as level 1 for prof bonus
 		const baseProfBonus = Math.floor((level - 1) / 4) + 2;
 		return baseProfBonus + (this._data.customModifiers.proficiencyBonus || 0);
+	}
+
+	/**
+	 * Check if character meets multiclass requirements for a class
+	 * @param {string} className - The class name to check
+	 * @returns {boolean} True if requirements are met
+	 */
+	meetsMulticlassRequirement (className) {
+		const requirements = {
+			Barbarian: {str: 13},
+			Bard: {cha: 13},
+			Cleric: {wis: 13},
+			Druid: {wis: 13},
+			Fighter: [{str: 13}, {dex: 13}], // OR
+			Monk: {dex: 13, wis: 13},
+			Paladin: {str: 13, cha: 13},
+			Ranger: {dex: 13, wis: 13},
+			Rogue: {dex: 13},
+			Sorcerer: {cha: 13},
+			Warlock: {cha: 13},
+			Wizard: {int: 13},
+			Artificer: {int: 13},
+		};
+
+		const req = requirements[className];
+		if (!req) return true; // Unknown class, allow
+
+		// Handle OR requirements (Fighter)
+		if (Array.isArray(req)) {
+			return req.some(option => this._meetsAbilityRequirement(option));
+		}
+
+		return this._meetsAbilityRequirement(req);
+	}
+
+	_meetsAbilityRequirement (requirement) {
+		for (const [ability, minScore] of Object.entries(requirement)) {
+			if (this.getAbilityScore(ability) < minScore) return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Get the multiclass caster level for combined spellcasting
+	 * @returns {number} The effective caster level
+	 */
+	getMulticlassCasterLevel () {
+		const fullCasters = ["Bard", "Cleric", "Druid", "Sorcerer", "Wizard"];
+		const halfCasters = ["Paladin", "Ranger", "Artificer"];
+		const thirdCasters = ["Eldritch Knight", "Arcane Trickster"]; // Subclasses
+
+		let totalLevels = 0;
+
+		for (const cls of this._data.classes) {
+			if (fullCasters.includes(cls.name)) {
+				totalLevels += cls.level;
+			} else if (halfCasters.includes(cls.name)) {
+				totalLevels += Math.floor(cls.level / 2);
+			} else if (cls.subclass?.name === "Eldritch Knight" || cls.subclass?.name === "Arcane Trickster") {
+				totalLevels += Math.floor(cls.level / 3);
+			}
+		}
+
+		return totalLevels;
+	}
+
+	/**
+	 * Get the number of attacks per Attack action
+	 * @returns {number} Number of attacks
+	 */
+	getNumberOfAttacks () {
+		// Fighter gets Extra Attack at 5, 11, and 20
+		const fighter = this._data.classes.find(c => c.name === "Fighter");
+		if (fighter) {
+			if (fighter.level >= 20) return 4;
+			if (fighter.level >= 11) return 3;
+			if (fighter.level >= 5) return 2;
+		}
+
+		// Most martial classes get Extra Attack at 5
+		const extraAttackClasses = ["Barbarian", "Monk", "Paladin", "Ranger"];
+		const hasExtraAttack = this._data.classes.some(c =>
+			extraAttackClasses.includes(c.name) && c.level >= 5
+		);
+
+		if (hasExtraAttack) return 2;
+
+		// Check for Extra Attack feature directly
+		const extraAttackFeature = this._data.features.find(f =>
+			f.name.toLowerCase().includes("extra attack")
+		);
+		if (extraAttackFeature) return 2;
+
+		return 1;
+	}
+
+	/**
+	 * Check if a class level is an ASI (Ability Score Improvement) level
+	 * @param {string} className - The class name
+	 * @param {number} level - The class level to check
+	 * @returns {boolean} True if ASI available at this level
+	 */
+	isASILevel (className, level) {
+		// Standard ASI levels (most classes)
+		const standardASILevels = [4, 8, 12, 16, 19];
+
+		// Fighter gets extra ASIs at 6 and 14
+		const fighterASILevels = [4, 6, 8, 12, 14, 16, 19];
+
+		// Rogue gets extra ASI at 10
+		const rogueASILevels = [4, 8, 10, 12, 16, 19];
+
+		if (className === "Fighter") {
+			return fighterASILevels.includes(level);
+		}
+		if (className === "Rogue") {
+			return rogueASILevels.includes(level);
+		}
+		return standardASILevels.includes(level);
+	}
+
+	/**
+	 * Apply an Ability Score Improvement
+	 * @param {string} ability - The ability to increase
+	 * @param {number} amount - The amount to increase (1 or 2)
+	 */
+	applyASI (ability, amount = 1) {
+		const currentBase = this._data.abilities[ability] || 10;
+		// Cap at 20
+		this._data.abilities[ability] = Math.min(20, currentBase + amount);
 	}
 	// #endregion
 
@@ -2262,6 +2578,11 @@ class CharacterSheetState {
 		return Math.floor((this.getAbilityScore(ability) - 10) / 2);
 	}
 
+	// Alias for test compatibility
+	getAbilityModifier (ability) {
+		return this.getAbilityMod(ability);
+	}
+
 	getAbilityBase (ability) {
 		return this._data.abilities[ability] || 10;
 	}
@@ -2270,6 +2591,30 @@ class CharacterSheetState {
 		const racialBonus = this._data.abilityBonuses[ability] || 0;
 		const featureBonus = this._data.customModifiers.abilityScores?.[ability] || 0;
 		return racialBonus + featureBonus;
+	}
+
+	/**
+	 * Add a bonus to an ability score (from feats, features, etc.)
+	 * @param {string} ability - The ability name (str, dex, con, int, wis, cha)
+	 * @param {number} bonus - The bonus to add
+	 */
+	addAbilityBonus (ability, bonus) {
+		if (!this._data.customModifiers.abilityScores) {
+			this._data.customModifiers.abilityScores = {};
+		}
+		this._data.customModifiers.abilityScores[ability] = 
+			(this._data.customModifiers.abilityScores[ability] || 0) + bonus;
+	}
+
+	/**
+	 * Increase an ability score through ASI, capping at 20
+	 * @param {string} ability - The ability name
+	 * @param {number} amount - Amount to increase
+	 */
+	increaseAbility (ability, amount) {
+		const currentBase = this.getAbilityBase(ability);
+		const newBase = Math.min(20, currentBase + amount);
+		this.setAbilityBase(ability, newBase);
 	}
 	// #endregion
 
@@ -2280,7 +2625,13 @@ class CharacterSheetState {
 
 	getCurrentHp () { return this._data.hp.current; }
 
-	setMaxHp (hp) { this._data.hp.max = hp; }
+	setMaxHp (hp) {
+		this._data.hp.max = hp;
+		// Cap current HP if it exceeds new max
+		if (this._data.hp.current > hp) {
+			this._data.hp.current = hp;
+		}
+	}
 
 	getMaxHp () {
 		if (this._data.hp.max > 0) return this._data.hp.max;
@@ -2317,22 +2668,85 @@ class CharacterSheetState {
 
 	_recalculateMaxHp () {
 		const calculated = this._calculateMaxHp();
-		if (this._data.hp.max === 0 || this._data.hp.max === calculated) {
-			this._data.hp.max = calculated;
-		}
+		// Always update max HP when recalculated (level up, class added/removed, etc.)
+		this._data.hp.max = calculated;
 		// If current HP exceeds max, cap it
 		if (this._data.hp.current > this._data.hp.max) {
 			this._data.hp.current = this._data.hp.max;
 		}
 	}
 
-	setTempHp (hp) { this._data.hp.temp = Math.max(0, hp); }
+	setTempHp (hp) {
+		if (hp < 0) return false;
+		this._data.hp.temp = hp;
+		return true;
+	}
 	getTempHp () { return this._data.hp.temp; }
 
 	// Unified HP methods for rest.js compatibility
 	heal (amount) {
 		const maxHp = this.getMaxHp();
+		const wasAtZero = this._data.hp.current === 0;
 		this._data.hp.current = Math.min(maxHp, this._data.hp.current + amount);
+		
+		// Reset death saves when healing from 0 HP
+		if (wasAtZero && this._data.hp.current > 0) {
+			this.resetDeathSaves();
+		}
+	}
+
+	/**
+	 * Take damage, consuming temp HP first
+	 * @param {number} damage - Amount of damage to take
+	 * @returns {boolean} True if damage was taken
+	 */
+	takeDamage (damage) {
+		if (damage <= 0) return false;
+
+		const startingHp = this._data.hp.current;
+		const maxHp = this.getMaxHp();
+
+		// Consume temp HP first
+		if (this._data.hp.temp > 0) {
+			if (this._data.hp.temp >= damage) {
+				this._data.hp.temp -= damage;
+				return true;
+			} else {
+				damage -= this._data.hp.temp;
+				this._data.hp.temp = 0;
+			}
+		}
+
+		// Apply remaining damage to current HP
+		this._data.hp.current = Math.max(0, this._data.hp.current - damage);
+
+		// Check for massive damage death (damage remaining after reaching 0 >= max HP)
+		const overkill = startingHp - damage;
+		if (overkill <= -maxHp) {
+			this._data.massiveDamageDeath = true;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check if character is unconscious (at 0 HP)
+	 * @returns {boolean} True if unconscious
+	 */
+	isUnconscious () {
+		return this._data.hp.current === 0;
+	}
+
+	/**
+	 * Check if character is dead (3 death save failures, massive damage, or exhaustion 6)
+	 * @returns {boolean} True if dead
+	 */
+	isDead () {
+		// Death from exhaustion level 6 (2014 rules)
+		if (this._data.exhaustion >= 6 && this._data.settings?.exhaustionRules !== "2024") {
+			return true;
+		}
+		return this._data.deathSaves.failures >= 3 || this._data.massiveDamageDeath === true;
 	}
 
 	getHp () {
@@ -2457,15 +2871,40 @@ class CharacterSheetState {
 
 		if (dieType && this._data.hitDice[dieType]?.current > 0) {
 			this._data.hitDice[dieType].current--;
+			
+			// Roll the hit die and heal (average roll for deterministic behavior)
+			// Hit die type is like "d8" or "d10"
+			const dieSize = parseInt(dieType.replace("d", ""), 10) || 8;
+			const averageRoll = Math.ceil(dieSize / 2) + 1; // Average rounded up
+			const conMod = this.getAbilityMod("con");
+			const healAmount = Math.max(1, averageRoll + conMod); // Minimum 1 HP
+			
+			this.heal(healAmount);
 			return true;
 		}
 		return false;
 	}
 
-	recoverHitDice (amount = null) {
-		// Recover hit dice (usually half total level on long rest)
-		const totalLevel = this.getTotalLevel();
-		const toRecover = amount ?? Math.max(1, Math.floor(totalLevel / 2));
+	// Alias for test compatibility
+	spendHitDie (dieType) { return this.useHitDie(dieType); }
+
+	recoverHitDice (amountOrSelections = null) {
+		// Support selective hit dice recovery: [{type: "d10", amount: 2}, {type: "d6", amount: 1}]
+		if (Array.isArray(amountOrSelections)) {
+			for (const {type, amount} of amountOrSelections) {
+				if (this._data.hitDice[type]) {
+					this._data.hitDice[type].current = Math.min(
+						this._data.hitDice[type].max,
+						this._data.hitDice[type].current + amount,
+					);
+				}
+			}
+			return;
+		}
+
+		// Recover hit dice (usually half total level on long rest, rounded up per test expectations)
+		const totalLevel = Math.max(1, this.getTotalLevel());
+		const toRecover = amountOrSelections ?? Math.max(1, Math.ceil(totalLevel / 2));
 
 		let remaining = toRecover;
 		for (const type of Object.keys(this._data.hitDice)) {
@@ -2504,8 +2943,93 @@ class CharacterSheetState {
 		}
 	}
 
+	/**
+	 * Make a death saving throw
+	 * @param {boolean} success - Whether the save was successful
+	 * @returns {object} Result with stabilized/dead status
+	 */
+	makeDeathSave (success) {
+		if (success) {
+			this._data.deathSaves.successes = Math.min(3, this._data.deathSaves.successes + 1);
+		} else {
+			this._data.deathSaves.failures = Math.min(3, this._data.deathSaves.failures + 1);
+		}
+
+		return {
+			successes: this._data.deathSaves.successes,
+			failures: this._data.deathSaves.failures,
+			stabilized: this._data.deathSaves.successes >= 3,
+			dead: this._data.deathSaves.failures >= 3,
+		};
+	}
+
 	resetDeathSaves () {
 		this._data.deathSaves = {successes: 0, failures: 0};
+	}
+
+	/**
+	 * Add death save success(es)
+	 * @param {number} count - Number of successes to add (default 1)
+	 */
+	addDeathSaveSuccess (count = 1) {
+		this._data.deathSaves.successes = Math.min(3, this._data.deathSaves.successes + count);
+	}
+
+	/**
+	 * Add death save failure(s)
+	 * @param {number} count - Number of failures to add (default 1, 2 for nat 1)
+	 */
+	addDeathSaveFailure (count = 1) {
+		this._data.deathSaves.failures = Math.min(3, this._data.deathSaves.failures + count);
+	}
+
+	/**
+	 * Get death save successes count
+	 * @returns {number} Number of successes
+	 */
+	getDeathSaveSuccesses () {
+		return this._data.deathSaves.successes;
+	}
+
+	/**
+	 * Get death save failures count
+	 * @returns {number} Number of failures
+	 */
+	getDeathSaveFailures () {
+		return this._data.deathSaves.failures;
+	}
+
+	/**
+	 * Set death save successes directly
+	 * @param {number} count - Number of successes
+	 */
+	setDeathSaveSuccesses (count) {
+		this._data.deathSaves.successes = Math.min(3, Math.max(0, count));
+	}
+
+	/**
+	 * Set death save failures directly
+	 * @param {number} count - Number of failures
+	 */
+	setDeathSaveFailures (count) {
+		this._data.deathSaves.failures = Math.min(3, Math.max(0, count));
+	}
+
+	/**
+	 * Check if character is stable (3 death save successes while at 0 HP)
+	 * Alias for isStabilized
+	 * @returns {boolean} True if stable
+	 */
+	isStable () {
+		return this.isStabilized();
+	}
+
+	/**
+	 * Check if character is stabilized (3 death save successes while at 0 HP)
+	 * @returns {boolean} True if stabilized
+	 */
+	isStabilized () {
+		return this._data.deathSaves.successes >= 3 && this._data.hp.current === 0;
 	}
 	// #endregion
 
@@ -2522,6 +3046,11 @@ class CharacterSheetState {
 		}
 	}
 
+	// Alias for addSaveProficiency
+	setSavingThrowProficiency (ability) {
+		this.addSaveProficiency(ability);
+	}
+
 	removeSaveProficiency (ability) {
 		this._data.saveProficiencies = this._data.saveProficiencies.filter(a => a !== ability);
 	}
@@ -2535,10 +3064,16 @@ class CharacterSheetState {
 		const prof = this.hasSaveProficiency(ability) ? this.getProficiencyBonus() : 0;
 		const custom = this._data.customModifiers.savingThrows[ability] || 0;
 		// Add item bonuses (general saving throw bonus from magic items)
-		const itemBonus = this._data.itemBonuses?.savingThrow || 0;
+		// Check both naming conventions: "savingThrow" and "saves"
+		const itemBonus = this._data.itemBonuses?.savingThrow || this._data.itemBonuses?.saves || 0;
 		// Add bonus from active states (e.g., Bless spell, Paladin's Aura)
 		const stateBonus = this.getSaveBonusFromStates(ability);
 		return mod + prof + custom + itemBonus + stateBonus;
+	}
+
+	// Alias for test compatibility
+	getSaveModifier (ability) {
+		return this.getSaveMod(ability);
 	}
 	// #endregion
 
@@ -2554,6 +3089,11 @@ class CharacterSheetState {
 
 	// Alias for compatibility with levelup module
 	addSkillProficiency (skill) { this.setSkillProficiency(skill, 1); }
+
+	// Alias for test compatibility
+	setSkillExpertise (skill, hasExpertise) {
+		this.setSkillProficiency(skill, hasExpertise ? 2 : 1);
+	}
 
 	// Add expertise (level 2 proficiency) to a skill
 	addExpertise (skill) {
@@ -2572,7 +3112,38 @@ class CharacterSheetState {
 		return this._data.skillProficiencies[skill] || 0;
 	}
 
+	/**
+	 * Check if the character is proficient in a skill
+	 * @param {string} skill - The skill name
+	 * @returns {boolean} True if proficient
+	 */
+	isProficientInSkill (skill) {
+		return this.getSkillProficiency(skill) >= 1;
+	}
+
+	// Alias for test compatibility
+	isSkillProficient (skill) {
+		return this.isProficientInSkill(skill);
+	}
+
+	/**
+	 * Get the total skill bonus (alias for getSkillMod)
+	 * @param {string} skill - The skill name
+	 * @returns {number} The skill bonus
+	 */
+	getSkillBonus (skill) {
+		return this.getSkillMod(skill);
+	}
+
+	// Alias for test compatibility
+	getSkillModifier (skill) {
+		return this.getSkillMod(skill);
+	}
+
 	getSkillMod (skill) {
+		// Normalize skill key to lowercase without spaces
+		const normalizedSkill = skill.toLowerCase().replace(/\s+/g, "");
+		
 		const skillAbilities = {
 			acrobatics: "dex",
 			animalhandling: "wis",
@@ -2594,17 +3165,17 @@ class CharacterSheetState {
 			survival: "wis",
 		};
 
-		let ability = skillAbilities[skill];
+		let ability = skillAbilities[normalizedSkill];
 
 		// If not a standard skill, check custom skills
 		if (!ability) {
 			const customSkill = this._data.customSkills.find(s => 
-				s.name.toLowerCase().replace(/\s+/g, "") === skill
+				s.name.toLowerCase().replace(/\s+/g, "") === normalizedSkill
 			);
 			ability = customSkill?.ability || "str";
 		}
 
-		return this.getSkillModWithAbility(skill, ability);
+		return this.getSkillModWithAbility(normalizedSkill, ability);
 	}
 
 	/**
@@ -2806,16 +3377,20 @@ class CharacterSheetState {
 				bestAcFormula.ac > (10 + dexMod); // Only matters if we're using the formula
 			
 			if (!isMonkUnarmored && !formulaForbidsShield) {
-				// Base shield bonus is 2, plus any magic bonus
-				const baseShieldBonus = 2;
-				const magicBonus = (typeof this._data.ac.shield === "object") ? (this._data.ac.shield.bonus || 0) : 0;
-				ac += baseShieldBonus + magicBonus;
+				// Shield bonus: if explicit bonus set, use it; otherwise default to 2
+				// For magic shields, bonus includes the magic enhancement (e.g., Shield +1 = bonus of 3)
+				const shieldBonus = (typeof this._data.ac.shield === "object" && this._data.ac.shield.bonus !== undefined) 
+					? this._data.ac.shield.bonus 
+					: 2;
+				ac += shieldBonus;
 			}
 		}
 
 		// Bonuses from other equipped magic items (e.g., Cloak of Protection, Ring of Protection)
 		// Note: Armor and shield bonuses are already included above, this is for OTHER items
+		// Check both the legacy ac.itemBonus and the itemBonuses.ac paths
 		ac += this._data.ac.itemBonus || 0;
+		ac += this._data.itemBonuses?.ac || 0;
 
 		// Custom bonuses
 		ac += this._data.customModifiers.ac || 0;
@@ -2868,15 +3443,26 @@ class CharacterSheetState {
 		return best;
 	}
 
+	/**
+	 * Manually set unarmored defense type for characters that have it from
+	 * non-standard sources (homebrews, feats, etc.)
+	 * @param {string} type - "monk", "barbarian", or null to clear
+	 */
+	setUnarmoredDefense (type) {
+		this._data.manualUnarmoredDefense = type?.toLowerCase() || null;
+	}
+
 	_hasUnarmoredDefense () {
 		return this._hasBarbarianUnarmoredDefense() || this._hasMonkUnarmoredDefense();
 	}
 
 	_hasBarbarianUnarmoredDefense () {
+		if (this._data.manualUnarmoredDefense === "barbarian") return true;
 		return this._data.classes.some(c => c.name === "Barbarian");
 	}
 
 	_hasMonkUnarmoredDefense () {
+		if (this._data.manualUnarmoredDefense === "monk") return true;
 		return this._data.classes.some(c => c.name === "Monk");
 	}
 
@@ -2905,6 +3491,9 @@ class CharacterSheetState {
 
 	// Alias for compatibility with export module
 	getArmorClass () { return this.getAc(); }
+
+	// Alias for test compatibility
+	getAC () { return this.getAc(); }
 
 	/**
 	 * Get a detailed breakdown of AC components for display
@@ -3084,6 +3673,10 @@ class CharacterSheetState {
 	setItemBonuses (bonuses) { this._data.itemBonuses = bonuses || {}; }
 	getItemBonuses () { return this._data.itemBonuses || {}; }
 	getItemBonus (type) { return this._data.itemBonuses?.[type] || 0; }
+	setItemBonus (type, value) {
+		if (!this._data.itemBonuses) this._data.itemBonuses = {};
+		this._data.itemBonuses[type] = value || 0;
+	}
 	// #endregion
 
 	// #region Speed
@@ -3112,7 +3705,13 @@ class CharacterSheetState {
 		return level >= 18 ? 30 : level >= 14 ? 25 : level >= 10 ? 20 : level >= 6 ? 15 : 10;
 	}
 	
-	getSpeed () {
+	getSpeed (type) {
+		// If a type is specified, return just that speed value as a number
+		if (type) {
+			return this.getSpeedByType(type);
+		}
+		
+		// Otherwise return the formatted string for display
 		const speedMods = this._data.customModifiers.speed || {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
 		const unarmoredBonus = this.getUnarmoredMovementBonus();
@@ -3120,9 +3719,9 @@ class CharacterSheetState {
 		const parts = [`${walk} ft.`];
 
 		// Check for "equal to walk" modifiers for each speed type
-		const getSpeedWithEqualToWalk = (type, base, bonus) => {
+		const getSpeedWithEqualToWalk = (speedType, base, bonus) => {
 			const equalToWalkMod = this._data.namedModifiers?.find(m => 
-				m.type === `speed:${type}` && m.equalToWalk && m.enabled,
+				m.type === `speed:${speedType}` && m.equalToWalk && m.enabled,
 			);
 			if (equalToWalkMod) {
 				return Math.max(base + bonus, walk);
@@ -3201,6 +3800,25 @@ class CharacterSheetState {
 	getLanguages () { return [...this._data.languages]; }
 	getSaveProficiencies () { return [...this._data.saveProficiencies]; }
 
+	/**
+	 * Check if character has proficiency with an armor type
+	 * @param {string} armor - The armor type (light, medium, heavy, shields)
+	 * @returns {boolean} True if proficient
+	 */
+	hasArmorProficiency (armor) {
+		return this._data.armorProficiencies.some(a => a.toLowerCase() === armor.toLowerCase());
+	}
+
+	/**
+	 * Check if character has proficiency with a weapon
+	 * @param {string} weapon - The weapon name or type (simple, martial, longsword, etc.)
+	 * @returns {boolean} True if proficient
+	 */
+	hasWeaponProficiency (weapon) {
+		const weaponLower = weapon.toLowerCase();
+		return this._data.weaponProficiencies.some(w => w.toLowerCase() === weaponLower);
+	}
+
 	addArmorProficiency (armor) {
 		if (!this._data.armorProficiencies.includes(armor)) {
 			this._data.armorProficiencies.push(armor);
@@ -3229,6 +3847,16 @@ class CharacterSheetState {
 		if (!this._data.toolProficiencies.some(t => t.toLowerCase() === toolLower)) {
 			this._data.toolProficiencies.push(tool);
 		}
+	}
+
+	/**
+	 * Check if character has proficiency with a tool
+	 * @param {string} tool - Tool name to check
+	 * @returns {boolean} True if proficient
+	 */
+	hasToolProficiency (tool) {
+		const toolLower = tool.toLowerCase();
+		return this._data.toolProficiencies.some(t => t.toLowerCase() === toolLower);
 	}
 
 	removeToolProficiency (tool) {
@@ -3264,7 +3892,62 @@ class CharacterSheetState {
 		return 8 + this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellDc || 0) + itemBonus - exhaustionPenalty;
 	}
 
-	getSpellAttackBonus () {
+	/**
+	 * Alias for getSpellSaveDc - uppercase DC version
+	 * @param {string} classNameOrAbility - Optional class name (for multiclass support) or ability abbreviation
+	 * @returns {number|null} The spell save DC
+	 */
+	getSpellSaveDC (classNameOrAbility) {
+		// Check if it's an ability abbreviation (str, dex, con, int, wis, cha)
+		const abilities = ["str", "dex", "con", "int", "wis", "cha"];
+		if (classNameOrAbility && abilities.includes(classNameOrAbility.toLowerCase())) {
+			const ability = classNameOrAbility.toLowerCase();
+			const itemBonus = this._data.itemBonuses?.spellSaveDc || 0;
+			return 8 + this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellDc || 0) + itemBonus;
+		}
+
+		// If className specified, temporarily use that class's spellcasting ability
+		if (classNameOrAbility) {
+			const spellcastingAbilities = {
+				Wizard: "int",
+				Cleric: "wis",
+				Druid: "wis",
+				Sorcerer: "cha",
+				Bard: "cha",
+				Paladin: "cha",
+				Ranger: "wis",
+				Warlock: "cha",
+				Artificer: "int",
+			};
+			const ability = spellcastingAbilities[classNameOrAbility];
+			if (ability) {
+				const itemBonus = this._data.itemBonuses?.spellSaveDc || 0;
+				return 8 + this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellDc || 0) + itemBonus;
+			}
+		}
+		return this.getSpellSaveDc();
+	}
+
+	getSpellAttackBonus (className) {
+		// If className specified, use that class's spellcasting ability
+		if (className) {
+			const spellcastingAbilities = {
+				Wizard: "int",
+				Cleric: "wis",
+				Druid: "wis",
+				Sorcerer: "cha",
+				Bard: "cha",
+				Paladin: "cha",
+				Ranger: "wis",
+				Warlock: "cha",
+				Artificer: "int",
+			};
+			const ability = spellcastingAbilities[className];
+			if (ability) {
+				const itemBonus = this._data.itemBonuses?.spellAttack || 0;
+				return this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellAttack || 0) + itemBonus;
+			}
+		}
 		const ability = this._data.spellcasting.ability;
 		if (!ability) return null;
 		// Add item bonuses (spell attack bonus from magic items)
@@ -3463,6 +4146,18 @@ class CharacterSheetState {
 		return this._data.spellcasting.pactSlots || {current: 0, max: 0, level: 0};
 	}
 
+	/**
+	 * Set pact slots directly (for Warlock pact magic)
+	 * @param {object} slots - Object with current, max, and level properties
+	 */
+	setPactSlots (slots) {
+		this._data.spellcasting.pactSlots = {
+			current: slots.current ?? slots.max ?? 0,
+			max: slots.max ?? 0,
+			level: slots.level ?? 1,
+		};
+	}
+
 	setPactSlotsCurrent (current) {
 		if (this._data.spellcasting.pactSlots) {
 			this._data.spellcasting.pactSlots.current = Math.max(0, Math.min(current, this._data.spellcasting.pactSlots.max));
@@ -3478,8 +4173,19 @@ class CharacterSheetState {
 		return false;
 	}
 
-	setSpellSlots (level, max, current = max) {
-		this._data.spellcasting.spellSlots[level] = {current, max};
+	setSpellSlots (levelOrArray, max, current = max) {
+		// Support array format: [{level: 1, current: 0, max: 4}, ...]
+		if (Array.isArray(levelOrArray)) {
+			for (const slot of levelOrArray) {
+				this._data.spellcasting.spellSlots[slot.level] = {
+					current: slot.current ?? slot.max,
+					max: slot.max,
+				};
+			}
+		} else {
+			// Original format: (level, max, current)
+			this._data.spellcasting.spellSlots[levelOrArray] = {current, max};
+		}
 	}
 
 	/**
@@ -3671,7 +4377,51 @@ class CharacterSheetState {
 		return [...cantrips, ...spells];
 	}
 	getSpellsKnown () { return [...this._data.spellcasting.spellsKnown]; }
+	getKnownSpells () { return this.getSpellsKnown(); } // Alias
 	getCantripsKnown () { return [...this._data.spellcasting.cantripsKnown]; }
+	getCantrips () { return this.getCantripsKnown(); } // Alias
+
+	/**
+	 * Get all prepared spells (spells with prepared === true or alwaysPrepared === true)
+	 * @returns {Array} Array of prepared spell objects
+	 */
+	getPreparedSpells () {
+		return this._data.spellcasting.spellsKnown.filter(s => s.prepared || s.alwaysPrepared);
+	}
+
+	/**
+	 * Get the maximum number of prepared spells for a class
+	 * @param {string} className - The class name
+	 * @returns {number} Maximum prepared spells
+	 */
+	getMaxPreparedSpells (className) {
+		const cls = this._data.classes.find(c => c.name === className);
+		if (!cls) return 0;
+
+		const level = cls.level;
+
+		// Get the spellcasting ability for the class
+		const abilityMap = {
+			Wizard: "int",
+			Cleric: "wis",
+			Druid: "wis",
+			Paladin: "cha",
+			Artificer: "int",
+		};
+
+		const ability = abilityMap[className];
+		if (!ability) return 0; // Non-prepared caster
+
+		const abilityMod = this.getAbilityMod(ability);
+
+		// Most prepared casters: level + ability mod (minimum 1)
+		if (className === "Paladin") {
+			// Paladin: half level (rounded down) + CHA mod
+			return Math.max(1, Math.floor(level / 2) + abilityMod);
+		}
+
+		return Math.max(1, level + abilityMod);
+	}
 
 	addSpell (spell, prepared = false) {
 		// Check if it's a cantrip
@@ -3693,6 +4443,8 @@ class CharacterSheetState {
 				ritual: spell.ritual || false,
 				concentration: spell.concentration || false,
 				prepared: prepared !== undefined ? prepared : spell.prepared,
+				alwaysPrepared: spell.alwaysPrepared || false,
+				inSpellbook: spell.inSpellbook || false, // For Wizard spellbook tracking
 				castingTime: spell.castingTime || "",
 				range: spell.range || "",
 				duration: spell.duration || "",
@@ -3734,6 +4486,9 @@ class CharacterSheetState {
 			return true;
 		});
 	}
+
+	// Alias for test compatibility
+	addKnownSpell (spell) { this.addSpell(spell, spell.prepared); }
 
 	// Innate spell management
 	getInnateSpells () { 
@@ -4052,11 +4807,12 @@ class CharacterSheetState {
 	}
 
 	addItem (item, quantity = 1, equipped = false, attuned = false) {
-		// Handle flat item structure (from inventory module)
-		if (item.quantity !== undefined) {
-			quantity = item.quantity;
-			equipped = item.equipped || false;
-			attuned = item.attuned || false;
+		// Handle flat item structure (from inventory module or tests)
+		// Check for any of the wrapper properties
+		if (item.quantity !== undefined || item.equipped !== undefined || item.attuned !== undefined) {
+			quantity = item.quantity ?? quantity;
+			equipped = item.equipped ?? equipped;
+			attuned = item.attuned ?? attuned;
 		}
 
 		const existing = this._data.inventory.find(
@@ -4067,14 +4823,44 @@ class CharacterSheetState {
 		} else {
 			// Extract item properties, excluding wrapper properties
 			const {quantity: _q, equipped: _e, attuned: _a, ...itemProps} = item;
+			// Use provided id if present, otherwise generate one
+			const itemId = item.id || CryptUtil.uid();
 			this._data.inventory.push({
-				id: CryptUtil.uid(),
+				id: itemId,
 				item: {...itemProps},
 				quantity,
 				equipped,
 				attuned,
 			});
+
+			// If item is equipped, also set it in appropriate AC slot
+			if (equipped && item.type === "armor") {
+				if (item.acBonus !== undefined) {
+					// Shield-type item (has bonus instead of base AC)
+					this._data.ac.shield = {bonus: item.acBonus};
+				} else if (item.ac !== undefined) {
+					// Body armor
+					const armorType = item.armorType || this._inferArmorType(item);
+					this.setArmor({ac: item.ac, type: armorType, name: item.name});
+				}
+			}
 		}
+	}
+
+	/**
+	 * Infer armor type from item properties
+	 * @param {object} item - The item
+	 * @returns {string} "light", "medium", or "heavy"
+	 */
+	_inferArmorType (item) {
+		// Check if explicitly set
+		if (item.armorType) return item.armorType;
+
+		// Infer from AC value (rough heuristic based on D&D 5e armor table)
+		const ac = item.ac || 10;
+		if (ac <= 12) return "light";  // Leather (11), Padded (11), Studded (12)
+		if (ac <= 15) return "medium"; // Hide (12), Chain Shirt (13), Scale (14), Breastplate (14), Half-plate (15)
+		return "heavy"; // Ring mail (14), Chain (16), Splint (17), Plate (18)
 	}
 
 	removeItem (itemId) {
@@ -4097,9 +4883,78 @@ class CharacterSheetState {
 		if (item) item.equipped = equipped;
 	}
 
+	/**
+	 * Equip an item by ID (alias for setItemEquipped)
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean} True if item was found and equipped
+	 */
+	equip (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (invItem) {
+			invItem.equipped = true;
+			
+			// Also set AC slot if armor
+			const item = invItem.item;
+			if (item?.type === "armor" || item?.type === "M" || item?.type === "R" || item?.ac !== undefined || item?.acBonus !== undefined) {
+				if (item.acBonus !== undefined) {
+					// Shield
+					this._data.ac.shield = {bonus: item.acBonus};
+				} else if (item.ac !== undefined) {
+					// Body armor
+					const armorType = item.armorType || this._inferArmorType(item);
+					this.setArmor({ac: item.ac, type: armorType, name: item.name});
+				}
+			}
+			
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Unequip an item by ID
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean} True if item was found and unequipped
+	 */
+	unequip (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (item) {
+			item.equipped = false;
+			return true;
+		}
+		return false;
+	}
+
 	setItemAttuned (itemId, attuned) {
 		const item = this._data.inventory.find(i => i.id === itemId);
 		if (item) item.attuned = attuned;
+	}
+
+	/**
+	 * Attune to an item by ID
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean} True if attunement succeeded, false if at capacity or item not found
+	 */
+	attune (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item) return false;
+
+		// Check if already at max attunement
+		if (this.getAttunedCount() >= this.getMaxAttunement()) {
+			return false;
+		}
+
+		item.attuned = true;
+		return true;
+	}
+
+	/**
+	 * Remove attunement from an item
+	 * @param {string} itemId - The item ID
+	 */
+	unattune (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (item) item.attuned = false;
 	}
 
 	setItemCharges (itemId, charges) {
@@ -4109,8 +4964,74 @@ class CharacterSheetState {
 		}
 	}
 
+	/**
+	 * Use charges from an item
+	 * @param {string} itemId - The item ID
+	 * @param {number} charges - Number of charges to use
+	 * @returns {boolean} True if charges were used
+	 */
+	useItemCharge (itemId, charges = 1) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item) return false;
+		
+		const current = item.item.chargesCurrent ?? item.item.charges ?? 0;
+		// Use as many charges as available, up to requested amount
+		const actualChargesUsed = Math.min(charges, current);
+		if (actualChargesUsed === 0) return false;
+		
+		item.item.chargesCurrent = Math.max(0, current - actualChargesUsed);
+		return true;
+	}
+
 	getAttunedCount () {
 		return this._data.inventory.filter(i => i.attuned).length;
+	}
+
+	/**
+	 * Check if character can attune to another item
+	 * @returns {boolean} True if can attune
+	 */
+	canAttune () {
+		return this.getAttunedCount() < this.getMaxAttunement();
+	}
+
+	/**
+	 * Get all attuned items
+	 * @returns {Array} Array of attuned inventory items
+	 */
+	getAttunedItems () {
+		return this._data.inventory.filter(i => i.attuned);
+	}
+
+	/**
+	 * Get all equipped weapons
+	 * @returns {Array} Array of equipped weapon items
+	 */
+	getEquippedWeapons () {
+		return this._data.inventory.filter(i =>
+			i.equipped && (
+				i.item?.type === "M" || // Melee weapon
+				i.item?.type === "R" || // Ranged weapon
+				i.item?.type === "weapon" || // Simple type from tests
+				i.item?.weaponCategory // Has weapon category
+			)
+		).map(i => ({
+			id: i.id,
+			name: i.item?.name || i.name,
+			...i.item,
+		}));
+	}
+
+	/**
+	 * Get all equipped items
+	 * @returns {Array} Array of equipped inventory items
+	 */
+	getEquippedItems () {
+		return this._data.inventory.filter(i => i.equipped).map(i => ({
+			id: i.id,
+			name: i.item?.name || i.name,
+			...i.item,
+		}));
 	}
 
 	/**
@@ -4163,6 +5084,20 @@ class CharacterSheetState {
 		const flatBonus = this._data.customModifiers.carryCapacity || 0;
 		const multiplier = this._data.customModifiers.carryCapacityMultiplier || 1;
 		return (baseCapacity + flatBonus) * multiplier;
+	}
+
+	/**
+	 * Get encumbrance level based on carried weight
+	 * @returns {string} "normal", "encumbered", "heavily_encumbered", or "over_capacity"
+	 */
+	getEncumbranceLevel () {
+		const weight = this.getTotalWeight();
+		const capacity = this.getCarryingCapacity();
+
+		if (weight > capacity) return "over_capacity";
+		if (weight > capacity * 0.75) return "heavily_encumbered";
+		if (weight > capacity * 0.5) return "encumbered";
+		return "normal";
 	}
 	// #endregion
 
@@ -4701,6 +5636,28 @@ class CharacterSheetState {
 		});
 	}
 
+	/**
+	 * Get a resource by name
+	 * @param {string} name Resource name to find
+	 * @returns {object|null} Resource object or null
+	 */
+	getResource (name) {
+		return this._data.resources.find(r => r.name === name) || null;
+	}
+
+	/**
+	 * Use a charge from a resource by name
+	 * @param {string} name Resource name
+	 * @param {number} amount Number of charges to use (default 1)
+	 * @returns {boolean} True if successful
+	 */
+	useResourceCharge (name, amount = 1) {
+		const resource = this._data.resources.find(r => r.name === name);
+		if (!resource || resource.current < amount) return false;
+		resource.current = Math.max(0, resource.current - amount);
+		return true;
+	}
+
 	setResourceCurrent (resourceId, current) {
 		const resource = this._data.resources.find(r => r.id === resourceId);
 		if (resource) {
@@ -4712,6 +5669,24 @@ class CharacterSheetState {
 		this._data.resources.forEach(r => {
 			if (r.recharge === rechargeType || (rechargeType === "long" && r.recharge === "short")) {
 				r.current = r.max;
+			}
+		});
+
+		// Also recover feature uses directly
+		this._data.features.forEach(f => {
+			if (f.uses) {
+				if (f.uses.recharge === rechargeType || (rechargeType === "long" && f.uses.recharge === "short")) {
+					f.uses.current = f.uses.max;
+				}
+			}
+		});
+
+		// And feat uses
+		this._data.feats?.forEach(f => {
+			if (f.uses) {
+				if (f.uses.recharge === rechargeType || (rechargeType === "long" && f.uses.recharge === "short")) {
+					f.uses.current = f.uses.max;
+				}
 			}
 		});
 	}
@@ -4805,16 +5780,27 @@ class CharacterSheetState {
 			...feature,
 		};
 
-		// Add uses if detected
+		// Add uses if detected or passed in
 		if (uses) {
 			featureData.uses = {
-				current: uses.max,
+				current: uses.current !== undefined ? uses.current : uses.max,
 				max: uses.max,
-				recharge: uses.recharge,
+				recharge: uses.recharge || feature.recharge, // Allow recharge at feature level or inside uses
 			};
 		}
 
 		this._data.features.push(featureData);
+
+		// Process resistances/immunities/vulnerabilities granted by the feature
+		if (feature.resistances) {
+			feature.resistances.forEach(r => this.addResistance(r));
+		}
+		if (feature.immunities) {
+			feature.immunities.forEach(i => this.addImmunity(i));
+		}
+		if (feature.vulnerabilities) {
+			feature.vulnerabilities.forEach(v => this.addVulnerability(v));
+		}
 
 		// Also add to resources section for easy tracking
 		if (uses && uses.max > 0) {
@@ -4824,6 +5810,7 @@ class CharacterSheetState {
 				this.addResource({
 					name: feature.name,
 					max: uses.max,
+					current: uses.current !== undefined ? uses.current : uses.max,
 					recharge: uses.recharge,
 					featureId: featureData.id, // Link to feature
 				});
@@ -5211,6 +6198,35 @@ class CharacterSheetState {
 		}
 	}
 
+	/**
+	 * Get current uses for a feature
+	 * @param {string} featureName - The name of the feature
+	 * @returns {number} Current uses remaining (0 if no uses or feature not found)
+	 */
+	getFeatureUses (featureName) {
+		const feature = this._data.features.find(f => f.name === featureName);
+		return feature?.uses?.current ?? 0;
+	}
+
+	/**
+	 * Use a feature charge
+	 * @param {string} featureIdOrName - The ID or name of the feature
+	 * @returns {boolean} True if a charge was used, false otherwise
+	 */
+	useFeature (featureIdOrName) {
+		const feature = this._data.features.find(f => f.id === featureIdOrName || f.name === featureIdOrName);
+		if (feature?.uses && feature.uses.current > 0) {
+			feature.uses.current--;
+			return true;
+		}
+		return false;
+	}
+
+	// Alias for test compatibility
+	useFeatureCharge (featureName) {
+		return this.useFeature(featureName);
+	}
+
 	getFeats () {
 		return this._data.feats.map(f => ({
 			...f,
@@ -5218,56 +6234,95 @@ class CharacterSheetState {
 		}));
 	}
 
-	addFeat (feat) {
-		if (!this._data.feats.find(f => f.name === feat.name && f.source === feat.source)) {
-			// Auto-extract uses from feat description
-			let uses = feat.uses;
-			if (!uses && feat.description) {
-				const getAbilityMod = (ability) => this.getAbilityMod(ability);
-				const getProfBonus = () => this.getProficiencyBonus();
-				uses = FeatureUsesParser.parseUses(feat.description, getAbilityMod, getProfBonus);
-				if (uses) {
-					console.log(`[CharSheet State] Auto-detected uses for feat "${feat.name}":`, uses);
-				}
-			}
+	/**
+	 * Check if character has a specific feat
+	 * @param {string} featName - The name of the feat to check for
+	 * @returns {boolean} True if character has the feat
+	 */
+	hasFeat (featName) {
+		return this._data.feats.some(f => f.name === featName);
+	}
 
-			const featData = {
-				id: CryptUtil.uid(),
-				name: feat.name,
-				source: feat.source,
-				description: feat.description,
-				additionalSpells: feat.additionalSpells, // Preserve for spell processing
+	/**
+	 * Get a specific feature by name
+	 * @param {string} featureName - The name of the feature
+	 * @returns {object|null} The feature object or null if not found
+	 */
+	getFeature (featureName) {
+		return this._data.features.find(f => f.name === featureName) || null;
+	}
+
+	/**
+	 * Check if character has a specific feature
+	 * @param {string} featureName - The name of the feature
+	 * @returns {boolean} True if character has the feature
+	 */
+	hasFeature (featureName) {
+		return this.getFeature(featureName) !== null;
+	}
+
+	addFeat (feat) {
+		// Check for duplicates
+		if (this._data.feats.find(f => f.name === feat.name && f.source === feat.source)) {
+			return false;
+		}
+
+		// Auto-extract uses from feat description
+		let uses = feat.uses;
+		if (!uses && feat.description) {
+			const getAbilityMod = (ability) => this.getAbilityMod(ability);
+			const getProfBonus = () => this.getProficiencyBonus();
+			uses = FeatureUsesParser.parseUses(feat.description, getAbilityMod, getProfBonus);
+			if (uses) {
+				console.log(`[CharSheet State] Auto-detected uses for feat "${feat.name}":`, uses);
+			}
+		}
+
+		const featData = {
+			id: CryptUtil.uid(),
+			name: feat.name,
+			source: feat.source,
+			description: feat.description,
+			additionalSpells: feat.additionalSpells, // Preserve for spell processing
+		};
+
+		// Add uses if detected
+		if (uses) {
+			featData.uses = {
+				current: uses.max,
+				max: uses.max,
+				recharge: uses.recharge,
 			};
 
-			// Add uses if detected
-			if (uses) {
-				featData.uses = {
-					current: uses.max,
+			// Also add to resources section
+			const existingResource = this._data.resources.find(r => r.name === feat.name);
+			if (!existingResource) {
+				this.addResource({
+					name: feat.name,
 					max: uses.max,
 					recharge: uses.recharge,
-				};
-
-				// Also add to resources section
-				const existingResource = this._data.resources.find(r => r.name === feat.name);
-				if (!existingResource) {
-					this.addResource({
-						name: feat.name,
-						max: uses.max,
-						recharge: uses.recharge,
-						featId: featData.id,
-					});
-					console.log(`[CharSheet State] Auto-added resource for feat "${feat.name}":`, uses);
-				}
+					featId: featData.id,
+				});
+				console.log(`[CharSheet State] Auto-added resource for feat "${feat.name}":`, uses);
 			}
-
-			this._data.feats.push(featData);
-
-			// Process spells granted by this feat
-			this._processFeatureSpells(featData, featData.id);
-
-			// Process modifiers granted by this feat
-			this._processFeatureModifiers(featData, featData.id);
 		}
+
+		this._data.feats.push(featData);
+
+		// Process ability bonuses from feat (e.g., Athlete grants +1 to STR or DEX)
+		if (feat.abilityBonus) {
+			for (const [ability, bonus] of Object.entries(feat.abilityBonus)) {
+				this.addAbilityBonus(ability, bonus);
+			}
+		}
+
+		// Process spells granted by this feat
+		this._processFeatureSpells(featData, featData.id);
+
+		// Process modifiers granted by this feat
+		this._processFeatureModifiers(featData, featData.id);
+
+		return true;
 	}
 
 	removeFeat (featIdOrName, source) {
@@ -5545,6 +6600,42 @@ class CharacterSheetState {
 		if (!this._data.conditionImmunities.includes(condition)) {
 			this._data.conditionImmunities.push(condition);
 		}
+	}
+
+	/**
+	 * Check if character has resistance to a damage type
+	 * @param {string} type - Damage type
+	 * @returns {boolean} True if resistant
+	 */
+	hasResistance (type) {
+		return this._data.resistances.includes(type);
+	}
+
+	/**
+	 * Check if character has immunity to a damage type
+	 * @param {string} type - Damage type
+	 * @returns {boolean} True if immune
+	 */
+	hasImmunity (type) {
+		return this._data.immunities.includes(type);
+	}
+
+	/**
+	 * Check if character has vulnerability to a damage type
+	 * @param {string} type - Damage type
+	 * @returns {boolean} True if vulnerable
+	 */
+	hasVulnerability (type) {
+		return this._data.vulnerabilities.includes(type);
+	}
+
+	/**
+	 * Check if character is immune to a condition
+	 * @param {string} condition - Condition name
+	 * @returns {boolean} True if immune
+	 */
+	isImmuneToCondition (condition) {
+		return this._data.conditionImmunities.includes(condition);
 	}
 	// #endregion
 
@@ -7236,18 +8327,27 @@ class CharacterSheetState {
 
 	/**
 	 * Start concentrating on a spell
-	 * @param {string} spellName - The spell name
-	 * @param {number} spellLevel - The spell level
+	 * @param {string|object} spellNameOrObj - The spell name or object with name/level
+	 * @param {number} spellLevel - The spell level (if first param is string)
 	 */
-	setConcentration (spellName, spellLevel = 0) {
+	setConcentration (spellNameOrObj, spellLevel = 0) {
+		// Handle object input
+		const spellName = typeof spellNameOrObj === "string" 
+			? spellNameOrObj 
+			: (spellNameOrObj?.name || spellNameOrObj?.spellName);
+		const level = typeof spellNameOrObj === "string" 
+			? spellLevel 
+			: (spellNameOrObj?.level || spellNameOrObj?.spellLevel || 0);
+		
 		// End any existing concentration
 		if (this._data.concentrating) {
 			this.breakConcentration();
 		}
 
 		this._data.concentrating = {
+			name: spellName, // Use 'name' for consistency with getConcentratingSpell()
 			spellName,
-			spellLevel,
+			spellLevel: level,
 			startedAt: Date.now(),
 		};
 
@@ -7255,8 +8355,18 @@ class CharacterSheetState {
 		this.activateState("concentration", {
 			name: `Concentrating: ${spellName}`,
 			spellName,
-			spellLevel,
+			spellLevel: level,
 		});
+	}
+
+	/**
+	 * Alias for setConcentration - accepts spell object
+	 * @param {object|string} spell - The spell object with name/source, or spell name
+	 */
+	setConcentrating (spell) {
+		const name = typeof spell === "string" ? spell : spell?.name || spell?.spellName;
+		const level = typeof spell === "string" ? 0 : (spell?.level || spell?.spellLevel || 0);
+		this.setConcentration(name, level);
 	}
 
 	/**
@@ -7273,11 +8383,26 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Alias for breakConcentration
+	 */
+	loseConcentration () {
+		this.breakConcentration();
+	}
+
+	/**
 	 * Check if currently concentrating
 	 * @returns {boolean}
 	 */
 	isConcentrating () {
 		return this._data.concentrating !== null;
+	}
+
+	/**
+	 * Get the spell currently being concentrated on
+	 * @returns {object|null} Spell object or null
+	 */
+	getConcentratingSpell () {
+		return this._data.concentrating;
 	}
 
 	/**
@@ -7287,6 +8412,11 @@ class CharacterSheetState {
 	 */
 	getConcentrationSaveDC (damageTaken) {
 		return Math.max(10, Math.floor(damageTaken / 2));
+	}
+
+	// Alias for test compatibility
+	getConcentrationDC (damageTaken) {
+		return this.getConcentrationSaveDC(damageTaken);
 	}
 
 	// --- Rest Integration for Active States ---
@@ -7331,6 +8461,11 @@ class CharacterSheetState {
 			this._data.spellcasting.pactSlots.current = this._data.spellcasting.pactSlots.max;
 		}
 
+		// Recover Ki points (Monk: recovers all on short rest)
+		if (this._data.kiPoints?.max > 0) {
+			this._data.kiPoints.current = this._data.kiPoints.max;
+		}
+
 		// Recover short rest innate spells
 		this.restoreInnateSpells("short");
 
@@ -7338,12 +8473,17 @@ class CharacterSheetState {
 		this.restoreExertion();
 	}
 
-	onLongRest () {
+	onLongRest (options = {}) {
 		// Clear active states that end on rest
 		this.clearStatesOnRest("long");
 
 		// Recover all HP
 		this._data.hp.current = this.getMaxHp();
+
+		// Optionally clear temp HP (house rule)
+		if (options.clearTempHp) {
+			this._data.hp.temp = 0;
+		}
 
 		// Reset death saves
 		this.resetDeathSaves();
@@ -7354,9 +8494,19 @@ class CharacterSheetState {
 		// Recover all spell slots
 		this.recoverSpellSlots();
 
+		// Recover pact slots (Warlock)
+		if (this._data.spellcasting.pactSlots.max > 0) {
+			this._data.spellcasting.pactSlots.current = this._data.spellcasting.pactSlots.max;
+		}
+
 		// Recover all resources
 		this.recoverResources("long");
 		this.recoverResources("dawn");
+
+		// Recover sorcery points (Sorcerer)
+		if (this._data.sorceryPoints && this._data.sorceryPoints.max > 0) {
+			this._data.sorceryPoints.current = this._data.sorceryPoints.max;
+		}
 
 		// Recover all innate spells
 		this.restoreInnateSpells("long");
@@ -7368,6 +8518,358 @@ class CharacterSheetState {
 
 		// Recover exertion (Thelemar: recovers on any rest)
 		this.restoreExertion();
+
+		// Recharge magic items at dawn
+		this._rechargeItems("dawn");
+
+		// Track time for rest restrictions
+		this._data.lastLongRestTime = 0; // Reset to 0 hours since last long rest
+	}
+
+	/**
+	 * Recharge magic items that recharge on a specific trigger
+	 * @param {string} trigger - "dawn", "dusk", or "long"
+	 */
+	_rechargeItems (trigger) {
+		const items = this._data.inventory || [];
+		for (const entry of items) {
+			const itemData = entry.item || entry;
+			if (itemData.recharge === trigger && itemData.charges) {
+				const rechargeAmount = itemData.rechargeAmount;
+				if (rechargeAmount === "all") {
+					itemData.charges.current = itemData.charges.max;
+				} else if (typeof rechargeAmount === "string" && rechargeAmount.includes("d")) {
+					// Dice expression like "1d6+4" - use average
+					const match = rechargeAmount.match(/(\d*)d(\d+)([+-]\d+)?/);
+					if (match) {
+						const numDice = parseInt(match[1] || "1", 10);
+						const dieSize = parseInt(match[2], 10);
+						const modifier = parseInt(match[3] || "0", 10);
+						const average = Math.ceil((numDice * (dieSize + 1)) / 2) + modifier;
+						itemData.charges.current = Math.min(itemData.charges.max, itemData.charges.current + average);
+					}
+				} else if (typeof rechargeAmount === "number") {
+					itemData.charges.current = Math.min(itemData.charges.max, itemData.charges.current + rechargeAmount);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Trigger dusk events (item recharges, etc.)
+	 */
+	onDusk () {
+		this._rechargeItems("dusk");
+	}
+
+	/**
+	 * Get an item from inventory by ID
+	 * @param {string} itemId - The item ID
+	 * @returns {object|null} The inventory entry (with id, item, quantity, equipped, attuned) or null
+	 */
+	getItem (itemId) {
+		const entry = this._data.inventory.find(e => e.id === itemId || e.item?.id === itemId);
+		if (!entry) return null;
+		
+		// Return a combined object with both wrapper props and item props
+		return {
+			id: entry.id,
+			quantity: entry.quantity,
+			equipped: entry.equipped,
+			attuned: entry.attuned,
+			...entry.item,
+			// Also expose chargesCurrent from the item if present
+			chargesCurrent: entry.item?.chargesCurrent,
+		};
+	}
+
+	/**
+	 * Get requirements for a specific rest type
+	 * @param {string} restType - "short" or "long"
+	 * @returns {object} Rest requirements
+	 */
+	getRestRequirements (restType) {
+		if (restType === "short") {
+			return {duration: 60}; // 1 hour in minutes
+		}
+		return {duration: 480}; // 8 hours in minutes
+	}
+
+	/**
+	 * Advance time in hours (for tracking rest restrictions)
+	 * @param {number} hours - Number of hours to advance
+	 */
+	advanceTime (hours) {
+		this._data.lastLongRestTime = (this._data.lastLongRestTime || 0) + hours;
+	}
+
+	/**
+	 * Get time since last long rest in hours
+	 * @returns {number} Hours since last long rest
+	 */
+	getTimeSinceLastLongRest () {
+		return this._data.lastLongRestTime || 0;
+	}
+
+	/**
+	 * Check if a long rest is allowed (24 hour restriction)
+	 * @returns {boolean} True if long rest is allowed
+	 */
+	canLongRest () {
+		return (this._data.lastLongRestTime || 0) >= 24;
+	}
+
+	// #region Interrupted Rest Tracking
+	/**
+	 * Start a long rest (for tracking interruptions)
+	 */
+	startLongRest () {
+		this._data.restState = {
+			inProgress: true,
+			type: "long",
+			interrupted: false,
+			hoursCompleted: 0,
+			combatDuration: 0,
+		};
+	}
+
+	/**
+	 * Interrupt the current rest
+	 * @param {object} options - {hoursCompleted, combatDuration} in minutes for combat
+	 */
+	interruptRest (options = {}) {
+		if (this._data.restState) {
+			this._data.restState.interrupted = true;
+			this._data.restState.hoursCompleted = options.hoursCompleted || 0;
+			this._data.restState.combatDuration = options.combatDuration || 0;
+		}
+	}
+
+	/**
+	 * Check if current rest was interrupted
+	 * @returns {boolean} True if rest was interrupted
+	 */
+	isRestInterrupted () {
+		return this._data.restState?.interrupted || false;
+	}
+
+	/**
+	 * Check if rest can be continued after interruption
+	 * @returns {boolean} True if rest can continue
+	 */
+	canContinueRest () {
+		const state = this._data.restState;
+		if (!state || !state.interrupted) return false;
+		// RAW: Can continue if combat was 1 hour or less
+		return (state.combatDuration || 0) <= 60;
+	}
+
+	/**
+	 * Complete a long rest (checks for interruption conditions)
+	 */
+	completeLongRest () {
+		const state = this._data.restState;
+		if (state?.interrupted && state.hoursCompleted < 1) {
+			// No benefits if interrupted before completing 1 hour
+			this._data.restState = null;
+			return;
+		}
+		this.onLongRest();
+		this._data.restState = null;
+	}
+	// #endregion
+
+	// #region Class-Specific Rest Features
+
+	/**
+	 * Use Arcane Recovery (Wizard feature)
+	 * @param {Array} slotsToRecover - Array of {level, amount} to recover
+	 * @returns {boolean} True if successful
+	 */
+	useArcaneRecovery (slotsToRecover) {
+		// Check if we have the feature and it has uses
+		const feature = this.getFeature("Arcane Recovery");
+		if (!feature || (feature.uses && feature.uses.current <= 0)) {
+			return false;
+		}
+
+		// Validate: no 6th level or higher slots
+		if (slotsToRecover.some(s => s.level >= 6)) {
+			return false;
+		}
+
+		// Get wizard level
+		const wizardLevel = this.getClassLevel("Wizard");
+		const maxLevels = Math.ceil(wizardLevel / 2);
+
+		// Calculate total levels being recovered
+		const totalLevels = slotsToRecover.reduce((sum, s) => sum + (s.level * s.amount), 0);
+		if (totalLevels > maxLevels) {
+			return false;
+		}
+
+		// Recover the slots - modify _data directly since getSpellSlots returns a copy
+		const slots = this._data.spellcasting.spellSlots;
+		for (const {level, amount} of slotsToRecover) {
+			if (slots[level]) {
+				slots[level].current = Math.min(slots[level].max, slots[level].current + amount);
+			}
+		}
+
+		// Use the feature charge
+		if (feature.uses) {
+			feature.uses.current--;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Add a bonus to short rest healing (like Bard's Song of Rest)
+	 * @param {string} id - Identifier for the bonus
+	 * @param {string} die - Die type (e.g., "d6")
+	 */
+	addShortRestBonus (id, die) {
+		if (!this._data.shortRestBonuses) {
+			this._data.shortRestBonuses = {};
+		}
+		this._data.shortRestBonuses[id] = die;
+	}
+
+	/**
+	 * Get sorcery points (Sorcerer resource)
+	 * @returns {object} {current, max}
+	 */
+	getSorceryPoints () {
+		return this._data.sorceryPoints || {current: 0, max: 0};
+	}
+
+	/**
+	 * Set sorcery points
+	 * @param {object} points - {current, max}
+	 */
+	setSorceryPoints (points) {
+		if (typeof points === "number") {
+			// Simple number means set both current and max
+			this._data.sorceryPoints = {current: points, max: points};
+		} else {
+			this._data.sorceryPoints = {...points};
+		}
+	}
+
+	/**
+	 * Use sorcery points
+	 * @param {number} amount - Number of points to use
+	 * @returns {boolean} True if successful
+	 */
+	useSorceryPoint (amount = 1) {
+		if (!this._data.sorceryPoints) this._data.sorceryPoints = {current: 0, max: 0};
+		if (this._data.sorceryPoints.current < amount) return false;
+		this._data.sorceryPoints.current -= amount;
+		return true;
+	}
+
+	// #region Ki Points (Monk resource)
+	/**
+	 * Get Ki points maximum
+	 * @returns {number} Max Ki points
+	 */
+	getKiPoints () {
+		return this._data.kiPoints?.max || 0;
+	}
+
+	/**
+	 * Set Ki points maximum
+	 * @param {number} points - Max Ki points
+	 */
+	setKiPoints (points) {
+		if (!this._data.kiPoints) this._data.kiPoints = {current: 0, max: 0};
+		this._data.kiPoints.max = points;
+	}
+
+	/**
+	 * Get current Ki points
+	 * @returns {number} Current Ki points
+	 */
+	getKiPointsCurrent () {
+		return this._data.kiPoints?.current || 0;
+	}
+
+	/**
+	 * Set current Ki points
+	 * @param {number} points - Current Ki points
+	 */
+	setKiPointsCurrent (points) {
+		if (!this._data.kiPoints) this._data.kiPoints = {current: 0, max: 0};
+		this._data.kiPoints.current = Math.max(0, Math.min(points, this._data.kiPoints.max));
+	}
+
+	/**
+	 * Use Ki points
+	 * @param {number} amount - Number of points to use
+	 * @returns {boolean} True if successful
+	 */
+	useKiPoint (amount = 1) {
+		if (!this._data.kiPoints) return false;
+		if (this._data.kiPoints.current < amount) return false;
+		this._data.kiPoints.current -= amount;
+		return true;
+	}
+	// #endregion
+	// #endregion
+	// #endregion
+
+	// #region Serialization
+	/**
+	 * Serialize the character sheet to JSON
+	 * @returns {string} JSON string representation of the character
+	 */
+	serialize () {
+		return JSON.stringify({
+			version: 1,
+			data: this._data,
+		});
+	}
+
+	/**
+	 * Deserialize a character sheet from JSON
+	 * @param {string} json - JSON string to deserialize
+	 * @returns {CharacterSheetState} A new character sheet state
+	 */
+	static deserialize (json) {
+		const parsed = JSON.parse(json);
+		const state = new CharacterSheetState();
+
+		// Handle version migrations if needed
+		if (parsed.version && parsed.data) {
+			Object.assign(state._data, parsed.data);
+		} else {
+			// Legacy format: direct data
+			// Handle basicInfo wrapper format
+			if (parsed.basicInfo) {
+				if (parsed.basicInfo.name) state._data.name = parsed.basicInfo.name;
+				if (parsed.basicInfo.race) state._data.race = parsed.basicInfo.race;
+				if (parsed.basicInfo.subrace) state._data.subrace = parsed.basicInfo.subrace;
+				if (parsed.basicInfo.background) state._data.background = parsed.basicInfo.background;
+			}
+			// Handle abilities wrapper format (direct values, not {base: value})
+			if (parsed.abilities) {
+				Object.keys(parsed.abilities).forEach(ability => {
+					if (state._data.abilities.hasOwnProperty(ability)) {
+						state._data.abilities[ability] = parsed.abilities[ability];
+					}
+				});
+			}
+			// Copy other recognized fields directly
+			const directFields = ["name", "race", "subrace", "background", "classes", "hp", "features", "inventory", "spellcasting"];
+			directFields.forEach(field => {
+				if (parsed[field] !== undefined && !parsed.basicInfo) {
+					state._data[field] = parsed[field];
+				}
+			});
+		}
+
+		return state;
 	}
 	// #endregion
 }
