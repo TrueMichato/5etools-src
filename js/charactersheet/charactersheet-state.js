@@ -4457,7 +4457,13 @@ class CharacterSheetState {
 		const existing = this._data.spellcasting.cantripsKnown.find(
 			s => s.name === spell.name && s.source === spell.source,
 		);
-		if (!existing) {
+		if (existing) {
+			// If we're adding a cantrip from a feature (free), update the existing entry
+			// so it doesn't count against limit
+			if (spell.sourceFeature && !existing.sourceFeature) {
+				existing.sourceFeature = spell.sourceFeature;
+			}
+		} else {
 			this._data.spellcasting.cantripsKnown.push({
 				id: CryptUtil.uid(),
 				name: spell.name,
@@ -4468,6 +4474,7 @@ class CharacterSheetState {
 				duration: spell.duration || "",
 				concentration: spell.concentration || false,
 				components: spell.components || "",
+				sourceFeature: spell.sourceFeature || null,
 			});
 		}
 	}
@@ -6162,6 +6169,7 @@ class CharacterSheetState {
 					source: spell.source,
 					level: spell.level || 1,
 					prepared: spell.prepared,
+					sourceFeature: feature.name,
 				});
 			}
 		});
