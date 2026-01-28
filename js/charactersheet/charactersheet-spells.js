@@ -220,6 +220,29 @@ class CharacterSheetSpells {
 			isWidth100: true,
 		});
 
+		// Cantrip count status bar
+		const $cantripStatus = $(`<div class="charsheet__modal-status-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: rgba(var(--rgb-bg-text), 0.05); border-radius: 4px; margin-bottom: 10px; font-size: 0.9em;"></div>`).appendTo($modalInner);
+
+		const updateCantripStatus = () => {
+			const info = this._state.getSpellcastingInfo();
+			if (!info || !info.cantripsKnown) {
+				$cantripStatus.hide();
+				return;
+			}
+
+			const allCantrips = this._state.getCantripsKnown();
+			const count = allCantrips.filter(c => !c.sourceFeature).length;
+			const limit = info.cantripsKnown;
+			const colorClass = count > limit ? "text-danger" : (count === limit ? "text-success" : "");
+			const icon = count > limit ? `<span class="glyphicon glyphicon-alert"></span> ` : "";
+
+			$cantripStatus.html(`
+				<span class="bold">Cantrips Known</span>
+				<span class="bold ${colorClass}">${icon}${count} / ${limit}</span>
+			`).show();
+		};
+		updateCantripStatus();
+
 		// All available schools
 		const schools = [...new Set(spells.map(s => s.school).filter(Boolean))].sort();
 
@@ -1024,6 +1047,7 @@ class CharacterSheetSpells {
 							$item.addClass("ve-muted");
 							$item.find(".spell-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`);
 							JqueryUtil.doToast({type: "success", content: `Added ${spell.name} to your spellbook!`});
+							updateCantripStatus();
 						});
 
 						// Click row to show info
@@ -1689,6 +1713,19 @@ class CharacterSheetSpells {
 				grouped[spell.level].spells.push(spell);
 			}
 		});
+
+		// Update Cantrips header with count
+		const spellcastingInfo = this._state.getSpellcastingInfo();
+		if (spellcastingInfo && spellcastingInfo.cantripsKnown > 0) {
+			const allCantrips = this._state.getCantripsKnown();
+			const count = allCantrips.filter(c => !c.sourceFeature).length;
+			const limit = spellcastingInfo.cantripsKnown;
+			const colorClass = count > limit ? "text-danger" : (count === limit ? "text-success" : "");
+			grouped[0].name = `Cantrips <span class="ve-small ve-muted">(${count}/${limit})</span>`;
+			if (count > limit) {
+				grouped[0].name = `Cantrips <span class="ve-small ${colorClass}" title="You have more cantrips than your class level allows">(${count}/${limit}) <span class="glyphicon glyphicon-alert"></span></span>`;
+			}
+		}
 
 		// Render each group
 		Object.entries(grouped).forEach(([level, group]) => {
