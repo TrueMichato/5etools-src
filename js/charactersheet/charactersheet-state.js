@@ -3981,18 +3981,30 @@ class CharacterSheetState {
 
 		if (spellcastingByClass.length === 0) return null;
 
-		// If single class, return simple format for backwards compatibility
+		// If single class, return detailed format (enhanced from simple)
 		if (spellcastingByClass.length === 1) {
+			const info = spellcastingByClass[0];
 			return {
-				type: spellcastingByClass[0].type,
-				max: spellcastingByClass[0].max,
-				cantripsKnown: spellcastingByClass[0].cantripsKnown || 0,
+				type: info.type,
+				max: info.max,
+				cantripsKnown: info.cantripsKnown || 0,
+				spellsKnownMax: info.spellsKnownMax || (info.type === "known" ? info.max : null),
+				preparedMax: info.preparedMax || (info.type === "prepared" ? info.max : null),
+				hasFullAccess: info.hasFullAccess,
+				is2024: info.is2024,
+				isMulticlass: false,
+				byClass: spellcastingByClass,
 			};
 		}
 
-		// Multiclass: return aggregated info
+		// Multiclass: return aggregated info with per-class breakdown
 		// Each class's spells are tracked separately
-		// Total is sum of all known/prepared from each class
+		const totalSpellsKnown = spellcastingByClass
+			.filter(c => c.type === "known")
+			.reduce((sum, c) => sum + (c.spellsKnownMax || c.max || 0), 0);
+		const totalPreparedMax = spellcastingByClass
+			.filter(c => c.type === "prepared")
+			.reduce((sum, c) => sum + (c.preparedMax || c.max || 0), 0);
 		const totalMax = spellcastingByClass.reduce((sum, c) => sum + (c.max || 0), 0);
 		const hasKnown = spellcastingByClass.some(c => c.type === "known");
 		const hasPrepared = spellcastingByClass.some(c => c.type === "prepared");
@@ -4001,6 +4013,8 @@ class CharacterSheetState {
 			type: hasKnown && hasPrepared ? "mixed" : (hasKnown ? "known" : "prepared"),
 			max: totalMax,
 			cantripsKnown: totalCantripsKnown,
+			spellsKnownMax: totalSpellsKnown || null,
+			preparedMax: totalPreparedMax || null,
 			isMulticlass: true,
 			byClass: spellcastingByClass,
 		};
@@ -4009,13 +4023,15 @@ class CharacterSheetState {
 	/**
 	 * Get spellcasting info for a single class
 	 * @param {Object} cls - Class entry with name, level, subclass, _classData
-	 * @returns {{type: string, max: number, cantripsKnown: number}|null}
+	 * @returns {{type: string, max: number, cantripsKnown: number, spellsKnownMax?: number, preparedMax?: number, hasFullAccess?: boolean}|null}
 	 */
 	_getClassSpellcastingInfo (cls) {
 		const className = cls.name;
 		const level = cls.level || 1;
 		const levelIndex = Math.min(level, 20) - 1;
 		const classData = cls._classData;
+		const source = cls.source || "PHB";
+		const is2024 = source === "XPHB" || source === "xphb";
 
 		// Try to get progression from class data first (supports 2024 and homebrew)
 		if (classData) {
@@ -4027,15 +4043,21 @@ class CharacterSheetState {
 					type: "prepared",
 					max: classData.preparedSpellsProgression[levelIndex] || 0,
 					cantripsKnown,
+					preparedMax: classData.preparedSpellsProgression[levelIndex] || 0,
+					hasFullAccess: true, // 2024 prepared casters can prepare from full class list
+					is2024: true,
 				};
 			}
 
-			// 2014 rules use spellsKnownProgression for some casters
+			// 2014 rules use spellsKnownProgression for some casters (Bard, Sorcerer, Warlock, Ranger)
 			if (classData.spellsKnownProgression) {
 				return {
 					type: "known",
 					max: classData.spellsKnownProgression[levelIndex] || 0,
 					cantripsKnown,
+					spellsKnownMax: classData.spellsKnownProgression[levelIndex] || 0,
+					hasFullAccess: false, // Known casters can only cast what they know
+					is2024: false,
 				};
 			}
 
@@ -4055,6 +4077,9 @@ class CharacterSheetState {
 					type: "prepared",
 					max: preparedCount,
 					cantripsKnown,
+					preparedMax: preparedCount,
+					hasFullAccess: true, // 2014 prepared casters can prepare from full class list
+					is2024,
 				};
 			}
 		}
@@ -4085,6 +4110,9 @@ class CharacterSheetState {
 				type: "known",
 				max: spellsKnownTables[className][levelIndex],
 				cantripsKnown,
+				spellsKnownMax: spellsKnownTables[className][levelIndex],
+				hasFullAccess: false, // Known casters can only cast what they know
+				is2024: false,
 			};
 		}
 
@@ -4113,6 +4141,9 @@ class CharacterSheetState {
 				type: "prepared",
 				max: preparedCount,
 				cantripsKnown,
+				preparedMax: preparedCount,
+				hasFullAccess: true, // 2014 prepared casters can prepare from full class list
+				is2024: false,
 			};
 		}
 
@@ -4120,10 +4151,14 @@ class CharacterSheetState {
 		const subclassName = cls.subclass?.name;
 		if (subclassName === "Eldritch Knight" || subclassName === "Arcane Trickster") {
 			const ekAtSpellsKnown = [0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13];
+			const knownMax = ekAtSpellsKnown[levelIndex];
 			return {
 				type: "known",
-				max: ekAtSpellsKnown[levelIndex],
+				max: knownMax,
 				cantripsKnown: level >= 3 ? (level >= 10 ? 3 : 2) : 0,
+				spellsKnownMax: knownMax,
+				hasFullAccess: false, // Known casters can only cast what they know
+				is2024: false,
 			};
 		}
 
@@ -4433,7 +4468,17 @@ class CharacterSheetState {
 		const existing = this._data.spellcasting.spellsKnown.find(
 			s => s.name === spell.name && s.source === spell.source,
 		);
-		if (!existing) {
+		if (existing) {
+			// If we're adding from a feature (free), update the existing entry
+			// so it doesn't count against limit
+			if (spell.sourceFeature && !existing.sourceFeature) {
+				existing.sourceFeature = spell.sourceFeature;
+			}
+			if (spell.alwaysPrepared && !existing.alwaysPrepared) {
+				existing.alwaysPrepared = true;
+				existing.prepared = true;
+			}
+		} else {
 			this._data.spellcasting.spellsKnown.push({
 				id: CryptUtil.uid(),
 				name: spell.name,
@@ -4449,6 +4494,7 @@ class CharacterSheetState {
 				range: spell.range || "",
 				duration: spell.duration || "",
 				components: spell.components || "",
+				sourceFeature: spell.sourceFeature || null,
 			});
 		}
 	}

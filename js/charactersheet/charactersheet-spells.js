@@ -220,28 +220,76 @@ class CharacterSheetSpells {
 			isWidth100: true,
 		});
 
-		// Cantrip count status bar
-		const $cantripStatus = $(`<div class="charsheet__modal-status-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: rgba(var(--rgb-bg-text), 0.05); border-radius: 4px; margin-bottom: 10px; font-size: 0.9em;"></div>`).appendTo($modalInner);
+		// Spell tracking status bar - shows cantrips and spells known/prepared
+		const $statusBar = $(`<div class="charsheet__modal-status-bar" style="display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 12px; background: rgba(var(--rgb-bg-text), 0.05); border-radius: 6px; margin-bottom: 12px; font-size: 0.85em;"></div>`).appendTo($modalInner);
 
-		const updateCantripStatus = () => {
+		const updateStatusBar = () => {
 			const info = this._state.getSpellcastingInfo();
-			if (!info || !info.cantripsKnown) {
-				$cantripStatus.hide();
+			if (!info) {
+				$statusBar.hide();
 				return;
 			}
 
-			const allCantrips = this._state.getCantripsKnown();
-			const count = allCantrips.filter(c => !c.sourceFeature).length;
-			const limit = info.cantripsKnown;
-			const colorClass = count > limit ? "text-danger" : (count === limit ? "text-success" : "");
-			const icon = count > limit ? `<span class="glyphicon glyphicon-alert"></span> ` : "";
+			$statusBar.empty();
 
-			$cantripStatus.html(`
-				<span class="bold">Cantrips Known</span>
-				<span class="bold ${colorClass}">${icon}${count} / ${limit}</span>
-			`).show();
+			// Cantrips
+			if (info.cantripsKnown) {
+				const allCantrips = this._state.getCantripsKnown();
+				const count = allCantrips.filter(c => !c.sourceFeature).length;
+				const limit = info.cantripsKnown;
+				const colorClass = count > limit ? "text-danger" : (count === limit ? "text-success" : "");
+				const icon = count > limit ? `<span class="glyphicon glyphicon-alert mr-1"></span>` : "⭐ ";
+
+				$statusBar.append(`
+					<div style="display: flex; align-items: center; gap: 6px;">
+						<span style="color: #2dd4bf;">${icon}Cantrips:</span>
+						<span class="bold ${colorClass}">${count}/${limit}</span>
+					</div>
+				`);
+			}
+
+			// Leveled spells
+			const spells = this._state.getSpells();
+			const leveledSpells = spells.filter(s => s.level > 0);
+			const preparedSpells = leveledSpells.filter(s => s.prepared || s.alwaysPrepared);
+			// Count spells that aren't from features (manual selections)
+			const manualLeveledSpells = leveledSpells.filter(s => !s.sourceFeature);
+
+			// For multiclass with per-class breakdown, show each class separately
+			if (info.isMulticlass && info.byClass?.length > 1) {
+				this._renderMulticlassStatusBar($statusBar, info, manualLeveledSpells, preparedSpells);
+			} else if (info.type === "known") {
+				const currentKnown = manualLeveledSpells.length;
+				const maxKnown = info.spellsKnownMax || info.max;
+				const colorClass = currentKnown > maxKnown ? "text-danger" : (currentKnown === maxKnown ? "text-success" : "");
+				const icon = currentKnown > maxKnown ? `<span class="glyphicon glyphicon-alert mr-1"></span>` : "📖 ";
+
+				$statusBar.append(`
+					<div style="display: flex; align-items: center; gap: 6px;">
+						<span style="color: #60a5fa;">${icon}Spells Known:</span>
+						<span class="bold ${colorClass}">${currentKnown}/${maxKnown}</span>
+						<span class="ve-muted ve-small" title="Known spells are permanent choices. You can swap one spell when you level up.">(permanent)</span>
+					</div>
+				`);
+			} else if (info.type === "prepared") {
+				const currentPrepared = preparedSpells.length;
+				const maxPrepared = info.preparedMax || info.max;
+				const colorClass = currentPrepared > maxPrepared ? "text-danger" : (currentPrepared === maxPrepared ? "text-success" : "");
+				const icon = currentPrepared > maxPrepared ? `<span class="glyphicon glyphicon-alert mr-1"></span>` : (info.is2024 ? "✨ " : "📚 ");
+				const editionLabel = info.is2024 ? "2024" : "2014";
+
+				$statusBar.append(`
+					<div style="display: flex; align-items: center; gap: 6px;">
+						<span style="color: ${info.is2024 ? "#fbbf24" : "#a78bfa"};">${icon}Prepared:</span>
+						<span class="bold ${colorClass}">${currentPrepared}/${maxPrepared}</span>
+						<span class="ve-muted ve-small" title="Prepared spells can be changed after a long rest.">(${editionLabel} rules)</span>
+					</div>
+				`);
+			}
+
+			$statusBar.show();
 		};
-		updateCantripStatus();
+		updateStatusBar();
 
 		// All available schools
 		const schools = [...new Set(spells.map(s => s.school).filter(Boolean))].sort();
@@ -1047,7 +1095,7 @@ class CharacterSheetSpells {
 							$item.addClass("ve-muted");
 							$item.find(".spell-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`);
 							JqueryUtil.doToast({type: "success", content: `Added ${spell.name} to your spellbook!`});
-							updateCantripStatus();
+							updateStatusBar();
 						});
 
 						// Click row to show info
@@ -1151,8 +1199,72 @@ class CharacterSheetSpells {
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
 	}
 
+	/**
+	 * Check if adding a spell would exceed limits for known casters
+	 * @returns {{canAdd: boolean, warning?: string}}
+	 */
+	_checkSpellLimits (spell) {
+		const info = this._state.getSpellcastingInfo();
+		if (!info) return {canAdd: true};
+
+		const isCantrip = spell.level === 0;
+
+		// Check cantrip limits
+		if (isCantrip && info.cantripsKnown) {
+			const allCantrips = this._state.getCantripsKnown();
+			const currentCount = allCantrips.filter(c => !c.sourceFeature).length;
+			if (currentCount >= info.cantripsKnown) {
+				return {
+					canAdd: true, // Still allow, but warn
+					warning: `You already have ${currentCount}/${info.cantripsKnown} cantrips. Adding more exceeds your class limit.`,
+				};
+			}
+		}
+
+		// Check spells known limits for known casters
+		if (!isCantrip && info.type === "known") {
+			const spells = this._state.getSpells();
+			const leveledSpells = spells.filter(s => s.level > 0 && !s.sourceFeature);
+			const maxKnown = info.spellsKnownMax || info.max;
+			if (leveledSpells.length >= maxKnown) {
+				return {
+					canAdd: true, // Still allow, but warn
+					warning: `You already have ${leveledSpells.length}/${maxKnown} spells known. Adding more exceeds your class limit. Consider removing a spell first.`,
+					isOverLimit: true,
+				};
+			}
+		}
+
+		// For multiclass with known casters, check combined limit
+		if (!isCantrip && info.isMulticlass && info.byClass?.some(c => c.type === "known")) {
+			const spells = this._state.getSpells();
+			const leveledSpells = spells.filter(s => s.level > 0 && !s.sourceFeature);
+			const knownClasses = info.byClass.filter(c => c.type === "known");
+			const totalKnownMax = knownClasses.reduce((sum, c) => sum + (c.spellsKnownMax || c.max || 0), 0);
+			if (leveledSpells.length >= totalKnownMax) {
+				const classNames = knownClasses.map(c => c.className).join("/");
+				return {
+					canAdd: true,
+					warning: `Your ${classNames} spells known limit (${totalKnownMax}) is reached. Adding more exceeds your limit.`,
+					isOverLimit: true,
+				};
+			}
+		}
+
+		return {canAdd: true};
+	}
+
 	_addSpell (spell) {
 		console.log("[CharSheet Spells] Adding spell:", spell.name, spell.level);
+
+		// Check limits and warn if over
+		const limitCheck = this._checkSpellLimits(spell);
+		if (limitCheck.warning) {
+			JqueryUtil.doToast({
+				type: limitCheck.isOverLimit ? "warning" : "info",
+				content: limitCheck.warning,
+			});
+		}
 		
 		this._state.addSpell({
 			name: spell.name,
@@ -1902,6 +2014,8 @@ class CharacterSheetSpells {
 		const schoolFull = spell.school ? Parser.spSchoolAbvToFull(spell.school) : "";
 		const isPrepared = spell.prepared;
 		const isCantrip = spell.level === 0;
+		const isAlwaysPrepared = spell.alwaysPrepared;
+		const sourceFeature = spell.sourceFeature;
 		// Ensure spell has a valid ID
 		const spellId = spell.id || `${spell.name}|${spell.source}`;
 
@@ -1927,8 +2041,34 @@ class CharacterSheetSpells {
 		if (spell.components) detailParts.push(spell.components);
 		const detailsLine = detailParts.join(" · ");
 
+		// Determine preparation button state and text
+		let prepButtonHtml = "";
+		if (!isCantrip) {
+			if (isAlwaysPrepared) {
+				// Always prepared spells (from domain, subclass features, etc.) can't be unprepared
+				const featureSource = sourceFeature || "class feature";
+				prepButtonHtml = `
+					<span class="ve-btn ve-btn-xs ve-btn-warning charsheet__spell-always-prepared" title="Always prepared from ${featureSource}">
+						<span class="glyphicon glyphicon-star mr-1"></span>Always
+					</span>
+				`;
+			} else {
+				// Normal prepared toggle
+				prepButtonHtml = `
+					<button class="ve-btn ve-btn-xs ${isPrepared ? "ve-btn-primary" : "ve-btn-default"} charsheet__spell-prepared" title="Toggle Prepared">
+						<span class="glyphicon glyphicon-book mr-1"></span>${isPrepared ? "Prepared" : "Prepare"}
+					</button>
+				`;
+			}
+		}
+
+		// Build source badge if from a feature
+		const sourceBadge = sourceFeature 
+			? `<span class="badge badge-warning charsheet__spell-source-badge" title="From: ${sourceFeature}">${this._truncateFeatureName(sourceFeature)}</span>` 
+			: "";
+
 		return $(`
-			<div class="charsheet__spell-item ${isPrepared ? "prepared" : ""}" data-spell-id="${spellId}">
+			<div class="charsheet__spell-item ${isPrepared || isAlwaysPrepared ? "prepared" : ""} ${isAlwaysPrepared ? "always-prepared" : ""}" data-spell-id="${spellId}">
 				<div class="charsheet__spell-item-main">
 					<div class="charsheet__spell-item-header">
 						<span class="charsheet__spell-item-name">${spellLink}</span>
@@ -1936,26 +2076,91 @@ class CharacterSheetSpells {
 							${schoolFull ? `<span class="badge badge-secondary">${schoolFull}</span>` : ""}
 							${spell.concentration ? `<span class="badge badge-info" title="Concentration">C</span>` : ""}
 							${spell.ritual ? `<span class="badge badge-success" title="Ritual">R</span>` : ""}
+							${sourceBadge}
 						</span>
 					</div>
 					${detailsLine ? `<div class="charsheet__spell-item-details ve-muted ve-small">${detailsLine}</div>` : ""}
 				</div>
 				<div class="charsheet__spell-item-actions">
-					${!isCantrip ? `
-						<button class="ve-btn ve-btn-xs ${isPrepared ? "ve-btn-primary" : "ve-btn-default"} charsheet__spell-prepared" title="Toggle Prepared">
-							<span class="glyphicon glyphicon-book mr-1"></span>${isPrepared ? "Prepared" : "Prepare"}
-						</button>
-					` : ""}
+					${prepButtonHtml}
 					<button class="ve-btn ve-btn-xs ve-btn-success charsheet__spell-cast" title="Cast Spell">
 						<span class="glyphicon glyphicon-flash mr-1"></span>Cast
 					</button>
 					<button class="ve-btn ve-btn-xs ve-btn-default charsheet__spell-info" title="Spell Info">
 						<span class="glyphicon glyphicon-info-sign mr-1"></span>Info
 					</button>
-					<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__spell-remove" title="Remove Spell">
-						<span class="glyphicon glyphicon-trash mr-1"></span>Remove
-					</button>
+					${!isAlwaysPrepared ? `
+						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__spell-remove" title="Remove Spell">
+							<span class="glyphicon glyphicon-trash mr-1"></span>Remove
+						</button>
+					` : `
+						<button class="ve-btn ve-btn-xs ve-btn-default charsheet__spell-remove" title="Cannot remove feature spells" disabled>
+							<span class="glyphicon glyphicon-lock mr-1"></span>Locked
+						</button>
+					`}
 				</div>
+			</div>
+		`);
+	}
+
+	/**
+	 * Truncate a feature name for badge display
+	 */
+	_truncateFeatureName (name) {
+		if (!name) return "";
+		if (name.length <= 12) return name;
+		return name.substring(0, 10) + "…";
+	}
+
+	/**
+	 * Render multiclass status bar showing per-class spell tracking
+	 */
+	_renderMulticlassStatusBar ($statusBar, info, manualLeveledSpells, preparedSpells) {
+		// Add a multiclass indicator
+		$statusBar.append(`
+			<div style="display: flex; align-items: center; gap: 6px; padding-right: 8px; border-right: 1px solid rgba(var(--rgb-bg-text), 0.2);">
+				<span class="ve-muted ve-small">⚔️ Multiclass</span>
+			</div>
+		`);
+
+		// Show each class's spell tracking separately
+		for (const classInfo of info.byClass) {
+			if (classInfo.type === "known") {
+				// For known casters, they need to track their own spells known limit
+				// In D&D, each class tracks its own spells known separately
+				const maxKnown = classInfo.spellsKnownMax || classInfo.max;
+				// Note: In a real implementation, we'd need to track which spells belong to which class
+				// For now, show the limit per class
+				const icon = "📖 ";
+				$statusBar.append(`
+					<div style="display: flex; align-items: center; gap: 4px;" title="${classInfo.className}: Spells known are permanent. Can swap 1 on level up.">
+						<span style="color: #60a5fa;">${icon}${classInfo.className}:</span>
+						<span class="ve-muted ve-small">max ${maxKnown} known</span>
+					</div>
+				`);
+			} else if (classInfo.type === "prepared") {
+				const maxPrepared = classInfo.preparedMax || classInfo.max;
+				const icon = classInfo.is2024 ? "✨ " : "📚 ";
+				const color = classInfo.is2024 ? "#fbbf24" : "#a78bfa";
+				$statusBar.append(`
+					<div style="display: flex; align-items: center; gap: 4px;" title="${classInfo.className}: Can prepare from full class spell list after long rest.">
+						<span style="color: ${color};">${icon}${classInfo.className}:</span>
+						<span class="ve-muted ve-small">max ${maxPrepared} prepared</span>
+					</div>
+				`);
+			}
+		}
+
+		// Show totals
+		const totalManual = manualLeveledSpells.length;
+		const totalPrepared = preparedSpells.length;
+		const totalMax = info.max;
+
+		$statusBar.append(`
+			<div style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid rgba(var(--rgb-bg-text), 0.2);">
+				<span class="ve-muted">Total:</span>
+				<span class="bold">${totalManual} spells</span>
+				<span class="ve-muted ve-small">(${totalPrepared} prepared)</span>
 			</div>
 		`);
 	}
@@ -1978,6 +2183,7 @@ class CharacterSheetSpells {
 			$("#charsheet-spell-ability").text("—");
 			$("#charsheet-spell-dc").text("—");
 			$("#charsheet-spell-attack").text("—");
+			$("#charsheet-spell-tracking").hide();
 			return;
 		}
 
@@ -2006,6 +2212,7 @@ class CharacterSheetSpells {
 			$("#charsheet-spell-ability").text("—");
 			$("#charsheet-spell-dc").text("—");
 			$("#charsheet-spell-attack").text("—");
+			$("#charsheet-spell-tracking").hide();
 			return;
 		}
 
@@ -2035,65 +2242,142 @@ class CharacterSheetSpells {
 		$("#charsheet-spell-dc").text(saveDC);
 		$("#charsheet-spell-attack").text(`+${attackBonus}`);
 
-		// Display spells known or prepared count
+		// Display spell tracking using the new enhanced UI
+		this._renderSpellTrackingUI();
+	}
+
+	/**
+	 * Render the spell tracking UI based on caster type (known vs prepared, 2014 vs 2024)
+	 */
+	_renderSpellTrackingUI () {
 		const spellcastingInfo = this._state.getSpellcastingInfo();
-		const $knownContainer = $("#charsheet-spells-known-container");
-		const $preparedContainer = $("#charsheet-spells-prepared-container");
+		const $trackingContainer = $("#charsheet-spell-tracking");
+		
+		// Hide all tracking boxes by default
+		$("#charsheet-known-caster-info").hide();
+		$("#charsheet-prepared-caster-info-2014").hide();
+		$("#charsheet-prepared-caster-info-2024").hide();
+		$("#charsheet-cantrips-info").hide();
 
-		// Hide both by default
-		$knownContainer.hide();
-		$preparedContainer.hide();
+		if (!spellcastingInfo) {
+			$trackingContainer.hide();
+			return;
+		}
 
-		if (spellcastingInfo) {
-			const spells = this._state.getSpells();
-			const leveledSpells = spells.filter(s => s.level > 0);
-			const cantrips = spells.filter(s => s.level === 0);
-			const preparedSpells = leveledSpells.filter(s => s.prepared);
+		$trackingContainer.show();
 
-			// Handle multiclass spellcasting display
-			if (spellcastingInfo.isMulticlass && spellcastingInfo.byClass) {
-				// Build display string showing each class's spells
-				const parts = [];
-				for (const classInfo of spellcastingInfo.byClass) {
-					const classSpells = leveledSpells.filter(s => s.class === classInfo.className);
-					const classPrepared = classSpells.filter(s => s.prepared);
-					
-					if (classInfo.type === "known") {
-						parts.push(`${classInfo.className}: ${classSpells.length}/${classInfo.max}`);
-					} else {
-						parts.push(`${classInfo.className}: ${classPrepared.length}/${classInfo.max}`);
-					}
+		const spells = this._state.getSpells();
+		const leveledSpells = spells.filter(s => s.level > 0);
+		const allCantrips = this._state.getCantripsKnown();
+		const preparedSpells = leveledSpells.filter(s => s.prepared || s.alwaysPrepared);
+		// Manual spells = those not from features (count against limit)
+		const manualLeveledSpells = leveledSpells.filter(s => !s.sourceFeature);
+		
+		// Cantrips count (excluding feature-granted ones)
+		const cantripsChosen = allCantrips.filter(c => !c.sourceFeature).length;
+		const cantripsMax = spellcastingInfo.cantripsKnown || 0;
+
+		// Show cantrips info if the class has cantrips
+		if (cantripsMax > 0) {
+			const $cantripsInfo = $("#charsheet-cantrips-info").show();
+			$("#charsheet-cantrips-current").text(cantripsChosen);
+			$("#charsheet-cantrips-max").text(cantripsMax);
+			
+			// Handle over-limit state
+			const $count = $cantripsInfo.find(".charsheet__spell-tracking-count");
+			if (cantripsChosen > cantripsMax) {
+				$count.addClass("charsheet__spell-tracking-count--over");
+				$cantripsInfo.addClass("charsheet__spell-tracking-box--over");
+			} else {
+				$count.removeClass("charsheet__spell-tracking-count--over");
+				$cantripsInfo.removeClass("charsheet__spell-tracking-box--over");
+			}
+		}
+
+		// Determine which spell tracking box to show based on caster type
+		if (spellcastingInfo.type === "known") {
+			// Known caster (2014 Bard, Sorcerer, Warlock, Ranger, EK, AT)
+			const $knownInfo = $("#charsheet-known-caster-info").show();
+			// Only count manual spells (not from features) against the limit
+			const currentKnown = manualLeveledSpells.length;
+			const maxKnown = spellcastingInfo.spellsKnownMax || spellcastingInfo.max;
+			
+			$("#charsheet-spells-known-current").text(currentKnown);
+			$("#charsheet-spells-known-max").text(maxKnown);
+			
+			// Handle over-limit state
+			const $count = $knownInfo.find(".charsheet__spell-tracking-count");
+			if (currentKnown > maxKnown) {
+				$count.addClass("charsheet__spell-tracking-count--over");
+				$knownInfo.addClass("charsheet__spell-tracking-box--over");
+			} else {
+				$count.removeClass("charsheet__spell-tracking-count--over");
+				$knownInfo.removeClass("charsheet__spell-tracking-box--over");
+			}
+		} else if (spellcastingInfo.type === "prepared") {
+			// Prepared caster - check if 2024 or 2014
+			const is2024 = spellcastingInfo.is2024;
+			const currentPrepared = preparedSpells.length;
+			const maxPrepared = spellcastingInfo.preparedMax || spellcastingInfo.max;
+			
+			if (is2024) {
+				const $preparedInfo = $("#charsheet-prepared-caster-info-2024").show();
+				$("#charsheet-spells-prepared-current-2024").text(currentPrepared);
+				$("#charsheet-spells-prepared-max-2024").text(maxPrepared);
+				
+				const $count = $preparedInfo.find(".charsheet__spell-tracking-count");
+				if (currentPrepared > maxPrepared) {
+					$count.addClass("charsheet__spell-tracking-count--over");
+					$preparedInfo.addClass("charsheet__spell-tracking-box--over");
+				} else {
+					$count.removeClass("charsheet__spell-tracking-count--over");
+					$preparedInfo.removeClass("charsheet__spell-tracking-box--over");
 				}
-
-				// Show both containers for multiclass with combined info
-				if (spellcastingInfo.type === "known" || spellcastingInfo.type === "mixed") {
-					$knownContainer.show();
-					const currentKnown = leveledSpells.length;
-					const maxKnown = spellcastingInfo.max;
-					const knownColor = currentKnown > maxKnown ? "color: #c9302c;" : "";
-					$("#charsheet-spells-known").html(`<span style="${knownColor}" title="${parts.join(', ')}">${currentKnown}/${maxKnown}</span>`);
+			} else {
+				const $preparedInfo = $("#charsheet-prepared-caster-info-2014").show();
+				$("#charsheet-spells-prepared-current-2014").text(currentPrepared);
+				$("#charsheet-spells-prepared-max-2014").text(maxPrepared);
+				
+				const $count = $preparedInfo.find(".charsheet__spell-tracking-count");
+				if (currentPrepared > maxPrepared) {
+					$count.addClass("charsheet__spell-tracking-count--over");
+					$preparedInfo.addClass("charsheet__spell-tracking-box--over");
+				} else {
+					$count.removeClass("charsheet__spell-tracking-count--over");
+					$preparedInfo.removeClass("charsheet__spell-tracking-box--over");
 				}
-				if (spellcastingInfo.type === "prepared" || spellcastingInfo.type === "mixed") {
-					$preparedContainer.show();
-					const currentPrepared = preparedSpells.length;
-					const maxPrepared = spellcastingInfo.max;
-					const preparedColor = currentPrepared > maxPrepared ? "color: #c9302c;" : "";
-					$("#charsheet-spells-prepared").html(`<span style="${preparedColor}" title="${parts.join(', ')}">${currentPrepared}/${maxPrepared}</span>`);
-				}
-			} else if (spellcastingInfo.type === "known") {
-				// Spells known caster (Bard, Sorcerer, Warlock, Ranger)
-				$knownContainer.show();
-				const currentKnown = leveledSpells.length;
-				const maxKnown = spellcastingInfo.max;
-				const knownColor = currentKnown > maxKnown ? "color: #c9302c;" : "";
-				$("#charsheet-spells-known").html(`<span style="${knownColor}">${currentKnown}/${maxKnown}</span>`);
-			} else if (spellcastingInfo.type === "prepared") {
-				// Prepared caster (Cleric, Druid, Paladin, Wizard)
-				$preparedContainer.show();
-				const currentPrepared = preparedSpells.length;
-				const maxPrepared = spellcastingInfo.max;
-				const preparedColor = currentPrepared > maxPrepared ? "color: #c9302c;" : "";
-				$("#charsheet-spells-prepared").html(`<span style="${preparedColor}">${currentPrepared}/${maxPrepared}</span>`);
+			}
+		} else if (spellcastingInfo.type === "mixed" && spellcastingInfo.isMulticlass) {
+			// Multiclass with mixed caster types - show both relevant boxes
+			// This is a complex case, show a simplified combined view
+			const hasKnown = spellcastingInfo.byClass?.some(c => c.type === "known");
+			const hasPrepared = spellcastingInfo.byClass?.some(c => c.type === "prepared");
+			
+			if (hasKnown) {
+				const $knownInfo = $("#charsheet-known-caster-info").show();
+				const knownClasses = spellcastingInfo.byClass.filter(c => c.type === "known");
+				const totalKnownMax = knownClasses.reduce((sum, c) => sum + (c.spellsKnownMax || c.max || 0), 0);
+				// For multiclass, only count manual spells against limit
+				$("#charsheet-spells-known-current").text(manualLeveledSpells.length);
+				$("#charsheet-spells-known-max").text(totalKnownMax);
+				
+				// Update hint for multiclass
+				$knownInfo.find(".charsheet__spell-tracking-hint").text(
+					`From: ${knownClasses.map(c => c.className).join(", ")}`,
+				);
+			}
+			
+			if (hasPrepared) {
+				const $preparedInfo = $("#charsheet-prepared-caster-info-2014").show();
+				const preparedClasses = spellcastingInfo.byClass.filter(c => c.type === "prepared");
+				const totalPreparedMax = preparedClasses.reduce((sum, c) => sum + (c.preparedMax || c.max || 0), 0);
+				$("#charsheet-spells-prepared-current-2014").text(preparedSpells.length);
+				$("#charsheet-spells-prepared-max-2014").text(totalPreparedMax);
+				
+				// Update hint for multiclass
+				$preparedInfo.find(".charsheet__spell-tracking-hint").text(
+					`From: ${preparedClasses.map(c => c.className).join(", ")}`,
+				);
 			}
 		}
 	}
