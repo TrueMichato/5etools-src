@@ -2250,7 +2250,10 @@ class CharacterSheetState {
 		const existing = this._data.classes.find(c => c.name === classData.name && c.source === classData.source);
 		if (existing) {
 			existing.level = classData.level;
-			existing.subclass = classData.subclass;
+			// Only update subclass if one is provided, preserve existing subclass otherwise
+			if (classData.subclass !== undefined) {
+				existing.subclass = classData.subclass;
+			}
 		} else {
 			this._data.classes.push({...classData});
 		}
@@ -4733,92 +4736,3372 @@ class CharacterSheetState {
 
 			switch (className) {
 				case "Rogue": {
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+
 					// Sneak Attack: 1d6 at level 1, +1d6 every 2 levels (rounded up)
 					const sneakDice = Math.ceil(level / 2);
 					calculations.sneakAttack = {
 						dice: `${sneakDice}d6`,
 						avgDamage: Math.floor(sneakDice * 3.5),
 					};
+
+					// Expertise (PHB level 1 and 6, XPHB level 1 and 6)
+					if (level >= 1) {
+						calculations.hasExpertise = true;
+						calculations.expertiseSkills = level >= 6 ? 4 : 2;
+					}
+
+					// Thieves' Cant (level 1)
+					if (level >= 1) {
+						calculations.hasThievesCant = true;
+					}
+
+					// Weapon Mastery (XPHB level 1)
+					if (is2024 && level >= 1) {
+						calculations.hasWeaponMastery = true;
+						calculations.weaponMasteryCount = 2;
+					}
+
+					// Cunning Action (level 2)
+					if (level >= 2) {
+						calculations.hasCunningAction = true;
+					}
+
+					// Steady Aim (PHB/TCE level 3, XPHB level 3)
+					if (level >= 3) {
+						calculations.hasSteadyAim = true;
+					}
+
+					// Uncanny Dodge (level 5)
+					if (level >= 5) {
+						calculations.hasUncannyDodge = true;
+					}
+
+					// Cunning Strike (XPHB level 5) - can spend sneak attack dice for effects
+					if (is2024 && level >= 5) {
+						calculations.hasCunningStrike = true;
+						calculations.cunningStrikeOptions = ["Poison", "Trip", "Withdraw"];
+					}
+
+					// Evasion (level 7)
+					if (level >= 7) {
+						calculations.hasEvasion = true;
+					}
+
+					// Reliable Talent (PHB level 11, XPHB level 7)
+					if ((is2024 && level >= 7) || (!is2024 && level >= 11)) {
+						calculations.hasReliableTalent = true;
+						calculations.reliableTalentMinimum = 10;
+					}
+
+					// Improved Cunning Strike (XPHB level 11) - adds more options
+					if (is2024 && level >= 11) {
+						calculations.hasImprovedCunningStrike = true;
+						calculations.cunningStrikeOptions = ["Poison", "Trip", "Withdraw", "Daze"];
+					}
+
+					// Blindsense (PHB level 14)
+					if (!is2024 && level >= 14) {
+						calculations.hasBlindsense = true;
+						calculations.blindsenseRange = 10;
+					}
+
+					// Devious Strikes (XPHB level 14) - adds even more options
+					if (is2024 && level >= 14) {
+						calculations.hasDeviousStrikes = true;
+						calculations.deviousStrikeOptions = ["Daze", "Knock Out", "Obscure"];
+					}
+
+					// Slippery Mind (level 15)
+					if (level >= 15) {
+						calculations.hasSlipperyMind = true;
+						calculations.wisdomSaveProficiency = true;
+					}
+
+					// Elusive (level 18)
+					if (level >= 18) {
+						calculations.hasElusive = true;
+					}
+
+					// Stroke of Luck (level 20)
+					if (level >= 20) {
+						calculations.hasStrokeOfLuck = true;
+					}
+
+					// Subclass features
+					const subclassName = cls.subclass?.name;
+					if (subclassName) {
+						switch (subclassName) {
+							case "Thief": {
+								// Fast Hands (level 3)
+								if (level >= 3) {
+									calculations.hasFastHands = true;
+								}
+								// Second-Story Work (level 3)
+								if (level >= 3) {
+									calculations.hasSecondStoryWork = true;
+									calculations.climbSpeedBonus = this.getAbilityMod("dex");
+								}
+								// Supreme Sneak (level 9)
+								if (level >= 9) {
+									calculations.hasSupremeSneak = true;
+								}
+								// Use Magic Device (level 13)
+								if (level >= 13) {
+									calculations.hasUseMagicDevice = true;
+								}
+								// Thief's Reflexes (level 17)
+								if (level >= 17) {
+									calculations.hasThiefsReflexes = true;
+									calculations.extraTurnsFirstRound = 1;
+								}
+								break;
+							}
+							case "Assassin": {
+								// Assassinate (level 3)
+								if (level >= 3) {
+									calculations.hasAssassinate = true;
+									calculations.hasAdvantageOnSurprisedTargets = true;
+								}
+								// Bonus Proficiencies (PHB level 3)
+								if (!is2024 && level >= 3) {
+									calculations.hasDisguiseKitProficiency = true;
+									calculations.hasPoisonerKitProficiency = true;
+								}
+								// Assassin's Tools (XPHB level 3)
+								if (is2024 && level >= 3) {
+									calculations.hasAssassinsTools = true;
+								}
+								// Infiltration Expertise (level 9)
+								if (level >= 9) {
+									calculations.hasInfiltrationExpertise = true;
+								}
+								// Impostor (PHB level 13)
+								if (!is2024 && level >= 13) {
+									calculations.hasImpostor = true;
+								}
+								// Envenom Weapons (XPHB level 13)
+								if (is2024 && level >= 13) {
+									calculations.hasEnvenomWeapons = true;
+									calculations.envenomDamage = `${profBonus}d6`;
+								}
+								// Death Strike (level 17)
+								if (level >= 17) {
+									calculations.hasDeathStrike = true;
+									calculations.deathStrikeDc = 8 + profBonus + this.getAbilityMod("dex") - exhaustionPenalty;
+								}
+								break;
+							}
+							case "Arcane Trickster": {
+								// Spellcasting (level 3) - 1/3 caster
+								if (level >= 3) {
+									calculations.hasSpellcasting = true;
+									calculations.spellcastingAbility = "int";
+									calculations.spellSaveDc = 8 + profBonus + this.getAbilityMod("int") - exhaustionPenalty;
+									calculations.spellAttackBonus = profBonus + this.getAbilityMod("int") - exhaustionPenalty;
+									// Cantrips known: 3 at level 3, +1 at level 10 (3 total)
+									calculations.cantripsKnown = level >= 10 ? 3 : 3;
+									// Spells known (PHB) or prepared (XPHB)
+									if (is2024) {
+										// XPHB prepared spell progression
+										const preparedSpells = level >= 19 ? 13 : level >= 17 ? 12 : level >= 15 ? 11 : level >= 14 ? 10 :
+											level >= 13 ? 9 : level >= 11 ? 8 : level >= 10 ? 7 : level >= 8 ? 6 : level >= 7 ? 5 :
+											level >= 4 ? 4 : 3;
+										calculations.preparedSpells = preparedSpells;
+									} else {
+										// PHB spells known progression
+										const spellsKnown = level >= 20 ? 13 : level >= 19 ? 13 : level >= 16 ? 12 : level >= 14 ? 11 :
+											level >= 13 ? 10 : level >= 11 ? 9 : level >= 10 ? 8 : level >= 8 ? 7 : level >= 7 ? 6 :
+											level >= 4 ? 4 : 3;
+										calculations.spellsKnown = spellsKnown;
+									}
+								}
+								// Mage Hand Legerdemain (level 3)
+								if (level >= 3) {
+									calculations.hasMageHandLegerdemain = true;
+								}
+								// Magical Ambush (level 9)
+								if (level >= 9) {
+									calculations.hasMagicalAmbush = true;
+								}
+								// Versatile Trickster (level 13)
+								if (level >= 13) {
+									calculations.hasVersatileTrickster = true;
+								}
+								// Spell Thief (level 17)
+								if (level >= 17) {
+									calculations.hasSpellThief = true;
+									calculations.spellThiefDc = 8 + profBonus + this.getAbilityMod("int") - exhaustionPenalty;
+								}
+								break;
+							}
+							case "Inquisitive": {
+								// Ear for Deceit (level 3)
+								if (level >= 3) {
+									calculations.hasEarForDeceit = true;
+									calculations.insightMinimum = 8;
+								}
+								// Eye for Detail (level 3)
+								if (level >= 3) {
+									calculations.hasEyeForDetail = true;
+								}
+								// Insightful Fighting (level 3)
+								if (level >= 3) {
+									calculations.hasInsightfulFighting = true;
+								}
+								// Steady Eye (level 9)
+								if (level >= 9) {
+									calculations.hasSteadyEye = true;
+								}
+								// Unerring Eye (level 13)
+								if (level >= 13) {
+									calculations.hasUnerringEye = true;
+									calculations.unerringEyeUses = Math.max(1, this.getAbilityMod("wis"));
+								}
+								// Eye for Weakness (level 17)
+								if (level >= 17) {
+									calculations.hasEyeForWeakness = true;
+									calculations.eyeForWeaknessBonus = "3d6";
+								}
+								break;
+							}
+							case "Mastermind": {
+								// Master of Intrigue (level 3)
+								if (level >= 3) {
+									calculations.hasMasterOfIntrigue = true;
+								}
+								// Master of Tactics (level 3)
+								if (level >= 3) {
+									calculations.hasMasterOfTactics = true;
+									calculations.helpRange = 30;
+								}
+								// Insightful Manipulator (level 9)
+								if (level >= 9) {
+									calculations.hasInsightfulManipulator = true;
+								}
+								// Misdirection (level 13)
+								if (level >= 13) {
+									calculations.hasMisdirection = true;
+								}
+								// Soul of Deceit (level 17)
+								if (level >= 17) {
+									calculations.hasSoulOfDeceit = true;
+								}
+								break;
+							}
+							case "Swashbuckler": {
+								// Fancy Footwork (level 3)
+								if (level >= 3) {
+									calculations.hasFancyFootwork = true;
+								}
+								// Rakish Audacity (level 3)
+								if (level >= 3) {
+									calculations.hasRakishAudacity = true;
+									calculations.initiativeBonus = this.getAbilityMod("cha");
+								}
+								// Panache (level 9)
+								if (level >= 9) {
+									calculations.hasPanache = true;
+								}
+								// Elegant Maneuver (level 13)
+								if (level >= 13) {
+									calculations.hasElegantManeuver = true;
+								}
+								// Master Duelist (level 17)
+								if (level >= 17) {
+									calculations.hasMasterDuelist = true;
+								}
+								break;
+							}
+							case "Scout": {
+								// Skirmisher (level 3)
+								if (level >= 3) {
+									calculations.hasSkirmisher = true;
+								}
+								// Survivalist (level 3)
+								if (level >= 3) {
+									calculations.hasSurvivalist = true;
+								}
+								// Superior Mobility (level 9)
+								if (level >= 9) {
+									calculations.hasSuperiorMobility = true;
+									calculations.movementBonus = 10;
+								}
+								// Ambush Master (level 13)
+								if (level >= 13) {
+									calculations.hasAmbushMaster = true;
+								}
+								// Sudden Strike (level 17)
+								if (level >= 17) {
+									calculations.hasSuddenStrike = true;
+								}
+								break;
+							}
+							case "Phantom": {
+								// Whispers of the Dead (level 3)
+								if (level >= 3) {
+									calculations.hasWhispersOfTheDead = true;
+								}
+								// Wails from the Grave (level 3)
+								if (level >= 3) {
+									calculations.hasWailsFromTheGrave = true;
+									const wailsDice = Math.ceil(sneakDice / 2);
+									calculations.wailsDamage = `${wailsDice}d6`;
+								}
+								// Tokens of the Departed (level 9)
+								if (level >= 9) {
+									calculations.hasTokensOfTheDeparted = true;
+									calculations.maxSoulTrinkets = profBonus;
+								}
+								// Ghost Walk (level 13)
+								if (level >= 13) {
+									calculations.hasGhostWalk = true;
+									calculations.ghostWalkFlySpeed = 10;
+								}
+								// Death's Friend (level 17)
+								if (level >= 17) {
+									calculations.hasDeathsFriend = true;
+								}
+								break;
+							}
+							case "Soulknife": {
+								// Psionic Power (level 3)
+								if (level >= 3) {
+									calculations.hasPsionicPower = true;
+									calculations.psionicEnergyDice = profBonus * 2;
+									const psiDieSize = level >= 17 ? "d12" : level >= 11 ? "d10" : level >= 5 ? "d8" : "d6";
+									calculations.psionicEnergyDie = psiDieSize;
+								}
+								// Psychic Blades (level 3)
+								if (level >= 3) {
+									calculations.hasPsychicBlades = true;
+									calculations.psychicBladeDamage = "1d6";
+									calculations.psychicBladeOffhand = "1d4";
+								}
+								// Psi-Bolstered Knack (level 3)
+								if (level >= 3) {
+									calculations.hasPsiBolsteredKnack = true;
+								}
+								// Psychic Whispers (level 3)
+								if (level >= 3) {
+									calculations.hasPsychicWhispers = true;
+									calculations.psychicWhispersTargets = profBonus;
+								}
+								// Soul Blades (level 9)
+								if (level >= 9) {
+									calculations.hasSoulBlades = true;
+									calculations.hasHomingStrikes = true;
+									calculations.hasPsychicTeleportation = true;
+								}
+								// Psychic Veil (level 13)
+								if (level >= 13) {
+									calculations.hasPsychicVeil = true;
+								}
+								// Rend Mind (level 17)
+								if (level >= 17) {
+									calculations.hasRendMind = true;
+									calculations.rendMindDc = 8 + profBonus + this.getAbilityMod("dex") - exhaustionPenalty;
+								}
+								break;
+							}
+						}
+					}
 					break;
 				}
 				case "Monk": {
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+
+					// Ki/Focus points = monk level
+					const kiPoints = level;
+					calculations.kiPoints = kiPoints;
+					calculations.focusPoints = kiPoints; // XPHB name
+
 					// Ki/Focus Save DC: 8 + prof + WIS
 					const kiDc = 8 + profBonus + this.getAbilityMod("wis") - exhaustionPenalty;
-					// Martial Arts die progression
-					const martialArtsDice = level >= 17 ? "1d12" : level >= 11 ? "1d10" : level >= 5 ? "1d8" : "1d6";
 					calculations.kiSaveDc = kiDc;
 					calculations.focusSaveDc = kiDc; // 2024 PHB name
+
+					// Martial Arts die progression
+					// PHB: d4 at 1, d6 at 5, d8 at 11, d10 at 17
+					// XPHB: d6 at 1, d8 at 5, d10 at 11, d12 at 17
+					let martialArtsDice;
+					if (is2024) {
+						martialArtsDice = level >= 17 ? "1d12" : level >= 11 ? "1d10" : level >= 5 ? "1d8" : "1d6";
+					} else {
+						martialArtsDice = level >= 17 ? "1d10" : level >= 11 ? "1d8" : level >= 5 ? "1d6" : "1d4";
+					}
 					calculations.martialArtsDie = martialArtsDice;
 					calculations.unarmedDamage = martialArtsDice;
+
 					// Unarmored Movement bonus (level 2+, when not wearing armor/shield)
 					if (level >= 2) {
 						const unarmoredMovementBonus = level >= 18 ? 30 : level >= 14 ? 25 : level >= 10 ? 20 : level >= 6 ? 15 : 10;
 						calculations.unarmoredMovement = unarmoredMovementBonus;
 					}
+
+					// Deflect Missiles damage reduction (PHB level 3+)
+					// XPHB calls it "Deflect Attacks" - works on melee too at higher levels
+					if (level >= 3) {
+						const deflectReduction = `1d10+${this.getAbilityMod("dex")}+${level}`;
+						calculations.deflectMissilesReduction = deflectReduction;
+						if (is2024) {
+							calculations.deflectAttacksReduction = deflectReduction;
+						}
+					}
+
+					// Slow Fall damage reduction (level 4+) = 5 × monk level
+					if (level >= 4) {
+						calculations.slowFallReduction = 5 * level;
+					}
+
+					// Extra Attack (level 5+)
+					if (level >= 5) {
+						calculations.hasExtraAttack = true;
+					}
+
+					// Stunning Strike (level 5+)
+					if (level >= 5) {
+						calculations.hasStunningStrike = true;
+					}
+
+					// Ki-Empowered Strikes (PHB level 6) / Empowered Strikes (XPHB level 6)
+					if (level >= 6) {
+						calculations.hasKiEmpoweredStrikes = true;
+						calculations.hasEmpoweredStrikes = true;
+					}
+
+					// Evasion (level 7)
+					if (level >= 7) {
+						calculations.hasEvasion = true;
+					}
+
+					// Stillness of Mind (PHB level 7)
+					if (!is2024 && level >= 7) {
+						calculations.hasStillnessOfMind = true;
+					}
+
+					// Unarmored Movement Improvement (PHB level 9) - can run on walls/water
+					if (!is2024 && level >= 9) {
+						calculations.canRunOnWalls = true;
+						calculations.canRunOnWater = true;
+					}
+
+					// Acrobatic Movement (XPHB level 9) - difficult terrain doesn't cost extra
+					if (is2024 && level >= 9) {
+						calculations.hasAcrobaticMovement = true;
+					}
+
+					// Purity of Body (PHB level 10) - immune to disease and poison
+					if (!is2024 && level >= 10) {
+						calculations.hasPurityOfBody = true;
+					}
+
+					// Heightened Focus (XPHB level 10) - improved Flurry/Patient Defense/Step of Wind
+					if (is2024 && level >= 10) {
+						calculations.hasHeightenedFocus = true;
+					}
+
+					// Self-Restoration (XPHB level 10) - end charmed/frightened on turn
+					if (is2024 && level >= 10) {
+						calculations.hasSelfRestoration = true;
+					}
+
+					// Tongue of the Sun and Moon (PHB level 13)
+					if (!is2024 && level >= 13) {
+						calculations.hasTongueOfSunAndMoon = true;
+					}
+
+					// Deflect Energy (XPHB level 13) - deflect attacks works on energy too
+					if (is2024 && level >= 13) {
+						calculations.hasDeflectEnergy = true;
+					}
+
+					// Diamond Soul (PHB level 14) - proficient in all saves, spend ki to reroll
+					if (!is2024 && level >= 14) {
+						calculations.hasDiamondSoul = true;
+					}
+
+					// Disciplined Survivor (XPHB level 14) - proficient in all saves, spend focus to reroll
+					if (is2024 && level >= 14) {
+						calculations.hasDisciplinedSurvivor = true;
+					}
+
+					// Timeless Body (PHB level 15) - no frailty of old age
+					if (!is2024 && level >= 15) {
+						calculations.hasTimelessBody = true;
+					}
+
+					// Perfect Focus (XPHB level 15) - regain 4 focus points if none on initiative
+					if (is2024 && level >= 15) {
+						calculations.hasPerfectFocus = true;
+						calculations.perfectFocusRecovery = 4;
+					}
+
+					// Empty Body (PHB level 18) - spend 4 ki for invisibility
+					if (!is2024 && level >= 18) {
+						calculations.hasEmptyBody = true;
+						calculations.emptyBodyCost = 4;
+					}
+
+					// Superior Defense (XPHB level 18) - spend 3 focus for resistance
+					if (is2024 && level >= 18) {
+						calculations.hasSuperiorDefense = true;
+						calculations.superiorDefenseCost = 3;
+					}
+
+					// Perfect Self (PHB level 20) - regain 4 ki if none on initiative
+					if (!is2024 && level >= 20) {
+						calculations.hasPerfectSelf = true;
+						calculations.perfectSelfRecovery = 4;
+					}
+
+					// Body and Mind (XPHB level 20) - +4 DEX and WIS (max 25)
+					if (is2024 && level >= 20) {
+						calculations.hasBodyAndMind = true;
+					}
+
+					// Uncanny Metabolism (XPHB level 2) - regain ki on short rest roll
+					if (is2024 && level >= 2) {
+						calculations.hasUncannyMetabolism = true;
+					}
+
+					// =========================================================
+					// SUBCLASSES
+					// =========================================================
+
+					// Way of the Open Hand
+					if (cls.subclass?.shortName === "Open Hand") {
+						const subSource = cls.subclass?.source || source;
+						const isOpenHand2024 = subSource === "XPHB";
+
+						// Open Hand Technique (level 3) - effects on Flurry of Blows
+						calculations.hasOpenHandTechnique = true;
+
+						// Wholeness of Body (level 6) - heal self
+						if (level >= 6) {
+							calculations.hasWholenessOfBody = true;
+							if (isOpenHand2024) {
+								// XPHB: Heal = martial arts die + WIS mod, uses = WIS mod per long rest
+								calculations.wholenessOfBodyHealing = `${martialArtsDice}+${this.getAbilityMod("wis")}`;
+								calculations.wholenessOfBodyUses = Math.max(1, this.getAbilityMod("wis"));
+							} else {
+								// PHB: Heal 3 × monk level once per long rest
+								calculations.wholenessOfBodyHealing = 3 * level;
+								calculations.wholenessOfBodyUses = 1;
+							}
+						}
+
+						// Tranquility (PHB level 11) / Fleet Step (XPHB level 11)
+						if (level >= 11) {
+							if (isOpenHand2024) {
+								calculations.hasFleetStep = true;
+							} else {
+								calculations.hasTranquility = true;
+								calculations.tranquilityDc = kiDc;
+							}
+						}
+
+						// Quivering Palm (level 17)
+						if (level >= 17) {
+							calculations.hasQuiveringPalm = true;
+							calculations.quiveringPalmCost = 3; // 3 ki/focus points
+							calculations.quiveringPalmDc = kiDc;
+						}
+					}
+
+					// Way of Shadow
+					if (cls.subclass?.shortName === "Shadow") {
+						const subSource = cls.subclass?.source || source;
+						const isShadow2024 = subSource === "XPHB";
+
+						// Shadow Arts (level 3) - cast spells for ki
+						calculations.hasShadowArts = true;
+						calculations.shadowArtsCost = 2; // 2 ki for most spells
+
+						// Shadow Step (level 6) - teleport between shadows
+						if (level >= 6) {
+							calculations.hasShadowStep = true;
+							calculations.shadowStepRange = 60;
+						}
+
+						// Cloak of Shadows (PHB level 11) / Shadow Strike (XPHB level 11)
+						if (level >= 11) {
+							if (isShadow2024) {
+								calculations.hasShadowStrike = true;
+								calculations.shadowStrikeDamage = `${martialArtsDice}`;
+							} else {
+								calculations.hasCloakOfShadows = true;
+							}
+						}
+
+						// Opportunist (PHB level 17) / Cloak of Shadows (XPHB level 17)
+						if (level >= 17) {
+							if (isShadow2024) {
+								calculations.hasCloakOfShadows = true;
+							} else {
+								calculations.hasOpportunist = true;
+							}
+						}
+					}
+
+					// Way of the Four Elements / Warrior of the Elements
+					if (cls.subclass?.shortName === "Four Elements" || cls.subclass?.shortName === "Elements") {
+						const subSource = cls.subclass?.source || source;
+						const isElements2024 = subSource === "XPHB";
+
+						if (isElements2024) {
+							// XPHB Warrior of the Elements
+							calculations.hasElementalAttunement = true;
+							calculations.elementalAttunementReach = 15;
+
+							// Elemental Burst (level 6) - AoE damage
+							if (level >= 6) {
+								calculations.hasElementalBurst = true;
+								calculations.elementalBurstDamage = martialArtsDice;
+								calculations.elementalBurstCost = 2;
+							}
+
+							// Stride of the Elements (level 11) - fly speed
+							if (level >= 11) {
+								calculations.hasStrideOfElements = true;
+							}
+
+							// Elemental Epitome (level 17) - enhanced form
+							if (level >= 17) {
+								calculations.hasElementalEpitome = true;
+							}
+						} else {
+							// PHB Way of Four Elements - elemental disciplines
+							calculations.hasDiscipleOfElements = true;
+							// Disciplines known: 1 at 3, +1 at 6, 11, 17
+							const disciplinesKnown = level >= 17 ? 4 : level >= 11 ? 3 : level >= 6 ? 2 : 1;
+							calculations.elementalDisciplinesKnown = disciplinesKnown;
+						}
+					}
+
+					// Way of the Long Death (SCAG)
+					if (cls.subclass?.shortName === "Long Death") {
+						// Touch of Death (level 3) - gain temp HP on kill
+						calculations.hasTouchOfDeath = true;
+						calculations.touchOfDeathTempHp = `${this.getAbilityMod("wis")}+${level}`;
+
+						// Hour of Reaping (level 6) - frighten nearby creatures
+						if (level >= 6) {
+							calculations.hasHourOfReaping = true;
+							calculations.hourOfReapingDc = kiDc;
+						}
+
+						// Mastery of Death (level 11) - spend 1 ki to avoid dropping to 0
+						if (level >= 11) {
+							calculations.hasMasteryOfDeath = true;
+							calculations.masteryOfDeathCost = 1;
+						}
+
+						// Touch of the Long Death (level 17) - spend ki for necrotic damage
+						if (level >= 17) {
+							calculations.hasTouchOfLongDeath = true;
+							calculations.touchOfLongDeathDamage = "2d10 per ki point";
+							calculations.touchOfLongDeathDc = kiDc;
+						}
+					}
+
+					// Way of the Drunken Master (XGE)
+					if (cls.subclass?.shortName === "Drunken Master") {
+						// Drunken Technique (level 3) - Disengage and +10 speed on Flurry
+						calculations.hasDrunkenTechnique = true;
+
+						// Tipsy Sway (level 6) - stand up for 5ft, redirect attacks
+						if (level >= 6) {
+							calculations.hasTipsySway = true;
+							calculations.redirectAttackCost = 1;
+						}
+
+						// Drunkard's Luck (level 11) - spend 2 ki to cancel disadvantage
+						if (level >= 11) {
+							calculations.hasDrunkardsLuck = true;
+							calculations.drunkardsLuckCost = 2;
+						}
+
+						// Intoxicated Frenzy (level 17) - up to 5 Flurry targets
+						if (level >= 17) {
+							calculations.hasIntoxicatedFrenzy = true;
+							calculations.intoxicatedFrenzyTargets = 5;
+						}
+					}
+
+					// Way of the Kensei (XGE)
+					if (cls.subclass?.shortName === "Kensei") {
+						// Path of the Kensei (level 3) - kensei weapons
+						calculations.hasPathOfKensei = true;
+						const kenseiWeapons = level >= 17 ? 5 : level >= 11 ? 4 : level >= 6 ? 3 : 2;
+						calculations.kenseiWeaponsKnown = kenseiWeapons;
+
+						// Agile Parry - +2 AC when making unarmed strike
+						calculations.agileParryBonus = 2;
+
+						// One with the Blade (level 6) - magic weapons, Deft Strike
+						if (level >= 6) {
+							calculations.hasOneWithTheBlade = true;
+							calculations.hasDeftStrike = true;
+							calculations.deftStrikeDamage = martialArtsDice;
+						}
+
+						// Sharpen the Blade (level 11) - spend ki for weapon bonus
+						if (level >= 11) {
+							calculations.hasSharpenTheBlade = true;
+							calculations.sharpenBladeMaxBonus = 3;
+						}
+
+						// Unerring Accuracy (level 17) - reroll miss once per turn
+						if (level >= 17) {
+							calculations.hasUnerringAccuracy = true;
+						}
+					}
+
+					// Way of the Sun Soul (XGE)
+					if (cls.subclass?.shortName === "Sun Soul") {
+						// Radiant Sun Bolt (level 3) - ranged spell attack
+						calculations.hasRadiantSunBolt = true;
+						calculations.radiantSunBoltRange = 30;
+						calculations.radiantSunBoltDamage = martialArtsDice;
+
+						// Searing Arc Strike (level 6) - burning hands after Attack action
+						if (level >= 6) {
+							calculations.hasSearingArcStrike = true;
+							calculations.searingArcStrikeCost = 2; // base cost, +1 per additional level
+						}
+
+						// Searing Sunburst (level 11) - radiant AoE
+						if (level >= 11) {
+							calculations.hasSearingSunburst = true;
+							calculations.searingSunburstDamage = "2d6";
+							calculations.searingSunburstDc = kiDc;
+						}
+
+						// Sun Shield (level 17) - bright light aura, retribution damage
+						if (level >= 17) {
+							calculations.hasSunShield = true;
+							calculations.sunShieldDamage = 5 + this.getAbilityMod("wis");
+						}
+					}
+
+					// Way of Mercy (TCE)
+					if (cls.subclass?.shortName === "Mercy") {
+						const subSource = cls.subclass?.source || source;
+						const isMercy2024 = subSource === "XPHB";
+
+						// Hand of Healing (level 3) - heal with ki
+						calculations.hasHandOfHealing = true;
+						calculations.handOfHealingAmount = `${martialArtsDice}+${this.getAbilityMod("wis")}`;
+
+						// Hand of Harm (level 3) - extra necrotic damage
+						calculations.hasHandOfHarm = true;
+						calculations.handOfHarmDamage = `${martialArtsDice}+${this.getAbilityMod("wis")}`;
+
+						// Physician's Touch (level 6) - cure conditions with Hand of Healing
+						if (level >= 6) {
+							calculations.hasPhysiciansTouch = true;
+						}
+
+						// Flurry of Healing and Harm (level 11) - use Hands during Flurry
+						if (level >= 11) {
+							calculations.hasFlurryOfHealingAndHarm = true;
+						}
+
+						// Hand of Ultimate Mercy (level 17) - resurrect
+						if (level >= 17) {
+							calculations.hasHandOfUltimateMercy = true;
+							calculations.handOfUltimateMercyCost = 5;
+						}
+					}
+
+					// Way of the Astral Self (TCE)
+					if (cls.subclass?.shortName === "Astral Self") {
+						// Arms of the Astral Self (level 3)
+						calculations.hasArmsOfAstralSelf = true;
+						calculations.armsOfAstralSelfCost = 1;
+						calculations.armsOfAstralSelfReach = 10;
+						calculations.armsOfAstralSelfDamage = martialArtsDice;
+
+						// Visage of the Astral Self (level 6)
+						if (level >= 6) {
+							calculations.hasVisageOfAstralSelf = true;
+							calculations.visageOfAstralSelfCost = 1;
+						}
+
+						// Body of the Astral Self (level 11)
+						if (level >= 11) {
+							calculations.hasBodyOfAstralSelf = true;
+						}
+
+						// Awakened Astral Self (level 17)
+						if (level >= 17) {
+							calculations.hasAwakenedAstralSelf = true;
+							calculations.awakenedAstralSelfCost = 5;
+							calculations.awakenedAstralSelfBonusDamage = "2d10";
+						}
+					}
+
+					// Way of the Ascendant Dragon (FTD)
+					if (cls.subclass?.shortName === "Ascendant Dragon") {
+						// Draconic Disciple (level 3) - change unarmed damage type
+						calculations.hasDraconicDisciple = true;
+
+						// Breath of the Dragon (level 3) - breath weapon
+						calculations.hasBreathOfDragon = true;
+						const breathDice = level >= 17 ? 4 : level >= 11 ? 3 : 2;
+						calculations.breathOfDragonDamage = `${breathDice}d8`;
+						calculations.breathOfDragonDc = kiDc;
+
+						// Wings Unfurled (level 6) - fly when using Step of the Wind
+						if (level >= 6) {
+							calculations.hasWingsUnfurled = true;
+							calculations.wingsUnfurledUses = profBonus;
+						}
+
+						// Aspect of the Wyrm (level 11) - frightful presence or resistance aura
+						if (level >= 11) {
+							calculations.hasAspectOfWyrm = true;
+							calculations.aspectOfWyrmCost = 3;
+						}
+
+						// Ascendant Aspect (level 17) - enhanced features
+						if (level >= 17) {
+							calculations.hasAscendantAspect = true;
+							calculations.augmentBreathDamage = `${breathDice}d8`; // additional damage
+						}
+					}
+
 					break;
 				}
 				case "Barbarian": {
-					// Rage damage bonus
+					const source = cls.source || "PHB";
+					const isXPHB = source === "XPHB";
+
+					// Rage damage bonus (same for PHB and XPHB)
 					const rageDamage = level >= 16 ? 4 : level >= 9 ? 3 : 2;
 					calculations.rageDamage = rageDamage;
-					// Brutal Critical dice (levels 9, 13, 17)
-					const brutalDice = level >= 17 ? 3 : level >= 13 ? 2 : level >= 9 ? 1 : 0;
-					if (brutalDice > 0) {
+
+					// Number of rages per long rest
+					// PHB: 2/3/4/5/6/unlimited at levels 1/3/6/12/17/20
+					// XPHB: 2/3/4/5/6 at levels 1/3/6/12/17 (no unlimited at 20)
+					if (isXPHB) {
+						const ragesPerDay = level >= 17 ? 6 : level >= 12 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2;
+						calculations.ragesPerDay = ragesPerDay;
+					} else {
+						const ragesPerDay = level >= 20 ? Infinity : level >= 17 ? 6 : level >= 12 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2;
+						calculations.ragesPerDay = ragesPerDay;
+					}
+
+					// Brutal Critical (PHB only) - extra damage dice on critical
+					// Levels 9, 13, 17 add +1/+2/+3 dice
+					if (!isXPHB && level >= 9) {
+						const brutalDice = level >= 17 ? 3 : level >= 13 ? 2 : 1;
 						calculations.brutalCritical = `+${brutalDice} dice`;
+					}
+
+					// Brutal Strike (XPHB only) - replaces Brutal Critical
+					// 1d10 extra damage at level 9, 2d10 at level 17
+					if (isXPHB && level >= 9) {
+						const brutalStrikeDamage = level >= 17 ? "2d10" : "1d10";
+						calculations.brutalStrikeDamage = brutalStrikeDamage;
+					}
+
+					// Danger Sense (level 2+) - both PHB and XPHB
+					if (level >= 2) {
+						calculations.hasDangerSense = true;
+					}
+
+					// Weapon Mastery slots (XPHB only)
+					if (isXPHB) {
+						const weaponMasterySlots = level >= 10 ? 4 : level >= 4 ? 3 : 2;
+						calculations.weaponMasterySlots = weaponMasterySlots;
+					}
+
+					// Fast Movement bonus (level 5+) - 10ft movement
+					if (level >= 5) {
+						calculations.fastMovementBonus = 10;
+					}
+
+					// Relentless Rage DC (level 11+) - starts at 10, increases by 5 each use
+					if (level >= 11) {
+						calculations.relentlessRageBaseDc = 10;
+					}
+
+					// Persistent Rage (level 15+)
+					if (level >= 15) {
+						calculations.hasPersistentRage = true;
+					}
+
+					// Indomitable Might (level 18+) - use STR score for STR checks
+					if (level >= 18) {
+						calculations.hasIndomitableMight = true;
+					}
+
+					// Primal Champion (level 20) - +4 STR and CON (max 24)
+					if (level >= 20) {
+						calculations.hasPrimalChampion = true;
 					}
 					break;
 				}
 				case "Paladin": {
-					// Divine Sense, Channel Divinity, Lay on Hands already handled as resources
-					// Aura range
-					const auraRange = level >= 18 ? 30 : level >= 10 ? 10 : 0;
-					if (auraRange > 0) {
-						calculations.auraRange = `${auraRange} ft`;
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+					const chaMod = this.getAbilityMod("cha");
+
+					// =========================================================
+					// CORE PALADIN FEATURES
+					// =========================================================
+
+					// Lay on Hands pool = 5 × paladin level
+					calculations.layOnHandsPool = 5 * level;
+
+					// Divine Sense uses (PHB: 1 + CHA mod, XPHB: uses Channel Divinity)
+					if (!is2024 && level >= 1) {
+						calculations.divineSenseUses = 1 + Math.max(0, chaMod);
 					}
+
+					// Spellcasting (PHB level 2+, XPHB level 1+)
+					const hasSpellcasting = is2024 ? level >= 1 : level >= 2;
+					if (hasSpellcasting) {
+						calculations.hasSpellcasting = true;
+						// Spell save DC = 8 + proficiency + CHA
+						calculations.spellSaveDc = 8 + profBonus + chaMod;
+						// Spell attack bonus = proficiency + CHA
+						calculations.spellAttackBonus = profBonus + chaMod;
+
+						// Prepared spells (PHB: level/2 + CHA, XPHB: fixed progression)
+						if (is2024) {
+							// XPHB prepared spells progression
+							const preparedProgression = [0, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22];
+							calculations.preparedSpells = preparedProgression[level] || 4;
+						} else {
+							calculations.preparedSpells = Math.max(1, Math.floor(level / 2) + chaMod);
+						}
+					}
+
+					// Divine Smite (PHB level 2+, XPHB level 2+)
+					if (level >= 2) {
+						calculations.hasDivineSmite = true;
+						// Base damage: 2d8 for 1st level slot, +1d8 per slot level above 1st
+						// Max 5d8 for slots, +1d8 vs undead/fiend (max 6d8)
+						calculations.smiteBaseDamage = "2d8";
+						calculations.smiteMaxDamage = "5d8"; // 4th level slot
+						calculations.smiteMaxDamageUndeadFiend = "6d8";
+					}
+
+					// Channel Divinity (level 3+)
+					if (level >= 3) {
+						calculations.channelDivinityUses = is2024 ? (level >= 11 ? 3 : level >= 3 ? 2 : 0) : 1;
+						calculations.hasChannelDivinity = true;
+					}
+
+					// XPHB: Channel Divinity uses = 2 at level 3, 3 at level 11
+					if (is2024 && level >= 3) {
+						calculations.channelDivinityUses = level >= 11 ? 3 : 2;
+					}
+
+					// Divine Health (PHB level 3) - immunity to disease
+					if (!is2024 && level >= 3) {
+						calculations.hasDivineHealth = true;
+					}
+
+					// Extra Attack (level 5)
+					if (level >= 5) {
+						calculations.hasExtraAttack = true;
+					}
+
+					// Faithful Steed (XPHB level 5) - free Find Steed
+					if (is2024 && level >= 5) {
+						calculations.hasFaithfulSteed = true;
+					}
+
+					// Aura of Protection (level 6)
+					// Allies within range add CHA mod to saves
+					if (level >= 6) {
+						calculations.hasAuraOfProtection = true;
+						calculations.auraOfProtectionBonus = Math.max(0, chaMod);
+					}
+
+					// Aura range (10 ft at 6+, 30 ft at 18+)
+					const auraRange = level >= 18 ? 30 : level >= 6 ? 10 : 0;
+					if (auraRange > 0) {
+						calculations.auraRange = auraRange;
+					}
+
+					// Aura of Courage (level 10) - immunity to frightened
+					if (level >= 10) {
+						calculations.hasAuraOfCourage = true;
+					}
+
+					// Improved Divine Smite (PHB level 11) - +1d8 radiant on all melee hits
+					if (!is2024 && level >= 11) {
+						calculations.hasImprovedDivineSmite = true;
+						calculations.improvedSmiteDamage = "1d8";
+					}
+
+					// Radiant Strikes (XPHB level 11) - +1d8 radiant on all melee hits
+					if (is2024 && level >= 11) {
+						calculations.hasRadiantStrikes = true;
+						calculations.radiantStrikesDamage = "1d8";
+					}
+
+					// Cleansing Touch (PHB level 14) - end spell on creature
+					if (!is2024 && level >= 14) {
+						calculations.hasCleansingTouch = true;
+						calculations.cleansingTouchUses = Math.max(1, chaMod);
+					}
+
+					// Restoring Touch (XPHB level 14) - remove condition via Lay on Hands
+					if (is2024 && level >= 14) {
+						calculations.hasRestoringTouch = true;
+					}
+
+					// Abjure Foes (XPHB level 9) - Channel Divinity option
+					if (is2024 && level >= 9) {
+						calculations.hasAbjureFoes = true;
+						calculations.abjureFoesDc = 8 + profBonus + chaMod;
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF DEVOTION
+					// =========================================================
+					if (cls.subclass?.shortName === "Devotion") {
+						const subSource = cls.subclass?.source || source;
+						const isDevotion2024 = subSource === "XPHB";
+
+						// Sacred Weapon (level 3) - add CHA to attack rolls
+						if (level >= 3) {
+							calculations.hasSacredWeapon = true;
+							calculations.sacredWeaponBonus = Math.max(0, chaMod);
+						}
+
+						// Turn the Unholy (level 3)
+						if (level >= 3) {
+							calculations.hasTurnTheUnholy = true;
+							calculations.turnTheUnholyDc = 8 + profBonus + chaMod;
+						}
+
+						// Aura of Devotion (level 7) - immunity to charm
+						if (level >= 7) {
+							calculations.hasAuraOfDevotion = true;
+						}
+
+						// Smite of Protection (XPHB level 7) - grant temp HP on smite
+						if (isDevotion2024 && level >= 7) {
+							calculations.hasSmiteOfProtection = true;
+							calculations.smiteOfProtectionTempHp = `1d8+${chaMod}`;
+						}
+
+						// Purity of Spirit (level 15) - protection from evil/good always on
+						if (level >= 15) {
+							calculations.hasPurityOfSpirit = true;
+						}
+
+						// Holy Nimbus (level 20)
+						if (level >= 20) {
+							calculations.hasHolyNimbus = true;
+							if (isDevotion2024) {
+								calculations.holyNimbusDamage = "10"; // 10 radiant per creature
+								calculations.holyNimbusAdvantage = true; // Advantage vs fiends/undead
+							} else {
+								calculations.holyNimbusDamage = "10"; // 10 radiant per enemy
+							}
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF THE ANCIENTS
+					// =========================================================
+					if (cls.subclass?.shortName === "Ancients") {
+						const subSource = cls.subclass?.source || source;
+						const isAncients2024 = subSource === "XPHB";
+
+						// Nature's Wrath (level 3) - restrain creature
+						if (level >= 3) {
+							calculations.hasNaturesWrath = true;
+							calculations.naturesWrathDc = 8 + profBonus + chaMod;
+						}
+
+						// Turn the Faithless (level 3)
+						if (level >= 3) {
+							calculations.hasTurnTheFaithless = true;
+						}
+
+						// Aura of Warding (level 7) - resistance to spell damage
+						if (level >= 7) {
+							calculations.hasAuraOfWarding = true;
+						}
+
+						// Undying Sentinel (level 15) - drop to 1 HP instead of 0
+						if (level >= 15) {
+							calculations.hasUndyingSentinel = true;
+						}
+
+						// Elder Champion (level 20)
+						if (level >= 20) {
+							calculations.hasElderChampion = true;
+							if (isAncients2024) {
+								calculations.elderChampionHealing = 10; // Heal 10 HP at start of turn
+							}
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF VENGEANCE
+					// =========================================================
+					if (cls.subclass?.shortName === "Vengeance") {
+						const subSource = cls.subclass?.source || source;
+						const isVengeance2024 = subSource === "XPHB";
+
+						// Abjure Enemy (PHB level 3) - frighten creature
+						if (!isVengeance2024 && level >= 3) {
+							calculations.hasAbjureEnemy = true;
+							calculations.abjureEnemyDc = 8 + profBonus + chaMod;
+						}
+
+						// Vow of Enmity (level 3) - advantage on attacks vs one creature
+						if (level >= 3) {
+							calculations.hasVowOfEnmity = true;
+						}
+
+						// Relentless Avenger (level 7) - move after opportunity attack
+						if (level >= 7) {
+							calculations.hasRelentlessAvenger = true;
+						}
+
+						// Soul of Vengeance (level 15) - reaction attack when vow target attacks
+						if (level >= 15) {
+							calculations.hasSoulOfVengeance = true;
+						}
+
+						// Avenging Angel (level 20) - wings, frightening aura
+						if (level >= 20) {
+							calculations.hasAvengingAngel = true;
+							calculations.avengingAngelFlySpeed = 60;
+							calculations.avengingAngelFrightenDc = 8 + profBonus + chaMod;
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF GLORY
+					// =========================================================
+					if (cls.subclass?.shortName === "Glory") {
+						const subSource = cls.subclass?.source || source;
+						const isGlory2024 = subSource === "XPHB";
+
+						// Peerless Athlete (level 3) - bonus to athletics/acrobatics
+						if (level >= 3) {
+							calculations.hasPeerlessAthlete = true;
+						}
+
+						// Inspiring Smite (level 3) - distribute temp HP after smite
+						if (level >= 3) {
+							calculations.hasInspiringSmite = true;
+							// Temp HP = 2d8 + paladin level
+							calculations.inspiringSmiteTempHp = `2d8+${level}`;
+						}
+
+						// Aura of Alacrity (level 7) - bonus to speed
+						if (level >= 7) {
+							calculations.hasAuraOfAlacrity = true;
+							calculations.auraOfAlacrityBonus = 10;
+						}
+
+						// Glorious Defense (level 15) - add CHA to AC as reaction
+						if (level >= 15) {
+							calculations.hasGloriousDefense = true;
+							calculations.gloriousDefenseBonus = Math.max(0, chaMod);
+							calculations.gloriousDefenseUses = Math.max(1, chaMod);
+						}
+
+						// Living Legend (level 20)
+						if (level >= 20) {
+							calculations.hasLivingLegend = true;
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATHBREAKER
+					// =========================================================
+					if (cls.subclass?.shortName === "Oathbreaker") {
+						// Control Undead (level 3)
+						if (level >= 3) {
+							calculations.hasControlUndead = true;
+							calculations.controlUndeadDc = 8 + profBonus + chaMod;
+						}
+
+						// Dreadful Aspect (level 3) - frighten creatures
+						if (level >= 3) {
+							calculations.hasDreadfulAspect = true;
+							calculations.dreadfulAspectDc = 8 + profBonus + chaMod;
+						}
+
+						// Aura of Hate (level 7) - add CHA to melee damage for self, fiends, undead
+						if (level >= 7) {
+							calculations.hasAuraOfHate = true;
+							calculations.auraOfHateBonus = Math.max(0, chaMod);
+						}
+
+						// Supernatural Resistance (level 15) - resistance to nonmagical b/p/s
+						if (level >= 15) {
+							calculations.hasSupernaturalResistance = true;
+						}
+
+						// Dread Lord (level 20)
+						if (level >= 20) {
+							calculations.hasDreadLord = true;
+							calculations.dreadLordShadowDamage = `${Math.max(0, chaMod)}d10`;
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF THE CROWN
+					// =========================================================
+					if (cls.subclass?.shortName === "Crown") {
+						// Champion Challenge (level 3)
+						if (level >= 3) {
+							calculations.hasChampionChallenge = true;
+							calculations.championChallengeDc = 8 + profBonus + chaMod;
+						}
+
+						// Turn the Tide (level 3) - heal allies below half HP
+						if (level >= 3) {
+							calculations.hasTurnTheTide = true;
+							calculations.turnTheTideHealing = `1d6+${Math.max(0, chaMod)}`;
+						}
+
+						// Divine Allegiance (level 7) - take damage for ally
+						if (level >= 7) {
+							calculations.hasDivineAllegiance = true;
+						}
+
+						// Unyielding Spirit (level 15) - advantage on saves vs paralyzed/stunned
+						if (level >= 15) {
+							calculations.hasUnyieldingSpirit = true;
+						}
+
+						// Exalted Champion (level 20)
+						if (level >= 20) {
+							calculations.hasExaltedChampion = true;
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF CONQUEST
+					// =========================================================
+					if (cls.subclass?.shortName === "Conquest") {
+						// Conquering Presence (level 3) - frighten creatures
+						if (level >= 3) {
+							calculations.hasConqueringPresence = true;
+							calculations.conqueringPresenceDc = 8 + profBonus + chaMod;
+						}
+
+						// Guided Strike (level 3) - +10 to attack roll
+						if (level >= 3) {
+							calculations.hasGuidedStrike = true;
+							calculations.guidedStrikeBonus = 10;
+						}
+
+						// Aura of Conquest (level 7) - psychic damage to frightened in aura
+						if (level >= 7) {
+							calculations.hasAuraOfConquest = true;
+							calculations.auraOfConquestDamage = Math.floor(level / 2);
+						}
+
+						// Scornful Rebuke (level 15) - damage attackers
+						if (level >= 15) {
+							calculations.hasScornfulRebuke = true;
+							calculations.scornfulRebukeDamage = Math.max(0, chaMod);
+						}
+
+						// Invincible Conqueror (level 20)
+						if (level >= 20) {
+							calculations.hasInvincibleConqueror = true;
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF REDEMPTION
+					// =========================================================
+					if (cls.subclass?.shortName === "Redemption") {
+						// Emissary of Peace (level 3) - +5 to Persuasion
+						if (level >= 3) {
+							calculations.hasEmissaryOfPeace = true;
+							calculations.emissaryOfPeaceBonus = 5;
+						}
+
+						// Rebuke the Violent (level 3) - reflect damage
+						if (level >= 3) {
+							calculations.hasRebukeTheViolent = true;
+							calculations.rebukeTheViolentDc = 8 + profBonus + chaMod;
+						}
+
+						// Aura of the Guardian (level 7) - take damage for ally
+						if (level >= 7) {
+							calculations.hasAuraOfTheGuardian = true;
+						}
+
+						// Protective Spirit (level 15) - heal when below half HP
+						if (level >= 15) {
+							calculations.hasProtectiveSpirit = true;
+							calculations.protectiveSpiritHealing = `1d6+${Math.floor(level / 2)}`;
+						}
+
+						// Emissary of Redemption (level 20)
+						if (level >= 20) {
+							calculations.hasEmissaryOfRedemption = true;
+						}
+					}
+
+					// =========================================================
+					// SUBCLASS: OATH OF THE WATCHERS
+					// =========================================================
+					if (cls.subclass?.shortName === "Watchers") {
+						// Watcher's Will (level 3) - grant advantage on mental saves
+						if (level >= 3) {
+							calculations.hasWatchersWill = true;
+							calculations.watchersWillTargets = Math.max(1, chaMod);
+						}
+
+						// Abjure the Extraplanar (level 3) - turn aberrations, celestials, etc.
+						if (level >= 3) {
+							calculations.hasAbjureTheExtraplanar = true;
+							calculations.abjureTheExtraplanarDc = 8 + profBonus + chaMod;
+						}
+
+						// Aura of the Sentinel (level 7) - bonus to initiative
+						if (level >= 7) {
+							calculations.hasAuraOfTheSentinel = true;
+							calculations.auraOfTheSentinelBonus = profBonus;
+						}
+
+						// Vigilant Rebuke (level 15) - damage creature that forces save
+						if (level >= 15) {
+							calculations.hasVigilantRebuke = true;
+							calculations.vigilantRebukeDamage = `2d8+${Math.max(0, chaMod)}`;
+						}
+
+						// Mortal Bulwark (level 20)
+						if (level >= 20) {
+							calculations.hasMortalBulwark = true;
+						}
+					}
+
 					break;
 				}
 				case "Fighter": {
-					// Superiority dice (Battle Master) - check subclass
-					if (cls.subclass?.name === "Battle Master" || cls.subclass?.shortName === "Battle Master") {
-						const superiorityDice = level >= 18 ? "1d12" : level >= 10 ? "1d10" : "1d8";
-						const maneuverDc = 8 + profBonus + Math.max(this.getAbilityMod("str"), this.getAbilityMod("dex")) - exhaustionPenalty;
-						calculations.superiorityDie = superiorityDice;
-						calculations.maneuverSaveDc = maneuverDc;
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+
+					// Second Wind healing (1d10 + fighter level), uses scale in XPHB
+					if (level >= 1) {
+						calculations.secondWindHealing = `1d10+${level}`;
+						// XPHB: Uses = 2 at level 1, +1 at levels 4, 10, 16; PHB: 1 use per rest
+						if (is2024) {
+							calculations.secondWindUses = level >= 16 ? 5 : level >= 10 ? 4 : level >= 4 ? 3 : 2;
+						} else {
+							calculations.secondWindUses = 1;
+						}
 					}
+
+					// Action Surge uses
+					if (level >= 2) {
+						calculations.actionSurgeUses = level >= 17 ? 2 : 1;
+					}
+
+					// Extra Attack count (attacks per Attack action)
+					if (level >= 5) {
+						calculations.extraAttacks = level >= 20 ? 4 : level >= 11 ? 3 : 2;
+					}
+
+					// Indomitable uses
+					if (level >= 9) {
+						calculations.indomitableUses = level >= 17 ? 3 : level >= 13 ? 2 : 1;
+					}
+
+					// XPHB-exclusive features
+					if (is2024) {
+						// Tactical Mind (level 2): Add Second Wind die to failed ability check
+						if (level >= 2) {
+							calculations.hasTacticalMind = true;
+						}
+						// Tactical Shift (level 5): Move half speed when using Second Wind
+						if (level >= 5) {
+							calculations.hasTacticalShift = true;
+						}
+						// Tactical Master (level 9): Swap weapon mastery property
+						if (level >= 9) {
+							calculations.hasTacticalMaster = true;
+						}
+						// Studied Attacks (level 13): Advantage on next attack after miss
+						if (level >= 13) {
+							calculations.hasStudiedAttacks = true;
+						}
+					}
+
+					// Champion subclass
+					if (cls.subclass?.shortName === "Champion") {
+						const subSource = cls.subclass?.source || source;
+						const isChampion2024 = subSource === "XPHB";
+
+						// Improved Critical (level 3): crit on 19-20
+						calculations.criticalRange = level >= 15 ? 18 : 19; // Superior Critical at 15
+						calculations.hasCriticalRange = true;
+
+						// Remarkable Athlete (level 7)
+						if (level >= 7) {
+							if (isChampion2024) {
+								// XPHB: Add Heroic Inspiration on Initiative roll, jump distance bonus
+								calculations.hasRemarkableAthlete = true;
+								calculations.initiativeBonus = profBonus;
+							} else {
+								// PHB: Add half proficiency to STR/DEX/CON checks without proficiency
+								calculations.remarkableAthleteBonus = Math.floor(profBonus / 2);
+							}
+						}
+
+						// Additional Fighting Style (level 10, PHB only)
+						if (!isChampion2024 && level >= 10) {
+							calculations.hasAdditionalFightingStyle = true;
+						}
+
+						// Heroic Warrior (XPHB level 10): Gain Heroic Inspiration on short/long rest
+						if (isChampion2024 && level >= 10) {
+							calculations.hasHeroicWarrior = true;
+						}
+
+						// Survivor (level 18)
+						if (level >= 18) {
+							if (isChampion2024) {
+								// XPHB: Heal 5 + CON mod at start of turn when below half HP
+								const conMod = this.getAbilityMod("con");
+								calculations.survivorHealing = 5 + conMod;
+							} else {
+								// PHB: Heal 5 + CON mod when below half HP, not at 0
+								const conMod = this.getAbilityMod("con");
+								calculations.survivorHealing = 5 + conMod;
+							}
+						}
+					}
+
+					// Battle Master subclass
+					if (cls.subclass?.shortName === "Battle Master") {
+						const subSource = cls.subclass?.source || source;
+						const isBM2024 = subSource === "XPHB";
+
+						// Superiority Dice
+						const superiorityDie = level >= 18 ? "d12" : level >= 10 ? "d10" : "d8";
+						calculations.superiorityDie = superiorityDie;
+
+						// Number of superiority dice
+						const diceCount = level >= 15 ? 6 : level >= 7 ? 5 : 4;
+						calculations.superiorityDiceCount = diceCount;
+
+						// Number of maneuvers known
+						const maneuversKnown = level >= 15 ? 9 : level >= 10 ? 7 : level >= 7 ? 5 : 3;
+						calculations.maneuversKnown = maneuversKnown;
+
+						// Maneuver save DC
+						const maneuverDc = 8 + profBonus + Math.max(this.getAbilityMod("str"), this.getAbilityMod("dex")) - exhaustionPenalty;
+						calculations.maneuverSaveDc = maneuverDc;
+
+						// Know Your Enemy (level 7, PHB only)
+						if (!isBM2024 && level >= 7) {
+							calculations.hasKnowYourEnemy = true;
+						}
+
+						// Relentless (level 15): Regain 1 die on initiative if none
+						if (level >= 15) {
+							calculations.hasRelentless = true;
+						}
+					}
+
+					// Eldritch Knight subclass (1/3 caster)
+					if (cls.subclass?.shortName === "Eldritch Knight") {
+						// Spell save DC and attack bonus based on INT
+						const intMod = this.getAbilityMod("int");
+						calculations.ekSpellSaveDc = 8 + profBonus + intMod - exhaustionPenalty;
+						calculations.ekSpellAttackBonus = profBonus + intMod - exhaustionPenalty;
+
+						// War Magic (level 7): Bonus action attack after cantrip
+						if (level >= 7) {
+							calculations.hasWarMagic = true;
+						}
+
+						// Eldritch Strike (level 10): Disadvantage on saves after weapon hit
+						if (level >= 10) {
+							calculations.hasEldritchStrike = true;
+						}
+
+						// Arcane Charge (level 15): Teleport 30ft when Action Surge
+						if (level >= 15) {
+							calculations.hasArcaneCharge = true;
+						}
+
+						// Improved War Magic (level 18): Bonus action attack after any spell
+						if (level >= 18) {
+							calculations.hasImprovedWarMagic = true;
+						}
+					}
+
+					// Psi Warrior subclass
+					if (cls.subclass?.shortName === "Psi Warrior") {
+						const subSource = cls.subclass?.source || source;
+						const isPsi2024 = subSource === "XPHB";
+
+						// Psionic Energy dice
+						const psionicDie = level >= 17 ? "d12" : level >= 11 ? "d10" : level >= 5 ? "d8" : "d6";
+						calculations.psionicEnergyDie = psionicDie;
+
+						// Number of psionic dice = 2 × proficiency bonus
+						calculations.psionicDiceCount = 2 * profBonus;
+
+						// Psionic save DC
+						const psiDc = 8 + profBonus + this.getAbilityMod("int") - exhaustionPenalty;
+						calculations.psionicSaveDc = psiDc;
+
+						// Telekinetic Adept (level 7)
+						if (level >= 7) {
+							calculations.hasTelekineticAdept = true;
+						}
+
+						// Guarded Mind (level 10): Resistance to psychic, expend die to end conditions
+						if (level >= 10) {
+							calculations.hasGuardedMind = true;
+						}
+
+						// Bulwark of Force (level 15): Create half cover for allies
+						if (level >= 15) {
+							calculations.hasBulwarkOfForce = true;
+						}
+
+						// Telekinetic Master (level 18): Cast Telekinesis
+						if (level >= 18) {
+							calculations.hasTelekineticMaster = true;
+						}
+					}
+
+					// Arcane Archer subclass
+					if (cls.subclass?.shortName === "Arcane Archer") {
+						// Arcane Shot uses: 2 per rest
+						calculations.arcaneShotUses = 2;
+
+						// Arcane Shot options known
+						const optionsKnown = level >= 18 ? 6 : level >= 15 ? 5 : level >= 10 ? 4 : level >= 7 ? 3 : 2;
+						calculations.arcaneShotOptions = optionsKnown;
+
+						// Arcane Shot save DC
+						const arcaneArrowDc = 8 + profBonus + this.getAbilityMod("int") - exhaustionPenalty;
+						calculations.arcaneShotSaveDc = arcaneArrowDc;
+
+						// Curving Shot (level 7): Redirect missed arrow
+						if (level >= 7) {
+							calculations.hasCurvingShot = true;
+						}
+
+						// Ever-Ready Shot (level 15): Regain use on initiative if none
+						if (level >= 15) {
+							calculations.hasEverReadyShot = true;
+						}
+					}
+
+					// Cavalier subclass
+					if (cls.subclass?.shortName === "Cavalier") {
+						// Unwavering Mark uses per long rest = STR mod (min 1)
+						const strMod = Math.max(1, this.getAbilityMod("str"));
+						calculations.unwaveringMarkUses = strMod;
+
+						// Warding Maneuver (level 7): Uses = CON mod per long rest
+						if (level >= 7) {
+							const conMod = Math.max(1, this.getAbilityMod("con"));
+							calculations.wardingManeuverUses = conMod;
+						}
+
+						// Hold the Line (level 10): OA when creature moves in reach
+						if (level >= 10) {
+							calculations.hasHoldTheLine = true;
+						}
+
+						// Ferocious Charger (level 15): Knock prone on charge
+						if (level >= 15) {
+							calculations.hasFerociousCharger = true;
+						}
+
+						// Vigilant Defender (level 18): Special reaction each turn
+						if (level >= 18) {
+							calculations.hasVigilantDefender = true;
+						}
+					}
+
+					// Samurai subclass
+					if (cls.subclass?.shortName === "Samurai") {
+						// Fighting Spirit uses = 3 per long rest
+						calculations.fightingSpiritUses = 3;
+						// Temp HP from Fighting Spirit = 5, increases at 10 and 15
+						calculations.fightingSpiritTempHp = level >= 15 ? 15 : level >= 10 ? 10 : 5;
+
+						// Elegant Courtier (level 7): Add WIS to Persuasion
+						if (level >= 7) {
+							calculations.hasElegantCourtier = true;
+							calculations.elegantCourtierBonus = this.getAbilityMod("wis");
+						}
+
+						// Tireless Spirit (level 10): Regain Fighting Spirit use on initiative if none
+						if (level >= 10) {
+							calculations.hasTirelessSpirit = true;
+						}
+
+						// Rapid Strike (level 15): Trade advantage for extra attack
+						if (level >= 15) {
+							calculations.hasRapidStrike = true;
+						}
+
+						// Strength before Death (level 18): Extra turn when reduced to 0
+						if (level >= 18) {
+							calculations.hasStrengthBeforeDeath = true;
+						}
+					}
+
+					// Echo Knight subclass
+					if (cls.subclass?.shortName === "Echo Knight") {
+						// Unleash Incarnation uses = CON mod per long rest
+						const conMod = Math.max(1, this.getAbilityMod("con"));
+						calculations.unleashIncarnationUses = conMod;
+
+						// Echo HP = 1 (destroyed if takes damage)
+						calculations.echoHp = 1;
+						// Echo AC = 14 + proficiency bonus
+						calculations.echoAc = 14 + profBonus;
+
+						// Echo Avatar (level 7): Transfer senses to echo
+						if (level >= 7) {
+							calculations.hasEchoAvatar = true;
+						}
+
+						// Shadow Martyr (level 10): Echo takes hit for ally
+						if (level >= 10) {
+							calculations.hasShadowMartyr = true;
+						}
+
+						// Reclaim Potential (level 15): Temp HP when echo destroyed = CON mod
+						if (level >= 15) {
+							calculations.hasReclaimPotential = true;
+							calculations.reclaimPotentialTempHp = conMod;
+						}
+
+						// Legion of One (level 18): Two echoes, regain Unleash on initiative if none
+						if (level >= 18) {
+							calculations.hasLegionOfOne = true;
+							calculations.maxEchoes = 2;
+						} else {
+							calculations.maxEchoes = 1;
+						}
+					}
+
+					// Rune Knight subclass
+					if (cls.subclass?.shortName === "Rune Knight") {
+						// Giant's Might uses = proficiency bonus per long rest
+						calculations.giantsMightUses = profBonus;
+						// Extra damage from Giant's Might = 1d6, then 1d8 at 10, 1d10 at 18
+						calculations.giantsMightDamage = level >= 18 ? "1d10" : level >= 10 ? "1d8" : "1d6";
+						// Size when using Giant's Might
+						calculations.giantsMightSize = level >= 18 ? "Huge" : "Large";
+
+						// Number of runes known
+						const runesKnown = level >= 15 ? 5 : level >= 10 ? 4 : level >= 7 ? 3 : 2;
+						calculations.runesKnown = runesKnown;
+
+						// Rune save DC
+						const runeDc = 8 + profBonus + this.getAbilityMod("con") - exhaustionPenalty;
+						calculations.runeSaveDc = runeDc;
+
+						// Runic Shield (level 7): Force reroll against ally
+						if (level >= 7) {
+							calculations.hasRunicShield = true;
+							calculations.runicShieldUses = profBonus;
+						}
+
+						// Great Stature (level 10): Height increases, extra d6 damage
+						if (level >= 10) {
+							calculations.hasGreatStature = true;
+						}
+
+						// Master of Runes (level 15): Use each rune twice
+						if (level >= 15) {
+							calculations.hasMasterOfRunes = true;
+						}
+
+						// Runic Juggernaut (level 18): Become Huge, reach increases
+						if (level >= 18) {
+							calculations.hasRunicJuggernaut = true;
+						}
+					}
+
 					break;
 				}
 				case "Warlock": {
-					// Eldritch Blast beams
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+					const chaMod = this.getAbilityMod("cha");
+
+					// Eldritch Blast beams (based on total character level)
 					const beams = level >= 17 ? 4 : level >= 11 ? 3 : level >= 5 ? 2 : 1;
 					calculations.eldritchBlastBeams = beams;
+
+					// Pact Magic - spellcasting
+					calculations.hasPactMagic = true;
+					calculations.spellcastingAbility = "cha";
+					calculations.spellSaveDc = 8 + profBonus + chaMod - exhaustionPenalty;
+					calculations.spellAttackBonus = profBonus + chaMod - exhaustionPenalty;
+
+					// Cantrips known: 2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4
+					const cantripsKnown = level >= 10 ? 4 : level >= 4 ? 3 : 2;
+					calculations.cantripsKnown = cantripsKnown;
+
+					// Pact Magic spell slots (short rest recovery)
+					// PHB: 1-2: 1 slot (1st), 3-4: 2 slots (2nd), 5-6: 2 (3rd), 7-8: 2 (4th), 9+: 2 (5th)
+					// XPHB: 1: 1 slot (1st), 2: 2 (1st), 3-4: 2 (2nd), 5-6: 2 (3rd), 7-8: 2 (4th), 9-10: 2 (5th), 11+: 3 (5th), 17+: 4 (5th)
+					let pactSlots, pactSlotLevel;
+					if (is2024) {
+						pactSlots = level >= 17 ? 4 : level >= 11 ? 3 : level >= 2 ? 2 : 1;
+						pactSlotLevel = level >= 9 ? 5 : level >= 7 ? 4 : level >= 5 ? 3 : level >= 3 ? 2 : 1;
+					} else {
+						pactSlots = level >= 11 ? 3 : level >= 2 ? 2 : 1;
+						pactSlotLevel = level >= 9 ? 5 : level >= 7 ? 4 : level >= 5 ? 3 : level >= 3 ? 2 : 1;
+					}
+					calculations.pactSlots = pactSlots;
+					calculations.pactSlotLevel = pactSlotLevel;
+
+					// Spells known (PHB) or Prepared spells (XPHB)
+					if (is2024) {
+						// XPHB: prepared spells progression
+						const preparedSpells = level >= 19 ? 15 : level >= 17 ? 14 : level >= 15 ? 13 : level >= 13 ? 12 :
+							level >= 11 ? 11 : level >= 10 ? 10 : level >= 9 ? 9 : level >= 8 ? 9 : level >= 7 ? 8 :
+							level >= 6 ? 7 : level >= 5 ? 7 : level >= 4 ? 6 : level >= 3 ? 5 : level >= 2 ? 4 : 2;
+						calculations.preparedSpells = preparedSpells;
+					} else {
+						// PHB: spells known progression
+						const spellsKnown = level >= 19 ? 15 : level >= 17 ? 14 : level >= 15 ? 13 : level >= 13 ? 12 :
+							level >= 11 ? 11 : level >= 9 ? 10 : level >= 8 ? 9 : level >= 7 ? 8 : level >= 6 ? 7 :
+							level >= 5 ? 6 : level >= 4 ? 5 : level >= 3 ? 4 : level >= 2 ? 3 : 2;
+						calculations.spellsKnown = spellsKnown;
+					}
+
+					// Eldritch Invocations
+					if (is2024 || level >= 2) {
+						calculations.hasEldritchInvocations = true;
+						// Invocations known: PHB level 2+, XPHB level 1+
+						// PHB: 2 at 2, +1 at 5,7,9,12,15,18
+						// XPHB: similar progression
+						let invocationsKnown;
+						if (is2024) {
+							invocationsKnown = level >= 18 ? 8 : level >= 15 ? 7 : level >= 12 ? 6 : level >= 9 ? 5 :
+								level >= 7 ? 4 : level >= 5 ? 3 : level >= 2 ? 2 : 1;
+						} else {
+							invocationsKnown = level >= 18 ? 8 : level >= 15 ? 7 : level >= 12 ? 6 : level >= 9 ? 5 :
+								level >= 7 ? 4 : level >= 5 ? 3 : level >= 2 ? 2 : 0;
+						}
+						calculations.invocationsKnown = invocationsKnown;
+					}
+
+					// Pact Boon (PHB level 3)
+					if (!is2024 && level >= 3) {
+						calculations.hasPactBoon = true;
+					}
+
+					// Magical Cunning (XPHB level 2)
+					if (is2024 && level >= 2) {
+						calculations.hasMagicalCunning = true;
+					}
+
+					// Contact Patron (XPHB level 9)
+					if (is2024 && level >= 9) {
+						calculations.hasContactPatron = true;
+					}
+
+					// Mystic Arcanum
+					// Level 11: 6th-level spell, Level 13: 7th, Level 15: 8th, Level 17: 9th
+					if (level >= 11) {
+						calculations.hasMysticArcanum = true;
+						calculations.mysticArcanum6th = true;
+					}
+					if (level >= 13) {
+						calculations.mysticArcanum7th = true;
+					}
+					if (level >= 15) {
+						calculations.mysticArcanum8th = true;
+					}
+					if (level >= 17) {
+						calculations.mysticArcanum9th = true;
+					}
+
+					// Eldritch Master (level 20)
+					if (level >= 20) {
+						calculations.hasEldritchMaster = true;
+					}
+
+					// Subclass features (Otherworldly Patron)
+					const subclassName = cls.subclass?.name;
+					// PHB gets subclass at level 1, XPHB at level 3
+					const subclassLevel = is2024 ? 3 : 1;
+
+					if (subclassName && level >= subclassLevel) {
+						switch (subclassName) {
+							case "The Archfey":
+							case "Archfey":
+							case "Archfey Patron": {
+								// Fey Presence / Steps of the Fey (level 1/3)
+								if (is2024) {
+									calculations.hasStepsOfTheFey = true;
+									calculations.stepsOfTheFeyUses = profBonus;
+								} else {
+									calculations.hasFeyPresence = true;
+								}
+
+								// Misty Escape (level 6)
+								if (level >= 6) {
+									calculations.hasMistyEscape = true;
+								}
+
+								// Beguiling Defenses (level 10)
+								if (level >= 10) {
+									calculations.hasBeguilingDefenses = true;
+								}
+
+								// Dark Delirium (level 14) / Bewitching Magic (XPHB)
+								if (level >= 14) {
+									if (is2024) {
+										calculations.hasBewitchingMagic = true;
+									} else {
+										calculations.hasDarkDelirium = true;
+										calculations.darkDeliriumDc = 8 + profBonus + chaMod;
+									}
+								}
+								break;
+							}
+
+							case "The Fiend":
+							case "Fiend":
+							case "Fiend Patron": {
+								// Dark One's Blessing (level 1/3)
+								calculations.hasDarkOnesBlessing = true;
+								calculations.darkOnesBlessingTempHp = chaMod + level;
+
+								// Dark One's Own Luck (level 6)
+								if (level >= 6) {
+									calculations.hasDarkOnesOwnLuck = true;
+								}
+
+								// Fiendish Resilience (level 10)
+								if (level >= 10) {
+									calculations.hasFiendishResilience = true;
+								}
+
+								// Hurl Through Hell (level 14)
+								if (level >= 14) {
+									calculations.hasHurlThroughHell = true;
+									calculations.hurlThroughHellDamage = "10d10";
+								}
+								break;
+							}
+
+							case "The Great Old One":
+							case "Great Old One":
+							case "Great Old One Patron": {
+								// Awakened Mind (level 1/3)
+								calculations.hasAwakenedMind = true;
+								if (is2024) {
+									calculations.awakenedMindRange = level * 5; // 5 ft per level in XPHB
+								} else {
+									calculations.awakenedMindRange = 30;
+								}
+
+								// Psychic Spells (XPHB level 3)
+								if (is2024) {
+									calculations.hasPsychicSpells = true;
+								}
+
+								// Entropic Ward (level 6) / Clairvoyant Combatant (XPHB)
+								if (level >= 6) {
+									if (is2024) {
+										calculations.hasClairvoyantCombatant = true;
+									} else {
+										calculations.hasEntropicWard = true;
+									}
+								}
+
+								// Thought Shield (level 10) / Eldritch Hex + Thought Shield (XPHB)
+								if (level >= 10) {
+									calculations.hasThoughtShield = true;
+									if (is2024) {
+										calculations.hasEldritchHex = true;
+									}
+								}
+
+								// Create Thrall (level 14)
+								if (level >= 14) {
+									calculations.hasCreateThrall = true;
+								}
+								break;
+							}
+
+							case "The Undying":
+							case "Undying": {
+								// Among the Dead (level 1)
+								calculations.hasAmongTheDead = true;
+
+								// Defy Death (level 6)
+								if (level >= 6) {
+									calculations.hasDefyDeath = true;
+									calculations.defyDeathHealing = "1d8+" + chaMod;
+								}
+
+								// Undying Nature (level 10)
+								if (level >= 10) {
+									calculations.hasUndyingNature = true;
+								}
+
+								// Indestructible Life (level 14)
+								if (level >= 14) {
+									calculations.hasIndestructibleLife = true;
+									calculations.indestructibleLifeHealing = "1d8+" + level;
+								}
+								break;
+							}
+
+							case "The Celestial":
+							case "Celestial":
+							case "Celestial Patron": {
+								// Healing Light (level 1/3)
+								calculations.hasHealingLight = true;
+								calculations.healingLightDice = 1 + level; // Pool of d6s
+								calculations.healingLightMaxDice = Math.min(chaMod, 5); // Max dice per use
+
+								// Radiant Soul (level 6)
+								if (level >= 6) {
+									calculations.hasRadiantSoul = true;
+									calculations.radiantSoulBonus = chaMod;
+								}
+
+								// Celestial Resilience (level 10)
+								if (level >= 10) {
+									calculations.hasCelestialResilience = true;
+									calculations.celestialResilienceTempHp = level + chaMod;
+								}
+
+								// Searing Vengeance (level 14)
+								if (level >= 14) {
+									calculations.hasSearingVengeance = true;
+									calculations.searingVengeanceDamage = "2d8+" + chaMod;
+								}
+								break;
+							}
+
+							case "The Hexblade":
+							case "Hexblade": {
+								// Hexblade's Curse + Hex Warrior (level 1)
+								calculations.hasHexWarrior = true;
+								calculations.hasHexbladesCurse = true;
+								calculations.hexbladesCurseDamage = profBonus;
+								calculations.hexbladesCurseHealing = chaMod + level;
+
+								// Accursed Specter (level 6)
+								if (level >= 6) {
+									calculations.hasAccursedSpecter = true;
+									calculations.accursedSpecterTempHp = Math.floor(level / 2);
+								}
+
+								// Armor of Hexes (level 10)
+								if (level >= 10) {
+									calculations.hasArmorOfHexes = true;
+								}
+
+								// Master of Hexes (level 14)
+								if (level >= 14) {
+									calculations.hasMasterOfHexes = true;
+								}
+								break;
+							}
+
+							case "The Fathomless":
+							case "Fathomless": {
+								// Gift of the Sea + Tentacle of the Deeps (level 1)
+								calculations.hasGiftOfTheSea = true;
+								calculations.swimSpeed = 40;
+								calculations.hasTentacleOfTheDeeps = true;
+								calculations.tentacleDamage = "1d8";
+								calculations.tentacleUses = profBonus;
+
+								// Guardian Coil + Oceanic Soul (level 6)
+								if (level >= 6) {
+									calculations.hasGuardianCoil = true;
+									calculations.guardianCoilReduction = "1d8";
+									calculations.hasOceanicSoul = true;
+								}
+
+								// Grasping Tentacles (level 10)
+								if (level >= 10) {
+									calculations.hasGraspingTentacles = true;
+									calculations.graspingTentaclesTempHp = level;
+								}
+
+								// Fathomless Plunge (level 14)
+								if (level >= 14) {
+									calculations.hasFathomlessPlunge = true;
+									calculations.fathomlessPlungeRange = 30;
+								}
+								break;
+							}
+
+							case "The Genie":
+							case "Genie": {
+								// Genie's Vessel (level 1)
+								calculations.hasGeniesVessel = true;
+								calculations.geniesWrathDamage = profBonus;
+
+								// Elemental Gift (level 6)
+								if (level >= 6) {
+									calculations.hasElementalGift = true;
+									calculations.elementalGiftFlySpeed = 30;
+								}
+
+								// Sanctuary Vessel (level 10)
+								if (level >= 10) {
+									calculations.hasSanctuaryVessel = true;
+									calculations.sanctuaryVesselHours = level / 2;
+								}
+
+								// Limited Wish (level 14)
+								if (level >= 14) {
+									calculations.hasLimitedWish = true;
+								}
+								break;
+							}
+
+							case "The Undead":
+							case "Undead": {
+								// Form of Dread (level 1)
+								calculations.hasFormOfDread = true;
+								calculations.formOfDreadTempHp = "1d10+" + level;
+								calculations.formOfDreadUses = profBonus;
+
+								// Grave Touched (level 6)
+								if (level >= 6) {
+									calculations.hasGraveTouched = true;
+								}
+
+								// Necrotic Husk (level 10)
+								if (level >= 10) {
+									calculations.hasNecroticHusk = true;
+								}
+
+								// Spirit Projection (level 14)
+								if (level >= 14) {
+									calculations.hasSpiritProjection = true;
+								}
+								break;
+							}
+						}
+					}
+
 					break;
 				}
 				case "Sorcerer": {
-					// Metamagic - handled by resources
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+
+					// Spellcasting
+					calculations.hasSpellcasting = true;
+					calculations.spellcastingAbility = "cha";
+					calculations.spellSaveDc = 8 + profBonus + this.getAbilityMod("cha") - exhaustionPenalty;
+					calculations.spellAttackBonus = profBonus + this.getAbilityMod("cha") - exhaustionPenalty;
+
+					// Cantrips known progression
+					const cantripsKnown = level >= 10 ? 6 : level >= 4 ? 5 : 4;
+					calculations.cantripsKnown = cantripsKnown;
+
+					// Spells known (PHB) or Prepared (XPHB)
+					if (is2024) {
+						// XPHB prepared spells progression
+						const preparedSpells = level >= 20 ? 22 : level >= 19 ? 21 : level >= 18 ? 20 : level >= 17 ? 19 :
+							level >= 16 ? 18 : level >= 15 ? 18 : level >= 14 ? 17 : level >= 13 ? 17 : level >= 12 ? 16 :
+							level >= 11 ? 16 : level >= 10 ? 15 : level >= 9 ? 14 : level >= 8 ? 12 : level >= 7 ? 11 :
+							level >= 6 ? 10 : level >= 5 ? 9 : level >= 4 ? 7 : level >= 3 ? 6 : level >= 2 ? 4 : 2;
+						calculations.preparedSpells = preparedSpells;
+					} else {
+						// PHB spells known progression
+						const spellsKnown = level >= 17 ? 15 : level >= 15 ? 14 : level >= 13 ? 13 : level >= 11 ? 12 :
+							level >= 10 ? 11 : level >= 9 ? 10 : level >= 8 ? 9 : level >= 7 ? 8 : level >= 6 ? 7 :
+							level >= 5 ? 6 : level >= 4 ? 5 : level >= 3 ? 4 : level >= 2 ? 3 : 2;
+						calculations.spellsKnown = spellsKnown;
+					}
+
+					// Font of Magic / Sorcery Points (level 2+)
+					if (level >= 2) {
+						calculations.hasFontOfMagic = true;
+						calculations.sorceryPoints = level;
+					}
+
+					// Metamagic options count
+					if (level >= 3 || (is2024 && level >= 2)) {
+						calculations.hasMetamagic = true;
+						if (is2024) {
+							// XPHB: 2 at level 2, 4 at level 10, 6 at level 17
+							calculations.metamagicOptions = level >= 17 ? 6 : level >= 10 ? 4 : 2;
+						} else {
+							// PHB: 2 at level 3, 3 at level 10, 4 at level 17
+							calculations.metamagicOptions = level >= 17 ? 4 : level >= 10 ? 3 : 2;
+						}
+					}
+
+					// Innate Sorcery (XPHB level 1)
+					if (is2024) {
+						calculations.hasInnateSorcery = true;
+					}
+
+					// Sorcerous Restoration
+					// PHB level 20: regain 4 sorcery points on short rest
+					// XPHB level 5: regain sorcery points when no points left
+					if (is2024 && level >= 5) {
+						calculations.hasSorcerousRestoration = true;
+						calculations.sorcerousRestorationAmount = profBonus;
+					} else if (!is2024 && level >= 20) {
+						calculations.hasSorcerousRestoration = true;
+						calculations.sorcerousRestorationAmount = 4;
+					}
+
+					// Sorcery Incarnate (XPHB level 7)
+					if (is2024 && level >= 7) {
+						calculations.hasSorceryIncarnate = true;
+					}
+
+					// Arcane Apotheosis (XPHB level 20)
+					if (is2024 && level >= 20) {
+						calculations.hasArcaneApotheosis = true;
+					}
+
+					// Subclass features
+					const subclassName = cls.subclass?.name;
+					if (subclassName) {
+						switch (subclassName) {
+							case "Draconic Bloodline":
+							case "Draconic":
+							case "Draconic Sorcery": {
+								// Draconic Resilience (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasDraconicResilience = true;
+									// HP bonus = 1 per sorcerer level
+									calculations.draconicResilienceHpBonus = level;
+									// AC = 13 + DEX when not wearing armor
+									calculations.draconicResilienceAc = 13 + this.getAbilityMod("dex");
+								}
+								// Elemental Affinity (level 6)
+								if (level >= 6) {
+									calculations.hasElementalAffinity = true;
+									calculations.elementalAffinityBonus = this.getAbilityMod("cha");
+								}
+								// Dragon Wings (level 14)
+								if (level >= 14) {
+									calculations.hasDragonWings = true;
+									calculations.flySpeed = this.getSpeed?.() || 30;
+								}
+								// Draconic Presence (PHB level 18) / Dragon Companion (XPHB level 18)
+								if (level >= 18) {
+									if (is2024) {
+										calculations.hasDragonCompanion = true;
+									} else {
+										calculations.hasDraconicPresence = true;
+										calculations.draconicPresenceDc = 8 + profBonus + this.getAbilityMod("cha") - exhaustionPenalty;
+									}
+								}
+								break;
+							}
+							case "Wild Magic":
+							case "Wild Magic Sorcery": {
+								// Wild Magic Surge (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasWildMagicSurge = true;
+								}
+								// Tides of Chaos (level 1/3)
+								if (level >= subclassLevel) {
+									calculations.hasTidesOfChaos = true;
+								}
+								// Bend Luck (level 6)
+								if (level >= 6) {
+									calculations.hasBendLuck = true;
+									calculations.bendLuckCost = 2;
+								}
+								// Controlled Chaos (level 14)
+								if (level >= 14) {
+									calculations.hasControlledChaos = true;
+								}
+								// Spell Bombardment (PHB level 18) / Tamed Surge (XPHB level 18)
+								if (level >= 18) {
+									if (is2024) {
+										calculations.hasTamedSurge = true;
+									} else {
+										calculations.hasSpellBombardment = true;
+									}
+								}
+								break;
+							}
+							case "Divine Soul": {
+								// Divine Magic (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasDivineMagic = true;
+								}
+								// Favored by the Gods (level 1/3)
+								if (level >= subclassLevel) {
+									calculations.hasFavoredByTheGods = true;
+									calculations.favoredByTheGodsBonus = "2d4";
+								}
+								// Empowered Healing (level 6)
+								if (level >= 6) {
+									calculations.hasEmpoweredHealing = true;
+								}
+								// Otherworldly Wings (level 14)
+								if (level >= 14) {
+									calculations.hasOtherworldlyWings = true;
+									calculations.flySpeed = 30;
+								}
+								// Unearthly Recovery (level 18)
+								if (level >= 18) {
+									calculations.hasUnearthlyRecovery = true;
+									calculations.unearthlyRecoveryHp = Math.floor(this.getMaxHpValue?.() / 2) || level;
+								}
+								break;
+							}
+							case "Shadow Magic":
+							case "Shadow": {
+								// Eyes of the Dark (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasEyesOfTheDark = true;
+									calculations.darkvision = 120;
+								}
+								// Strength of the Grave (level 1/3)
+								if (level >= subclassLevel) {
+									calculations.hasStrengthOfTheGrave = true;
+									calculations.strengthOfTheGraveDc = 5; // + damage taken
+								}
+								// Hound of Ill Omen (level 6)
+								if (level >= 6) {
+									calculations.hasHoundOfIllOmen = true;
+									calculations.houndCost = 3;
+								}
+								// Shadow Walk (level 14)
+								if (level >= 14) {
+									calculations.hasShadowWalk = true;
+								}
+								// Umbral Form (level 18)
+								if (level >= 18) {
+									calculations.hasUmbralForm = true;
+									calculations.umbralFormCost = 6;
+								}
+								break;
+							}
+							case "Storm Sorcery":
+							case "Storm": {
+								// Wind Speaker (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasWindSpeaker = true;
+								}
+								// Tempestuous Magic (level 1/3)
+								if (level >= subclassLevel) {
+									calculations.hasTempestuousMagic = true;
+								}
+								// Heart of the Storm (level 6)
+								if (level >= 6) {
+									calculations.hasHeartOfTheStorm = true;
+									calculations.heartOfTheStormDamage = Math.floor(level / 2);
+								}
+								// Storm Guide (level 6)
+								if (level >= 6) {
+									calculations.hasStormGuide = true;
+								}
+								// Storm's Fury (level 14)
+								if (level >= 14) {
+									calculations.hasStormsFury = true;
+									calculations.stormsFuryDamage = level;
+								}
+								// Wind Soul (level 18)
+								if (level >= 18) {
+									calculations.hasWindSoul = true;
+									calculations.flySpeed = 60;
+									calculations.immuneToThunderLightning = true;
+								}
+								break;
+							}
+							case "Aberrant Mind":
+							case "Aberrant":
+							case "Aberrant Sorcery": {
+								// Psionic Spells (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasPsionicSpells = true;
+								}
+								// Telepathic Speech (level 1/3)
+								if (level >= subclassLevel) {
+									calculations.hasTelepathicSpeech = true;
+									calculations.telepathyRange = 30 * this.getAbilityMod("cha");
+								}
+								// Psionic Sorcery (level 6)
+								if (level >= 6) {
+									calculations.hasPsionicSorcery = true;
+								}
+								// Psychic Defenses (level 6)
+								if (level >= 6) {
+									calculations.hasPsychicDefenses = true;
+								}
+								// Revelation in Flesh (level 14)
+								if (level >= 14) {
+									calculations.hasRevelationInFlesh = true;
+								}
+								// Warping Implosion (level 18)
+								if (level >= 18) {
+									calculations.hasWarpingImplosion = true;
+									calculations.warpingImplosionCost = is2024 ? 5 : 5;
+								}
+								break;
+							}
+							case "Clockwork Soul":
+							case "Clockwork":
+							case "Clockwork Sorcery": {
+								// Clockwork Magic (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasClockworkMagic = true;
+								}
+								// Restore Balance (level 1/3)
+								if (level >= subclassLevel) {
+									calculations.hasRestoreBalance = true;
+									calculations.restoreBalanceUses = profBonus;
+								}
+								// Bastion of Law (level 6)
+								if (level >= 6) {
+									calculations.hasBastionOfLaw = true;
+									calculations.bastionMaxDice = 5;
+								}
+								// Trance of Order (level 14)
+								if (level >= 14) {
+									calculations.hasTranceOfOrder = true;
+									calculations.tranceOfOrderCost = is2024 ? 5 : 0; // XPHB costs 5 sorcery points
+								}
+								// Clockwork Cavalcade (level 18)
+								if (level >= 18) {
+									calculations.hasClockworkCavalcade = true;
+									calculations.clockworkCavalcadeHealing = 100;
+									calculations.clockworkCavalcadeCost = 7;
+								}
+								break;
+							}
+							case "Lunar Sorcery":
+							case "Lunar": {
+								// Lunar Embodiment (level 1/3)
+								const subclassLevel = is2024 ? 3 : 1;
+								if (level >= subclassLevel) {
+									calculations.hasLunarEmbodiment = true;
+								}
+								// Moon Fire (level 1/3)
+								if (level >= subclassLevel) {
+									calculations.hasMoonFire = true;
+								}
+								// Lunar Boons (level 6)
+								if (level >= 6) {
+									calculations.hasLunarBoons = true;
+								}
+								// Waxing and Waning (level 6)
+								if (level >= 6) {
+									calculations.hasWaxingAndWaning = true;
+								}
+								// Lunar Empowerment (level 14)
+								if (level >= 14) {
+									calculations.hasLunarEmpowerment = true;
+								}
+								// Lunar Phenomenon (level 18)
+								if (level >= 18) {
+									calculations.hasLunarPhenomenon = true;
+								}
+								break;
+							}
+						}
+					}
 					break;
 				}
 				case "Cleric": {
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+
 					// Channel Divinity DC is spell save DC
 					calculations.channelDivinityDc = this.getSpellSaveDc();
+
+					// Channel Divinity uses progression
+					// PHB/XPHB: 1 use at level 2, 2 at level 6, 3 at level 18
+					if (level >= 2) {
+						calculations.channelDivinityUses = level >= 18 ? 3 : level >= 6 ? 2 : 1;
+					}
+
+					// Destroy Undead CR threshold (PHB only - XPHB uses Sear Undead instead)
+					if (!is2024 && level >= 5) {
+						const destroyUndeadCr = level >= 17 ? 4 : level >= 14 ? 3 : level >= 11 ? 2 : level >= 8 ? 1 : 0.5;
+						calculations.destroyUndeadCr = destroyUndeadCr;
+					}
+
+					// Sear Undead damage (XPHB level 5+)
+					if (is2024 && level >= 5) {
+						const searUndeadDice = Math.floor(level / 5);
+						calculations.searUndeadDamage = `${searUndeadDice}d8`;
+					}
+
+					// Divine Intervention (level 10+)
+					if (level >= 10) {
+						// PHB: d100 <= cleric level for success; XPHB: automatic at level 20
+						calculations.divineInterventionChance = is2024 && level >= 20 ? 100 : level;
+					}
+
+					// Blessed Strikes damage (XPHB level 7+)
+					if (is2024 && level >= 7) {
+						const blessedStrikesDamage = level >= 14 ? "2d8" : "1d8";
+						calculations.blessedStrikesDamage = blessedStrikesDamage;
+					}
+
+					// Divine Order: Thaumaturge bonus (XPHB level 1)
+					// Grants WIS mod bonus to Arcana OR Religion checks
+					if (is2024) {
+						const wisMod = Math.max(1, this.getAbilityMod("wis"));
+						calculations.thaumaturgeBonus = wisMod;
+					}
 					break;
 				}
 				case "Druid": {
+					const source = cls.source || "PHB";
+					const isXPHB = source === "XPHB";
+
 					// Wild Shape DC is spell save DC
 					calculations.wildShapeDc = this.getSpellSaveDc();
+
+					// Wild Shape uses: 2 per short/long rest (both PHB and XPHB)
+					if (level >= 2) {
+						calculations.wildShapeUses = 2;
+					}
+
+					// Wild Shape CR limits (PHB) - based on druid level
+					// Level 2: CR 1/4, no flying/swimming
+					// Level 4: CR 1/2, no flying
+					// Level 8: CR 1
+					if (!isXPHB && level >= 2) {
+						const wildShapeCr = level >= 8 ? 1 : level >= 4 ? 0.5 : 0.25;
+						calculations.wildShapeCr = wildShapeCr;
+						calculations.wildShapeCanSwim = level >= 4;
+						calculations.wildShapeCanFly = level >= 8;
+					}
+
+					// XPHB Wild Shape uses different stat blocks with temp HP
+					if (isXPHB && level >= 2) {
+						// Temp HP = 4 × druid level
+						calculations.wildShapeTempHp = 4 * level;
+					}
+
+					// Timeless Body (PHB level 18)
+					if (!isXPHB && level >= 18) {
+						calculations.hasTimelessBody = true;
+					}
+
+					// Beast Spells (level 18 both PHB and XPHB)
+					if (level >= 18) {
+						calculations.hasBeastSpells = true;
+					}
+
+					// Archdruid (level 20 both PHB and XPHB)
+					if (level >= 20) {
+						calculations.hasArchdruid = true;
+						// XPHB: Can use Wild Shape unlimited times
+						if (isXPHB) {
+							calculations.wildShapeUses = Infinity;
+						}
+					}
+
+					// Wild Resurgence (XPHB level 5)
+					if (isXPHB && level >= 5) {
+						calculations.hasWildResurgence = true;
+					}
+
+					// Elemental Fury (XPHB level 7) - Potent Spellcasting or Primal Strike
+					if (isXPHB && level >= 7) {
+						calculations.hasElementalFury = true;
+						// Potent Spellcasting adds WIS mod to cantrip damage
+						calculations.potentSpellcastingBonus = this.getAbilityMod("wis");
+					}
+
+					// Improved Elemental Fury (XPHB level 15)
+					if (isXPHB && level >= 15) {
+						calculations.hasImprovedElementalFury = true;
+					}
 					break;
 				}
 				case "Bard": {
+					const source = cls.source || "PHB";
+					const isXPHB = source === "XPHB";
+
 					// Bardic Inspiration die
 					const inspirationDie = level >= 15 ? "1d12" : level >= 10 ? "1d10" : level >= 5 ? "1d8" : "1d6";
 					calculations.bardicInspirationDie = inspirationDie;
+
+					// Bardic Inspiration uses (equal to CHA modifier, minimum 1)
+					calculations.bardicInspirationUses = Math.max(1, this.getAbilityMod("cha"));
+
+					// Jack of All Trades (level 2+) - half proficiency rounded down
+					if (level >= 2) {
+						calculations.jackOfAllTrades = Math.floor(profBonus / 2);
+					}
+
+					// Song of Rest die (PHB only: level 2+, removed in XPHB 2024)
+					if (!isXPHB && level >= 2) {
+						const songOfRestDie = level >= 17 ? "1d12" : level >= 13 ? "1d10" : level >= 9 ? "1d8" : "1d6";
+						calculations.songOfRestDie = songOfRestDie;
+					}
+
+					// Countercharm - PHB: level 6+, XPHB: level 7+
+					const countercharmLevel = isXPHB ? 7 : 6;
+					if (level >= countercharmLevel) {
+						calculations.hasCountercharm = true;
+					}
+
+					// Superior Inspiration (level 18+) - both PHB and XPHB
+					if (level >= 18) {
+						calculations.hasSuperiorInspiration = true;
+					}
+
+					// Words of Creation (XPHB level 20 capstone - replaced Superior Inspiration capstone)
+					if (isXPHB && level >= 20) {
+						calculations.hasWordsOfCreation = true;
+					}
 					break;
 				}
 				case "Ranger": {
-					// Favored Foe damage - only if the ranger actually has this feature
-					// (Some homebrew rangers like TGTT don't have Favored Foe/Enemy)
+					const source = cls.source || "PHB";
+					const isXPHB = source === "XPHB";
+					const wisMod = this.getAbilityMod("wis");
+
+					// Favored Foe damage (TCE optional feature replaces Favored Enemy)
+					// Increases at level 6 and 14
 					if (this.hasFavoredFoe()) {
 						const favoredFoeDamage = level >= 14 ? "1d8" : level >= 6 ? "1d6" : "1d4";
 						calculations.favoredFoeDamage = favoredFoeDamage;
+					}
+
+					// XPHB: Favored Enemy grants free Hunter's Mark casts
+					// 2 uses at level 1, 3 at level 9, 4 at level 13, 5 at level 17
+					if (isXPHB) {
+						calculations.huntersMarkFreeUses = level >= 17 ? 5 : level >= 13 ? 4 : level >= 9 ? 3 : 2;
+						calculations.hasFavoredEnemy = true;
+					} else {
+						// PHB: Favored Enemy at level 1
+						calculations.hasFavoredEnemy = level >= 1;
+					}
+
+					// Spellcasting - PHB starts at level 2, XPHB starts at level 1
+					if ((isXPHB && level >= 1) || (!isXPHB && level >= 2)) {
+						calculations.hasSpellcasting = true;
+						calculations.spellSaveDc = 8 + profBonus + wisMod - exhaustionPenalty;
+						calculations.spellAttackBonus = profBonus + wisMod - exhaustionPenalty;
+
+						// Spells known (PHB) or Prepared spells (XPHB)
+						if (isXPHB) {
+							// XPHB uses prepared spells progression
+							const preparedProgression = [2, 3, 4, 5, 6, 6, 7, 7, 9, 9, 10, 10, 11, 11, 12, 12, 14, 14, 15, 15];
+							calculations.preparedSpells = preparedProgression[Math.min(level - 1, 19)];
+						} else {
+							// PHB uses spells known
+							const spellsKnown = [0, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11];
+							calculations.spellsKnown = spellsKnown[Math.min(level - 1, 19)];
+						}
+					}
+
+					// Natural Explorer (PHB level 1) - additional terrain at 6 and 10
+					if (!isXPHB && level >= 1) {
+						calculations.hasNaturalExplorer = true;
+						calculations.favoredTerrains = level >= 10 ? 3 : level >= 6 ? 2 : 1;
+					}
+
+					// Deft Explorer (TCE/XPHB) - Canny at 1/2, Roving at 6, Tireless at 10
+					// In XPHB: Deft Explorer at level 2
+					if (isXPHB && level >= 2) {
+						calculations.hasDeftExplorer = true;
+						calculations.hasCanny = true; // Expertise in one skill
+					}
+
+					// Roving (XPHB level 6) - +10 speed, climb/swim speed
+					if (isXPHB && level >= 6) {
+						calculations.hasRoving = true;
+						calculations.rovingSpeedBonus = 10;
+					}
+
+					// Fighting Style (PHB level 2, XPHB level 2)
+					if (level >= 2) {
+						calculations.hasFightingStyle = true;
+					}
+
+					// Primeval Awareness (PHB level 3) / Primal Awareness (TCE level 3)
+					if (!isXPHB && level >= 3) {
+						calculations.hasPrimevalAwareness = true;
+					}
+
+					// Extra Attack (level 5)
+					if (level >= 5) {
+						calculations.hasExtraAttack = true;
+						calculations.attacksPerAction = 2;
+					}
+
+					// Land's Stride (PHB level 8)
+					if (!isXPHB && level >= 8) {
+						calculations.hasLandsStride = true;
+					}
+
+					// Expertise (XPHB level 9) - 2 skills
+					if (isXPHB && level >= 9) {
+						calculations.hasExpertise = true;
+						calculations.expertiseCount = 2;
+					}
+
+					// Hide in Plain Sight (PHB level 10) / Nature's Veil (TCE/XPHB level 10/14)
+					if (!isXPHB && level >= 10) {
+						calculations.hasHideInPlainSight = true;
+					}
+
+					// Tireless (XPHB level 10) - temp HP and reduce exhaustion
+					if (isXPHB && level >= 10) {
+						calculations.hasTireless = true;
+						calculations.tirelessTempHp = `1d8 + ${wisMod}`;
+						calculations.tirelessUses = profBonus;
+					}
+
+					// Relentless Hunter (XPHB level 13) - no concentration on Hunter's Mark
+					if (isXPHB && level >= 13) {
+						calculations.hasRelentlessHunter = true;
+					}
+
+					// Vanish (PHB level 14) - bonus action Hide, can't be tracked
+					if (!isXPHB && level >= 14) {
+						calculations.hasVanish = true;
+					}
+
+					// Nature's Veil (XPHB level 14) - uses per long rest equal to prof bonus
+					if (isXPHB && level >= 14) {
+						calculations.hasNaturesVeil = true;
+						calculations.naturesVeilUses = profBonus;
+					}
+
+					// Precise Hunter (XPHB level 17) - advantage on attacks vs Hunter's Mark target
+					if (isXPHB && level >= 17) {
+						calculations.hasPreciseHunter = true;
+					}
+
+					// Feral Senses (level 18) - attack unseen creatures without disadvantage
+					if (level >= 18) {
+						calculations.hasFeralSenses = true;
+						calculations.blindsightRange = 30;
+					}
+
+					// Foe Slayer (level 20) - add WIS to attack/damage vs favored enemy
+					if (level >= 20) {
+						calculations.hasFoeSlayer = true;
+						calculations.foeSlayerBonus = wisMod;
+					}
+
+					// =====================================================================
+					// Ranger Subclass Features
+					// =====================================================================
+					const subclassName = cls.subclass?.name;
+					if (subclassName && level >= 3) {
+						switch (subclassName) {
+							case "Beast Master": {
+								// Ranger's Companion / Primal Companion (level 3)
+								calculations.hasBeastCompanion = true;
+								calculations.companionProfBonus = profBonus;
+
+								// Exceptional Training (level 7) - beast attacks are magical
+								if (level >= 7) {
+									calculations.hasExceptionalTraining = true;
+								}
+
+								// Bestial Fury (level 11) - companion can multiattack
+								if (level >= 11) {
+									calculations.hasBestialFury = true;
+									calculations.companionAttacks = 2;
+								}
+
+								// Share Spells (level 15) - self-targeted spells affect companion
+								if (level >= 15) {
+									calculations.hasShareSpells = true;
+								}
+								break;
+							}
+
+							case "Hunter": {
+								// Hunter's Prey (level 3) - choice of Colossus Slayer, Giant Killer, or Horde Breaker
+								calculations.hasHuntersPrey = true;
+								calculations.colossusSlayerDamage = "1d8"; // Extra damage to wounded foes
+
+								// Defensive Tactics (level 7) - choice of defensive abilities
+								if (level >= 7) {
+									calculations.hasDefensiveTactics = true;
+									calculations.multiattackDefenseBonus = 4; // AC bonus after hit
+								}
+
+								// Multiattack (level 11) - Volley or Whirlwind Attack
+								if (level >= 11) {
+									calculations.hasMultiattack = true;
+								}
+
+								// Superior Hunter's Defense (level 15) - Evasion, Stand Against the Tide, or Uncanny Dodge
+								if (level >= 15) {
+									calculations.hasSuperiorHuntersDefense = true;
+								}
+								break;
+							}
+
+							case "Gloom Stalker": {
+								// Dread Ambusher (level 3) - bonus to initiative, extra attack/damage first turn
+								calculations.hasDreadAmbusher = true;
+								calculations.dreadAmbusherInitiativeBonus = wisMod;
+								calculations.dreadAmbusherExtraDamage = "1d8";
+
+								// Umbral Sight (level 3) - darkvision +60 ft, invisible in darkness to darkvision
+								calculations.hasUmbralSight = true;
+								calculations.umbralSightDarkvisionBonus = 60;
+
+								// Iron Mind (level 7) - WIS save proficiency
+								if (level >= 7) {
+									calculations.hasIronMind = true;
+								}
+
+								// Stalker's Flurry (level 11) - reroll missed attack once per turn
+								if (level >= 11) {
+									calculations.hasStalkersFlurry = true;
+								}
+
+								// Shadowy Dodge (level 15) - impose disadvantage on attacks as reaction
+								if (level >= 15) {
+									calculations.hasShadowyDodge = true;
+								}
+								break;
+							}
+
+							case "Horizon Walker": {
+								// Detect Portal (level 3) - sense planar portals
+								calculations.hasDetectPortal = true;
+
+								// Planar Warrior (level 3) - bonus action for force damage
+								calculations.hasPlanarWarrior = true;
+								calculations.planarWarriorDamage = level >= 11 ? "2d8" : "1d8";
+
+								// Ethereal Step (level 7) - cast etherealness as bonus action
+								if (level >= 7) {
+									calculations.hasEtherealStep = true;
+								}
+
+								// Distant Strike (level 11) - teleport 10 ft before each attack, bonus attack vs third target
+								if (level >= 11) {
+									calculations.hasDistantStrike = true;
+									calculations.distantStrikeTeleportRange = 10;
+								}
+
+								// Spectral Defense (level 15) - reaction for resistance to damage
+								if (level >= 15) {
+									calculations.hasSpectralDefense = true;
+								}
+								break;
+							}
+
+							case "Monster Slayer": {
+								// Hunter's Sense (level 3) - learn creature vulnerabilities/resistances/immunities
+								calculations.hasHuntersSense = true;
+								calculations.huntersSenseUses = wisMod;
+
+								// Slayer's Prey (level 3) - extra 1d6 damage to marked target
+								calculations.hasSlayersPrey = true;
+								calculations.slayersPreyDamage = "1d6";
+
+								// Supernatural Defense (level 7) - add 1d6 to saves/grapple escapes vs prey
+								if (level >= 7) {
+									calculations.hasSupernaturalDefense = true;
+									calculations.supernaturalDefenseBonus = "1d6";
+								}
+
+								// Magic-User's Nemesis (level 11) - reaction to counter teleportation/spell
+								if (level >= 11) {
+									calculations.hasMagicUsersNemesis = true;
+								}
+
+								// Slayer's Counter (level 15) - reaction attack when prey forces save
+								if (level >= 15) {
+									calculations.hasSlayersCounter = true;
+								}
+								break;
+							}
+
+							case "Fey Wanderer": {
+								// Dreadful Strikes (level 3) - extra psychic damage once per turn
+								calculations.hasDreadfulStrikes = true;
+								calculations.dreadfulStrikesDamage = level >= 11 ? "2d4" : "1d4";
+
+								// Otherworldly Glamour (level 3) - add WIS to Charisma checks
+								calculations.hasOtherworldlyGlamour = true;
+								calculations.otherworldlyGlamourBonus = Math.max(1, wisMod);
+
+								// Beguiling Twist (level 7) - advantage on charm/frighten saves, redirect effect
+								if (level >= 7) {
+									calculations.hasBeguilingTwist = true;
+								}
+
+								// Fey Reinforcements (level 11) - free summon fey cast
+								if (level >= 11) {
+									calculations.hasFeyReinforcements = true;
+								}
+
+								// Misty Wanderer (level 15) - free misty step casts
+								if (level >= 15) {
+									calculations.hasMistyWanderer = true;
+									calculations.mistyWandererUses = Math.max(1, wisMod);
+								}
+								break;
+							}
+
+							case "Swarmkeeper": {
+								// Gathered Swarm (level 3) - swarm assists on hit
+								calculations.hasGatheredSwarm = true;
+								calculations.gatheredSwarmDamage = level >= 11 ? "1d8" : "1d6";
+								calculations.gatheredSwarmPushDistance = 15;
+								calculations.gatheredSwarmDc = 8 + profBonus + wisMod;
+
+								// Writhing Tide (level 7) - hover fly speed
+								if (level >= 7) {
+									calculations.hasWrithingTide = true;
+									calculations.writhingTideFlySpeed = 10;
+									calculations.writhingTideUses = profBonus;
+								}
+
+								// Mighty Swarm (level 11) - improved gathered swarm
+								if (level >= 11) {
+									calculations.hasMightySwarm = true;
+								}
+
+								// Swarming Dispersal (level 15) - reaction teleport with resistance
+								if (level >= 15) {
+									calculations.hasSwarmingDispersal = true;
+									calculations.swarmingDispersalUses = profBonus;
+								}
+								break;
+							}
+
+							case "Drakewarden": {
+								// Draconic Gift (level 3) - thaumaturgy cantrip, speak Draconic
+								calculations.hasDraconicGift = true;
+
+								// Drake Companion (level 3) - summon drake
+								calculations.hasDrakeCompanion = true;
+								calculations.drakeProfBonus = profBonus;
+
+								// Bond of Fang and Scale (level 7) - drake gains fly speed, resistances
+								if (level >= 7) {
+									calculations.hasBondOfFangAndScale = true;
+								}
+
+								// Drake's Breath (level 11) - drake breath weapon
+								if (level >= 11) {
+									calculations.hasDrakesBreath = true;
+									calculations.drakesBreathDamage = "8d6";
+									calculations.drakesBreathDc = 8 + profBonus + wisMod;
+								}
+
+								// Perfected Bond (level 15) - Large drake, extra damage, reaction share damage
+								if (level >= 15) {
+									calculations.hasPerfectedBond = true;
+									calculations.perfectedBondExtraDamage = "1d6";
+								}
+								break;
+							}
+						}
+					}
+					break;
+				}
+				case "Wizard": {
+					const source = cls.source || "PHB";
+					const is2024 = source === "XPHB";
+					const intMod = this.getAbilityMod("int");
+
+					// Spellcasting
+					calculations.hasSpellcasting = true;
+					calculations.spellcastingAbility = "int";
+					calculations.spellSaveDc = 8 + profBonus + intMod - exhaustionPenalty;
+					calculations.spellAttackBonus = profBonus + intMod - exhaustionPenalty;
+
+					// Cantrips known: 3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5
+					const cantripsKnown = level >= 10 ? 5 : level >= 4 ? 4 : 3;
+					calculations.cantripsKnown = cantripsKnown;
+
+					// Prepared spells = wizard level + INT modifier
+					if (is2024) {
+						// XPHB uses fixed prepared spells progression
+						const preparedProgression = [4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 25];
+						calculations.preparedSpells = preparedProgression[Math.min(level - 1, 19)];
+					} else {
+						// PHB: wizard level + INT modifier (minimum 1)
+						calculations.preparedSpells = Math.max(1, level + intMod);
+					}
+
+					// Spellbook: add 2 spells per level
+					calculations.spellbookSpellsKnown = 6 + (level - 1) * 2; // 6 at level 1, +2 per level
+
+					// Arcane Recovery (level 1)
+					calculations.hasArcaneRecovery = true;
+					calculations.arcaneRecoverySlotLevels = Math.ceil(level / 2); // Half wizard level (rounded up)
+
+					// Ritual Adept (XPHB level 1) - can cast rituals without preparing
+					if (is2024) {
+						calculations.hasRitualAdept = true;
+					}
+
+					// Arcane Tradition / Wizard Subclass
+					// PHB: level 2, XPHB: level 3
+					const subclassLevel = is2024 ? 3 : 2;
+
+					// Scholar (XPHB level 2) - expertise in Arcana
+					if (is2024 && level >= 2) {
+						calculations.hasScholar = true;
+					}
+
+					// Memorize Spell (XPHB level 5)
+					if (is2024 && level >= 5) {
+						calculations.hasMemorizeSpell = true;
+					}
+
+					// Spell Mastery (level 18) - 1st and 2nd level at will
+					if (level >= 18) {
+						calculations.hasSpellMastery = true;
+					}
+
+					// Signature Spells (level 20) - two 3rd level spells always prepared, free cast once
+					if (level >= 20) {
+						calculations.hasSignatureSpells = true;
+					}
+
+					// Subclass features (Arcane Tradition)
+					const subclassName = cls.subclass?.name;
+					if (subclassName && level >= subclassLevel) {
+						switch (subclassName) {
+							case "School of Abjuration":
+							case "Abjuration":
+							case "Abjurer": {
+								// Abjuration Savant (level 2/3)
+								if (!is2024) {
+									calculations.hasAbjurationSavant = true;
+								}
+
+								// Arcane Ward (level 2/3)
+								calculations.hasArcaneWard = true;
+								calculations.arcaneWardMaxHp = level * 2 + intMod;
+
+								// Projected Ward (level 6)
+								if (level >= 6) {
+									calculations.hasProjectedWard = true;
+								}
+
+								// Improved Abjuration (level 10)
+								if (level >= 10) {
+									calculations.hasImprovedAbjuration = true;
+									calculations.improvedAbjurationBonus = profBonus;
+								}
+
+								// Spell Resistance (level 14)
+								if (level >= 14) {
+									calculations.hasSpellResistance = true;
+								}
+								break;
+							}
+
+							case "School of Conjuration":
+							case "Conjuration": {
+								// Conjuration Savant (level 2)
+								calculations.hasConjurationSavant = true;
+
+								// Minor Conjuration (level 2)
+								calculations.hasMinorConjuration = true;
+
+								// Benign Transposition (level 6)
+								if (level >= 6) {
+									calculations.hasBenignTransposition = true;
+									calculations.benignTranspositionRange = 30;
+								}
+
+								// Focused Conjuration (level 10)
+								if (level >= 10) {
+									calculations.hasFocusedConjuration = true;
+								}
+
+								// Durable Summons (level 14)
+								if (level >= 14) {
+									calculations.hasDurableSummons = true;
+									calculations.durableSummonsTempHp = 30;
+								}
+								break;
+							}
+
+							case "School of Divination":
+							case "Divination":
+							case "Diviner": {
+								// Divination Savant (level 2/3)
+								if (!is2024) {
+									calculations.hasDivinationSavant = true;
+								}
+
+								// Portent (level 2/3) - 2 rolls, 3 at level 14
+								calculations.hasPortent = true;
+								calculations.portentDice = level >= 14 ? 3 : 2;
+
+								// Expert Divination (level 6)
+								if (level >= 6) {
+									calculations.hasExpertDivination = true;
+								}
+
+								// The Third Eye (level 10)
+								if (level >= 10) {
+									calculations.hasTheThirdEye = true;
+								}
+
+								// Greater Portent (level 14)
+								if (level >= 14) {
+									calculations.hasGreaterPortent = true;
+								}
+								break;
+							}
+
+							case "School of Enchantment":
+							case "Enchantment": {
+								// Enchantment Savant (level 2)
+								calculations.hasEnchantmentSavant = true;
+
+								// Hypnotic Gaze (level 2)
+								calculations.hasHypnoticGaze = true;
+
+								// Instinctive Charm (level 6)
+								if (level >= 6) {
+									calculations.hasInstinctiveCharm = true;
+									calculations.instinctiveCharmDc = 8 + profBonus + intMod;
+								}
+
+								// Split Enchantment (level 10)
+								if (level >= 10) {
+									calculations.hasSplitEnchantment = true;
+								}
+
+								// Alter Memories (level 14)
+								if (level >= 14) {
+									calculations.hasAlterMemories = true;
+								}
+								break;
+							}
+
+							case "School of Evocation":
+							case "Evocation":
+							case "Evoker": {
+								// Evocation Savant (level 2/3)
+								if (!is2024) {
+									calculations.hasEvocationSavant = true;
+								}
+
+								// Sculpt Spells (level 2/3)
+								calculations.hasSculptSpells = true;
+								calculations.sculptSpellsTargets = 1 + (is2024 ? Math.floor(level / 5) : 0); // XPHB scales
+
+								// Potent Cantrip (level 6)
+								if (level >= 6) {
+									calculations.hasPotentCantrip = true;
+								}
+
+								// Empowered Evocation (level 10)
+								if (level >= 10) {
+									calculations.hasEmpoweredEvocation = true;
+									calculations.empoweredEvocationBonus = intMod;
+								}
+
+								// Overchannel (level 14)
+								if (level >= 14) {
+									calculations.hasOverchannel = true;
+								}
+								break;
+							}
+
+							case "School of Illusion":
+							case "Illusion":
+							case "Illusionist": {
+								// Illusion Savant (level 2/3)
+								if (!is2024) {
+									calculations.hasIllusionSavant = true;
+								}
+
+								// Improved Minor Illusion (level 2/3)
+								calculations.hasImprovedMinorIllusion = true;
+
+								// Malleable Illusions (level 6)
+								if (level >= 6) {
+									calculations.hasMalleableIllusions = true;
+								}
+
+								// Illusory Self (level 10)
+								if (level >= 10) {
+									calculations.hasIllusorySelf = true;
+								}
+
+								// Illusory Reality (level 14)
+								if (level >= 14) {
+									calculations.hasIllusoryReality = true;
+								}
+								break;
+							}
+
+							case "School of Necromancy":
+							case "Necromancy": {
+								// Necromancy Savant (level 2)
+								calculations.hasNecromancySavant = true;
+
+								// Grim Harvest (level 2)
+								calculations.hasGrimHarvest = true;
+								calculations.grimHarvestHealing = "2x spell level"; // or 3x for necromancy
+
+								// Undead Thralls (level 6)
+								if (level >= 6) {
+									calculations.hasUndeadThralls = true;
+									calculations.undeadThrallsHpBonus = level;
+									calculations.undeadThrallsDamageBonus = profBonus;
+								}
+
+								// Inured to Undeath (level 10)
+								if (level >= 10) {
+									calculations.hasInuredToUndeath = true;
+								}
+
+								// Command Undead (level 14)
+								if (level >= 14) {
+									calculations.hasCommandUndead = true;
+									calculations.commandUndeadDc = 8 + profBonus + intMod;
+								}
+								break;
+							}
+
+							case "School of Transmutation":
+							case "Transmutation": {
+								// Transmutation Savant (level 2)
+								calculations.hasTransmutationSavant = true;
+
+								// Minor Alchemy (level 2)
+								calculations.hasMinorAlchemy = true;
+
+								// Transmuter's Stone (level 6)
+								if (level >= 6) {
+									calculations.hasTransmutersStone = true;
+								}
+
+								// Shapechanger (level 10)
+								if (level >= 10) {
+									calculations.hasShapechanger = true;
+								}
+
+								// Master Transmuter (level 14)
+								if (level >= 14) {
+									calculations.hasMasterTransmuter = true;
+								}
+								break;
+							}
+
+							case "War Magic":
+							case "War": {
+								// Arcane Deflection (level 2)
+								calculations.hasArcaneDeflection = true;
+								calculations.arcaneDeflectionAcBonus = 2;
+								calculations.arcaneDeflectionSaveBonus = 4;
+
+								// Tactical Wit (level 2)
+								calculations.hasTacticalWit = true;
+								calculations.tacticalWitBonus = intMod;
+
+								// Power Surge (level 6)
+								if (level >= 6) {
+									calculations.hasPowerSurge = true;
+									calculations.powerSurgeMaxStored = intMod;
+									calculations.powerSurgeDamage = Math.floor(level / 2);
+								}
+
+								// Durable Magic (level 10)
+								if (level >= 10) {
+									calculations.hasDurableMagic = true;
+									calculations.durableMagicAcBonus = 2;
+									calculations.durableMagicSaveBonus = 2;
+								}
+
+								// Deflecting Shroud (level 14)
+								if (level >= 14) {
+									calculations.hasDeflectingShroud = true;
+									calculations.deflectingShroudDamage = level / 2;
+								}
+								break;
+							}
+
+							case "Bladesinging":
+							case "Bladesinger": {
+								// Training in War and Song (level 2/3)
+								calculations.hasTrainingInWarAndSong = true;
+
+								// Bladesong (level 2/3)
+								calculations.hasBladesong = true;
+								calculations.bladesongAcBonus = intMod;
+								calculations.bladesongConcentrationBonus = intMod;
+								calculations.bladesongSpeedBonus = 10;
+
+								// Extra Attack (level 6) - can replace one attack with cantrip
+								if (level >= 6) {
+									calculations.hasExtraAttack = true;
+									calculations.attacksPerAction = 2;
+									calculations.canReplaceAttackWithCantrip = true;
+								}
+
+								// Song of Defense (level 10)
+								if (level >= 10) {
+									calculations.hasSongOfDefense = true;
+								}
+
+								// Song of Victory (level 14)
+								if (level >= 14) {
+									calculations.hasSongOfVictory = true;
+									calculations.songOfVictoryDamageBonus = intMod;
+								}
+								break;
+							}
+
+							case "Order of Scribes":
+							case "Scribes": {
+								// Wizardly Quill (level 2)
+								calculations.hasWizardlyQuill = true;
+
+								// Awakened Spellbook (level 2)
+								calculations.hasAwakenedSpellbook = true;
+
+								// Manifest Mind (level 6)
+								if (level >= 6) {
+									calculations.hasManifestMind = true;
+									calculations.manifestMindUses = profBonus;
+								}
+
+								// Master Scrivener (level 10)
+								if (level >= 10) {
+									calculations.hasMasterScrivener = true;
+								}
+
+								// One with the Word (level 14)
+								if (level >= 14) {
+									calculations.hasOneWithTheWord = true;
+								}
+								break;
+							}
+
+							case "Chronurgy Magic":
+							case "Chronurgy": {
+								// Chronal Shift (level 2)
+								calculations.hasChronalShift = true;
+								calculations.chronalShiftUses = 2;
+
+								// Temporal Awareness (level 2)
+								calculations.hasTemporalAwareness = true;
+								calculations.temporalAwarenessBonus = intMod;
+
+								// Momentary Stasis (level 6)
+								if (level >= 6) {
+									calculations.hasMomentaryStasis = true;
+									calculations.momentaryStasisDc = 8 + profBonus + intMod;
+									calculations.momentaryStasisUses = intMod;
+								}
+
+								// Arcane Abeyance (level 10)
+								if (level >= 10) {
+									calculations.hasArcaneAbeyance = true;
+								}
+
+								// Convergent Future (level 14)
+								if (level >= 14) {
+									calculations.hasConvergentFuture = true;
+								}
+								break;
+							}
+
+							case "Graviturgy Magic":
+							case "Graviturgy": {
+								// Adjust Density (level 2)
+								calculations.hasAdjustDensity = true;
+
+								// Gravity Well (level 6)
+								if (level >= 6) {
+									calculations.hasGravityWell = true;
+								}
+
+								// Violent Attraction (level 10)
+								if (level >= 10) {
+									calculations.hasViolentAttraction = true;
+									calculations.violentAttractionDamage = "2d10";
+									calculations.violentAttractionUses = intMod;
+								}
+
+								// Event Horizon (level 14)
+								if (level >= 14) {
+									calculations.hasEventHorizon = true;
+									calculations.eventHorizonRange = 30;
+								}
+								break;
+							}
+						}
+					}
+					break;
+				}
+				case "Artificer": {
+					// Infusion slots: starts at 2 at level 2, increases at 6, 10, 14, 18
+					if (level >= 2) {
+						const infusionSlots = level >= 18 ? 6 : level >= 14 ? 5 : level >= 10 ? 4 : level >= 6 ? 3 : 2;
+						calculations.infusionSlots = infusionSlots;
+					}
+
+					// Infusions known: 4 at level 2, +2 at 6, 10, 14, 18, 22
+					if (level >= 2) {
+						const infusionsKnown = level >= 18 ? 12 : level >= 14 ? 10 : level >= 10 ? 8 : level >= 6 ? 6 : 4;
+						calculations.infusionsKnown = infusionsKnown;
+					}
+
+					// Flash of Genius uses (level 7+): INT modifier times per long rest
+					if (level >= 7) {
+						calculations.flashOfGeniusUses = Math.max(1, this.getAbilityMod("int"));
+						calculations.flashOfGeniusBonus = this.getAbilityMod("int");
+					}
+
+					// Magic Item Adept (level 10+): attune to 4 items
+					// Magic Item Savant (level 14+): attune to 5 items
+					// Magic Item Master (level 18+): attune to 6 items
+					const attunementLimit = level >= 18 ? 6 : level >= 14 ? 5 : level >= 10 ? 4 : 3;
+					calculations.magicItemAttunementLimit = attunementLimit;
+
+					// Spell-Storing Item (level 11+): can store INT mod * 2 uses
+					if (level >= 11) {
+						calculations.spellStoringItemUses = Math.max(2, this.getAbilityMod("int") * 2);
+					}
+
+					// Soul of Artifice (level 20): +1 to all saves per attuned item
+					if (level >= 20) {
+						calculations.soulOfArtificeSaveBonus = attunementLimit; // max possible bonus
 					}
 					break;
 				}

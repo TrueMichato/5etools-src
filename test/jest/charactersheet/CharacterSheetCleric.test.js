@@ -68,33 +68,49 @@ describe("Cleric Core Class Features (PHB)", () => {
 	// Channel Divinity Progression
 	// -------------------------------------------------------------------------
 	describe("Channel Divinity", () => {
-		it("should gain Channel Divinity at level 2", () => {
-			state.addClass({ name: "Cleric", source: "PHB", level: 2 });
-			expect(state.getTotalLevel()).toBe(2);
+		it("should not have Channel Divinity before level 2", () => {
+			state.addClass({ name: "Cleric", source: "PHB", level: 1 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.channelDivinityUses).toBeUndefined();
 		});
 
-		it("should have 1 Channel Divinity use at levels 2-5", () => {
+		it("should have 1 Channel Divinity use at level 2", () => {
+			state.addClass({ name: "Cleric", source: "PHB", level: 2 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.channelDivinityUses).toBe(1);
+		});
+
+		it("should have 1 Channel Divinity use at level 5", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 5 });
-			// At level 5, still has 1 use (increases to 2 at level 6)
-			expect(state.getTotalLevel()).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.channelDivinityUses).toBe(1);
 		});
 
-		it("should have 2 Channel Divinity uses at levels 6-17", () => {
+		it("should have 2 Channel Divinity uses at level 6", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 6 });
-			// At level 6, Channel Divinity increases to 2/rest
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.channelDivinityUses).toBe(2);
 		});
 
-		it("should have 3 Channel Divinity uses at level 18+", () => {
+		it("should have 2 Channel Divinity uses at level 17", () => {
+			state.addClass({ name: "Cleric", source: "PHB", level: 17 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.channelDivinityUses).toBe(2);
+		});
+
+		it("should have 3 Channel Divinity uses at level 18", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 18 });
-			// At level 18, Channel Divinity increases to 3/rest
-			expect(state.getTotalLevel()).toBe(18);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.channelDivinityUses).toBe(3);
 		});
 
-		it("should have Turn Undead as base Channel Divinity option", () => {
-			state.addClass({ name: "Cleric", source: "PHB", level: 2 });
-			expect(state.getTotalLevel()).toBe(2);
-			// Turn Undead is available at level 2
+		it("should calculate Channel Divinity DC based on spell save DC", () => {
+			state.addClass({ name: "Cleric", source: "PHB", level: 5 });
+			state.setAbilityBase("wis", 16); // +3 modifier
+			state.setSpellcastingAbility("wis"); // Ensure spellcasting ability is set
+			const calculations = state.getFeatureCalculations();
+			// DC = 8 + prof (3) + WIS (3) = 14
+			expect(calculations.channelDivinityDc).toBe(14);
 		});
 	});
 
@@ -104,32 +120,38 @@ describe("Cleric Core Class Features (PHB)", () => {
 	describe("Destroy Undead", () => {
 		it("should not have Destroy Undead before level 5", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 4 });
-			expect(state.getTotalLevel()).toBe(4);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.destroyUndeadCr).toBeUndefined();
 		});
 
 		it("should destroy CR 1/2 undead at level 5", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 5 });
-			expect(state.getTotalLevel()).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.destroyUndeadCr).toBe(0.5);
 		});
 
 		it("should destroy CR 1 undead at level 8", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 8 });
-			expect(state.getTotalLevel()).toBe(8);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.destroyUndeadCr).toBe(1);
 		});
 
 		it("should destroy CR 2 undead at level 11", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 11 });
-			expect(state.getTotalLevel()).toBe(11);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.destroyUndeadCr).toBe(2);
 		});
 
 		it("should destroy CR 3 undead at level 14", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 14 });
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.destroyUndeadCr).toBe(3);
 		});
 
 		it("should destroy CR 4 undead at level 17", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 17 });
-			expect(state.getTotalLevel()).toBe(17);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.destroyUndeadCr).toBe(4);
 		});
 	});
 
@@ -139,17 +161,27 @@ describe("Cleric Core Class Features (PHB)", () => {
 	describe("Divine Intervention", () => {
 		it("should not have Divine Intervention before level 10", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 9 });
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.divineInterventionChance).toBeUndefined();
 		});
 
-		it("should gain Divine Intervention at level 10", () => {
+		it("should have 10% chance at level 10", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 10 });
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.divineInterventionChance).toBe(10);
 		});
 
-		it("should gain Divine Intervention Improvement at level 20", () => {
+		it("should have 15% chance at level 15", () => {
+			state.addClass({ name: "Cleric", source: "PHB", level: 15 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.divineInterventionChance).toBe(15);
+		});
+
+		it("should have 20% chance at level 20 (not auto-success in PHB)", () => {
 			state.addClass({ name: "Cleric", source: "PHB", level: 20 });
-			expect(state.getTotalLevel()).toBe(20);
+			const calculations = state.getFeatureCalculations();
+			// PHB Divine Intervention Improvement at 20 is still d100 <= level
+			expect(calculations.divineInterventionChance).toBe(20);
 		});
 	});
 
@@ -1412,52 +1444,97 @@ describe("Cleric Core Class Features (XPHB 2024)", () => {
 		state = new CharacterSheetState();
 	});
 
-	it("should gain Divine Order at level 1", () => {
-		state.addClass({ name: "Cleric", source: "XPHB", level: 1 });
-		expect(state.getTotalLevel()).toBe(1);
-	});
-
-	it("should have Protector or Thaumaturge choice at level 1", () => {
-		state.addClass({ name: "Cleric", source: "XPHB", level: 1 });
-		// Divine Order allows choosing Protector or Thaumaturge
-		expect(state.getTotalLevel()).toBe(1);
-	});
-
-	it("should gain Channel Divinity with Divine Spark at level 2", () => {
-		state.addClass({ name: "Cleric", source: "XPHB", level: 2 });
-		// Divine Spark is the new CD option in XPHB
-		expect(state.getTotalLevel()).toBe(2);
-	});
-
-	it("should gain subclass at level 3 (not level 1)", () => {
-		state.addClass({
-			name: "Cleric",
-			source: "XPHB",
-			level: 3,
-			subclass: { name: "Life Domain", shortName: "Life", source: "XPHB" },
+	describe("Divine Order", () => {
+		it("should have Thaumaturge bonus calculated at level 1", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 1 });
+			state.setAbilityBase("wis", 16); // +3 modifier
+			const calculations = state.getFeatureCalculations();
+			// Thaumaturge grants WIS mod (min 1) bonus to Arcana/Religion
+			expect(calculations.thaumaturgeBonus).toBe(3);
 		});
-		const classes = state.getClasses();
-		expect(classes[0].subclass).toBeTruthy();
+
+		it("should have minimum +1 Thaumaturge bonus with low WIS", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 1 });
+			state.setAbilityBase("wis", 8); // -1 modifier
+			const calculations = state.getFeatureCalculations();
+			// Minimum of +1
+			expect(calculations.thaumaturgeBonus).toBe(1);
+		});
+
+		it("should not have Destroy Undead in XPHB (uses Sear Undead instead)", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 5 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.destroyUndeadCr).toBeUndefined();
+		});
 	});
 
-	it("should gain Sear Undead at level 5", () => {
-		state.addClass({ name: "Cleric", source: "XPHB", level: 5 });
-		expect(state.getTotalLevel()).toBe(5);
+	describe("Channel Divinity (XPHB)", () => {
+		it("should have same Channel Divinity uses as PHB", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 6 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.channelDivinityUses).toBe(2);
+		});
 	});
 
-	it("should gain Blessed Strikes at level 7", () => {
-		state.addClass({ name: "Cleric", source: "XPHB", level: 7 });
-		expect(state.getTotalLevel()).toBe(7);
+	describe("Sear Undead", () => {
+		it("should have 1d8 Sear Undead damage at level 5", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 5 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.searUndeadDamage).toBe("1d8");
+		});
+
+		it("should have 2d8 Sear Undead damage at level 10", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 10 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.searUndeadDamage).toBe("2d8");
+		});
+
+		it("should have 3d8 Sear Undead damage at level 15", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 15 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.searUndeadDamage).toBe("3d8");
+		});
+
+		it("should have 4d8 Sear Undead damage at level 20", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 20 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.searUndeadDamage).toBe("4d8");
+		});
 	});
 
-	it("should gain Improved Blessed Strikes at level 14", () => {
-		state.addClass({ name: "Cleric", source: "XPHB", level: 14 });
-		expect(state.getTotalLevel()).toBe(14);
+	describe("Blessed Strikes", () => {
+		it("should not have Blessed Strikes before level 7", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 6 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.blessedStrikesDamage).toBeUndefined();
+		});
+
+		it("should have 1d8 Blessed Strikes damage at level 7", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 7 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.blessedStrikesDamage).toBe("1d8");
+		});
+
+		it("should have 2d8 Improved Blessed Strikes damage at level 14", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 14 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.blessedStrikesDamage).toBe("2d8");
+		});
 	});
 
-	it("should gain Greater Divine Intervention at level 20", () => {
-		state.addClass({ name: "Cleric", source: "XPHB", level: 20 });
-		expect(state.getTotalLevel()).toBe(20);
+	describe("Greater Divine Intervention", () => {
+		it("should have auto-success (100%) at level 20 in XPHB", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 20 });
+			const calculations = state.getFeatureCalculations();
+			// XPHB Greater Divine Intervention at 20 is automatic success
+			expect(calculations.divineInterventionChance).toBe(100);
+		});
+
+		it("should still use percentage at level 19 in XPHB", () => {
+			state.addClass({ name: "Cleric", source: "XPHB", level: 19 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.divineInterventionChance).toBe(19);
+		});
 	});
 
 	it("should have same spell slot progression as PHB", () => {

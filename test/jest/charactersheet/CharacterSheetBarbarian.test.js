@@ -240,6 +240,155 @@ describe("Barbarian Core Class Features (PHB)", () => {
 			}
 		});
 	});
+
+	// ==========================================================================
+	// Rages Per Day (PHB)
+	// ==========================================================================
+	describe("Rages Per Day (PHB)", () => {
+		it("should have 2 rages at levels 1-2", () => {
+			const testState = new CharacterSheetState();
+			testState.addClass({name: "Barbarian", source: "PHB", level: 1});
+			const calculations = testState.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(2);
+		});
+
+		it("should have 3 rages at levels 3-5", () => {
+			const testState = new CharacterSheetState();
+			testState.addClass({name: "Barbarian", source: "PHB", level: 3});
+			const calculations = testState.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(3);
+		});
+
+		it("should have 4 rages at levels 6-11", () => {
+			const testState = new CharacterSheetState();
+			testState.addClass({name: "Barbarian", source: "PHB", level: 6});
+			const calculations = testState.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(4);
+		});
+
+		it("should have 5 rages at levels 12-16", () => {
+			const testState = new CharacterSheetState();
+			testState.addClass({name: "Barbarian", source: "PHB", level: 12});
+			const calculations = testState.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(5);
+		});
+
+		it("should have 6 rages at levels 17-19", () => {
+			const testState = new CharacterSheetState();
+			testState.addClass({name: "Barbarian", source: "PHB", level: 17});
+			const calculations = testState.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(6);
+		});
+
+		it("should have unlimited rages at level 20 (PHB only)", () => {
+			const testState = new CharacterSheetState();
+			testState.addClass({name: "Barbarian", source: "PHB", level: 20});
+			const calculations = testState.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(Infinity);
+		});
+	});
+
+	// ==========================================================================
+	// Danger Sense (PHB)
+	// ==========================================================================
+	describe("Danger Sense (PHB)", () => {
+		it("should have Danger Sense at level 2", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 2});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasDangerSense).toBe(true);
+		});
+
+		it("should not have Danger Sense at level 1", () => {
+			// Level 1 is set in beforeEach
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasDangerSense).toBeUndefined();
+		});
+	});
+
+	// ==========================================================================
+	// Fast Movement (PHB)
+	// ==========================================================================
+	describe("Fast Movement (PHB)", () => {
+		it("should have +10 ft movement at level 5", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 5});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.fastMovementBonus).toBe(10);
+		});
+
+		it("should not have Fast Movement before level 5", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 4});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.fastMovementBonus).toBeUndefined();
+		});
+	});
+
+	// ==========================================================================
+	// Relentless Rage (PHB)
+	// ==========================================================================
+	describe("Relentless Rage (PHB)", () => {
+		it("should have Relentless Rage DC at level 11", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 11});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.relentlessRageBaseDc).toBe(10);
+		});
+
+		it("should not have Relentless Rage before level 11", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.relentlessRageBaseDc).toBeUndefined();
+		});
+	});
+
+	// ==========================================================================
+	// Persistent Rage (PHB)
+	// ==========================================================================
+	describe("Persistent Rage (PHB)", () => {
+		it("should have Persistent Rage at level 15", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 15});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPersistentRage).toBe(true);
+		});
+
+		it("should not have Persistent Rage before level 15", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 14});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPersistentRage).toBeUndefined();
+		});
+	});
+
+	// ==========================================================================
+	// Indomitable Might (PHB)
+	// ==========================================================================
+	describe("Indomitable Might (PHB)", () => {
+		it("should have Indomitable Might at level 18", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 18});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasIndomitableMight).toBe(true);
+		});
+
+		it("should not have Indomitable Might before level 18", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 17});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasIndomitableMight).toBeUndefined();
+		});
+	});
+
+	// ==========================================================================
+	// Primal Champion (PHB)
+	// ==========================================================================
+	describe("Primal Champion (PHB)", () => {
+		it("should have Primal Champion at level 20", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 20});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPrimalChampion).toBe(true);
+		});
+
+		it("should not have Primal Champion before level 20", () => {
+			state.addClass({name: "Barbarian", source: "PHB", level: 19});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPrimalChampion).toBeUndefined();
+		});
+	});
 });
 
 // ==========================================================================
@@ -650,20 +799,64 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	// Level 1: Weapon Mastery (XPHB exclusive)
 	// ==========================================================================
 	describe("Weapon Mastery (XPHB Level 1)", () => {
-		it("should have Weapon Mastery as a level 1 feature", () => {
-			// Weapon Mastery is a new XPHB feature at level 1
-			// Number of weapon mastery slots scales: 2 at 1, 3 at 4, 4 at 10
-			const level1State = new CharacterSheetState();
-			level1State.addClass({name: "Barbarian", source: "XPHB", level: 1});
-			expect(level1State.getTotalLevel()).toBe(1);
+		it("should have 2 Weapon Mastery slots at level 1", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.weaponMasterySlots).toBe(2);
 		});
 
-		it("should have more weapon mastery slots at higher levels", () => {
-			// Level 4: 3 weapon mastery slots
-			// Level 10: 4 weapon mastery slots
-			const level10State = new CharacterSheetState();
-			level10State.addClass({name: "Barbarian", source: "XPHB", level: 10});
-			expect(level10State.getTotalLevel()).toBe(10);
+		it("should have 3 Weapon Mastery slots at level 4", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 4});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.weaponMasterySlots).toBe(3);
+		});
+
+		it("should have 4 Weapon Mastery slots at level 10", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.weaponMasterySlots).toBe(4);
+		});
+
+		it("should not have Weapon Mastery slots for PHB Barbarian", () => {
+			const phbState = new CharacterSheetState();
+			phbState.addClass({name: "Barbarian", source: "PHB", level: 1});
+			const calculations = phbState.getFeatureCalculations();
+			expect(calculations.weaponMasterySlots).toBeUndefined();
+		});
+	});
+
+	// ==========================================================================
+	// Rages Per Day (XPHB - different at level 20)
+	// ==========================================================================
+	describe("Rages Per Day (XPHB)", () => {
+		it("should have 2 rages at levels 1-2", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(2);
+		});
+
+		it("should have 3 rages at levels 3-5", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 3});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(3);
+		});
+
+		it("should have 4 rages at levels 6-11", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 6});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(4);
+		});
+
+		it("should have 5 rages at levels 12-16", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 12});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(5);
+		});
+
+		it("should have 6 rages at level 17+ (not unlimited like PHB)", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 20});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.ragesPerDay).toBe(6);
+			// Explicitly NOT Infinity like PHB level 20
+			expect(calculations.ragesPerDay).not.toBe(Infinity);
 		});
 	});
 
@@ -700,22 +893,22 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	// Level 9: Brutal Strike (XPHB exclusive - replaces Brutal Critical)
 	// ==========================================================================
 	describe("Brutal Strike (XPHB Level 9)", () => {
-		it("should have Brutal Strike instead of Brutal Critical at level 9", () => {
+		it("should have 1d10 Brutal Strike damage at level 9", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 9});
-			// XPHB uses Brutal Strike (1d10 extra damage) instead of Brutal Critical
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalStrikeDamage).toBe("1d10");
 		});
 
-		it("should have Forceful Blow option at level 9", () => {
-			// Forceful Blow: push target 15 feet, can move half speed toward target
+		it("should not have Brutal Critical (XPHB uses Brutal Strike)", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 9});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalCritical).toBeUndefined();
 		});
 
-		it("should have Hamstring Blow option at level 9", () => {
-			// Hamstring Blow: reduce target speed by 15 feet
-			state.addClass({name: "Barbarian", source: "XPHB", level: 9});
-			expect(state.getTotalLevel()).toBe(9);
+		it("should not have Brutal Strike before level 9", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 8});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalStrikeDamage).toBeUndefined();
 		});
 	});
 
@@ -723,6 +916,12 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	// Level 13: Improved Brutal Strike (XPHB)
 	// ==========================================================================
 	describe("Improved Brutal Strike (XPHB Level 13)", () => {
+		it("should still have 1d10 damage at level 13 (more options, same dice)", () => {
+			state.addClass({name: "Barbarian", source: "XPHB", level: 13});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalStrikeDamage).toBe("1d10");
+		});
+
 		it("should have additional Brutal Strike options at level 13", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 13});
 			// Adds Staggering Blow and Sundering Blow options
@@ -748,9 +947,8 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	describe("Improved Brutal Strike Enhancement (XPHB Level 17)", () => {
 		it("should increase Brutal Strike damage to 2d10 at level 17", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 17});
-			// At level 17, Brutal Strike deals 2d10 extra damage
-			// Can use two different effects per Brutal Strike
-			expect(state.getTotalLevel()).toBe(17);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalStrikeDamage).toBe("2d10");
 		});
 	});
 
@@ -758,10 +956,10 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	// Level 11: Relentless Rage (XPHB)
 	// ==========================================================================
 	describe("Relentless Rage (XPHB Level 11)", () => {
-		it("should have Relentless Rage at level 11", () => {
+		it("should have Relentless Rage base DC at level 11", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 11});
-			// XPHB: Regain HP equal to 2 × Barbarian level on successful DC 10 CON save
-			expect(state.getTotalLevel()).toBe(11);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.relentlessRageBaseDc).toBe(10);
 		});
 
 		it("should calculate Relentless Rage HP recovery correctly", () => {
@@ -777,11 +975,10 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	// Level 15: Persistent Rage (XPHB)
 	// ==========================================================================
 	describe("Persistent Rage (XPHB Level 15)", () => {
-		it("should have enhanced Persistent Rage at level 15", () => {
+		it("should have Persistent Rage at level 15", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 15});
-			// XPHB: Can regain all Rage uses when rolling initiative (1/long rest)
-			// Rage lasts 10 minutes without needing to extend
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPersistentRage).toBe(true);
 		});
 	});
 
@@ -791,8 +988,8 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	describe("Indomitable Might (XPHB Level 18)", () => {
 		it("should have Indomitable Might at level 18", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 18});
-			// Use STR score instead of roll if total is lower
-			expect(state.getTotalLevel()).toBe(18);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasIndomitableMight).toBe(true);
 		});
 	});
 
@@ -814,8 +1011,8 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 	describe("Primal Champion (XPHB Level 20)", () => {
 		it("should have Primal Champion at level 20", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 20});
-			// XPHB: STR and CON increase by 4, max becomes 25 (not 24)
-			expect(state.getTotalLevel()).toBe(20);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPrimalChampion).toBe(true);
 		});
 	});
 });

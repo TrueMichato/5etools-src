@@ -66,8 +66,21 @@ describe("Bard Core Class Features (PHB)", () => {
 			expect(calculations.bardicInspirationDie).toBe("1d12");
 		});
 
-		it("should have uses equal to Charisma modifier", () => {
-			expect(state.getAbilityMod("cha")).toBe(3);
+		it("should have uses equal to Charisma modifier (3 uses with CHA 16)", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationUses).toBe(3);
+		});
+
+		it("should have minimum 1 use even with low Charisma", () => {
+			state.setAbilityBase("cha", 8); // -1 modifier
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationUses).toBe(1);
+		});
+
+		it("should have 5 uses with Charisma 20", () => {
+			state.setAbilityBase("cha", 20); // +5 modifier
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationUses).toBe(5);
 		});
 	});
 
@@ -113,54 +126,63 @@ describe("Bard Core Class Features (PHB)", () => {
 	// 1.3 Jack of All Trades
 	// -------------------------------------------------------------------------
 	describe("Jack of All Trades", () => {
-		it("should have Jack of All Trades at level 2", () => {
-			state.addClass({name: "Bard", source: "PHB", level: 2});
-			expect(state.getTotalLevel()).toBe(2);
+		it("should not have Jack of All Trades at level 1", () => {
+			// Level 1 already set in beforeEach
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBeUndefined();
 		});
 
-		it("should add half proficiency (rounded down) at level 2", () => {
+		it("should have Jack of All Trades bonus of +1 at level 2", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 2});
-			const profBonus = state.getProficiencyBonus();
-			const halfProfBonus = Math.floor(profBonus / 2);
-			expect(halfProfBonus).toBe(1);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBe(1);
 		});
 
-		it("should have half proficiency of +2 at level 9", () => {
+		it("should have Jack of All Trades bonus of +1 at level 4", () => {
+			state.addClass({name: "Bard", source: "PHB", level: 4});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBe(1);
+		});
+
+		it("should have Jack of All Trades bonus of +2 at level 9", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 9});
-			expect(Math.floor(state.getProficiencyBonus() / 2)).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBe(2);
 		});
 
-		it("should have half proficiency of +3 at level 17", () => {
+		it("should have Jack of All Trades bonus of +3 at level 17", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 17});
-			expect(Math.floor(state.getProficiencyBonus() / 2)).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBe(3);
 		});
 	});
 
 	// -------------------------------------------------------------------------
 	// 1.4 Song of Rest
-	// Note: Song of Rest is a feature that is tracked through the character's
-	// features list, not a specific calculated property. These tests verify
-	// that the level thresholds are reached correctly.
 	// -------------------------------------------------------------------------
 	describe("Song of Rest", () => {
-		it("should be available at level 2", () => {
+		it("should have d6 Song of Rest at level 2", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 2});
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.songOfRestDie).toBe("1d6");
 		});
 
-		it("should scale at level 9", () => {
+		it("should have d8 Song of Rest at level 9", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 9});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.songOfRestDie).toBe("1d8");
 		});
 
-		it("should scale at level 13", () => {
+		it("should have d10 Song of Rest at level 13", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 13});
-			expect(state.getTotalLevel()).toBe(13);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.songOfRestDie).toBe("1d10");
 		});
 
-		it("should scale at level 17", () => {
+		it("should have d12 Song of Rest at level 17", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 17});
-			expect(state.getTotalLevel()).toBe(17);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.songOfRestDie).toBe("1d12");
 		});
 	});
 
@@ -197,7 +219,19 @@ describe("Bard Core Class Features (PHB)", () => {
 
 		it("should have Countercharm at level 6", () => {
 			state.addClass({name: "Bard", source: "PHB", level: 6});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCountercharm).toBe(true);
+		});
+
+		it("should not have Countercharm before level 6", () => {
+			state.addClass({name: "Bard", source: "PHB", level: 5});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCountercharm).toBeUndefined();
+		});
+
+		it("should have Magical Secrets at level 10", () => {
+			state.addClass({name: "Bard", source: "PHB", level: 10});
+			expect(state.getTotalLevel()).toBe(10);
 		});
 
 		it("should have Magical Secrets at level 10", () => {
@@ -1345,5 +1379,257 @@ describe("Bard Edge Cases", () => {
 		const updatedClasses = state.getClasses();
 		const updatedBard = updatedClasses.find(c => c.name === "Bard");
 		expect(updatedBard.subclass?.name).toBe("College of Lore");
+	});
+});
+
+// ==========================================================================
+// PART 21: XPHB 2024 BARD (One D&D / D&D 2024)
+// ==========================================================================
+describe("XPHB 2024 Bard Core Features", () => {
+	let state;
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+		state.setRace({name: "Human", source: "PHB"});
+		state.setAbilityBase("cha", 16); // +3 modifier
+		state.setAbilityBase("dex", 14);
+		state.setAbilityBase("con", 12);
+		state.setAbilityBase("int", 10);
+		state.setAbilityBase("wis", 10);
+		state.setAbilityBase("str", 8);
+	});
+
+	// -------------------------------------------------------------------------
+	// 21.1 Bardic Inspiration (XPHB)
+	// -------------------------------------------------------------------------
+	describe("Bardic Inspiration (XPHB)", () => {
+		it("should have d6 Bardic Inspiration die at level 1", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 1});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationDie).toBe("1d6");
+		});
+
+		it("should have d8 Bardic Inspiration die at level 5", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 5});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationDie).toBe("1d8");
+		});
+
+		it("should have d10 Bardic Inspiration die at level 10", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationDie).toBe("1d10");
+		});
+
+		it("should have d12 Bardic Inspiration die at level 15", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 15});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationDie).toBe("1d12");
+		});
+
+		it("should have uses equal to Charisma modifier", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 1});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bardicInspirationUses).toBe(3);
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 21.2 Jack of All Trades (XPHB)
+	// -------------------------------------------------------------------------
+	describe("Jack of All Trades (XPHB)", () => {
+		it("should have Jack of All Trades at level 2", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 2});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBe(1);
+		});
+
+		it("should have +2 at level 9", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 9});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBe(2);
+		});
+
+		it("should have +3 at level 17", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 17});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.jackOfAllTrades).toBe(3);
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 21.3 No Song of Rest in XPHB (Removed in 2024)
+	// -------------------------------------------------------------------------
+	describe("Song of Rest (Not in XPHB)", () => {
+		it("should not have Song of Rest in XPHB Bard", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 2});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.songOfRestDie).toBeUndefined();
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 21.4 Countercharm (XPHB - Level 7 instead of Level 6)
+	// -------------------------------------------------------------------------
+	describe("Countercharm (XPHB)", () => {
+		it("should not have Countercharm at level 6", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 6});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCountercharm).toBeUndefined();
+		});
+
+		it("should have Countercharm at level 7", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 7});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCountercharm).toBe(true);
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 21.5 Words of Creation (XPHB Level 20 Capstone)
+	// -------------------------------------------------------------------------
+	describe("Words of Creation (XPHB Level 20)", () => {
+		it("should have Words of Creation at level 20", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 20});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasWordsOfCreation).toBe(true);
+		});
+
+		it("should not have Words of Creation before level 20", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 19});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasWordsOfCreation).toBeUndefined();
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 21.6 Superior Inspiration (XPHB - Level 18)
+	// -------------------------------------------------------------------------
+	describe("Superior Inspiration (XPHB)", () => {
+		it("should have Superior Inspiration at level 18", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 18});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSuperiorInspiration).toBe(true);
+		});
+
+		it("should not have Superior Inspiration before level 18", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 17});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSuperiorInspiration).toBeUndefined();
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 21.7 XPHB Spell Tracking (Prepared instead of Known)
+	// -------------------------------------------------------------------------
+	describe("Spell Tracking (XPHB Prepared Caster)", () => {
+		it("should be able to prepare spells as XPHB Bard", () => {
+			state.addClass({name: "Bard", source: "XPHB", level: 1});
+			// XPHB Bard uses prepared spells, not known spells
+			// Just verify the Bard can be set up and has spellcasting
+			const spellSlots = state.getSpellSlots();
+			expect(spellSlots[1]?.max).toBe(2);
+		});
+	});
+});
+
+// ==========================================================================
+// PART 22: XPHB 2024 BARD SUBCLASSES
+// ==========================================================================
+describe("XPHB Bard Subclasses", () => {
+	let state;
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+		state.setRace({name: "Human", source: "PHB"});
+		state.setAbilityBase("cha", 16);
+		state.setAbilityBase("dex", 14);
+		state.setAbilityBase("con", 12);
+		state.setAbilityBase("str", 10);
+		state.setAbilityBase("int", 10);
+		state.setAbilityBase("wis", 10);
+	});
+
+	// -------------------------------------------------------------------------
+	// 22.1 College of Dance (XPHB)
+	// -------------------------------------------------------------------------
+	describe("College of Dance", () => {
+		it("should set College of Dance subclass at level 3", () => {
+			state.addClass({
+				name: "Bard",
+				source: "XPHB",
+				level: 3,
+				subclass: {name: "College of Dance", shortName: "Dance", source: "XPHB"},
+			});
+
+			const classes = state.getClasses();
+			const bard = classes.find(c => c.name === "Bard");
+			expect(bard.subclass?.name).toBe("College of Dance");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 22.2 College of Glamour (XPHB)
+	// -------------------------------------------------------------------------
+	describe("College of Glamour", () => {
+		it("should set College of Glamour subclass at level 3", () => {
+			state.addClass({
+				name: "Bard",
+				source: "XPHB",
+				level: 3,
+				subclass: {name: "College of Glamour", shortName: "Glamour", source: "XPHB"},
+			});
+
+			const classes = state.getClasses();
+			const bard = classes.find(c => c.name === "Bard");
+			expect(bard.subclass?.name).toBe("College of Glamour");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 22.3 College of Lore (XPHB)
+	// -------------------------------------------------------------------------
+	describe("College of Lore (XPHB)", () => {
+		it("should set College of Lore subclass at level 3", () => {
+			state.addClass({
+				name: "Bard",
+				source: "XPHB",
+				level: 3,
+				subclass: {name: "College of Lore", shortName: "Lore", source: "XPHB"},
+			});
+
+			const classes = state.getClasses();
+			const bard = classes.find(c => c.name === "Bard");
+			expect(bard.subclass?.name).toBe("College of Lore");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// 22.4 College of Valor (XPHB)
+	// -------------------------------------------------------------------------
+	describe("College of Valor (XPHB)", () => {
+		it("should set College of Valor subclass at level 3", () => {
+			state.addClass({
+				name: "Bard",
+				source: "XPHB",
+				level: 3,
+				subclass: {name: "College of Valor", shortName: "Valor", source: "XPHB"},
+			});
+
+			const classes = state.getClasses();
+			const bard = classes.find(c => c.name === "Bard");
+			expect(bard.subclass?.name).toBe("College of Valor");
+		});
+
+		it("should have Extra Attack at level 6", () => {
+			state.addClass({
+				name: "Bard",
+				source: "XPHB",
+				level: 6,
+				subclass: {name: "College of Valor", shortName: "Valor", source: "XPHB"},
+			});
+
+			expect(state.getTotalLevel()).toBe(6);
+		});
 	});
 });
