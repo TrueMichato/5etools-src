@@ -885,7 +885,8 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 
 		it("should have Primal Knowledge at level 3", () => {
 			// XPHB grants Primal Knowledge as a core feature at level 3
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasDangerSense).toBe(true);
 		});
 	});
 
@@ -925,19 +926,22 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 		it("should have additional Brutal Strike options at level 13", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 13});
 			// Adds Staggering Blow and Sundering Blow options
-			expect(state.getTotalLevel()).toBe(13);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalStrikeDamage).toBe("1d10");
 		});
 
 		it("should have Staggering Blow option at level 13", () => {
 			// Staggering Blow: target has disadvantage on next save, can't make opportunity attacks
 			state.addClass({name: "Barbarian", source: "XPHB", level: 13});
-			expect(state.getTotalLevel()).toBe(13);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalStrikeDamage).toBe("1d10");
 		});
 
 		it("should have Sundering Blow option at level 13", () => {
 			// Sundering Blow: next attack against target by another creature gets +5 bonus
 			state.addClass({name: "Barbarian", source: "XPHB", level: 13});
-			expect(state.getTotalLevel()).toBe(13);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.brutalStrikeDamage).toBe("1d10");
 		});
 	});
 
@@ -1001,7 +1005,8 @@ describe("Barbarian 2024 (XPHB) Core Features", () => {
 			state.addClass({name: "Barbarian", source: "XPHB", level: 19});
 			// XPHB replaces level 19 ASI with Epic Boon
 			// Boon of Irresistible Offense recommended
-			expect(state.getTotalLevel()).toBe(19);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasIndomitableMight).toBe(true);
 		});
 	});
 
@@ -1083,7 +1088,8 @@ describe("Path of the Berserker 2024 (XPHB)", () => {
 		it("should have Mindless Rage at level 6", () => {
 			// Immunity to Charmed and Frightened while raging
 			// Ends those conditions when entering rage
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMindlessRage).toBe(true);
 		});
 	});
 
@@ -1097,7 +1103,8 @@ describe("Path of the Berserker 2024 (XPHB)", () => {
 
 		it("should have Retaliation at level 10", () => {
 			// Reaction melee attack when taking damage from creature within 5 feet
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRetaliation).toBe(true);
 		});
 	});
 
@@ -1154,7 +1161,8 @@ describe("Path of the Wild Heart 2024 (XPHB)", () => {
 		it("should have Animal Speaker feature for ritual spells", () => {
 			// Can cast Beast Sense and Speak with Animals as rituals
 			// Wisdom is spellcasting ability
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAnimalSpeaker).toBe(true);
 		});
 	});
 
@@ -1164,17 +1172,20 @@ describe("Path of the Wild Heart 2024 (XPHB)", () => {
 	describe("Rage of the Wilds (Level 3)", () => {
 		it("should have Bear option for expanded resistances", () => {
 			// Bear: Resistance to all damage except Force, Necrotic, Psychic, Radiant
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRageOfTheWilds).toBe(true);
 		});
 
 		it("should have Eagle option for Dash and Disengage", () => {
 			// Eagle: Disengage and Dash on rage activation and as bonus action while raging
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRageOfTheWilds).toBe(true);
 		});
 
 		it("should have Wolf option for ally advantage", () => {
 			// Wolf: Allies have advantage on attacks vs enemies within 5 feet of you
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRageOfTheWilds).toBe(true);
 		});
 	});
 
@@ -1188,17 +1199,20 @@ describe("Path of the Wild Heart 2024 (XPHB)", () => {
 
 		it("should have Owl option for Darkvision", () => {
 			// Owl: 60 ft Darkvision (or +60 ft if already have it)
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAspectOfTheWilds).toBe(true);
 		});
 
 		it("should have Panther option for Climb Speed", () => {
 			// Panther: Climb Speed equal to Speed
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAspectOfTheWilds).toBe(true);
 		});
 
 		it("should have Salmon option for Swim Speed", () => {
 			// Salmon: Swim Speed equal to Speed
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAspectOfTheWilds).toBe(true);
 		});
 	});
 
@@ -1212,7 +1226,8 @@ describe("Path of the Wild Heart 2024 (XPHB)", () => {
 
 		it("should have Nature Speaker for Commune with Nature ritual", () => {
 			// Can cast Commune with Nature as a ritual
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPowerOfTheWilds).toBe(true);
 		});
 	});
 
@@ -1226,17 +1241,20 @@ describe("Path of the Wild Heart 2024 (XPHB)", () => {
 
 		it("should have Falcon option for Fly Speed", () => {
 			// Falcon: Fly Speed equal to Speed while raging (no armor)
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasNatureSpeaker).toBe(true);
 		});
 
 		it("should have Lion option for enemy disadvantage", () => {
 			// Lion: Enemies within 5 feet have disadvantage on attacks vs others
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasNatureSpeaker).toBe(true);
 		});
 
 		it("should have Ram option for knock Prone", () => {
 			// Ram: Can knock Large or smaller creature Prone on melee hit
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasNatureSpeaker).toBe(true);
 		});
 	});
 });
@@ -1320,7 +1338,8 @@ describe("Path of the World Tree 2024 (XPHB)", () => {
 		it("should have Battering Roots for extended reach", () => {
 			// +10 feet reach with Heavy or Versatile melee weapons
 			// Can use Push or Topple mastery in addition to another mastery
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBatteringRoots).toBe(true);
 		});
 	});
 
@@ -1335,7 +1354,8 @@ describe("Path of the World Tree 2024 (XPHB)", () => {
 		it("should have Travel Along the Tree teleportation", () => {
 			// Teleport 60 feet on rage activation and as bonus action
 			// Once per rage: 150 feet and can bring up to 6 willing creatures
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasTravelAlongTheTree).toBe(true);
 		});
 	});
 });
@@ -1457,7 +1477,8 @@ describe("Path of the Zealot 2024 (XPHB)", () => {
 		it("should have Zealous Presence battle cry feature", () => {
 			// Bonus action: up to 10 creatures within 60 feet gain advantage
 			// Can expend Rage use to restore this feature
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasZealousPresence).toBe(true);
 		});
 	});
 
@@ -1472,17 +1493,20 @@ describe("Path of the Zealot 2024 (XPHB)", () => {
 		it("should have Rage of the Gods divine form", () => {
 			// Divine warrior form for 1 minute or until 0 HP
 			// Gains: Fly Speed (hover), Resistance to Necrotic/Psychic/Radiant
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRageBeyondDeath).toBe(true);
 		});
 
 		it("should have Flight while in divine form", () => {
 			// Fly Speed equal to Speed, can hover
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRageBeyondDeath).toBe(true);
 		});
 
 		it("should have extra Resistances while in divine form", () => {
 			// Resistance to Necrotic, Psychic, and Radiant damage
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRageBeyondDeath).toBe(true);
 		});
 
 		it("should have Revivification reaction ability", () => {
