@@ -284,6 +284,27 @@ describe("Monk Core Class Features (PHB)", () => {
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.hasPurityOfBody).toBe(true);
 		});
+
+		it("should grant poison immunity at level 10", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 10});
+			expect(state.hasImmunity("poison")).toBe(true);
+		});
+
+		it("should grant poisoned condition immunity at level 10", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 10});
+			expect(state.isImmuneToCondition("poisoned")).toBe(true);
+		});
+
+		it("should grant diseased condition immunity at level 10", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 10});
+			expect(state.isImmuneToCondition("diseased")).toBe(true);
+		});
+
+		it("should not have immunities before level 10", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 9});
+			expect(state.hasImmunity("poison")).toBe(false);
+			expect(state.isImmuneToCondition("poisoned")).toBe(false);
+		});
 	});
 
 	// -------------------------------------------------------------------------
@@ -295,6 +316,11 @@ describe("Monk Core Class Features (PHB)", () => {
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.hasTongueOfSunAndMoon).toBe(true);
 		});
+
+		it("should grant all spoken languages at level 13", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 13});
+			expect(state.getLanguages()).toContain("All (spoken)");
+		});
 	});
 
 	// -------------------------------------------------------------------------
@@ -305,6 +331,24 @@ describe("Monk Core Class Features (PHB)", () => {
 			state.addClass({name: "Monk", source: "PHB", level: 14});
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.hasDiamondSoul).toBe(true);
+		});
+
+		it("should grant proficiency in all saving throws at level 14", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 14});
+			expect(state.hasSaveProficiency("str")).toBe(true);
+			expect(state.hasSaveProficiency("dex")).toBe(true);
+			expect(state.hasSaveProficiency("con")).toBe(true);
+			expect(state.hasSaveProficiency("int")).toBe(true);
+			expect(state.hasSaveProficiency("wis")).toBe(true);
+			expect(state.hasSaveProficiency("cha")).toBe(true);
+		});
+
+		it("should not have all save proficiencies before level 14", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 13});
+			// Diamond Soul grants all saves at level 14, so CON/INT/CHA should be false before then
+			expect(state.hasSaveProficiency("con")).toBe(false);
+			expect(state.hasSaveProficiency("int")).toBe(false);
+			expect(state.hasSaveProficiency("cha")).toBe(false);
 		});
 	});
 

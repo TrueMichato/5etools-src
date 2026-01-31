@@ -103,15 +103,14 @@ describe("Artificer Core Class Features (TCE)", () => {
 	describe("Infuse Item (Level 2)", () => {
 		it("should know 4 infusions at level 2", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 2 });
-			// Infusions known: 4 at level 2
-			// This is tracked in class features, not directly in state
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionsKnown).toBe(4);
 		});
 
-		it("should have 2 infused items at level 2", () => {
+		it("should have 2 infused item slots at level 2", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 2 });
-			// Infused items: 2 at level 2
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionSlots).toBe(2);
 		});
 	});
 
@@ -146,113 +145,181 @@ describe("Artificer Core Class Features (TCE)", () => {
 	describe("Flash of Genius (Level 7)", () => {
 		it("should be available at level 7", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 7 });
-			expect(state.getTotalLevel()).toBe(7);
+			state.setAbilityBase("int", 18);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.flashOfGeniusUses).toBeDefined();
 		});
 
 		it("should have uses equal to INT modifier", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 7 });
 			state.setAbilityBase("int", 18); // +4 modifier
-			expect(state.getAbilityMod("int")).toBe(4);
-			// Flash of Genius uses would be tracked as a resource
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.flashOfGeniusUses).toBe(4);
+		});
+
+		it("should have bonus equal to INT modifier", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 7 });
+			state.setAbilityBase("int", 16); // +3 modifier
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.flashOfGeniusBonus).toBe(3);
+		});
+
+		it("should have minimum 1 use with low INT", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 7 });
+			state.setAbilityBase("int", 8); // -1 modifier
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.flashOfGeniusUses).toBe(1);
 		});
 	});
 
 	describe("Magic Item Adept (Level 10)", () => {
-		it("should be available at level 10", () => {
+		it("should allow attuning to 4 magic items at level 10", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 10 });
-			expect(state.getTotalLevel()).toBe(10);
-			// Can attune to 4 magic items
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.magicItemAttunementLimit).toBe(4);
 		});
 	});
 
 	describe("Spell-Storing Item (Level 11)", () => {
 		it("should be available at level 11", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 11 });
-			expect(state.getTotalLevel()).toBe(11);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.spellStoringItemUses).toBeDefined();
 		});
 
 		it("should store spell uses equal to 2x INT modifier", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 11 });
 			state.setAbilityBase("int", 20); // +5 modifier = 10 uses
-			expect(state.getAbilityMod("int")).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.spellStoringItemUses).toBe(10);
+		});
+
+		it("should have minimum 2 uses with low INT", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 11 });
+			state.setAbilityBase("int", 8); // -1 modifier
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.spellStoringItemUses).toBe(2);
 		});
 	});
 
 	describe("Magic Item Savant (Level 14)", () => {
-		it("should be available at level 14", () => {
+		it("should allow attuning to 5 magic items at level 14", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 14 });
-			expect(state.getTotalLevel()).toBe(14);
-			// Can attune to 5 magic items
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.magicItemAttunementLimit).toBe(5);
 		});
 	});
 
 	describe("Magic Item Master (Level 18)", () => {
-		it("should be available at level 18", () => {
+		it("should allow attuning to 6 magic items at level 18", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 18 });
-			expect(state.getTotalLevel()).toBe(18);
-			// Can attune to 6 magic items
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.magicItemAttunementLimit).toBe(6);
 		});
 	});
 
 	describe("Soul of Artifice (Level 20)", () => {
 		it("should be available at level 20", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 20 });
-			expect(state.getTotalLevel()).toBe(20);
-			// +1 to all saves per attuned item
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.soulOfArtificeSaveBonus).toBeDefined();
+		});
+
+		it("should grant +6 to all saves (max attuned items)", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 20 });
+			const calculations = state.getFeatureCalculations();
+			// Max attunement at 20 is 6, so bonus is +6
+			expect(calculations.soulOfArtificeSaveBonus).toBe(6);
 		});
 	});
 
 	describe("Infusion Progression", () => {
 		it("should know 4 infusions at level 2-5", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 2 });
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionsKnown).toBe(4);
 		});
 
 		it("should know 6 infusions at level 6-9", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 6 });
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionsKnown).toBe(6);
 		});
 
 		it("should know 8 infusions at level 10-13", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 10 });
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionsKnown).toBe(8);
 		});
 
 		it("should know 10 infusions at level 14-17", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 14 });
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionsKnown).toBe(10);
 		});
 
 		it("should know 12 infusions at level 18-20", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 18 });
-			expect(state.getTotalLevel()).toBe(18);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionsKnown).toBe(12);
 		});
 	});
 
 	describe("Infused Items Progression", () => {
-		it("should have 2 infused items at level 2-5", () => {
+		it("should have 2 infused item slots at level 2-5", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 2 });
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionSlots).toBe(2);
 		});
 
-		it("should have 3 infused items at level 6-9", () => {
+		it("should have 3 infused item slots at level 6-9", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 6 });
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionSlots).toBe(3);
 		});
 
-		it("should have 4 infused items at level 10-13", () => {
+		it("should have 4 infused item slots at level 10-13", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 10 });
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionSlots).toBe(4);
 		});
 
-		it("should have 5 infused items at level 14-17", () => {
+		it("should have 5 infused item slots at level 14-17", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 14 });
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionSlots).toBe(5);
 		});
 
-		it("should have 6 infused items at level 18-20", () => {
+		it("should have 6 infused item slots at level 18-20", () => {
 			state.addClass({ name: "Artificer", source: "TCE", level: 18 });
-			expect(state.getTotalLevel()).toBe(18);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infusionSlots).toBe(6);
+		});
+	});
+
+	describe("Magic Item Attunement Progression", () => {
+		it("should have 3 attunement slots at level 1-9", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 5 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.magicItemAttunementLimit).toBe(3);
+		});
+
+		it("should have 4 attunement slots at level 10-13", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 10 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.magicItemAttunementLimit).toBe(4);
+		});
+
+		it("should have 5 attunement slots at level 14-17", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 14 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.magicItemAttunementLimit).toBe(5);
+		});
+
+		it("should have 6 attunement slots at level 18+", () => {
+			state.addClass({ name: "Artificer", source: "TCE", level: 18 });
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.magicItemAttunementLimit).toBe(6);
 		});
 	});
 });
@@ -355,7 +422,8 @@ describe("Alchemist (TCE)", () => {
 				level: 3,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.experimentalElixirCount).toBe(1);
 		});
 
 		it("should produce 2 elixirs at level 6", () => {
@@ -365,7 +433,8 @@ describe("Alchemist (TCE)", () => {
 				level: 6,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.experimentalElixirCount).toBe(2);
 		});
 
 		it("should produce 3 elixirs at level 15", () => {
@@ -375,7 +444,8 @@ describe("Alchemist (TCE)", () => {
 				level: 15,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.experimentalElixirCount).toBe(3);
 		});
 	});
 
@@ -387,10 +457,11 @@ describe("Alchemist (TCE)", () => {
 				level: 5,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAlchemicalSavant).toBe(true);
 		});
 
-		it("should add INT modifier to healing and acid/fire/necrotic/poison damage", () => {
+		it("should add INT modifier to healing and damage", () => {
 			state.addClass({
 				name: "Artificer",
 				source: "TCE",
@@ -398,7 +469,8 @@ describe("Alchemist (TCE)", () => {
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
 			state.setAbilityBase("int", 18);
-			expect(state.getAbilityMod("int")).toBe(4);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.alchemicalSavantBonus).toBe(4);
 		});
 	});
 
@@ -410,7 +482,8 @@ describe("Alchemist (TCE)", () => {
 				level: 9,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasRestorativeReagents).toBe(true);
 		});
 
 		it("should grant temp HP equal to 2d6 + INT mod on elixir consumption", () => {
@@ -421,7 +494,8 @@ describe("Alchemist (TCE)", () => {
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
 			state.setAbilityBase("int", 16);
-			expect(state.getAbilityMod("int")).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.restorativeReagentsTempHp).toBe("2d6+3");
 		});
 
 		it("should allow casting Lesser Restoration INT mod times", () => {
@@ -432,7 +506,8 @@ describe("Alchemist (TCE)", () => {
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
 			state.setAbilityBase("int", 18);
-			expect(state.getAbilityMod("int")).toBe(4);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.restorativeReagentsUses).toBe(4);
 		});
 	});
 
@@ -444,7 +519,8 @@ describe("Alchemist (TCE)", () => {
 				level: 15,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasChemicalMastery).toBe(true);
 		});
 
 		it("should grant acid and poison resistance and immunity to poisoned", () => {
@@ -454,7 +530,8 @@ describe("Alchemist (TCE)", () => {
 				level: 15,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasChemicalMastery).toBe(true);
 		});
 
 		it("should allow casting greater restoration and heal once each", () => {
@@ -464,7 +541,8 @@ describe("Alchemist (TCE)", () => {
 				level: 15,
 				subclass: { name: "Alchemist", shortName: "Alchemist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasChemicalMastery).toBe(true);
 		});
 	});
 });
@@ -487,7 +565,8 @@ describe("Armorer (TCE)", () => {
 				level: 3,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasArcaneArmor).toBe(true);
 		});
 	});
 
@@ -511,7 +590,8 @@ describe("Armorer (TCE)", () => {
 				level: 3,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasArcaneArmor).toBe(true);
 		});
 	});
 
@@ -523,7 +603,8 @@ describe("Armorer (TCE)", () => {
 				level: 3,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.thunderGauntletsDamage).toBe("1d8");
 		});
 
 		it("should provide Defensive Field (temp HP = artificer level)", () => {
@@ -533,8 +614,8 @@ describe("Armorer (TCE)", () => {
 				level: 10,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			// Temp HP = 10 at level 10
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.defensiveFieldTempHp).toBe(10);
 		});
 	});
 
@@ -546,7 +627,8 @@ describe("Armorer (TCE)", () => {
 				level: 3,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.lightningLauncherDamage).toBe("1d6");
 		});
 
 		it("should provide Powered Steps (+5 feet walking speed)", () => {
@@ -556,7 +638,8 @@ describe("Armorer (TCE)", () => {
 				level: 3,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.infiltratorSpeedBonus).toBe(5);
 		});
 
 		it("should provide Dampening Field (advantage on Stealth)", () => {
@@ -566,6 +649,7 @@ describe("Armorer (TCE)", () => {
 				level: 3,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
+			// This is a boolean feature
 			expect(state.getTotalLevel()).toBe(3);
 		});
 	});
@@ -578,7 +662,9 @@ describe("Armorer (TCE)", () => {
 				level: 5,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasExtraAttack).toBe(true);
+			expect(calculations.attacksPerAction).toBe(2);
 		});
 	});
 
@@ -590,7 +676,8 @@ describe("Armorer (TCE)", () => {
 				level: 9,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasArmorModifications).toBe(true);
 		});
 
 		it("should increase max infused items by 2 for armor pieces", () => {
@@ -600,7 +687,8 @@ describe("Armorer (TCE)", () => {
 				level: 9,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.armorInfusionBonus).toBe(2);
 		});
 	});
 
@@ -612,7 +700,8 @@ describe("Armorer (TCE)", () => {
 				level: 15,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPerfectedArmor).toBe(true);
 		});
 
 		it("Guardian should pull creatures within 30 feet", () => {
@@ -622,7 +711,8 @@ describe("Armorer (TCE)", () => {
 				level: 15,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.guardianPullRange).toBe(30);
 		});
 
 		it("Infiltrator should cause glimmering light and disadvantage on attacks", () => {
@@ -632,7 +722,8 @@ describe("Armorer (TCE)", () => {
 				level: 15,
 				subclass: { name: "Armorer", shortName: "Armorer", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasInfiltratorGlimmer).toBe(true);
 		});
 	});
 });
@@ -655,6 +746,7 @@ describe("Artillerist (TCE)", () => {
 				level: 3,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
+			// Tool proficiency is a boolean feature
 			expect(state.getTotalLevel()).toBe(3);
 		});
 	});
@@ -667,6 +759,7 @@ describe("Artillerist (TCE)", () => {
 				level: 3,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
+			// Spells prepared is a list-based feature
 			expect(state.getTotalLevel()).toBe(3);
 		});
 
@@ -677,6 +770,7 @@ describe("Artillerist (TCE)", () => {
 				level: 9,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
+			// Spells prepared is a list-based feature
 			expect(state.getTotalLevel()).toBe(9);
 		});
 	});
@@ -689,7 +783,8 @@ describe("Artillerist (TCE)", () => {
 				level: 3,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasEldritchCannon).toBe(true);
 		});
 
 		it("Flamethrower should deal 2d8 fire damage", () => {
@@ -699,7 +794,8 @@ describe("Artillerist (TCE)", () => {
 				level: 3,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.flamethrowerDamage).toBe("2d8");
 		});
 
 		it("Force Ballista should deal 2d8 force damage", () => {
@@ -709,7 +805,8 @@ describe("Artillerist (TCE)", () => {
 				level: 3,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.forceBallistaDamage).toBe("2d8");
 		});
 
 		it("Protector should grant 1d8 + INT mod temp HP", () => {
@@ -720,7 +817,9 @@ describe("Artillerist (TCE)", () => {
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
 			state.setAbilityBase("int", 16);
-			expect(state.getAbilityMod("int")).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.protectorTempHpDice).toBe("1d8");
+			expect(calculations.protectorTempHpBonus).toBe(3);
 		});
 
 		it("Cannon HP should be 5x artificer level", () => {
@@ -730,8 +829,8 @@ describe("Artillerist (TCE)", () => {
 				level: 10,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			// Cannon HP = 5 * 10 = 50
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.eldritchCannonHp).toBe(50);
 		});
 	});
 
@@ -743,7 +842,8 @@ describe("Artillerist (TCE)", () => {
 				level: 5,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasArcaneFirearm).toBe(true);
 		});
 
 		it("should add 1d8 to one damage roll of artificer spells", () => {
@@ -753,7 +853,8 @@ describe("Artillerist (TCE)", () => {
 				level: 5,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.arcaneFirearmDamage).toBe("1d8");
 		});
 	});
 
@@ -765,7 +866,8 @@ describe("Artillerist (TCE)", () => {
 				level: 9,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasExplosiveCannon).toBe(true);
 		});
 
 		it("should increase cannon damage by 1d8", () => {
@@ -775,8 +877,11 @@ describe("Artillerist (TCE)", () => {
 				level: 9,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
+			const calculations = state.getFeatureCalculations();
 			// Flamethrower: 3d8 fire, Force Ballista: 3d8 force, Protector: 2d8 + INT
-			expect(state.getTotalLevel()).toBe(9);
+			expect(calculations.flamethrowerDamage).toBe("3d8");
+			expect(calculations.forceBallistaDamage).toBe("3d8");
+			expect(calculations.protectorTempHpDice).toBe("2d8");
 		});
 
 		it("should allow detonation for 3d8 force damage", () => {
@@ -786,7 +891,8 @@ describe("Artillerist (TCE)", () => {
 				level: 9,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.cannonDetonationDamage).toBe("3d8");
 		});
 	});
 
@@ -798,7 +904,8 @@ describe("Artillerist (TCE)", () => {
 				level: 15,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasFortifiedPosition).toBe(true);
 		});
 
 		it("should provide half cover within 10 feet of cannon", () => {
@@ -808,7 +915,9 @@ describe("Artillerist (TCE)", () => {
 				level: 15,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.cannonCoverRange).toBe(10);
+			expect(calculations.cannonCoverType).toBe("half");
 		});
 
 		it("should allow two cannons at once", () => {
@@ -818,7 +927,8 @@ describe("Artillerist (TCE)", () => {
 				level: 15,
 				subclass: { name: "Artillerist", shortName: "Artillerist", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.maxCannons).toBe(2);
 		});
 	});
 });
@@ -841,6 +951,7 @@ describe("Battle Smith (TCE)", () => {
 				level: 3,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
+			// Tool proficiency is a boolean feature
 			expect(state.getTotalLevel()).toBe(3);
 		});
 	});
@@ -853,6 +964,7 @@ describe("Battle Smith (TCE)", () => {
 				level: 3,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
+			// Spells prepared is a list-based feature
 			expect(state.getTotalLevel()).toBe(3);
 		});
 	});
@@ -865,7 +977,8 @@ describe("Battle Smith (TCE)", () => {
 				level: 3,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBattleReady).toBe(true);
 		});
 
 		it("should allow using INT for magic weapon attacks", () => {
@@ -876,7 +989,9 @@ describe("Battle Smith (TCE)", () => {
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
 			state.setAbilityBase("int", 18);
-			expect(state.getAbilityMod("int")).toBe(4);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBattleReady).toBe(true);
+			expect(calculations.magicWeaponAttackMod).toBe(4);
 		});
 	});
 
@@ -888,7 +1003,8 @@ describe("Battle Smith (TCE)", () => {
 				level: 3,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSteelDefender).toBe(true);
 		});
 
 		it("Steel Defender should have HP based on artificer level and proficiency", () => {
@@ -898,8 +1014,10 @@ describe("Battle Smith (TCE)", () => {
 				level: 5,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			// Steel Defender HP = 2 + INT mod + 5 * artificer level
-			expect(state.getTotalLevel()).toBe(5);
+			state.setAbilityBase("int", 16);
+			const calculations = state.getFeatureCalculations();
+			// Steel Defender HP = 2 + INT mod + 5 * artificer level = 2 + 3 + 25 = 30
+			expect(calculations.steelDefenderHp).toBe(30);
 		});
 	});
 
@@ -911,7 +1029,9 @@ describe("Battle Smith (TCE)", () => {
 				level: 5,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasExtraAttack).toBe(true);
+			expect(calculations.attacksPerAction).toBe(2);
 		});
 	});
 
@@ -923,7 +1043,8 @@ describe("Battle Smith (TCE)", () => {
 				level: 9,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasArcaneJolt).toBe(true);
 		});
 
 		it("should deal 2d6 extra force damage or heal 2d6 HP", () => {
@@ -933,7 +1054,8 @@ describe("Battle Smith (TCE)", () => {
 				level: 9,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(9);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.arcaneJoltDamage).toBe("2d6");
 		});
 
 		it("should have uses equal to INT modifier", () => {
@@ -944,7 +1066,8 @@ describe("Battle Smith (TCE)", () => {
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
 			state.setAbilityBase("int", 20);
-			expect(state.getAbilityMod("int")).toBe(5);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.arcaneJoltUses).toBe(5);
 		});
 	});
 
@@ -956,7 +1079,8 @@ describe("Battle Smith (TCE)", () => {
 				level: 15,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasImprovedDefender).toBe(true);
 		});
 
 		it("should increase Arcane Jolt to 4d6", () => {
@@ -966,7 +1090,8 @@ describe("Battle Smith (TCE)", () => {
 				level: 15,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.arcaneJoltDamage).toBe("4d6");
 		});
 
 		it("should give Steel Defender +2 AC", () => {
@@ -976,7 +1101,8 @@ describe("Battle Smith (TCE)", () => {
 				level: 15,
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
-			expect(state.getTotalLevel()).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.steelDefenderAcBonus).toBe(2);
 		});
 
 		it("should make Deflect Attack deal 1d4 + INT force damage", () => {
@@ -987,7 +1113,9 @@ describe("Battle Smith (TCE)", () => {
 				subclass: { name: "Battle Smith", shortName: "Battle Smith", source: "TCE" },
 			});
 			state.setAbilityBase("int", 18);
-			expect(state.getAbilityMod("int")).toBe(4);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.deflectAttackDamageDice).toBe("1d4");
+			expect(calculations.deflectAttackDamageBonus).toBe(4);
 		});
 	});
 });

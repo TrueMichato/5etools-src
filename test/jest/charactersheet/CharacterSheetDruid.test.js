@@ -472,12 +472,14 @@ describe("Circle of the Moon (PHB)", () => {
 
 	describe("Combat Wild Shape", () => {
 		it("should allow Wild Shape as bonus action at level 2", () => {
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCombatWildShape).toBe(true);
 		});
 
 		it("should allow spending spell slots to heal in Wild Shape", () => {
 			// Heal 1d8 HP per spell slot level
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.wildShapeHealPerSlotLevel).toBe("1d8");
 		});
 	});
 
@@ -485,7 +487,8 @@ describe("Circle of the Moon (PHB)", () => {
 		it("should have CR 1 limit at level 2 (instead of CR 1/4)", () => {
 			// Moon druids get CR 1 at level 2
 			// This overrides the normal PHB druid CR progression
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.moonFormsCr).toBe(1);
 		});
 
 		it("should scale CR with level (CR = druid level / 3 rounded down)", () => {
@@ -517,7 +520,8 @@ describe("Circle of the Moon (PHB)", () => {
 				level: 6,
 				subclass: {name: "Circle of the Moon", shortName: "Moon", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPrimalStrike).toBe(true);
 		});
 	});
 
@@ -529,7 +533,8 @@ describe("Circle of the Moon (PHB)", () => {
 				level: 10,
 				subclass: {name: "Circle of the Moon", shortName: "Moon", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasElementalWildShape).toBe(true);
 		});
 
 		it("should cost 2 Wild Shape uses to become elemental", () => {
@@ -539,7 +544,8 @@ describe("Circle of the Moon (PHB)", () => {
 				level: 10,
 				subclass: {name: "Circle of the Moon", shortName: "Moon", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.elementalWildShapeCost).toBe(2);
 		});
 	});
 
@@ -551,7 +557,8 @@ describe("Circle of the Moon (PHB)", () => {
 				level: 14,
 				subclass: {name: "Circle of the Moon", shortName: "Moon", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasThousandForms).toBe(true);
 		});
 	});
 });
@@ -590,9 +597,9 @@ describe("Circle of Dreams (XGE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Dreams", shortName: "Dreams", source: "XGE"},
 			});
-			const druidLevel = 10;
-			const healingDice = druidLevel;
-			expect(healingDice).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.balmOfSummerCourtDice).toBe(10);
+			expect(calculations.balmOfSummerCourtPool).toBe("10d6");
 		});
 	});
 
@@ -604,7 +611,8 @@ describe("Circle of Dreams (XGE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Dreams", shortName: "Dreams", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasHearthOfMoonlight).toBe(true);
 		});
 	});
 
@@ -616,7 +624,8 @@ describe("Circle of Dreams (XGE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Dreams", shortName: "Dreams", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasHiddenPaths).toBe(true);
 		});
 
 		it("should have uses equal to WIS modifier", () => {
@@ -626,8 +635,8 @@ describe("Circle of Dreams (XGE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Dreams", shortName: "Dreams", source: "XGE"},
 			});
-			const wisMod = state.getAbilityMod("wis");
-			expect(wisMod).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hiddenPathsUses).toBe(3);
 		});
 	});
 
@@ -639,7 +648,8 @@ describe("Circle of Dreams (XGE)", () => {
 				level: 14,
 				subclass: {name: "Circle of Dreams", shortName: "Dreams", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasWalkerInDreams).toBe(true);
 		});
 	});
 });
@@ -670,7 +680,9 @@ describe("Circle of the Shepherd (XGE)", () => {
 
 	describe("Spirit Totem", () => {
 		it("should have Spirit Totem at level 2", () => {
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSpiritTotem).toBe(true);
+			expect(calculations.spiritTotemRadius).toBe(30);
 		});
 	});
 
@@ -682,7 +694,8 @@ describe("Circle of the Shepherd (XGE)", () => {
 				level: 6,
 				subclass: {name: "Circle of the Shepherd", shortName: "Shepherd", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMightySummoner).toBe(true);
 		});
 
 		it("should grant +2 HP per Hit Die to summoned creatures", () => {
@@ -692,7 +705,8 @@ describe("Circle of the Shepherd (XGE)", () => {
 				level: 6,
 				subclass: {name: "Circle of the Shepherd", shortName: "Shepherd", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.mightySummonerHpPerHd).toBe(2);
 		});
 	});
 
@@ -704,7 +718,9 @@ describe("Circle of the Shepherd (XGE)", () => {
 				level: 10,
 				subclass: {name: "Circle of the Shepherd", shortName: "Shepherd", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasGuardianSpirit).toBe(true);
+			expect(calculations.guardianSpiritHealing).toBe(5); // level 10 / 2 = 5
 		});
 	});
 
@@ -716,7 +732,8 @@ describe("Circle of the Shepherd (XGE)", () => {
 				level: 14,
 				subclass: {name: "Circle of the Shepherd", shortName: "Shepherd", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasFaithfulSummons).toBe(true);
 		});
 	});
 });
@@ -748,9 +765,8 @@ describe("Circle of Spores (TCE)", () => {
 
 	describe("Halo of Spores", () => {
 		it("should deal 1d4 necrotic damage at level 2", () => {
-			const druidLevel = 2;
-			const haloDamage = druidLevel >= 14 ? "1d10" : druidLevel >= 10 ? "1d8" : druidLevel >= 6 ? "1d6" : "1d4";
-			expect(haloDamage).toBe("1d4");
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.haloOfSporesDamage).toBe("1d4");
 		});
 
 		it("should deal 1d6 necrotic damage at level 6", () => {
@@ -760,9 +776,8 @@ describe("Circle of Spores (TCE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			const druidLevel = 6;
-			const haloDamage = druidLevel >= 14 ? "1d10" : druidLevel >= 10 ? "1d8" : druidLevel >= 6 ? "1d6" : "1d4";
-			expect(haloDamage).toBe("1d6");
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.haloOfSporesDamage).toBe("1d6");
 		});
 
 		it("should deal 1d8 necrotic damage at level 10", () => {
@@ -772,9 +787,8 @@ describe("Circle of Spores (TCE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			const druidLevel = 10;
-			const haloDamage = druidLevel >= 14 ? "1d10" : druidLevel >= 10 ? "1d8" : druidLevel >= 6 ? "1d6" : "1d4";
-			expect(haloDamage).toBe("1d8");
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.haloOfSporesDamage).toBe("1d8");
 		});
 
 		it("should deal 1d10 necrotic damage at level 14", () => {
@@ -784,17 +798,15 @@ describe("Circle of Spores (TCE)", () => {
 				level: 14,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			const druidLevel = 14;
-			const haloDamage = druidLevel >= 14 ? "1d10" : druidLevel >= 10 ? "1d8" : druidLevel >= 6 ? "1d6" : "1d4";
-			expect(haloDamage).toBe("1d10");
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.haloOfSporesDamage).toBe("1d10");
 		});
 	});
 
 	describe("Symbiotic Entity", () => {
 		it("should grant temp HP equal to 4 × druid level", () => {
-			const druidLevel = 2;
-			const tempHp = 4 * druidLevel;
-			expect(tempHp).toBe(8);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.symbioticEntityTempHp).toBe(8);
 		});
 
 		it("should scale temp HP with level", () => {
@@ -804,9 +816,8 @@ describe("Circle of Spores (TCE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			const druidLevel = 10;
-			const tempHp = 4 * druidLevel;
-			expect(tempHp).toBe(40);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.symbioticEntityTempHp).toBe(40);
 		});
 	});
 
@@ -818,7 +829,8 @@ describe("Circle of Spores (TCE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasFungalInfestation).toBe(true);
 		});
 
 		it("should have uses equal to WIS modifier", () => {
@@ -828,8 +840,8 @@ describe("Circle of Spores (TCE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			const wisMod = state.getAbilityMod("wis");
-			expect(wisMod).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.fungalInfestationUses).toBe(3);
 		});
 	});
 
@@ -841,7 +853,9 @@ describe("Circle of Spores (TCE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSpreadingSpores).toBe(true);
+			expect(calculations.spreadingSporesRange).toBe(30);
 		});
 	});
 
@@ -853,7 +867,8 @@ describe("Circle of Spores (TCE)", () => {
 				level: 14,
 				subclass: {name: "Circle of Spores", shortName: "Spores", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasFungalBody).toBe(true);
 		});
 	});
 });
@@ -884,24 +899,26 @@ describe("Circle of Stars (TCE)", () => {
 
 	describe("Star Map", () => {
 		it("should grant Guidance cantrip for free", () => {
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasStarMap).toBe(true);
 		});
 
 		it("should allow casting Guiding Bolt without expending spell slot", () => {
-			const profBonus = state.getProficiencyBonus();
-			expect(profBonus).toBeGreaterThanOrEqual(1);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.guidingBoltFreeUses).toBe(2); // PB at level 2
 		});
 	});
 
 	describe("Starry Form", () => {
 		it("should be available at level 2", () => {
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasStarryForm).toBe(true);
 		});
 
 		describe("Archer Form", () => {
 			it("should deal 1d8 + WIS radiant damage", () => {
-				const wisMod = state.getAbilityMod("wis");
-				expect(wisMod).toBe(3);
+				const calculations = state.getFeatureCalculations();
+				expect(calculations.archerFormDamage).toBe("1d8+3");
 			});
 
 			it("should scale to 2d8 + WIS at level 10", () => {
@@ -911,14 +928,15 @@ describe("Circle of Stars (TCE)", () => {
 					level: 10,
 					subclass: {name: "Circle of Stars", shortName: "Stars", source: "TCE"},
 				});
-				expect(state.getTotalLevel()).toBe(10);
+				const calculations = state.getFeatureCalculations();
+				expect(calculations.hasTwinklingConstellations).toBe(true);
 			});
 		});
 
 		describe("Chalice Form", () => {
 			it("should heal 1d8 + WIS HP when casting healing spell", () => {
-				const wisMod = state.getAbilityMod("wis");
-				expect(wisMod).toBe(3);
+				const calculations = state.getFeatureCalculations();
+				expect(calculations.chaliceFormHealing).toBe("1d8+3");
 			});
 
 			it("should scale to 2d8 + WIS at level 10", () => {
@@ -928,13 +946,15 @@ describe("Circle of Stars (TCE)", () => {
 					level: 10,
 					subclass: {name: "Circle of Stars", shortName: "Stars", source: "TCE"},
 				});
-				expect(state.getTotalLevel()).toBe(10);
+				const calculations = state.getFeatureCalculations();
+				expect(calculations.hasTwinklingConstellations).toBe(true);
 			});
 		});
 
 		describe("Dragon Form", () => {
 			it("should grant minimum 10 on concentration checks", () => {
-				expect(state.getTotalLevel()).toBe(2);
+				const calculations = state.getFeatureCalculations();
+				expect(calculations.dragonFormConcentrationMin).toBe(10);
 			});
 		});
 	});
@@ -947,7 +967,8 @@ describe("Circle of Stars (TCE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Stars", shortName: "Stars", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCosmicOmen).toBe(true);
 		});
 
 		it("should have uses equal to proficiency bonus", () => {
@@ -957,8 +978,8 @@ describe("Circle of Stars (TCE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Stars", shortName: "Stars", source: "TCE"},
 			});
-			const profBonus = state.getProficiencyBonus();
-			expect(profBonus).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.cosmicOmenUses).toBe(3);
 		});
 	});
 
@@ -970,7 +991,8 @@ describe("Circle of Stars (TCE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Stars", shortName: "Stars", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasTwinklingConstellations).toBe(true);
 		});
 	});
 
@@ -982,7 +1004,8 @@ describe("Circle of Stars (TCE)", () => {
 				level: 14,
 				subclass: {name: "Circle of Stars", shortName: "Stars", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasFullOfStars).toBe(true);
 		});
 	});
 });
@@ -1013,14 +1036,14 @@ describe("Circle of Wildfire (TCE)", () => {
 
 	describe("Summon Wildfire Spirit", () => {
 		it("should be available at level 2", () => {
-			expect(state.getTotalLevel()).toBe(2);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasWildfireSpirit).toBe(true);
 		});
 
 		it("should calculate spirit HP based on Wild Shape uses", () => {
 			// Spirit HP: 5 + 5 × druid level
-			const druidLevel = 2;
-			const spiritHp = 5 + 5 * druidLevel;
-			expect(spiritHp).toBe(15);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.wildfireSpiritHp).toBe(15);
 		});
 
 		it("should scale spirit HP with level", () => {
@@ -1030,9 +1053,8 @@ describe("Circle of Wildfire (TCE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Wildfire", shortName: "Wildfire", source: "TCE"},
 			});
-			const druidLevel = 10;
-			const spiritHp = 5 + 5 * druidLevel;
-			expect(spiritHp).toBe(55);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.wildfireSpiritHp).toBe(55);
 		});
 	});
 
@@ -1044,7 +1066,8 @@ describe("Circle of Wildfire (TCE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Wildfire", shortName: "Wildfire", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasEnhancedBond).toBe(true);
 		});
 
 		it("should add 1d8 to fire/healing spell damage/healing", () => {
@@ -1054,7 +1077,8 @@ describe("Circle of Wildfire (TCE)", () => {
 				level: 6,
 				subclass: {name: "Circle of Wildfire", shortName: "Wildfire", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.enhancedBondDamage).toBe("1d8");
 		});
 	});
 
@@ -1066,7 +1090,9 @@ describe("Circle of Wildfire (TCE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Wildfire", shortName: "Wildfire", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(10);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCauterizingFlames).toBe(true);
+			expect(calculations.cauterizingFlamesUses).toBe(4); // PB at level 10
 		});
 
 		it("should heal or deal 2d10 + WIS fire damage", () => {
@@ -1076,8 +1102,8 @@ describe("Circle of Wildfire (TCE)", () => {
 				level: 10,
 				subclass: {name: "Circle of Wildfire", shortName: "Wildfire", source: "TCE"},
 			});
-			const wisMod = state.getAbilityMod("wis");
-			expect(wisMod).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.cauterizingFlamesDamage).toBe("2d10+3");
 		});
 	});
 
@@ -1089,7 +1115,9 @@ describe("Circle of Wildfire (TCE)", () => {
 				level: 14,
 				subclass: {name: "Circle of Wildfire", shortName: "Wildfire", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBlazingRevival).toBe(true);
+			expect(calculations.blazingRevivalHp).toBe(7); // level 14 / 2 = 7
 		});
 	});
 });

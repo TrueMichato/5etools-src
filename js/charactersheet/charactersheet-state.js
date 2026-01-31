@@ -1799,6 +1799,610 @@ class FeatureModifierParser {
 // Make available globally
 globalThis.FeatureModifierParser = FeatureModifierParser;
 
+/**
+ * FeatureEffectRegistry
+ * 
+ * A data-driven registry that maps feature names/identifiers to their mechanical effects.
+ * This allows the system to apply effects generically based on feature NAME rather than
+ * which class the feature came from, enabling homebrew support.
+ * 
+ * Features are matched by normalized name (lowercase, trimmed). Multiple effects can be
+ * defined per feature. Each effect follows the standard effect schema used by
+ * _aggregateFeatureEffects().
+ * 
+ * Usage:
+ *   FeatureEffectRegistry.getEffects("Purity of Body") 
+ *   // Returns [{type: "immunity", damageType: "poison"}, {type: "conditionImmunity", ...}]
+ * 
+ *   FeatureEffectRegistry.hasEffects("Some Custom Feature") 
+ *   // Returns true if feature has registered effects
+ */
+const FeatureEffectRegistry = {
+	// Internal registry of feature name -> effects mapping
+	_registry: {},
+
+	/**
+	 * Initialize the default feature effects registry.
+	 * Call this once at load time to populate the registry with standard 5e features.
+	 */
+	init () {
+		this._registerCoreFeatures();
+		this._registerClassFeatures();
+		this._registerSubclassFeatures();
+		this._registerRaceFeatures();
+	},
+
+	/**
+	 * Register core features that appear across multiple classes
+	 */
+	_registerCoreFeatures () {
+		// === EVASION ===
+		// Appears in: Monk 7, Rogue 7, Ranger (Hunter) 15
+		this.register("Evasion", [
+			{type: "savingThrowProperty", save: "dex", property: "halfToNone"}
+		]);
+
+		// === EXTRA ATTACK ===
+		// Appears in: Barbarian 5, Bard (Valor/Swords) 6, Fighter 5, Monk 5, Paladin 5, Ranger 5
+		// Note: Count is handled by calculations, not registry
+		this.register("Extra Attack", [
+			{type: "attackCount", count: 2}
+		]);
+
+		// === LAND'S STRIDE ===
+		// Appears in: Druid (Land) 6, Ranger 8
+		this.register("Land's Stride", [
+			{type: "movement", property: "ignoreDifficultTerrain", conditional: "nonmagical"}
+		]);
+
+		// === TIMELESS BODY ===
+		// Appears in: Druid 18, Monk 15
+		// (Narrative effect only, no mechanical application)
+
+		// === EXPERTISE ===
+		// Appears in: Bard 3, Rogue 1, some subclasses
+		// (Handled by skill system, not effects)
+	},
+
+	/**
+	 * Register class-specific features
+	 */
+	_registerClassFeatures () {
+		// ======= ARTIFICER =======
+		this.register("Tool Expertise", [
+			{type: "toolBonus", bonus: "expertise"}
+		]);
+		this.register("Magic Item Savant", [
+			{type: "attunement", maxSlots: 5, ignoreRequirements: true}
+		]);
+		this.register("Soul of Artifice", [
+			{type: "modifier", modType: "save:all", value: "attunedItems"}
+		]);
+
+		// ======= BARBARIAN =======
+		this.register("Rage", [
+			{type: "resistance", damageType: "bludgeoning", conditional: "while raging", enabled: false},
+			{type: "resistance", damageType: "piercing", conditional: "while raging", enabled: false},
+			{type: "resistance", damageType: "slashing", conditional: "while raging", enabled: false},
+		]);
+		this.register("Danger Sense", [
+			{type: "modifier", modType: "save:dex:advantage", value: 1, conditional: "against effects you can see"}
+		]);
+		this.register("Fast Movement", [
+			{type: "speed", speedType: "walk", value: 10, conditional: "while not wearing heavy armor"}
+		]);
+		this.register("Feral Instinct", [
+			{type: "modifier", modType: "initiative:advantage", value: 1}
+		]);
+		this.register("Indomitable Might", [
+			{type: "modifier", modType: "ability:str:minimum", value: "strScore"}
+		]);
+
+		// ======= BARD =======
+		this.register("Jack of All Trades", [
+			{type: "skillBonus", bonus: "halfProficiency", requiresProficiency: false}
+		]);
+		this.register("Countercharm", [
+			{type: "modifier", modType: "save:advantage:frightened", value: 1, conditional: "while you can hear the bard"},
+			{type: "modifier", modType: "save:advantage:charmed", value: 1, conditional: "while you can hear the bard"},
+		]);
+		this.register("Superior Inspiration", [
+			{type: "resourceProperty", resource: "bardicInspiration", property: "regainOnInitiative"}
+		]);
+
+		// ======= CLERIC =======
+		// (Most cleric features are domain-specific, see subclasses)
+
+		// ======= DRUID =======
+		this.register("Beast Spells", [
+			{type: "spellcastingProperty", property: "castWhileWildShaped"}
+		]);
+		this.register("Archdruid", [
+			{type: "resourceProperty", resource: "wildShape", property: "unlimited"}
+		]);
+
+		// ======= FIGHTER =======
+		this.register("Defense", [ // Fighting Style
+			{type: "acBonus", value: 1, conditional: "while wearing armor"}
+		]);
+		this.register("Dueling", [ // Fighting Style
+			{type: "damageBonus", value: 2, conditional: "one-handed melee weapon, no other weapons"}
+		]);
+
+		// ======= MONK =======
+		this.register("Purity of Body", [
+			{type: "immunity", damageType: "poison"},
+			{type: "conditionImmunity", condition: "poisoned"},
+			{type: "conditionImmunity", condition: "diseased"},
+		]);
+		this.register("Diamond Soul", [
+			{type: "saveProficiency", ability: "str"},
+			{type: "saveProficiency", ability: "dex"},
+			{type: "saveProficiency", ability: "con"},
+			{type: "saveProficiency", ability: "int"},
+			{type: "saveProficiency", ability: "wis"},
+			{type: "saveProficiency", ability: "cha"},
+		]);
+		this.register("Disciplined Survivor", [ // 2024 version of Diamond Soul
+			{type: "saveProficiency", ability: "str"},
+			{type: "saveProficiency", ability: "dex"},
+			{type: "saveProficiency", ability: "con"},
+			{type: "saveProficiency", ability: "int"},
+			{type: "saveProficiency", ability: "wis"},
+			{type: "saveProficiency", ability: "cha"},
+		]);
+		this.register("Tongue of the Sun and Moon", [
+			{type: "language", language: "All (spoken)"}
+		]);
+		this.register("Ki-Empowered Strikes", [
+			{type: "weaponProperty", property: "magical", weaponType: "unarmed"}
+		]);
+		this.register("Empowered Strikes", [ // 2024 version
+			{type: "weaponProperty", property: "magical", weaponType: "unarmed"}
+		]);
+
+		// ======= PALADIN =======
+		this.register("Divine Health", [
+			{type: "conditionImmunity", condition: "diseased"}
+		]);
+		this.register("Aura of Courage", [
+			{type: "conditionImmunity", condition: "frightened"}
+		]);
+
+		// ======= RANGER =======
+		this.register("Feral Senses", [
+			{type: "sense", sense: "blindsight", range: 30}
+		]);
+
+		// ======= ROGUE =======
+		this.register("Slippery Mind", [
+			{type: "saveProficiency", ability: "wis"}
+		]);
+		this.register("Blindsense", [
+			{type: "sense", sense: "blindsight", range: 10}
+		]);
+		this.register("Reliable Talent", [
+			{type: "skillMinimum", minimum: 10, requiresProficiency: true}
+		]);
+
+		// ======= SORCERER =======
+		this.register("Draconic Resilience", [
+			{type: "hpBonus", value: 1, perLevel: true},
+			{type: "acFormula", base: 13, addDex: true, conditional: "while unarmored"},
+		]);
+
+		// ======= WARLOCK =======
+		// (Most warlock features are invocations/patron-specific)
+
+		// ======= WIZARD =======
+		// (Most wizard features are school-specific)
+	},
+
+	/**
+	 * Register subclass-specific features
+	 */
+	_registerSubclassFeatures () {
+		// ======= ARTIFICER SUBCLASSES =======
+		this.register("Battle Ready", [
+			{type: "attackAbility", ability: "int", weaponType: "magic"}
+		]);
+
+		// ======= BARBARIAN SUBCLASSES =======
+		this.register("Mindless Rage", [
+			{type: "conditionImmunity", condition: "charmed", conditional: "while raging"},
+			{type: "conditionImmunity", condition: "frightened", conditional: "while raging"},
+		]);
+		// Bear Totem
+		this.register("Bear Spirit", [
+			{type: "modifier", modType: "resistance:all-except-psychic", value: 1, conditional: "while raging", enabled: false}
+		]);
+		this.register("Totem Spirit: Bear", [
+			{type: "modifier", modType: "resistance:all-except-psychic", value: 1, conditional: "while raging", enabled: false}
+		]);
+
+		// ======= CLERIC SUBCLASSES =======
+		// Forge Domain
+		this.register("Soul of the Forge", [
+			{type: "acBonus", value: 1, conditional: "while wearing heavy armor"},
+			{type: "resistance", damageType: "fire"},
+		]);
+		this.register("Saint of Forge and Fire", [
+			{type: "immunity", damageType: "fire"}
+		]);
+		// Twilight Domain
+		this.register("Eyes of Night", [
+			{type: "sense", sense: "darkvision", range: 300}
+		]);
+		// Death Domain
+		this.register("Inescapable Destruction", [
+			{type: "damageProperty", property: "ignoreResistance", damageType: "necrotic"}
+		]);
+
+		// ======= DRUID SUBCLASSES =======
+		// Circle of Spores
+		this.register("Fungal Body", [
+			{type: "conditionImmunity", condition: "blinded"},
+			{type: "conditionImmunity", condition: "deafened"},
+			{type: "conditionImmunity", condition: "frightened"},
+			{type: "conditionImmunity", condition: "poisoned"},
+		]);
+		// Circle of the Land
+		this.register("Nature's Ward", [
+			{type: "immunity", damageType: "poison"},
+			{type: "conditionImmunity", condition: "diseased"},
+			{type: "conditionImmunity", condition: "poisoned"},
+		]);
+
+		// ======= ROGUE SUBCLASSES =======
+		// Assassin
+		this.register("Assassinate", [
+			{type: "toolProficiency", tool: "Disguise Kit"},
+			{type: "toolProficiency", tool: "Poisoner's Kit"},
+		]);
+		// Scout
+		this.register("Superior Mobility", [
+			{type: "speed", speedType: "walk", value: 10},
+			{type: "speed", speedType: "climb", value: "walk", conditional: "if you have a climb speed"},
+		]);
+		// Swashbuckler
+		this.register("Rakish Audacity", [
+			{type: "initiativeBonus", value: "cha"}
+		]);
+		// Inquisitive
+		this.register("Ear for Deceit", [
+			{type: "skillMinimum", skill: "insight", minimum: 8}
+		]);
+
+		// ======= SORCERER SUBCLASSES =======
+		// Draconic Bloodline
+		this.register("Dragon Wings", [
+			{type: "speed", speedType: "fly", value: "walk", conditional: "while not wearing armor"}
+		]);
+
+		// ======= WARLOCK SUBCLASSES =======
+		// Fiend
+		this.register("Fiendish Resilience", [
+			{type: "resistance", damageType: "choice", userSelectable: true}
+		]);
+
+		// ======= WIZARD SUBCLASSES =======
+		// Bladesinging
+		this.register("Bladesong", [
+			{type: "acBonus", value: "int", conditional: "while Bladesong is active", enabled: false},
+			{type: "modifier", modType: "concentration", value: "int", conditional: "while Bladesong is active", enabled: false},
+		]);
+	},
+
+	/**
+	 * Register race/species-specific features
+	 */
+	_registerRaceFeatures () {
+		// Dwarven features
+		this.register("Dwarven Resilience", [
+			{type: "resistance", damageType: "poison"},
+			{type: "modifier", modType: "save:advantage:poisoned", value: 1},
+		]);
+
+		// Elven features
+		this.register("Fey Ancestry", [
+			{type: "modifier", modType: "save:advantage:charmed", value: 1},
+			{type: "conditionImmunity", condition: "magically asleep"},
+		]);
+		this.register("Trance", [
+			// Narrative effect - 4 hours of meditation instead of 8 hours sleep
+		]);
+
+		// Halfling features
+		this.register("Brave", [
+			{type: "modifier", modType: "save:advantage:frightened", value: 1}
+		]);
+		this.register("Lucky", [
+			{type: "modifier", modType: "reroll:1:attack", value: 1},
+			{type: "modifier", modType: "reroll:1:ability", value: 1},
+			{type: "modifier", modType: "reroll:1:save", value: 1},
+		]);
+
+		// Gnome features
+		this.register("Gnome Cunning", [
+			{type: "modifier", modType: "save:advantage:int:magic", value: 1},
+			{type: "modifier", modType: "save:advantage:wis:magic", value: 1},
+			{type: "modifier", modType: "save:advantage:cha:magic", value: 1},
+		]);
+
+		// Tiefling features
+		this.register("Hellish Resistance", [
+			{type: "resistance", damageType: "fire"}
+		]);
+
+		// Dragonborn features
+		this.register("Draconic Resistance", [
+			{type: "resistance", damageType: "ancestry"} // Type depends on ancestry choice
+		]);
+
+		// Aasimar features
+		this.register("Celestial Resistance", [
+			{type: "resistance", damageType: "necrotic"},
+			{type: "resistance", damageType: "radiant"},
+		]);
+		this.register("Healing Hands", [
+			// Resource tracked separately
+		]);
+
+		// Goliath features
+		this.register("Stone's Endurance", [
+			// Reaction damage reduction - tracked as resource
+		]);
+
+		// Yuan-ti features
+		this.register("Magic Resistance", [
+			{type: "modifier", modType: "save:advantage:magic", value: 1}
+		]);
+		this.register("Poison Immunity", [
+			{type: "immunity", damageType: "poison"},
+			{type: "conditionImmunity", condition: "poisoned"},
+		]);
+	},
+
+	/**
+	 * Register a feature's effects in the registry
+	 * @param {string} featureName - The name of the feature
+	 * @param {Array} effects - Array of effect objects
+	 */
+	register (featureName, effects) {
+		const key = this._normalizeKey(featureName);
+		this._registry[key] = effects.map(e => ({...e, source: e.source || featureName}));
+	},
+
+	/**
+	 * Get effects for a feature by name
+	 * @param {string} featureName - The feature name to look up
+	 * @returns {Array} Array of effect objects, or empty array if not found
+	 */
+	getEffects (featureName) {
+		const key = this._normalizeKey(featureName);
+		return this._registry[key] || [];
+	},
+
+	/**
+	 * Check if a feature has registered effects
+	 * @param {string} featureName - The feature name to check
+	 * @returns {boolean} True if feature has effects
+	 */
+	hasEffects (featureName) {
+		return this.getEffects(featureName).length > 0;
+	},
+
+	/**
+	 * Get all registered feature names
+	 * @returns {Array} Array of feature names
+	 */
+	getAllFeatureNames () {
+		return Object.keys(this._registry);
+	},
+
+	/**
+	 * Normalize feature name for registry lookup
+	 * @param {string} name - The feature name
+	 * @returns {string} Normalized key
+	 */
+	_normalizeKey (name) {
+		if (!name) return "";
+		return name.toLowerCase().trim();
+	},
+
+	/**
+	 * Parse effects from feature data (resist, immune, conditionImmune, etc.)
+	 * This handles effects defined directly in feature data rather than by name
+	 * @param {object} featureData - The feature data object with possible resist/immune/etc. arrays
+	 * @param {string} sourceName - Name to use as source for effects
+	 * @returns {Array} Array of effect objects
+	 */
+	parseDataEffects (featureData, sourceName) {
+		const effects = [];
+		if (!featureData) return effects;
+
+		// Damage resistances
+		if (featureData.resist) {
+			const resistances = Array.isArray(featureData.resist) ? featureData.resist : [featureData.resist];
+			resistances.forEach(r => {
+				if (typeof r === "string") {
+					effects.push({type: "resistance", damageType: r, source: sourceName});
+				} else if (r.resist) {
+					// Complex resist object: {resist: ["fire", "cold"], note: "...", cond: true}
+					const types = Array.isArray(r.resist) ? r.resist : [r.resist];
+					types.forEach(t => {
+						effects.push({
+							type: "resistance",
+							damageType: t,
+							source: sourceName,
+							conditional: r.note || r.cond ? (r.note || "conditional") : undefined,
+						});
+					});
+				}
+			});
+		}
+
+		// Damage immunities
+		if (featureData.immune) {
+			const immunities = Array.isArray(featureData.immune) ? featureData.immune : [featureData.immune];
+			immunities.forEach(i => {
+				if (typeof i === "string") {
+					effects.push({type: "immunity", damageType: i, source: sourceName});
+				} else if (i.immune) {
+					const types = Array.isArray(i.immune) ? i.immune : [i.immune];
+					types.forEach(t => {
+						effects.push({
+							type: "immunity",
+							damageType: t,
+							source: sourceName,
+							conditional: i.note || i.cond ? (i.note || "conditional") : undefined,
+						});
+					});
+				}
+			});
+		}
+
+		// Condition immunities
+		if (featureData.conditionImmune) {
+			const condImmune = Array.isArray(featureData.conditionImmune) ? featureData.conditionImmune : [featureData.conditionImmune];
+			condImmune.forEach(c => {
+				if (typeof c === "string") {
+					effects.push({type: "conditionImmunity", condition: c, source: sourceName});
+				} else if (c.conditionImmune) {
+					const conditions = Array.isArray(c.conditionImmune) ? c.conditionImmune : [c.conditionImmune];
+					conditions.forEach(cond => {
+						effects.push({
+							type: "conditionImmunity",
+							condition: cond,
+							source: sourceName,
+							conditional: c.note || c.cond ? (c.note || "conditional") : undefined,
+						});
+					});
+				}
+			});
+		}
+
+		// Saving throw proficiencies
+		if (featureData.savingThrowProficiencies) {
+			const saveProfs = Array.isArray(featureData.savingThrowProficiencies) 
+				? featureData.savingThrowProficiencies 
+				: [featureData.savingThrowProficiencies];
+			saveProfs.forEach(sp => {
+				if (typeof sp === "string") {
+					effects.push({type: "saveProficiency", ability: sp.toLowerCase(), source: sourceName});
+				} else {
+					// Object format: {str: true, dex: true, ...}
+					Object.keys(sp).forEach(ability => {
+						if (sp[ability] === true) {
+							effects.push({type: "saveProficiency", ability: ability.toLowerCase(), source: sourceName});
+						}
+					});
+				}
+			});
+		}
+
+		// Skill proficiencies
+		if (featureData.skillProficiencies) {
+			const skillProfs = Array.isArray(featureData.skillProficiencies)
+				? featureData.skillProficiencies
+				: [featureData.skillProficiencies];
+			skillProfs.forEach(sp => {
+				if (typeof sp === "object") {
+					Object.keys(sp).forEach(skill => {
+						if (skill === "choose" || skill === "any") return; // Skip choice objects
+						const level = sp[skill] === 2 || sp[skill] === "expertise" ? 2 : 1;
+						effects.push({type: "skillProficiency", skill: skill.toLowerCase(), level, source: sourceName});
+					});
+				}
+			});
+		}
+
+		// Tool proficiencies
+		if (featureData.toolProficiencies) {
+			const toolProfs = Array.isArray(featureData.toolProficiencies)
+				? featureData.toolProficiencies
+				: [featureData.toolProficiencies];
+			toolProfs.forEach(tp => {
+				if (typeof tp === "string") {
+					effects.push({type: "toolProficiency", tool: tp, source: sourceName});
+				} else if (typeof tp === "object") {
+					Object.keys(tp).forEach(tool => {
+						if (tool === "choose" || tool === "any") return;
+						if (tp[tool] === true || tp[tool] === 1) {
+							effects.push({type: "toolProficiency", tool, source: sourceName});
+						}
+					});
+				}
+			});
+		}
+
+		// Language proficiencies
+		if (featureData.languageProficiencies) {
+			const langProfs = Array.isArray(featureData.languageProficiencies)
+				? featureData.languageProficiencies
+				: [featureData.languageProficiencies];
+			langProfs.forEach(lp => {
+				if (typeof lp === "string") {
+					effects.push({type: "language", language: lp, source: sourceName});
+				} else if (typeof lp === "object") {
+					Object.keys(lp).forEach(lang => {
+						if (lang === "choose" || lang === "any" || lang === "anyStandard") return;
+						if (lp[lang] === true || lp[lang] === 1) {
+							effects.push({type: "language", language: lang, source: sourceName});
+						}
+					});
+				}
+			});
+		}
+
+		// Weapon proficiencies
+		if (featureData.weaponProficiencies) {
+			const weaponProfs = Array.isArray(featureData.weaponProficiencies)
+				? featureData.weaponProficiencies
+				: [featureData.weaponProficiencies];
+			weaponProfs.forEach(wp => {
+				if (typeof wp === "string") {
+					effects.push({type: "weaponProficiency", weapon: wp, source: sourceName});
+				} else if (typeof wp === "object") {
+					Object.keys(wp).forEach(weapon => {
+						if (weapon === "choose" || weapon === "any") return;
+						if (wp[weapon] === true || wp[weapon] === 1) {
+							effects.push({type: "weaponProficiency", weapon, source: sourceName});
+						}
+					});
+				}
+			});
+		}
+
+		// Armor proficiencies
+		if (featureData.armorProficiencies) {
+			const armorProfs = Array.isArray(featureData.armorProficiencies)
+				? featureData.armorProficiencies
+				: [featureData.armorProficiencies];
+			armorProfs.forEach(ap => {
+				if (typeof ap === "string") {
+					effects.push({type: "armorProficiency", armor: ap, source: sourceName});
+				} else if (typeof ap === "object") {
+					Object.keys(ap).forEach(armor => {
+						if (armor === "choose" || armor === "any") return;
+						if (ap[armor] === true || ap[armor] === 1) {
+							effects.push({type: "armorProficiency", armor, source: sourceName});
+						}
+					});
+				}
+			});
+		}
+
+		return effects;
+	},
+};
+
+// Initialize the registry
+FeatureEffectRegistry.init();
+
+// Make available globally
+globalThis.FeatureEffectRegistry = FeatureEffectRegistry;
+
 class CharacterSheetState {
 	constructor () {
 		this._data = this._getDefaultState();
@@ -2263,6 +2867,8 @@ class CharacterSheetState {
 		this.ensureUnarmedStrike();
 		// Recalculate spell slots based on class levels
 		this.calculateSpellSlots();
+		// Apply class feature effects (resistances, immunities, proficiencies, etc.)
+		this.applyClassFeatureEffects();
 	}
 
 	/**
@@ -2284,6 +2890,8 @@ class CharacterSheetState {
 		this._recalculateHitDice();
 		this.ensureUnarmedStrike();
 		this.calculateSpellSlots();
+		// Re-apply class feature effects for new level
+		this.applyClassFeatureEffects();
 
 		return true;
 	}
@@ -2296,6 +2904,8 @@ class CharacterSheetState {
 		this.ensureUnarmedStrike();
 		// Recalculate spell slots based on remaining classes
 		this.calculateSpellSlots();
+		// Re-apply class feature effects after class removal
+		this.applyClassFeatureEffects();
 	}
 
 	getClasses () { return this._data.classes; }
@@ -2309,6 +2919,8 @@ class CharacterSheetState {
 		const classEntry = this._data.classes.find(c => c.name === className);
 		if (classEntry) {
 			classEntry.subclass = subclass;
+			// Re-apply class feature effects for new subclass
+			this.applyClassFeatureEffects();
 		}
 	}
 
@@ -5580,6 +6192,9 @@ class CharacterSheetState {
 					const source = cls.source || "PHB";
 					const isXPHB = source === "XPHB";
 
+					// Rage (level 1+) - all barbarians have rage
+					calculations.hasRage = true;
+
 					// Rage damage bonus (same for PHB and XPHB)
 					const rageDamage = level >= 16 ? 4 : level >= 9 ? 3 : 2;
 					calculations.rageDamage = rageDamage;
@@ -5622,7 +6237,16 @@ class CharacterSheetState {
 
 					// Fast Movement bonus (level 5+) - 10ft movement
 					if (level >= 5) {
+						calculations.hasFastMovement = true;
 						calculations.fastMovementBonus = 10;
+						// Extra Attack (level 5+)
+						calculations.hasExtraAttack = true;
+						calculations.extraAttackCount = 2;
+					}
+
+					// Feral Instinct (level 7+) - advantage on initiative
+					if (level >= 7) {
+						calculations.hasFeralInstinct = true;
 					}
 
 					// Relentless Rage DC (level 11+) - starts at 10, increases by 5 each use
@@ -5643,6 +6267,233 @@ class CharacterSheetState {
 					// Primal Champion (level 20) - +4 STR and CON (max 24)
 					if (level >= 20) {
 						calculations.hasPrimalChampion = true;
+					}
+
+					// ========== BARBARIAN SUBCLASS (PRIMAL PATH) FEATURES ==========
+					const subclassName = cls.subclass?.name?.toLowerCase();
+					if (subclassName) {
+						switch (subclassName) {
+							case "path of the berserker":
+							case "berserker": {
+								// Frenzy (level 3) - bonus action attack during rage
+								calculations.hasFrenzy = true;
+
+								// Mindless Rage (level 6) - can't be charmed/frightened while raging
+								if (level >= 6) {
+									calculations.hasMindlessRage = true;
+								}
+
+								// Retaliation (XPHB level 10) / Intimidating Presence (PHB level 10)
+								if (level >= 10) {
+									if (isXPHB) {
+										calculations.hasRetaliation = true;
+									} else {
+										calculations.hasIntimidatingPresence = true;
+										calculations.intimidatingPresenceDc = 8 + profBonus + this.getAbilityMod("cha");
+									}
+								}
+
+								// Intimidating Presence (XPHB level 14) / Retaliation (PHB level 14)
+								if (level >= 14) {
+									if (isXPHB) {
+										calculations.hasIntimidatingPresence = true;
+										calculations.intimidatingPresenceDc = 8 + profBonus + this.getAbilityMod("str"); // XPHB uses STR
+									} else {
+										calculations.hasRetaliation = true;
+									}
+								}
+								break;
+							}
+							case "path of the totem warrior":
+							case "totem warrior": {
+								// Spirit Seeker (level 3) - ritual casting
+								calculations.hasSpiritSeeker = true;
+
+								// Totem Spirit (level 3) - chosen totem animal
+								calculations.hasTotemSpirit = true;
+
+								// Aspect of the Beast (level 6)
+								if (level >= 6) {
+									calculations.hasAspectOfBeast = true;
+								}
+
+								// Spirit Walker (level 10) - commune with nature
+								if (level >= 10) {
+									calculations.hasSpiritWalker = true;
+								}
+
+								// Totemic Attunement (level 14)
+								if (level >= 14) {
+									calculations.hasTotemicAttunement = true;
+								}
+								break;
+							}
+							case "path of the ancestral guardian":
+							case "ancestral guardian": {
+								// Ancestral Protectors (level 3) - impose disadvantage on enemies
+								calculations.hasAncestralProtectors = true;
+
+								// Spirit Shield (level 6) - reduce damage to ally
+								if (level >= 6) {
+									calculations.hasSpiritShield = true;
+									calculations.spiritShieldReduction = level >= 14 ? "4d6" : level >= 10 ? "3d6" : "2d6";
+								}
+
+								// Consult the Spirits (level 10) - clairvoyance
+								if (level >= 10) {
+									calculations.hasConsultTheSpirits = true;
+								}
+
+								// Vengeful Ancestors (level 14) - reflect damage
+								if (level >= 14) {
+									calculations.hasVengefulAncestors = true;
+								}
+								break;
+							}
+							case "path of the storm herald":
+							case "storm herald": {
+								// Storm Aura (level 3) - 10ft aura
+								calculations.hasStormAura = true;
+								calculations.stormAuraRange = 10;
+
+								// Storm Soul (level 6) - resistance and environmental benefits
+								if (level >= 6) {
+									calculations.hasStormSoul = true;
+								}
+
+								// Shielding Storm (level 10) - allies gain resistance
+								if (level >= 10) {
+									calculations.hasShieldingStorm = true;
+								}
+
+								// Raging Storm (level 14) - enhanced aura effects
+								if (level >= 14) {
+									calculations.hasRagingStorm = true;
+								}
+								break;
+							}
+							case "path of the zealot":
+							case "zealot": {
+								// Divine Fury (level 3) - extra damage on first hit
+								calculations.hasDivineFury = true;
+								calculations.divineFuryDamage = `1d6+${Math.floor(level / 2)}`;
+
+								// Warrior of the Gods (level 3) - free resurrection
+								calculations.hasWarriorOfTheGods = true;
+
+								// Fanatical Focus (level 6) - reroll failed saving throw
+								if (level >= 6) {
+									calculations.hasFanaticalFocus = true;
+								}
+
+								// Zealous Presence (level 10) - advantage for allies
+								if (level >= 10) {
+									calculations.hasZealousPresence = true;
+								}
+
+								// Rage Beyond Death (level 14) - fight at 0 HP
+								if (level >= 14) {
+									calculations.hasRageBeyondDeath = true;
+								}
+								break;
+							}
+							case "path of the beast":
+							case "beast": {
+								// Form of the Beast (level 3) - natural weapons
+								calculations.hasFormOfBeast = true;
+								calculations.beastWeapons = ["bite", "claws", "tail"];
+
+								// Bestial Soul (level 6) - climb/swim speed, jump boost
+								if (level >= 6) {
+									calculations.hasBestialSoul = true;
+								}
+
+								// Infectious Fury (level 10) - spread rage or damage
+								if (level >= 10) {
+									calculations.hasInfectiousFury = true;
+									calculations.infectiousFuryDc = 8 + profBonus + this.getAbilityMod("con");
+								}
+
+								// Call the Hunt (level 14) - pack bonus
+								if (level >= 14) {
+									calculations.hasCallTheHunt = true;
+									calculations.callTheHuntTargets = profBonus;
+								}
+								break;
+							}
+							case "path of wild magic":
+							case "wild magic": {
+								// Magic Awareness (level 3) - detect magic
+								calculations.hasMagicAwareness = true;
+								calculations.magicAwarenessUses = profBonus;
+
+								// Wild Surge (level 3) - roll on wild magic table when raging
+								calculations.hasWildSurge = true;
+
+								// Bolstering Magic (level 6) - bonus to checks or restore spell slots
+								if (level >= 6) {
+									calculations.hasBolsteringMagic = true;
+									calculations.bolsteringMagicUses = profBonus;
+								}
+
+								// Unstable Backlash (level 10) - react to damage with wild magic
+								if (level >= 10) {
+									calculations.hasUnstableBacklash = true;
+								}
+
+								// Controlled Surge (level 14) - roll twice on wild magic table
+								if (level >= 14) {
+									calculations.hasControlledSurge = true;
+								}
+								break;
+							}
+							case "path of the wild heart":
+							case "wild heart": {
+								// Animal Speaker (level 3) - ritual casting
+								calculations.hasAnimalSpeaker = true;
+
+								// Rage of the Wilds (level 3) - choose animal option
+								calculations.hasRageOfTheWilds = true;
+
+								// Aspect of the Wilds (level 6) - passive animal benefits
+								if (level >= 6) {
+									calculations.hasAspectOfTheWilds = true;
+								}
+
+								// Power of the Wilds (level 10) - enhanced while raging
+								if (level >= 10) {
+									calculations.hasPowerOfTheWilds = true;
+								}
+
+								// Nature Speaker (level 14) - commune with nature
+								if (level >= 14) {
+									calculations.hasNatureSpeaker = true;
+								}
+								break;
+							}
+							case "path of the world tree":
+							case "world tree": {
+								// Vitality of the Tree (level 3) - temp HP when raging
+								calculations.hasVitalityOfTheTree = true;
+								calculations.vitalityTempHp = profBonus;
+
+								// Branches of the Tree (level 6) - teleport ally
+								if (level >= 6) {
+									calculations.hasBranchesOfTheTree = true;
+								}
+
+								// Battering Roots (level 10) - push enemies on hit
+								if (level >= 10) {
+									calculations.hasBatteringRoots = true;
+								}
+
+								// Travel Along the Tree (level 14) - mass teleport
+								if (level >= 14) {
+									calculations.hasTravelAlongTheTree = true;
+								}
+								break;
+							}
+						}
 					}
 					break;
 				}
@@ -6114,7 +6965,9 @@ class CharacterSheetState {
 
 					// Extra Attack count (attacks per Attack action)
 					if (level >= 5) {
+						calculations.hasExtraAttack = true;
 						calculations.extraAttacks = level >= 20 ? 4 : level >= 11 ? 3 : 2;
+						calculations.extraAttackCount = calculations.extraAttacks;
 					}
 
 					// Indomitable uses
@@ -7178,6 +8031,464 @@ class CharacterSheetState {
 						const wisMod = Math.max(1, this.getAbilityMod("wis"));
 						calculations.thaumaturgeBonus = wisMod;
 					}
+
+					// ========== CLERIC SUBCLASS (DOMAIN) FEATURES ==========
+					const subclassName = cls.subclass?.name?.toLowerCase();
+					if (subclassName) {
+						const wisMod = this.getAbilityMod("wis");
+
+						switch (subclassName) {
+							case "life domain":
+							case "life": {
+								// Disciple of Life (level 1): healing bonus = 2 + spell level
+								calculations.hasDiscipleOfLife = true;
+								calculations.discipleOfLifeBonus = 2; // Base bonus, spell level added at cast time
+
+								// Channel Divinity: Preserve Life (level 2)
+								// Restore HP = 5 × cleric level, divided among creatures
+								if (level >= 2) {
+									calculations.hasPreserveLife = true;
+									calculations.preserveLifeHealing = 5 * level;
+								}
+
+								// Blessed Healer (level 6): heal self when healing others
+								if (level >= 6) {
+									calculations.hasBlessedHealer = true;
+									calculations.blessedHealerBonus = 2; // Base + spell level
+								}
+
+								// Divine Strike (level 8): +1d8/2d8 radiant damage
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeType = "radiant";
+								}
+
+								// Supreme Healing (level 17): max healing dice
+								if (level >= 17) {
+									calculations.hasSupremeHealing = true;
+								}
+								break;
+							}
+							case "light domain":
+							case "light": {
+								// Bonus cantrip: Light
+								calculations.hasBonusLightCantrip = true;
+
+								// Warding Flare (level 1): WIS mod uses
+								calculations.hasWardingFlare = true;
+								calculations.wardingFlareUses = Math.max(1, wisMod);
+
+								// Channel Divinity: Radiance of the Dawn (level 2)
+								if (level >= 2) {
+									calculations.hasRadianceOfTheDawn = true;
+									calculations.radianceOfTheDawnDamage = `2d10+${level}`;
+								}
+
+								// Improved Flare (level 6): use on others within 30 ft
+								if (level >= 6) {
+									calculations.hasImprovedFlare = true;
+								}
+
+								// Potent Spellcasting (level 8): add WIS to cantrip damage
+								if (!is2024 && level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Corona of Light (level 17)
+								if (level >= 17) {
+									calculations.hasCoronaOfLight = true;
+								}
+								break;
+							}
+							case "war domain":
+							case "war": {
+								// Bonus proficiency: heavy armor, martial weapons
+								calculations.hasWarProficiencies = true;
+
+								// War Priest (level 1): bonus action attacks, WIS mod times
+								calculations.hasWarPriest = true;
+								calculations.warPriestUses = Math.max(1, wisMod);
+
+								// Channel Divinity: Guided Strike (level 2)
+								if (level >= 2) {
+									calculations.hasGuidedStrike = true;
+									calculations.guidedStrikeBonus = 10;
+								}
+
+								// Channel Divinity: War God's Blessing (level 6)
+								if (level >= 6) {
+									calculations.hasWarGodsBlessing = true;
+								}
+
+								// Divine Strike (level 8)
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+								}
+
+								// Avatar of Battle (level 17)
+								if (level >= 17) {
+									calculations.hasAvatarOfBattle = true;
+								}
+								break;
+							}
+							case "knowledge domain":
+							case "knowledge": {
+								// Blessings of Knowledge (level 1): 2 languages, 2 skill proficiencies
+								calculations.hasBlessingsOfKnowledge = true;
+								calculations.bonusLanguages = 2;
+								calculations.bonusSkillProficiencies = 2;
+
+								// Channel Divinity: Knowledge of the Ages (level 2)
+								if (level >= 2) {
+									calculations.hasKnowledgeOfTheAges = true;
+								}
+
+								// Channel Divinity: Read Thoughts (level 6)
+								if (level >= 6) {
+									calculations.hasReadThoughts = true;
+								}
+
+								// Potent Spellcasting (level 8)
+								if (!is2024 && level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Visions of the Past (level 17)
+								if (level >= 17) {
+									calculations.hasVisionsOfThePast = true;
+								}
+								break;
+							}
+							case "nature domain":
+							case "nature": {
+								// Acolyte of Nature (level 1): druid cantrip + skill
+								calculations.hasAcolyteOfNature = true;
+
+								// Bonus proficiency: heavy armor
+								calculations.hasNatureArmorProficiency = true;
+
+								// Channel Divinity: Charm Animals and Plants (level 2)
+								if (level >= 2) {
+									calculations.hasCharmAnimalsAndPlants = true;
+								}
+
+								// Dampen Elements (level 6)
+								if (level >= 6) {
+									calculations.hasDampenElements = true;
+								}
+
+								// Divine Strike (level 8): cold/fire/lightning
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+								}
+
+								// Master of Nature (level 17)
+								if (level >= 17) {
+									calculations.hasMasterOfNature = true;
+								}
+								break;
+							}
+							case "tempest domain":
+							case "tempest": {
+								// Bonus proficiencies: heavy armor, martial weapons
+								calculations.hasTempestProficiencies = true;
+
+								// Wrath of the Storm (level 1): 2d8 lightning/thunder
+								calculations.hasWrathOfTheStorm = true;
+								calculations.wrathOfTheStormUses = Math.max(1, wisMod);
+								calculations.wrathOfTheStormDamage = "2d8";
+
+								// Channel Divinity: Destructive Wrath (level 2)
+								if (level >= 2) {
+									calculations.hasDestructiveWrath = true;
+								}
+
+								// Thunderbolt Strike (level 6)
+								if (level >= 6) {
+									calculations.hasThunderboltStrike = true;
+								}
+
+								// Divine Strike (level 8): thunder
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeType = "thunder";
+								}
+
+								// Stormborn (level 17): fly speed in non-enclosed spaces
+								if (level >= 17) {
+									calculations.hasStormborn = true;
+								}
+								break;
+							}
+							case "trickery domain":
+							case "trickery": {
+								// Blessing of the Trickster (level 1): advantage on Stealth
+								calculations.hasBlessingOfTheTrickster = true;
+
+								// Channel Divinity: Invoke Duplicity (level 2)
+								if (level >= 2) {
+									calculations.hasInvokeDuplicity = true;
+								}
+
+								// Channel Divinity: Cloak of Shadows (PHB level 6)
+								// Trickster's Transposition (XPHB level 6)
+								if (level >= 6) {
+									if (is2024) {
+										calculations.hasTrickstersTransposition = true;
+									} else {
+										calculations.hasCloakOfShadows = true;
+									}
+								}
+
+								// Divine Strike (level 8): poison
+								if (!is2024 && level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeType = "poison";
+								}
+
+								// Improved Duplicity (level 17)
+								if (level >= 17) {
+									calculations.hasImprovedDuplicity = true;
+								}
+								break;
+							}
+							case "forge domain":
+							case "forge": {
+								// Bonus proficiencies: heavy armor, smith's tools
+								calculations.hasForgeProficiencies = true;
+
+								// Blessing of the Forge (level 1): +1 to armor/weapon
+								calculations.hasBlessingOfTheForge = true;
+
+								// Channel Divinity: Artisan's Blessing (level 2)
+								if (level >= 2) {
+									calculations.hasArtisansBlessing = true;
+								}
+
+								// Soul of the Forge (level 6): +1 AC in heavy armor, fire resistance
+								if (level >= 6) {
+									calculations.hasSoulOfTheForge = true;
+									calculations.soulOfTheForgeAcBonus = 1;
+								}
+
+								// Divine Strike (level 8): fire
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeType = "fire";
+								}
+
+								// Saint of Forge and Fire (level 17)
+								if (level >= 17) {
+									calculations.hasSaintOfForgeAndFire = true;
+								}
+								break;
+							}
+							case "grave domain":
+							case "grave": {
+								// Circle of Mortality (level 1): max healing on 0 HP creatures
+								calculations.hasCircleOfMortality = true;
+
+								// Eyes of the Grave (level 1): detect undead
+								calculations.hasEyesOfTheGrave = true;
+								calculations.eyesOfTheGraveUses = Math.max(1, wisMod);
+
+								// Channel Divinity: Path to the Grave (level 2)
+								if (level >= 2) {
+									calculations.hasPathToTheGrave = true;
+								}
+
+								// Sentinel at Death's Door (level 6)
+								if (level >= 6) {
+									calculations.hasSentinelAtDeathsDoor = true;
+									calculations.sentinelAtDeathsDoorUses = Math.max(1, wisMod);
+								}
+
+								// Potent Spellcasting (level 8)
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Keeper of Souls (level 17)
+								if (level >= 17) {
+									calculations.hasKeeperOfSouls = true;
+								}
+								break;
+							}
+							case "twilight domain":
+							case "twilight": {
+								// Bonus proficiencies: heavy armor, martial weapons
+								calculations.hasTwilightProficiencies = true;
+
+								// Eyes of Night (level 1): darkvision 300 ft
+								calculations.hasEyesOfNight = true;
+								calculations.eyesOfNightRange = 300;
+
+								// Vigilant Blessing (level 1): advantage on initiative
+								calculations.hasVigilantBlessing = true;
+
+								// Channel Divinity: Twilight Sanctuary (level 2)
+								if (level >= 2) {
+									calculations.hasTwilightSanctuary = true;
+									// Temp HP = 1d6 + level (we return level + 1 as base minimum)
+									calculations.twilightSanctuaryTempHp = level + 1;
+								}
+
+								// Steps of Night (level 6): fly speed
+								if (level >= 6) {
+									calculations.hasStepsOfNight = true;
+									calculations.stepsOfNightUses = profBonus;
+								}
+
+								// Divine Strike (level 8): radiant
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeType = "radiant";
+								}
+
+								// Twilight Shroud (level 17)
+								if (level >= 17) {
+									calculations.hasTwilightShroud = true;
+								}
+								break;
+							}
+							case "peace domain":
+							case "peace": {
+								// Implement of Peace (level 1): skill proficiency
+								calculations.hasImplementOfPeace = true;
+
+								// Emboldening Bond (level 1)
+								calculations.hasEmboldeningBond = true;
+								calculations.emboldeningBondTargets = profBonus;
+								calculations.emboldeningBondRange = 30;
+
+								// Channel Divinity: Balm of Peace (level 2)
+								if (level >= 2) {
+									calculations.hasBalmOfPeace = true;
+								}
+
+								// Protective Bond (level 6)
+								if (level >= 6) {
+									calculations.hasProtectiveBond = true;
+								}
+
+								// Potent Spellcasting (level 8)
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Expansive Bond (level 17)
+								if (level >= 17) {
+									calculations.hasExpansiveBond = true;
+									calculations.emboldeningBondRange = 60;
+								}
+								break;
+							}
+							case "order domain":
+							case "order": {
+								// Bonus proficiencies: heavy armor
+								calculations.hasOrderProficiencies = true;
+
+								// Voice of Authority (level 1): ally can attack as reaction
+								calculations.hasVoiceOfAuthority = true;
+
+								// Channel Divinity: Order's Demand (level 2)
+								if (level >= 2) {
+									calculations.hasOrdersDemand = true;
+								}
+
+								// Embodiment of the Law (level 6): bonus action enchantment spells
+								if (level >= 6) {
+									calculations.hasEmbodimentOfTheLaw = true;
+									calculations.embodimentOfTheLawUses = Math.max(1, wisMod);
+								}
+
+								// Divine Strike (level 8): psychic
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeType = "psychic";
+								}
+
+								// Order's Wrath (level 17)
+								if (level >= 17) {
+									calculations.hasOrdersWrath = true;
+									calculations.ordersWrathDamage = "2d8";
+								}
+								break;
+							}
+							case "death domain":
+							case "death": {
+								// Bonus proficiency: martial weapons
+								calculations.hasDeathProficiencies = true;
+
+								// Reaper (level 1): extra target for necromancy cantrips
+								calculations.hasReaper = true;
+
+								// Channel Divinity: Touch of Death (level 2)
+								if (level >= 2) {
+									calculations.hasTouchOfDeath = true;
+									calculations.touchOfDeathDamage = 5 + level;
+								}
+
+								// Inescapable Destruction (level 6)
+								if (level >= 6) {
+									calculations.hasInescapableDestruction = true;
+								}
+
+								// Divine Strike (level 8): necrotic
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeType = "necrotic";
+								}
+
+								// Improved Reaper (level 17)
+								if (level >= 17) {
+									calculations.hasImprovedReaper = true;
+								}
+								break;
+							}
+							case "arcana domain":
+							case "arcana": {
+								// Arcane Initiate (level 1): 2 wizard cantrips
+								calculations.hasArcaneInitiate = true;
+								calculations.bonusWizardCantrips = 2;
+
+								// Channel Divinity: Arcane Abjuration (level 2)
+								if (level >= 2) {
+									calculations.hasArcaneAbjuration = true;
+								}
+
+								// Spell Breaker (level 6)
+								if (level >= 6) {
+									calculations.hasSpellBreaker = true;
+								}
+
+								// Potent Spellcasting (level 8)
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Arcane Mastery (level 17)
+								if (level >= 17) {
+									calculations.hasArcaneMastery = true;
+								}
+								break;
+							}
+						}
+					}
 					break;
 				}
 				case "Druid": {
@@ -7244,6 +8555,270 @@ class CharacterSheetState {
 					if (isXPHB && level >= 15) {
 						calculations.hasImprovedElementalFury = true;
 					}
+
+					// ========== DRUID SUBCLASS (CIRCLE) FEATURES ==========
+					const subclassName = cls.subclass?.name?.toLowerCase();
+					if (subclassName) {
+						const wisMod = this.getAbilityMod("wis");
+
+						switch (subclassName) {
+							case "circle of the land":
+							case "land": {
+								// Bonus Cantrip (level 2/3)
+								calculations.hasBonusCantrip = true;
+
+								// Natural Recovery (PHB level 2, XPHB level 6)
+								const naturalRecoveryLevel = isXPHB ? 6 : 2;
+								if (level >= naturalRecoveryLevel) {
+									calculations.hasNaturalRecovery = true;
+									// Recover spell slots equal to half druid level rounded up
+									calculations.naturalRecoverySlots = Math.ceil(level / 2);
+								}
+
+								// Land's Stride (level 6)
+								if (level >= 6) {
+									calculations.hasLandsStride = true;
+								}
+
+								// Nature's Ward (level 10)
+								if (level >= 10) {
+									calculations.hasNaturesWard = true;
+								}
+
+								// Nature's Sanctuary (level 14)
+								if (level >= 14) {
+									calculations.hasNaturesSanctuary = true;
+									calculations.naturesSanctuaryDc = this.getSpellSaveDc();
+								}
+								break;
+							}
+							case "circle of the moon":
+							case "moon": {
+								// Combat Wild Shape (level 2) - bonus action, heal with slots
+								calculations.hasCombatWildShape = true;
+								calculations.wildShapeHealPerSlotLevel = "1d8";
+
+								// Circle Forms CR limits (overrides base druid)
+								// PHB: CR 1 at level 2, scales with level/3
+								// XPHB: Uses stat blocks instead
+								if (!isXPHB) {
+									calculations.moonFormsCr = level >= 2 ? Math.max(1, Math.floor(level / 3)) : 0;
+								}
+
+								// Primal Strike (PHB level 6) - attacks count as magical
+								if (!isXPHB && level >= 6) {
+									calculations.hasPrimalStrike = true;
+								}
+
+								// Elemental Wild Shape (PHB level 10) - costs 2 uses
+								if (!isXPHB && level >= 10) {
+									calculations.hasElementalWildShape = true;
+									calculations.elementalWildShapeCost = 2;
+								}
+
+								// Thousand Forms (PHB level 14) - Alter Self at will
+								if (!isXPHB && level >= 14) {
+									calculations.hasThousandForms = true;
+								}
+
+								// XPHB: Circle Forms (level 3) - Abjuration spells
+								if (isXPHB && level >= 3) {
+									calculations.hasCircleForms = true;
+								}
+
+								// XPHB: Improved Circle Forms (level 6) - enhanced stat blocks
+								if (isXPHB && level >= 6) {
+									calculations.hasImprovedCircleForms = true;
+								}
+
+								// XPHB: Moonlight Step (level 10) - teleport in dim light
+								if (isXPHB && level >= 10) {
+									calculations.hasMoonlightStep = true;
+									calculations.moonlightStepUses = Math.max(1, wisMod);
+								}
+
+								// XPHB: Lunar Form (level 14) - choose Full/New/Crescent moon
+								if (isXPHB && level >= 14) {
+									calculations.hasLunarForm = true;
+								}
+								break;
+							}
+							case "circle of dreams":
+							case "dreams": {
+								// Balm of the Summer Court (level 2)
+								// Healing pool = druid level d6s
+								calculations.balmOfSummerCourtDice = level;
+								calculations.balmOfSummerCourtDieSize = "d6";
+								calculations.balmOfSummerCourtPool = `${level}d6`;
+
+								// Hearth of Moonlight and Shadow (level 6)
+								if (level >= 6) {
+									calculations.hasHearthOfMoonlight = true;
+								}
+
+								// Hidden Paths (level 10) - WIS mod uses per long rest
+								if (level >= 10) {
+									calculations.hasHiddenPaths = true;
+									calculations.hiddenPathsUses = Math.max(1, wisMod);
+									calculations.hiddenPathsRange = 60; // feet
+								}
+
+								// Walker in Dreams (level 14)
+								if (level >= 14) {
+									calculations.hasWalkerInDreams = true;
+								}
+								break;
+							}
+							case "circle of the shepherd":
+							case "shepherd": {
+								// Spirit Totem (level 2) - Bear, Hawk, or Unicorn
+								calculations.hasSpiritTotem = true;
+								calculations.spiritTotemRadius = 30;
+
+								// Mighty Summoner (level 6) - summoned creatures gain bonuses
+								if (level >= 6) {
+									calculations.hasMightySummoner = true;
+									calculations.mightySummonerHpPerHd = 2;
+								}
+
+								// Guardian Spirit (level 10) - beasts/fey heal when ending turn in totem
+								if (level >= 10) {
+									calculations.hasGuardianSpirit = true;
+									calculations.guardianSpiritHealing = Math.floor(level / 2);
+								}
+
+								// Faithful Summons (level 14) - summon beasts when incapacitated
+								if (level >= 14) {
+									calculations.hasFaithfulSummons = true;
+								}
+								break;
+							}
+							case "circle of spores":
+							case "spores": {
+								// Halo of Spores (level 2) - scales with level
+								const haloDamage = level >= 14 ? "1d10" : level >= 10 ? "1d8" : level >= 6 ? "1d6" : "1d4";
+								calculations.haloOfSporesDamage = haloDamage;
+								calculations.haloOfSporesDc = this.getSpellSaveDc();
+
+								// Symbiotic Entity (level 2) - temp HP = 4 × level
+								calculations.symbioticEntityTempHp = 4 * level;
+
+								// Fungal Infestation (level 6) - WIS mod uses
+								if (level >= 6) {
+									calculations.hasFungalInfestation = true;
+									calculations.fungalInfestationUses = Math.max(1, wisMod);
+								}
+
+								// Spreading Spores (level 10) - Halo at range
+								if (level >= 10) {
+									calculations.hasSpreadingSpores = true;
+									calculations.spreadingSporesRange = 30;
+								}
+
+								// Fungal Body (level 14) - immunities
+								if (level >= 14) {
+									calculations.hasFungalBody = true;
+								}
+								break;
+							}
+							case "circle of stars":
+							case "stars": {
+								// Star Map (level 2) - free Guidance, Guiding Bolt uses
+								calculations.hasStarMap = true;
+								calculations.guidingBoltFreeUses = profBonus;
+
+								// Starry Form (level 2) - Archer, Chalice, or Dragon
+								calculations.hasStarryForm = true;
+								calculations.starryFormUses = 2; // Wild Shape uses
+
+								// Archer form: bonus action ranged attack
+								calculations.archerFormDamage = level >= 10 ? `1d8+${wisMod}` : `1d8+${wisMod}`;
+
+								// Chalice form: heal when casting spell
+								calculations.chaliceFormHealing = level >= 10 ? `1d8+${wisMod}` : `1d8+${wisMod}`;
+
+								// Dragon form: minimum 10 on concentration checks
+								calculations.dragonFormConcentrationMin = 10;
+
+								// Cosmic Omen (level 6) - Weal or Woe, PB uses
+								if (level >= 6) {
+									calculations.hasCosmicOmen = true;
+									calculations.cosmicOmenUses = profBonus;
+									calculations.cosmicOmenDie = "1d6";
+								}
+
+								// Twinkling Constellations (level 10) - change form as bonus action
+								if (level >= 10) {
+									calculations.hasTwinklingConstellations = true;
+								}
+
+								// Full of Stars (level 14) - resistance to B/P/S in Starry Form
+								if (level >= 14) {
+									calculations.hasFullOfStars = true;
+								}
+								break;
+							}
+							case "circle of wildfire":
+							case "wildfire": {
+								// Wildfire Spirit (level 2) - HP = 5 + 5 × druid level
+								calculations.hasWildfireSpirit = true;
+								calculations.wildfireSpiritHp = 5 + (5 * level);
+								calculations.wildfireSpiritAc = 13;
+
+								// Fiery Teleportation damage
+								calculations.fieryTeleportationDamage = `${Math.max(1, Math.floor(level / 5))}d6`;
+
+								// Enhanced Bond (level 6) - +1d8 to fire damage/healing spells
+								if (level >= 6) {
+									calculations.hasEnhancedBond = true;
+									calculations.enhancedBondDamage = "1d8";
+								}
+
+								// Cauterizing Flames (level 10) - PB uses, heal or damage
+								if (level >= 10) {
+									calculations.hasCauterizingFlames = true;
+									calculations.cauterizingFlamesUses = profBonus;
+									calculations.cauterizingFlamesDamage = `2d10+${wisMod}`;
+								}
+
+								// Blazing Revival (level 14) - revive when spirit dies
+								if (level >= 14) {
+									calculations.hasBlazingRevival = true;
+									calculations.blazingRevivalHp = Math.floor(level / 2);
+								}
+								break;
+							}
+							case "circle of the sea":
+							case "sea": {
+								// XPHB only
+								// Wrath of the Sea (level 3) - bonus action cold/lightning damage
+								if (level >= 3) {
+									calculations.hasWrathOfTheSea = true;
+									const wrathDamage = level >= 17 ? "1d12" : level >= 11 ? "1d10" : level >= 5 ? "1d8" : "1d4";
+									calculations.wrathOfTheSeaDamage = wrathDamage;
+								}
+
+								// Aquatic Affinity (level 6) - swim speed, water breathing
+								if (level >= 6) {
+									calculations.hasAquaticAffinity = true;
+									calculations.swimSpeed = 60;
+								}
+
+								// Stormborn (level 10) - fly speed in rain/storm
+								if (level >= 10) {
+									calculations.hasStormborn = true;
+									calculations.stormFlySpeed = 60;
+								}
+
+								// Oceanic Gift (level 14) - grant benefits to allies
+								if (level >= 14) {
+									calculations.hasOceanicGift = true;
+									calculations.oceanicGiftTargets = Math.max(1, wisMod);
+								}
+								break;
+							}
+						}
+					}
 					break;
 				}
 				case "Bard": {
@@ -7259,6 +8834,7 @@ class CharacterSheetState {
 
 					// Jack of All Trades (level 2+) - half proficiency rounded down
 					if (level >= 2) {
+						calculations.hasJackOfAllTrades = true;
 						calculations.jackOfAllTrades = Math.floor(profBonus / 2);
 					}
 
@@ -7408,6 +8984,7 @@ class CharacterSheetState {
 					if (level >= 18) {
 						calculations.hasFeralSenses = true;
 						calculations.blindsightRange = 30;
+						calculations.feralSensesRange = 30;
 					}
 
 					// Foe Slayer (level 20) - add WIS to attack/damage vs favored enemy
@@ -8070,6 +9647,13 @@ class CharacterSheetState {
 					break;
 				}
 				case "Artificer": {
+					const intMod = this.getAbilityMod("int");
+
+					// Tool Expertise (level 6+): double proficiency with all tools
+					if (level >= 6) {
+						calculations.hasToolExpertise = true;
+					}
+
 					// Infusion slots: starts at 2 at level 2, increases at 6, 10, 14, 18
 					if (level >= 2) {
 						const infusionSlots = level >= 18 ? 6 : level >= 14 ? 5 : level >= 10 ? 4 : level >= 6 ? 3 : 2;
@@ -8084,24 +9668,171 @@ class CharacterSheetState {
 
 					// Flash of Genius uses (level 7+): INT modifier times per long rest
 					if (level >= 7) {
-						calculations.flashOfGeniusUses = Math.max(1, this.getAbilityMod("int"));
-						calculations.flashOfGeniusBonus = this.getAbilityMod("int");
+						calculations.flashOfGeniusUses = Math.max(1, intMod);
+						calculations.flashOfGeniusBonus = intMod;
 					}
 
 					// Magic Item Adept (level 10+): attune to 4 items
-					// Magic Item Savant (level 14+): attune to 5 items
+					// Magic Item Savant (level 14+): attune to 5 items, ignore requirements
 					// Magic Item Master (level 18+): attune to 6 items
 					const attunementLimit = level >= 18 ? 6 : level >= 14 ? 5 : level >= 10 ? 4 : 3;
 					calculations.magicItemAttunementLimit = attunementLimit;
 
+					if (level >= 14) {
+						calculations.hasMagicItemSavant = true;
+					}
+
 					// Spell-Storing Item (level 11+): can store INT mod * 2 uses
 					if (level >= 11) {
-						calculations.spellStoringItemUses = Math.max(2, this.getAbilityMod("int") * 2);
+						calculations.spellStoringItemUses = Math.max(2, intMod * 2);
 					}
 
 					// Soul of Artifice (level 20): +1 to all saves per attuned item
 					if (level >= 20) {
+						calculations.hasSoulOfArtifice = true;
 						calculations.soulOfArtificeSaveBonus = attunementLimit; // max possible bonus
+					}
+
+					// =========================================================
+					// ARTIFICER SUBCLASSES
+					// =========================================================
+					const subclassName = cls.subclass?.name?.toLowerCase() || cls.subclass?.shortName?.toLowerCase();
+					if (subclassName && level >= 3) {
+						switch (subclassName) {
+							case "alchemist": {
+								// Experimental Elixir count: 1 at 3, 2 at 6, 3 at 15
+								calculations.experimentalElixirCount = level >= 15 ? 3 : level >= 6 ? 2 : 1;
+
+								// Alchemical Savant (level 5+): add INT mod to healing/damage
+								if (level >= 5) {
+									calculations.hasAlchemicalSavant = true;
+									calculations.alchemicalSavantBonus = intMod;
+								}
+
+								// Restorative Reagents (level 9+): Lesser Restoration uses = INT mod
+								if (level >= 9) {
+									calculations.hasRestorativeReagents = true;
+									calculations.restorativeReagentsUses = Math.max(1, intMod);
+									calculations.restorativeReagentsTempHp = `2d6+${intMod}`;
+								}
+
+								// Chemical Mastery (level 15+)
+								if (level >= 15) {
+									calculations.hasChemicalMastery = true;
+								}
+								break;
+							}
+							case "armorer": {
+								// Arcane Armor (level 3+)
+								calculations.hasArcaneArmor = true;
+
+								// Guardian model: Thunder Gauntlets (1d8 thunder)
+								calculations.thunderGauntletsDamage = "1d8";
+								// Defensive Field: temp HP = artificer level
+								calculations.defensiveFieldTempHp = level;
+
+								// Infiltrator model: Lightning Launcher (1d6 lightning, +1d6 once/turn)
+								calculations.lightningLauncherDamage = "1d6";
+								calculations.lightningLauncherBonusDamage = "1d6";
+								calculations.infiltratorSpeedBonus = 5;
+
+								// Extra Attack (level 5+)
+								if (level >= 5) {
+									calculations.hasExtraAttack = true;
+									calculations.attacksPerAction = 2;
+								}
+
+								// Armor Modifications (level 9+): +2 infusion slots for armor
+								if (level >= 9) {
+									calculations.hasArmorModifications = true;
+									calculations.armorInfusionBonus = 2;
+								}
+
+								// Perfected Armor (level 15+)
+								if (level >= 15) {
+									calculations.hasPerfectedArmor = true;
+									// Guardian: pull creatures up to 30 ft
+									calculations.guardianPullRange = 30;
+									// Infiltrator: impose disadvantage via glimmer
+									calculations.hasInfiltratorGlimmer = true;
+								}
+								break;
+							}
+							case "artillerist": {
+								// Eldritch Cannon available at level 3
+								calculations.hasEldritchCannon = true;
+								// Eldritch Cannon HP = 5 × artificer level
+								calculations.eldritchCannonHp = 5 * level;
+
+								// Cannon damage (increases at level 9)
+								const cannonBaseDamage = level >= 9 ? "3d8" : "2d8";
+								calculations.flamethrowerDamage = cannonBaseDamage;
+								calculations.forceBallistaDamage = cannonBaseDamage;
+								// Protector: separate dice and bonus for proper testing
+								calculations.protectorTempHpDice = level >= 9 ? "2d8" : "1d8";
+								calculations.protectorTempHpBonus = intMod;
+								calculations.protectorTempHp = level >= 9 ? `2d8+${intMod}` : `1d8+${intMod}`;
+								
+								// Max cannons (1, or 2 at level 15)
+								calculations.maxCannons = level >= 15 ? 2 : 1;
+
+								// Arcane Firearm (level 5+): +1d8 to spell damage
+								if (level >= 5) {
+									calculations.hasArcaneFirearm = true;
+									calculations.arcaneFirearmDamage = "1d8";
+								}
+
+								// Explosive Cannon (level 9+): can detonate for 3d8 force
+								if (level >= 9) {
+									calculations.hasExplosiveCannon = true;
+									calculations.cannonDetonationDamage = "3d8";
+								}
+
+								// Fortified Position (level 15+): 2 cannons, half cover
+								if (level >= 15) {
+									calculations.hasFortifiedPosition = true;
+									calculations.cannonCoverRange = 10;
+									calculations.cannonCoverType = "half";
+								}
+								break;
+							}
+							case "battle smith": {
+								// Battle Ready: can use INT for magic weapon attacks
+								calculations.hasBattleReady = true;
+								calculations.magicWeaponAttackMod = intMod;
+
+								// Steel Defender available
+								calculations.hasSteelDefender = true;
+								// Steel Defender HP = 2 + INT mod + 5 × artificer level
+								calculations.steelDefenderHp = 2 + intMod + (5 * level);
+								calculations.steelDefenderAc = 15; // Base AC
+								calculations.steelDefenderAcBonus = 0;
+
+								// Extra Attack (level 5+)
+								if (level >= 5) {
+									calculations.hasExtraAttack = true;
+									calculations.attacksPerAction = 2;
+								}
+
+								// Arcane Jolt (level 9+): 2d6 damage or healing, INT mod uses
+								if (level >= 9) {
+									calculations.hasArcaneJolt = true;
+									calculations.arcaneJoltDamage = level >= 15 ? "4d6" : "2d6";
+									calculations.arcaneJoltUses = Math.max(1, intMod);
+								}
+
+								// Improved Defender (level 15+): +2 AC, deflect deals damage
+								if (level >= 15) {
+									calculations.hasImprovedDefender = true;
+									calculations.steelDefenderAc = 17; // +2 AC
+									calculations.steelDefenderAcBonus = 2;
+									calculations.deflectAttackDamageDice = "1d4";
+									calculations.deflectAttackDamageBonus = intMod;
+									calculations.deflectAttackDamage = `1d4+${intMod}`;
+								}
+								break;
+							}
+						}
 					}
 					break;
 				}
@@ -8116,7 +9847,642 @@ class CharacterSheetState {
 			calculations.combatMethodDc = 8 + profBonus + Math.max(strMod, dexMod) - exhaustionPenalty;
 		}
 
+		// =====================================================
+		// AGGREGATE ALL EFFECTS FROM CALCULATIONS
+		// This allows features to declare their effects in a
+		// standardized format that gets auto-processed
+		// =====================================================
+		calculations._effects = this._aggregateFeatureEffects(calculations);
+
 		return calculations;
+	}
+
+	/**
+	 * Aggregate all feature effects from calculations into a standardized array.
+	 * 
+	 * This method uses a multi-source approach to gather effects:
+	 * 1. STORED FEATURES: Check features in _data.features for effects via FeatureEffectRegistry
+	 * 2. FEATURE DATA: Parse effects from feature data properties (resist, immune, etc.)
+	 * 3. CALCULATION FLAGS: Fall back to calculation flags for features identified by calculations
+	 * 
+	 * This design enables homebrew support - any feature with effects defined in the registry
+	 * or in its data will work regardless of what class it came from.
+	 * 
+	 * Effect types:
+	 * - resistance: { type: "resistance", damageType: "fire", source: "...", conditional?: "..." }
+	 * - immunity: { type: "immunity", damageType: "poison", source: "..." }
+	 * - conditionImmunity: { type: "conditionImmunity", condition: "poisoned", source: "..." }
+	 * - saveProficiency: { type: "saveProficiency", ability: "wis", source: "..." }
+	 * - skillProficiency: { type: "skillProficiency", skill: "perception", level: 1|2, source: "..." }
+	 * - sense: { type: "sense", sense: "darkvision", range: 60, source: "..." }
+	 * - speed: { type: "speed", speedType: "walk", value: 10, source: "...", conditional?: "..." }
+	 * - language: { type: "language", language: "Common", source: "..." }
+	 * - toolProficiency: { type: "toolProficiency", tool: "Thieves' Tools", source: "..." }
+	 * - weaponProficiency: { type: "weaponProficiency", weapon: "longsword", source: "..." }
+	 * - armorProficiency: { type: "armorProficiency", armor: "heavy", source: "..." }
+	 * - acBonus: { type: "acBonus", value: 1, source: "...", conditional?: "..." }
+	 * - initiativeBonus: { type: "initiativeBonus", value: 3, source: "..." }
+	 * - modifier: { type: "modifier", modType: "ac|attack|damage|...", value: 1, source: "...", conditional?: "...", enabled?: false }
+	 * 
+	 * @param {object} calculations - The feature calculations object
+	 * @returns {Array} Array of standardized effect objects
+	 */
+	_aggregateFeatureEffects (calculations) {
+		const effects = [];
+		const processedFeatures = new Set(); // Track which features we've processed to avoid duplicates
+
+		// =========================================================
+		// PHASE 1: Process stored features from _data.features
+		// This enables homebrew support by using the FeatureEffectRegistry
+		// =========================================================
+		if (this._data.features?.length) {
+			this._data.features.forEach(feature => {
+				if (!feature.name) return;
+				
+				// Try to get effects from the registry by feature name
+				const registryEffects = FeatureEffectRegistry.getEffects(feature.name);
+				if (registryEffects.length > 0) {
+					effects.push(...registryEffects);
+					processedFeatures.add(feature.name.toLowerCase());
+				}
+				
+				// Also parse effects from feature data properties (resist, immune, etc.)
+				// This handles effects defined directly on the feature rather than by name
+				if (feature.entryData || feature.resist || feature.immune || feature.conditionImmune) {
+					const dataEffects = FeatureEffectRegistry.parseDataEffects(
+						feature.entryData || feature,
+						feature.name
+					);
+					if (dataEffects.length > 0) {
+						effects.push(...dataEffects);
+						processedFeatures.add(feature.name.toLowerCase());
+					}
+				}
+			});
+		}
+
+		// =========================================================
+		// PHASE 2: Process calculation flags (backward compatibility)
+		// Only process if not already handled via stored features
+		// =========================================================
+		this._aggregateCalculationBasedEffects(calculations, effects, processedFeatures);
+
+		return effects;
+	}
+
+	/**
+	 * Process effects based on calculation flags.
+	 * This is the fallback mechanism for when features aren't stored in _data.features
+	 * but are indicated by calculation flags like hasPurityOfBody, hasDiamondSoul, etc.
+	 * 
+	 * @param {object} calculations - The feature calculations
+	 * @param {Array} effects - The effects array to append to
+	 * @param {Set} processedFeatures - Set of already-processed feature names
+	 */
+	_aggregateCalculationBasedEffects (calculations, effects, processedFeatures) {
+		// Helper to check if a feature was already processed
+		const alreadyProcessed = (name) => processedFeatures.has(name.toLowerCase());
+		
+		// =========================================================
+		// MONK FEATURES
+		// =========================================================
+		
+		// Purity of Body (PHB Monk 10): immune to disease and poison
+		if (calculations.hasPurityOfBody && !alreadyProcessed("Purity of Body")) {
+			effects.push({ type: "immunity", damageType: "poison", source: "Purity of Body" });
+			effects.push({ type: "conditionImmunity", condition: "poisoned", source: "Purity of Body" });
+			effects.push({ type: "conditionImmunity", condition: "diseased", source: "Purity of Body" });
+		}
+
+		// Diamond Soul / Disciplined Survivor (Monk 14): proficient in all saves
+		if ((calculations.hasDiamondSoul && !alreadyProcessed("Diamond Soul")) ||
+			(calculations.hasDisciplinedSurvivor && !alreadyProcessed("Disciplined Survivor"))) {
+			const source = calculations.hasDiamondSoul ? "Diamond Soul" : "Disciplined Survivor";
+			["str", "dex", "con", "int", "wis", "cha"].forEach(ability => {
+				effects.push({ type: "saveProficiency", ability, source });
+			});
+		}
+
+		// Tongue of the Sun and Moon (Monk 13): understand all spoken languages
+		if (calculations.hasTongueOfSunAndMoon && !alreadyProcessed("Tongue of the Sun and Moon")) {
+			effects.push({ type: "language", language: "All (spoken)", source: "Tongue of the Sun and Moon" });
+		}
+
+		// Unarmored Movement (Monk 2+)
+		if (calculations.unarmoredMovement) {
+			effects.push({ 
+				type: "speed", 
+				speedType: "walk", 
+				value: calculations.unarmoredMovement, 
+				source: "Unarmored Movement",
+				conditional: "while unarmored"
+			});
+		}
+
+		// Ki-Empowered Strikes / Empowered Strikes (Monk 6)
+		if ((calculations.hasKiEmpoweredStrikes || calculations.hasEmpoweredStrikes) && 
+			!alreadyProcessed("Ki-Empowered Strikes") && !alreadyProcessed("Empowered Strikes")) {
+			effects.push({ 
+				type: "weaponProperty", 
+				property: "magical", 
+				weaponType: "unarmed", 
+				source: "Ki-Empowered Strikes" 
+			});
+		}
+
+		// =========================================================
+		// BARBARIAN FEATURES
+		// =========================================================
+
+		// Rage damage resistance
+		if (calculations.hasRage && !alreadyProcessed("Rage")) {
+			if (calculations.hasBearTotemResistance) {
+				// Bear Totem: resistance to all except psychic
+				effects.push({ 
+					type: "modifier", 
+					modType: "resistance:all-except-psychic", 
+					value: 1, 
+					source: "Bear Totem Spirit",
+					conditional: "while raging",
+					enabled: false
+				});
+			} else {
+				// Standard rage: B/P/S resistance
+				["bludgeoning", "piercing", "slashing"].forEach(dmgType => {
+					effects.push({ 
+						type: "resistance", 
+						damageType: dmgType, 
+						source: "Rage",
+						conditional: "while raging",
+						enabled: false
+					});
+				});
+			}
+		}
+
+		// Fast Movement (Barbarian 5): +10 speed
+		if (calculations.hasFastMovement && !alreadyProcessed("Fast Movement")) {
+			effects.push({ 
+				type: "speed", 
+				speedType: "walk", 
+				value: 10, 
+				source: "Fast Movement",
+				conditional: "while not wearing heavy armor"
+			});
+		}
+
+		// Feral Instinct (Barbarian 7): advantage on initiative, can act first if surprised
+		if (calculations.hasFeralInstinct && !alreadyProcessed("Feral Instinct")) {
+			effects.push({ 
+				type: "modifier", 
+				modType: "initiative:advantage", 
+				value: 1, 
+				source: "Feral Instinct" 
+			});
+		}
+
+		// Storm Soul resistances (Storm Herald)
+		if (calculations.stormSoulResistance) {
+			effects.push({ 
+				type: "resistance", 
+				damageType: calculations.stormSoulResistance, 
+				source: "Storm Soul" 
+			});
+		}
+
+		// Danger Sense (Barbarian 2): advantage on DEX saves vs effects you can see
+		if (calculations.hasDangerSense && !alreadyProcessed("Danger Sense")) {
+			effects.push({ 
+				type: "modifier", 
+				modType: "save:dex:advantage", 
+				value: 1, 
+				source: "Danger Sense",
+				conditional: "against effects you can see"
+			});
+		}
+
+		// =========================================================
+		// ROGUE FEATURES
+		// =========================================================
+
+		// Slippery Mind (Rogue 15): WIS save proficiency
+		if (calculations.hasSlipperyMind && !alreadyProcessed("Slippery Mind")) {
+			effects.push({ type: "saveProficiency", ability: "wis", source: "Slippery Mind" });
+		}
+
+		// Blindsense (PHB Rogue 14): 10ft blindsight
+		if (calculations.hasBlindsense && calculations.blindsenseRange && !alreadyProcessed("Blindsense")) {
+			effects.push({ type: "sense", sense: "blindsight", range: calculations.blindsenseRange, source: "Blindsense" });
+		}
+
+		// Reliable Talent (Rogue 11): minimum 10 on proficient skills
+		if (calculations.hasReliableTalent && !alreadyProcessed("Reliable Talent")) {
+			effects.push({ 
+				type: "skillMinimum", 
+				minimum: calculations.reliableTalentMinimum || 10, 
+				requiresProficiency: true, 
+				source: "Reliable Talent" 
+			});
+		}
+
+		// Swashbuckler - Rakish Audacity: CHA to initiative
+		if (calculations.hasRakishAudacity && calculations.initiativeBonus && !alreadyProcessed("Rakish Audacity")) {
+			effects.push({ 
+				type: "initiativeBonus", 
+				value: calculations.initiativeBonus, 
+				source: "Rakish Audacity" 
+			});
+		}
+
+		// Scout - Superior Mobility: +10 speed
+		if (calculations.hasSuperiorMobility && calculations.movementBonus && !alreadyProcessed("Superior Mobility")) {
+			effects.push({ 
+				type: "speed", 
+				speedType: "walk", 
+				value: calculations.movementBonus, 
+				source: "Superior Mobility" 
+			});
+		}
+
+		// Assassin - Tool proficiencies
+		if (calculations.hasDisguiseKitProficiency && !alreadyProcessed("Assassinate")) {
+			effects.push({ type: "toolProficiency", tool: "Disguise Kit", source: "Assassin" });
+		}
+		if (calculations.hasPoisonerKitProficiency && !alreadyProcessed("Assassinate")) {
+			effects.push({ type: "toolProficiency", tool: "Poisoner's Kit", source: "Assassin" });
+		}
+
+		// Inquisitive - Ear for Deceit: minimum 8 on Insight
+		if (calculations.hasEarForDeceit && calculations.insightMinimum && !alreadyProcessed("Ear for Deceit")) {
+			effects.push({ 
+				type: "skillMinimum", 
+				skill: "insight",
+				minimum: calculations.insightMinimum, 
+				source: "Ear for Deceit" 
+			});
+		}
+
+		// =========================================================
+		// PALADIN FEATURES
+		// =========================================================
+
+		// Divine Health (Paladin 3): immune to disease
+		if (calculations.hasDivineHealth && !alreadyProcessed("Divine Health")) {
+			effects.push({ type: "conditionImmunity", condition: "diseased", source: "Divine Health" });
+		}
+
+		// Aura of Courage (Paladin 10): immune to frightened
+		if (calculations.hasAuraOfCourage && !alreadyProcessed("Aura of Courage")) {
+			effects.push({ type: "conditionImmunity", condition: "frightened", source: "Aura of Courage" });
+		}
+
+		// Aura of Protection (Paladin 6): CHA to saves for allies in aura
+		// (This affects allies, tracked but handled differently)
+
+		// =========================================================
+		// RANGER FEATURES
+		// =========================================================
+
+		// Feral Senses (Ranger 18): 30ft blindsight
+		if (calculations.hasFeralSenses && calculations.feralSensesRange && !alreadyProcessed("Feral Senses")) {
+			effects.push({ type: "sense", sense: "blindsight", range: calculations.feralSensesRange, source: "Feral Senses" });
+		}
+
+		// Land's Stride (Ranger 8): ignore nonmagical difficult terrain
+		if (calculations.hasLandsStride && !alreadyProcessed("Land's Stride")) {
+			effects.push({ 
+				type: "movement", 
+				property: "ignoreDifficultTerrain", 
+				source: "Land's Stride",
+				conditional: "nonmagical"
+			});
+		}
+
+		// Hide in Plain Sight / Nature's Veil
+		if (calculations.hasNaturesVeil && calculations.naturesVeilUses) {
+			// Tracked as a resource, not a passive effect
+		}
+
+		// =========================================================
+		// FIGHTER FEATURES
+		// =========================================================
+
+		// Defense Fighting Style: +1 AC while wearing armor
+		if (calculations.hasDefenseFightingStyle && !alreadyProcessed("Defense")) {
+			effects.push({ 
+				type: "acBonus", 
+				value: 1, 
+				source: "Defense Fighting Style",
+				conditional: "while wearing armor"
+			});
+		}
+
+		// Indomitable (Fighter 9): reroll failed saves
+		if (calculations.hasIndomitable && calculations.indomitableUses) {
+			// Tracked as a resource
+		}
+
+		// =========================================================
+		// WARLOCK FEATURES
+		// =========================================================
+
+		// Devil's Sight invocation: 120ft darkvision in magical darkness
+		if (calculations.hasDevilsSight && !alreadyProcessed("Devil's Sight")) {
+			effects.push({ 
+				type: "sense", 
+				sense: "darkvision", 
+				range: 120, 
+				source: "Devil's Sight",
+				special: "seesInMagicalDarkness"
+			});
+		}
+
+		// Fiendish Resilience (Fiend 10): choose resistance after rest
+		if (calculations.hasFiendishResilience && !alreadyProcessed("Fiendish Resilience")) {
+			effects.push({ 
+				type: "resistance", 
+				damageType: "choice", 
+				source: "Fiendish Resilience",
+				userSelectable: true
+			});
+		}
+
+		// Hurl Through Hell (Fiend 14): banish target briefly
+		// (Active ability, not passive)
+
+		// =========================================================
+		// CLERIC FEATURES
+		// =========================================================
+
+		// Twilight Domain - Eyes of Night: 300ft darkvision
+		if (calculations.hasEyesOfNight && calculations.eyesOfNightRange && !alreadyProcessed("Eyes of Night")) {
+			effects.push({ 
+				type: "sense", 
+				sense: "darkvision", 
+				range: calculations.eyesOfNightRange, 
+				source: "Eyes of Night" 
+			});
+		}
+
+		// Forge Domain - Soul of the Forge: +1 AC in heavy armor, fire resistance
+		if (calculations.hasSoulOfTheForge && !alreadyProcessed("Soul of the Forge")) {
+			if (calculations.soulOfTheForgeAcBonus) {
+				effects.push({ 
+					type: "acBonus", 
+					value: calculations.soulOfTheForgeAcBonus, 
+					source: "Soul of the Forge",
+					conditional: "while wearing heavy armor"
+				});
+			}
+			effects.push({ type: "resistance", damageType: "fire", source: "Soul of the Forge" });
+		}
+
+		// Forge Domain - Saint of Forge and Fire: fire immunity
+		if (calculations.hasSaintOfForgeAndFire && !alreadyProcessed("Saint of Forge and Fire")) {
+			effects.push({ type: "immunity", damageType: "fire", source: "Saint of Forge and Fire" });
+		}
+
+		// Death Domain - Inescapable Destruction: ignore necrotic resistance
+		if (calculations.hasInescapableDestruction && !alreadyProcessed("Inescapable Destruction")) {
+			effects.push({ 
+				type: "damageProperty", 
+				property: "ignoreResistance", 
+				damageType: "necrotic", 
+				source: "Inescapable Destruction" 
+			});
+		}
+
+		// =========================================================
+		// DRUID FEATURES
+		// =========================================================
+
+		// Circle of Spores - Fungal Body (14): immune to blinded, deafened, frightened, poisoned
+		if (calculations.hasFungalBody && !alreadyProcessed("Fungal Body")) {
+			effects.push({ type: "conditionImmunity", condition: "blinded", source: "Fungal Body" });
+			effects.push({ type: "conditionImmunity", condition: "deafened", source: "Fungal Body" });
+			effects.push({ type: "conditionImmunity", condition: "frightened", source: "Fungal Body" });
+			effects.push({ type: "conditionImmunity", condition: "poisoned", source: "Fungal Body" });
+		}
+
+		// Beast Spells (Druid 18): cast spells while in Wild Shape
+		if (calculations.hasBeastSpells && !alreadyProcessed("Beast Spells")) {
+			effects.push({ 
+				type: "spellcastingProperty", 
+				property: "castWhileWildShaped", 
+				source: "Beast Spells" 
+			});
+		}
+
+		// Archdruid (Druid 20): unlimited Wild Shapes
+		if (calculations.hasArchdruid && !alreadyProcessed("Archdruid")) {
+			effects.push({ 
+				type: "resourceProperty", 
+				resource: "wildShape", 
+				property: "unlimited", 
+				source: "Archdruid" 
+			});
+		}
+
+		// Land's Stride from Land circle
+		if (calculations.hasDruidLandsStride && !alreadyProcessed("Land's Stride")) {
+			effects.push({ 
+				type: "movement", 
+				property: "ignoreDifficultTerrain", 
+				source: "Land's Stride",
+				conditional: "nonmagical plants"
+			});
+		}
+
+		// =========================================================
+		// WIZARD FEATURES
+		// =========================================================
+
+		// Bladesong AC/Concentration bonus (INT)
+		if (calculations.hasBladesong && calculations.bladesongAcBonus && !alreadyProcessed("Bladesong")) {
+			effects.push({ 
+				type: "acBonus", 
+				value: calculations.bladesongAcBonus, 
+				source: "Bladesong",
+				conditional: "while Bladesong is active",
+				enabled: false
+			});
+			effects.push({ 
+				type: "modifier", 
+				modType: "concentration", 
+				value: calculations.bladesongAcBonus, 
+				source: "Bladesong",
+				conditional: "while Bladesong is active",
+				enabled: false
+			});
+		}
+
+		// Portent (Divination): roll d20s to replace rolls
+		// (Tracked as a resource with specific values)
+
+		// =========================================================
+		// SORCERER FEATURES
+		// =========================================================
+
+		// Draconic Resilience: +1 HP per level, unarmored AC = 13 + DEX
+		if (calculations.hasDraconicResilience && !alreadyProcessed("Draconic Resilience")) {
+			effects.push({ 
+				type: "hpBonus", 
+				value: 1, 
+				perLevel: true, 
+				source: "Draconic Resilience" 
+			});
+			effects.push({ 
+				type: "acFormula", 
+				base: 13, 
+				addDex: true, 
+				source: "Draconic Resilience",
+				conditional: "while unarmored"
+			});
+		}
+
+		// Elemental Affinity (Draconic 6): add CHA to damage of ancestry element
+		if (calculations.hasElementalAffinity && calculations.draconicAncestryDamageType && !alreadyProcessed("Elemental Affinity")) {
+			effects.push({ 
+				type: "damageBonus", 
+				damageType: calculations.draconicAncestryDamageType, 
+				value: "cha", 
+				source: "Elemental Affinity" 
+			});
+		}
+
+		// Dragon Wings (Draconic 14): fly speed
+		if (calculations.hasDragonWings && !alreadyProcessed("Dragon Wings")) {
+			effects.push({ 
+				type: "speed", 
+				speedType: "fly", 
+				value: "walk", 
+				source: "Dragon Wings",
+				conditional: "while not wearing armor"
+			});
+		}
+
+		// Draconic Presence (Draconic 18): frightful presence aura
+		// (Active ability, tracked as uses)
+
+		// Storm Guide (Storm Sorcery): control weather around you
+		// (Active ability, narrative)
+
+		// =========================================================
+		// BARD FEATURES
+		// =========================================================
+
+		// Jack of All Trades (Bard 2): +half prof to unproficient checks
+		if (calculations.hasJackOfAllTrades && !alreadyProcessed("Jack of All Trades")) {
+			effects.push({ 
+				type: "skillBonus", 
+				bonus: "halfProficiency", 
+				requiresProficiency: false, 
+				source: "Jack of All Trades" 
+			});
+		}
+
+		// Expertise (Bard 3, 10): double proficiency
+		// (Applied when skills are selected, not auto-applied)
+
+		// Countercharm (Bard 6): advantage on saves vs frightened/charmed
+		if (calculations.hasCountercharm && !alreadyProcessed("Countercharm")) {
+			effects.push({ 
+				type: "modifier", 
+				modType: "save:advantage:frightened", 
+				value: 1, 
+				source: "Countercharm",
+				conditional: "while you can hear the bard"
+			});
+			effects.push({ 
+				type: "modifier", 
+				modType: "save:advantage:charmed", 
+				value: 1, 
+				source: "Countercharm",
+				conditional: "while you can hear the bard"
+			});
+		}
+
+		// Superior Inspiration (Bard 20): regain 1 inspiration if have none on initiative
+		if (calculations.hasSuperiorInspiration && !alreadyProcessed("Superior Inspiration")) {
+			effects.push({ 
+				type: "resourceProperty", 
+				resource: "bardicInspiration", 
+				property: "regainOnInitiative", 
+				source: "Superior Inspiration" 
+			});
+		}
+
+		// =========================================================
+		// ARTIFICER FEATURES
+		// =========================================================
+
+		// Magical Tinkering (Artificer 1): imbue objects with properties
+		// (Active ability)
+
+		// Tool Expertise (Artificer 6): double proficiency with tools
+		if (calculations.hasToolExpertise && !alreadyProcessed("Tool Expertise")) {
+			effects.push({ 
+				type: "toolBonus", 
+				bonus: "expertise", 
+				source: "Tool Expertise" 
+			});
+		}
+
+		// Flash of Genius (Artificer 7): add INT to ability checks/saves (reaction)
+		// (Active ability, tracked as uses)
+
+		// Magic Item Savant (Artificer 14): attune to 5 items, ignore requirements
+		if (calculations.hasMagicItemSavant && !alreadyProcessed("Magic Item Savant")) {
+			effects.push({ 
+				type: "attunement", 
+				maxSlots: 5, 
+				ignoreRequirements: true, 
+				source: "Magic Item Savant" 
+			});
+		}
+
+		// Soul of Artifice (Artificer 20): +1 to saves per attuned item
+		if (calculations.hasSoulOfArtifice && !alreadyProcessed("Soul of Artifice")) {
+			effects.push({ 
+				type: "modifier", 
+				modType: "save:all", 
+				value: "attunedItems", 
+				source: "Soul of Artifice" 
+			});
+		}
+
+		// Battle Smith - Battle Ready: INT for attacks with magic weapons
+		if (calculations.hasBattleReady && !alreadyProcessed("Battle Ready")) {
+			effects.push({ 
+				type: "attackAbility", 
+				ability: "int", 
+				weaponType: "magic", 
+				source: "Battle Ready" 
+			});
+		}
+
+		// =========================================================
+		// GENERAL FEATURES (multiple classes)
+		// =========================================================
+
+		// Evasion (Monk 7, Rogue 7, Ranger fightingStyle): DEX saves for half → no damage
+		if (calculations.hasEvasion && !alreadyProcessed("Evasion")) {
+			effects.push({ 
+				type: "savingThrowProperty", 
+				save: "dex", 
+				property: "halfToNone", 
+				source: "Evasion" 
+			});
+		}
+
+		// Extra Attack
+		if (calculations.hasExtraAttack && !alreadyProcessed("Extra Attack")) {
+			effects.push({ 
+				type: "attackCount", 
+				count: calculations.extraAttackCount || 2, 
+				source: "Extra Attack" 
+			});
+		}
 	}
 
 	/**
@@ -8127,6 +10493,578 @@ class CharacterSheetState {
 	getFeatureCalculation (key) {
 		const calculations = this.getFeatureCalculations();
 		return calculations[key] ?? null;
+	}
+
+	/**
+	 * Apply actual mechanical effects from class features to the character.
+	 * This method reads the standardized _effects array from getFeatureCalculations()
+	 * and applies each effect generically based on its type.
+	 * Should be called when class configuration changes.
+	 */
+	applyClassFeatureEffects () {
+		// First, clear all previously applied class feature effects
+		this._clearClassFeatureEffects();
+
+		const calculations = this.getFeatureCalculations();
+		const effects = calculations._effects || [];
+		const appliedEffects = [];
+
+		// Process each effect based on its type
+		effects.forEach(effect => {
+			const result = this._applyFeatureEffect(effect);
+			if (result) {
+				appliedEffects.push(result);
+			}
+		});
+
+		// Store applied effects for debugging/display
+		this._data.appliedClassFeatureEffects = appliedEffects;
+
+		if (appliedEffects.length > 0) {
+			console.log(`[CharSheet State] Applied ${appliedEffects.length} class feature effects:`, appliedEffects);
+		}
+		return appliedEffects;
+	}
+
+	/**
+	 * Apply a single feature effect based on its type.
+	 * This is the generic effect processor that handles all effect types.
+	 * @param {object} effect - The effect object with type and properties
+	 * @returns {string|null} Description of what was applied, or null if nothing
+	 */
+	_applyFeatureEffect (effect) {
+		switch (effect.type) {
+			// ===== RESISTANCES & IMMUNITIES =====
+			case "resistance": {
+				if (effect.conditional || effect.enabled === false) {
+					// Conditional resistance - add as toggleable modifier
+					this._addClassFeatureModifier({
+						name: `${effect.source}: ${effect.damageType} resistance`,
+						type: `resistance:${effect.damageType}`,
+						value: 1,
+						note: effect.conditional ? `From ${effect.source} - ${effect.conditional}` : `From ${effect.source}`,
+						enabled: effect.enabled !== false && !effect.conditional,
+						conditional: effect.conditional,
+					});
+					return `${effect.source}: ${effect.damageType} resistance${effect.conditional ? ` (${effect.conditional})` : ""}`;
+				}
+				this._addClassFeatureResistance(effect.damageType);
+				return `${effect.source}: ${effect.damageType} resistance`;
+			}
+
+			case "immunity": {
+				this._addClassFeatureImmunity(effect.damageType);
+				return `${effect.source}: ${effect.damageType} immunity`;
+			}
+
+			case "conditionImmunity": {
+				this._addClassFeatureConditionImmunity(effect.condition);
+				return `${effect.source}: ${effect.condition} condition immunity`;
+			}
+
+			// ===== SAVING THROWS =====
+			case "saveProficiency": {
+				this._addClassFeatureSaveProficiency(effect.ability);
+				return `${effect.source}: ${effect.ability.toUpperCase()} save proficiency`;
+			}
+
+			// ===== SKILLS =====
+			case "skillProficiency": {
+				const level = effect.level || 1;
+				this._addClassFeatureSkillProficiency(effect.skill, level);
+				return `${effect.source}: ${effect.skill} ${level === 2 ? "expertise" : "proficiency"}`;
+			}
+
+			case "skillMinimum": {
+				// Add as a modifier that tracks minimum roll
+				const skillTarget = effect.skill ? `skill:${effect.skill}:minimum` : "skill:all:minimum";
+				this._addClassFeatureModifier({
+					name: effect.source,
+					type: skillTarget,
+					value: effect.minimum,
+					note: `From ${effect.source}${effect.requiresProficiency ? " (proficient skills only)" : ""}`,
+					enabled: true,
+					requiresProficiency: effect.requiresProficiency,
+				});
+				return `${effect.source}: minimum ${effect.minimum} on ${effect.skill || "proficient"} checks`;
+			}
+
+			case "skillBonus": {
+				if (effect.bonus === "halfProficiency") {
+					// Jack of All Trades style - handled in skill calculations
+					return `${effect.source}: +half proficiency to unproficient checks`;
+				}
+				return null;
+			}
+
+			// ===== SENSES =====
+			case "sense": {
+				this._setClassFeatureSense(effect.sense, effect.range);
+				let desc = `${effect.source}: ${effect.range} ft. ${effect.sense}`;
+				if (effect.special === "seesInMagicalDarkness") {
+					desc += " (sees through magical darkness)";
+				}
+				return desc;
+			}
+
+			// ===== SPEED =====
+			case "speed": {
+				const speedValue = effect.value === "walk" ? this.getWalkSpeed() : effect.value;
+				if (effect.conditional) {
+					this._addClassFeatureModifier({
+						name: effect.source,
+						type: `speed:${effect.speedType}`,
+						value: speedValue,
+						note: `From ${effect.source} - ${effect.conditional}`,
+						enabled: !effect.conditional.includes("while"),
+						conditional: effect.conditional,
+					});
+				} else {
+					this._addClassFeatureModifier({
+						name: effect.source,
+						type: `speed:${effect.speedType}`,
+						value: speedValue,
+						note: `From ${effect.source}`,
+						enabled: true,
+					});
+				}
+				return `${effect.source}: +${speedValue} ft. ${effect.speedType} speed${effect.conditional ? ` (${effect.conditional})` : ""}`;
+			}
+
+			// ===== LANGUAGES =====
+			case "language": {
+				this._addClassFeatureLanguage(effect.language);
+				return `${effect.source}: ${effect.language} language`;
+			}
+
+			// ===== PROFICIENCIES =====
+			case "toolProficiency": {
+				this._addClassFeatureToolProficiency(effect.tool);
+				return `${effect.source}: ${effect.tool} proficiency`;
+			}
+
+			case "weaponProficiency": {
+				this._addClassFeatureWeaponProficiency(effect.weapon);
+				return `${effect.source}: ${effect.weapon} proficiency`;
+			}
+
+			case "armorProficiency": {
+				this._addClassFeatureArmorProficiency(effect.armor);
+				return `${effect.source}: ${effect.armor} armor proficiency`;
+			}
+
+			// ===== AC =====
+			case "acBonus": {
+				this._addClassFeatureModifier({
+					name: effect.source,
+					type: "ac",
+					value: effect.value,
+					note: effect.conditional ? `From ${effect.source} - ${effect.conditional}` : `From ${effect.source}`,
+					enabled: effect.enabled !== false && !effect.conditional,
+					conditional: effect.conditional,
+				});
+				return `${effect.source}: +${effect.value} AC${effect.conditional ? ` (${effect.conditional})` : ""}`;
+			}
+
+			case "acFormula": {
+				// Store AC formula for alternative AC calculation
+				if (!this._data.acFormulas) this._data.acFormulas = [];
+				this._data.acFormulas.push({
+					base: effect.base,
+					addDex: effect.addDex,
+					secondAbility: effect.secondAbility,
+					sourceName: effect.source,
+					sourceType: "classFeature",
+					conditional: effect.conditional,
+				});
+				return `${effect.source}: AC = ${effect.base}${effect.addDex ? " + DEX" : ""}${effect.secondAbility ? ` + ${effect.secondAbility.toUpperCase()}` : ""}`;
+			}
+
+			// ===== INITIATIVE =====
+			case "initiativeBonus": {
+				this._addClassFeatureModifier({
+					name: effect.source,
+					type: "initiative",
+					value: effect.value,
+					note: `From ${effect.source}`,
+					enabled: true,
+				});
+				return `${effect.source}: +${effect.value} initiative`;
+			}
+
+			// ===== HP =====
+			case "hpBonus": {
+				this._addClassFeatureModifier({
+					name: effect.source,
+					type: "hp",
+					value: effect.value,
+					perLevel: effect.perLevel,
+					note: `From ${effect.source}${effect.perLevel ? " (per level)" : ""}`,
+					enabled: true,
+				});
+				return `${effect.source}: +${effect.value} HP${effect.perLevel ? " per level" : ""}`;
+			}
+
+			// ===== GENERIC MODIFIERS =====
+			case "modifier": {
+				this._addClassFeatureModifier({
+					name: effect.source,
+					type: effect.modType,
+					value: effect.value,
+					note: effect.conditional ? `From ${effect.source} - ${effect.conditional}` : `From ${effect.source}`,
+					enabled: effect.enabled !== false && !effect.conditional,
+					conditional: effect.conditional,
+				});
+				return `${effect.source}: ${effect.modType}${effect.conditional ? ` (${effect.conditional})` : ""}`;
+			}
+
+			// ===== COMBAT =====
+			case "attackCount": {
+				// Store for reference - affects how attacks are displayed
+				this._data._classFeatureAttackCount = effect.count;
+				return `${effect.source}: ${effect.count} attacks per Attack action`;
+			}
+
+			case "weaponProperty": {
+				// Track that unarmed strikes are magical
+				if (!this._data._classFeatureWeaponProperties) this._data._classFeatureWeaponProperties = [];
+				this._data._classFeatureWeaponProperties.push({
+					weaponType: effect.weaponType,
+					property: effect.property,
+					source: effect.source,
+				});
+				return `${effect.source}: ${effect.weaponType} attacks count as ${effect.property}`;
+			}
+
+			// ===== MOVEMENT PROPERTIES =====
+			case "movement": {
+				if (!this._data._classFeatureMovementProperties) this._data._classFeatureMovementProperties = [];
+				this._data._classFeatureMovementProperties.push({
+					property: effect.property,
+					source: effect.source,
+					conditional: effect.conditional,
+				});
+				return `${effect.source}: ${effect.property}${effect.conditional ? ` (${effect.conditional})` : ""}`;
+			}
+
+			// ===== SAVING THROW PROPERTIES =====
+			case "savingThrowProperty": {
+				if (!this._data._classFeatureSaveProperties) this._data._classFeatureSaveProperties = [];
+				this._data._classFeatureSaveProperties.push({
+					save: effect.save,
+					property: effect.property,
+					source: effect.source,
+				});
+				return `${effect.source}: ${effect.property} on ${effect.save.toUpperCase()} saves`;
+			}
+
+			// ===== DAMAGE PROPERTIES =====
+			case "damageProperty": {
+				if (!this._data._classFeatureDamageProperties) this._data._classFeatureDamageProperties = [];
+				this._data._classFeatureDamageProperties.push({
+					property: effect.property,
+					damageType: effect.damageType,
+					source: effect.source,
+				});
+				return `${effect.source}: ${effect.property} for ${effect.damageType}`;
+			}
+
+			case "damageBonus": {
+				this._addClassFeatureModifier({
+					name: effect.source,
+					type: `damage:${effect.damageType}`,
+					value: effect.value === "cha" ? this.getAbilityMod("cha") : effect.value,
+					note: `From ${effect.source}`,
+					enabled: true,
+					abilityMod: typeof effect.value === "string" ? effect.value : undefined,
+				});
+				return `${effect.source}: +${typeof effect.value === "string" ? effect.value.toUpperCase() : effect.value} ${effect.damageType} damage`;
+			}
+
+			// ===== TOOL BONUSES =====
+			case "toolBonus": {
+				if (effect.bonus === "expertise") {
+					if (!this._data._classFeatureToolExpertise) this._data._classFeatureToolExpertise = true;
+					return `${effect.source}: expertise with all tools`;
+				}
+				return null;
+			}
+
+			// ===== ATTUNEMENT =====
+			case "attunement": {
+				this._data._classFeatureAttunementSlots = effect.maxSlots;
+				if (effect.ignoreRequirements) {
+					this._data._classFeatureIgnoreAttunementRequirements = true;
+				}
+				return `${effect.source}: ${effect.maxSlots} attunement slots${effect.ignoreRequirements ? ", ignore requirements" : ""}`;
+			}
+
+			// ===== ATTACK ABILITY =====
+			case "attackAbility": {
+				if (!this._data._classFeatureAttackAbilities) this._data._classFeatureAttackAbilities = [];
+				this._data._classFeatureAttackAbilities.push({
+					ability: effect.ability,
+					weaponType: effect.weaponType,
+					source: effect.source,
+				});
+				return `${effect.source}: use ${effect.ability.toUpperCase()} for ${effect.weaponType} weapon attacks`;
+			}
+
+			// ===== SPELLCASTING PROPERTIES =====
+			case "spellcastingProperty": {
+				if (!this._data._classFeatureSpellcastingProperties) this._data._classFeatureSpellcastingProperties = [];
+				this._data._classFeatureSpellcastingProperties.push({
+					property: effect.property,
+					source: effect.source,
+				});
+				return `${effect.source}: ${effect.property}`;
+			}
+
+			// ===== RESOURCE PROPERTIES =====
+			case "resourceProperty": {
+				if (!this._data._classFeatureResourceProperties) this._data._classFeatureResourceProperties = [];
+				this._data._classFeatureResourceProperties.push({
+					resource: effect.resource,
+					property: effect.property,
+					source: effect.source,
+				});
+				return `${effect.source}: ${effect.property} for ${effect.resource}`;
+			}
+
+			default:
+				console.log(`[CharSheet State] Unknown effect type: ${effect.type}`, effect);
+				return null;
+		}
+	}
+
+	/**
+	 * Clear all effects that were applied from class features
+	 * Called before reapplying effects when class configuration changes
+	 */
+	_clearClassFeatureEffects () {
+		// Remove class feature resistances
+		if (this._data._classFeatureResistances) {
+			this._data._classFeatureResistances.forEach(r => {
+				const idx = this._data.resistances.indexOf(r);
+				if (idx >= 0) this._data.resistances.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureResistances = [];
+
+		// Remove class feature immunities
+		if (this._data._classFeatureImmunities) {
+			this._data._classFeatureImmunities.forEach(i => {
+				const idx = this._data.immunities.indexOf(i);
+				if (idx >= 0) this._data.immunities.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureImmunities = [];
+
+		// Remove class feature condition immunities
+		if (this._data._classFeatureConditionImmunities) {
+			this._data._classFeatureConditionImmunities.forEach(c => {
+				const idx = this._data.conditionImmunities.indexOf(c);
+				if (idx >= 0) this._data.conditionImmunities.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureConditionImmunities = [];
+
+		// Remove class feature save proficiencies
+		if (this._data._classFeatureSaveProficiencies) {
+			this._data._classFeatureSaveProficiencies.forEach(s => {
+				const idx = this._data.saveProficiencies.indexOf(s);
+				if (idx >= 0) this._data.saveProficiencies.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureSaveProficiencies = [];
+
+		// Remove class feature skill proficiencies
+		if (this._data._classFeatureSkillProficiencies) {
+			this._data._classFeatureSkillProficiencies.forEach(({skill, level}) => {
+				const currentLevel = this._data.skillProficiencies[skill] || 0;
+				if (currentLevel === level) {
+					this._data.skillProficiencies[skill] = 0;
+				}
+			});
+		}
+		this._data._classFeatureSkillProficiencies = [];
+
+		// Reset class feature senses
+		if (this._data._classFeatureSenses) {
+			Object.keys(this._data._classFeatureSenses).forEach(sense => {
+				// Only reset if the current value matches what we set
+				if (this._data.senses?.[sense] === this._data._classFeatureSenses[sense]) {
+					this._data.senses[sense] = 0;
+				}
+			});
+		}
+		this._data._classFeatureSenses = {};
+
+		// Remove class feature tool proficiencies
+		if (this._data._classFeatureToolProficiencies) {
+			this._data._classFeatureToolProficiencies.forEach(t => {
+				const idx = this._data.toolProficiencies.findIndex(p => p.toLowerCase() === t.toLowerCase());
+				if (idx >= 0) this._data.toolProficiencies.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureToolProficiencies = [];
+
+		// Remove class feature weapon proficiencies
+		if (this._data._classFeatureWeaponProficiencies) {
+			this._data._classFeatureWeaponProficiencies.forEach(w => {
+				const idx = this._data.weaponProficiencies.findIndex(p => p.toLowerCase() === w.toLowerCase());
+				if (idx >= 0) this._data.weaponProficiencies.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureWeaponProficiencies = [];
+
+		// Remove class feature armor proficiencies
+		if (this._data._classFeatureArmorProficiencies) {
+			this._data._classFeatureArmorProficiencies.forEach(a => {
+				const idx = this._data.armorProficiencies.findIndex(p => p.toLowerCase() === a.toLowerCase());
+				if (idx >= 0) this._data.armorProficiencies.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureArmorProficiencies = [];
+
+		// Remove class feature languages
+		if (this._data._classFeatureLanguages) {
+			this._data._classFeatureLanguages.forEach(l => {
+				const idx = this._data.languages.indexOf(l);
+				if (idx >= 0) this._data.languages.splice(idx, 1);
+			});
+		}
+		this._data._classFeatureLanguages = [];
+
+		// Remove class feature AC formulas
+		if (this._data.acFormulas) {
+			this._data.acFormulas = this._data.acFormulas.filter(f => f.sourceType !== "classFeature");
+		}
+
+		// Remove class feature modifiers (named modifiers with sourceType)
+		this._data.namedModifiers = this._data.namedModifiers.filter(
+			m => m.sourceType !== "classFeature",
+		);
+		this._recalculateCustomModifiers();
+
+		// Clear special property arrays
+		this._data._classFeatureWeaponProperties = [];
+		this._data._classFeatureMovementProperties = [];
+		this._data._classFeatureSaveProperties = [];
+		this._data._classFeatureDamageProperties = [];
+		this._data._classFeatureSpellcastingProperties = [];
+		this._data._classFeatureResourceProperties = [];
+		this._data._classFeatureAttackAbilities = [];
+		this._data._classFeatureAttackCount = null;
+		this._data._classFeatureToolExpertise = false;
+		this._data._classFeatureAttunementSlots = null;
+		this._data._classFeatureIgnoreAttunementRequirements = false;
+
+		// Clear applied effects list
+		this._data.appliedClassFeatureEffects = [];
+	}
+
+	// Helper methods for tracking class feature effects
+	_addClassFeatureResistance (type) {
+		if (!this._data._classFeatureResistances) this._data._classFeatureResistances = [];
+		if (!this._data.resistances.includes(type)) {
+			this._data.resistances.push(type);
+			this._data._classFeatureResistances.push(type);
+		}
+	}
+
+	_addClassFeatureImmunity (type) {
+		if (!this._data._classFeatureImmunities) this._data._classFeatureImmunities = [];
+		if (!this._data.immunities.includes(type)) {
+			this._data.immunities.push(type);
+			this._data._classFeatureImmunities.push(type);
+		}
+	}
+
+	_addClassFeatureConditionImmunity (condition) {
+		if (!this._data._classFeatureConditionImmunities) this._data._classFeatureConditionImmunities = [];
+		if (!this._data.conditionImmunities.includes(condition)) {
+			this._data.conditionImmunities.push(condition);
+			this._data._classFeatureConditionImmunities.push(condition);
+		}
+	}
+
+	_addClassFeatureSaveProficiency (ability) {
+		if (!this._data._classFeatureSaveProficiencies) this._data._classFeatureSaveProficiencies = [];
+		if (!this._data.saveProficiencies.includes(ability)) {
+			this._data.saveProficiencies.push(ability);
+			this._data._classFeatureSaveProficiencies.push(ability);
+		}
+	}
+
+	_addClassFeatureSkillProficiency (skill, level = 1) {
+		if (!this._data._classFeatureSkillProficiencies) this._data._classFeatureSkillProficiencies = [];
+		const currentLevel = this._data.skillProficiencies[skill] || 0;
+		if (level > currentLevel) {
+			this._data.skillProficiencies[skill] = level;
+			this._data._classFeatureSkillProficiencies.push({skill, level});
+		}
+	}
+
+	_addClassFeatureWeaponProficiency (weapon) {
+		if (!this._data._classFeatureWeaponProficiencies) this._data._classFeatureWeaponProficiencies = [];
+		const weaponLower = weapon.toLowerCase();
+		if (!this._data.weaponProficiencies.some(w => w.toLowerCase() === weaponLower)) {
+			this._data.weaponProficiencies.push(weapon);
+			this._data._classFeatureWeaponProficiencies.push(weapon);
+		}
+	}
+
+	_addClassFeatureArmorProficiency (armor) {
+		if (!this._data._classFeatureArmorProficiencies) this._data._classFeatureArmorProficiencies = [];
+		const armorLower = armor.toLowerCase();
+		if (!this._data.armorProficiencies.some(a => a.toLowerCase() === armorLower)) {
+			this._data.armorProficiencies.push(armor);
+			this._data._classFeatureArmorProficiencies.push(armor);
+		}
+	}
+
+	_setClassFeatureSense (sense, range) {
+		if (!this._data._classFeatureSenses) this._data._classFeatureSenses = {};
+		if (!this._data.senses) this._data.senses = {};
+		const current = this._data.senses[sense] || 0;
+		if (range > current) {
+			this._data.senses[sense] = range;
+			this._data._classFeatureSenses[sense] = range;
+		}
+	}
+
+	_addClassFeatureToolProficiency (tool) {
+		if (!this._data._classFeatureToolProficiencies) this._data._classFeatureToolProficiencies = [];
+		const toolLower = tool.toLowerCase();
+		if (!this._data.toolProficiencies.some(t => t.toLowerCase() === toolLower)) {
+			this._data.toolProficiencies.push(tool);
+			this._data._classFeatureToolProficiencies.push(tool);
+		}
+	}
+
+	_addClassFeatureLanguage (language) {
+		if (!this._data._classFeatureLanguages) this._data._classFeatureLanguages = [];
+		if (!this._data.languages.includes(language)) {
+			this._data.languages.push(language);
+			this._data._classFeatureLanguages.push(language);
+		}
+	}
+
+	_addClassFeatureModifier (modData) {
+		const id = this.addNamedModifier({
+			...modData,
+			sourceType: "classFeature",
+		});
+		return id;
+	}
+
+	/**
+	 * Get list of applied class feature effects for display
+	 * @returns {Array<string>} List of effect descriptions
+	 */
+	getAppliedClassFeatureEffects () {
+		return [...(this._data.appliedClassFeatureEffects || [])];
 	}
 	// #endregion
 
@@ -10008,7 +12946,7 @@ class CharacterSheetState {
 
 	/**
 	 * Add a named modifier
-	 * @param {Object} modifier - {name, type, value, note, enabled}
+	 * @param {Object} modifier - {name, type, value, note, enabled, sourceType}
 	 * @returns {string} The ID of the new modifier
 	 */
 	addNamedModifier (modifier) {
@@ -10024,6 +12962,7 @@ class CharacterSheetState {
 		
 		// Copy special properties that affect how the modifier is calculated
 		if (modifier.sourceFeatureId) newModifier.sourceFeatureId = modifier.sourceFeatureId;
+		if (modifier.sourceType) newModifier.sourceType = modifier.sourceType; // e.g., "classFeature", "race", "feat"
 		if (modifier.setValue) newModifier.setValue = true;
 		if (modifier.perLevel) newModifier.perLevel = true;
 		if (modifier.multiplier) newModifier.multiplier = modifier.multiplier;
@@ -10446,6 +13385,220 @@ class CharacterSheetState {
 			requiresClass: "barbarian",
 			requiresClassLevel: 2,
 		},
+		// ===== TGTT/HOMEBREW ACTIVATABLE STATE TYPES =====
+		// These support homebrew toggle abilities from sources like Level Up A5E, Grim Hollow, TGTT
+		
+		// Combat Tradition Methods (Level Up A5E / TGTT)
+		heavyStance: {
+			id: "heavyStance",
+			name: "Heavy Stance",
+			icon: "🏔️",
+			description: "Adamant Mountain combat stance for stability and strength",
+			effects: [
+				{type: "bonus", target: "check:str:athletics", useProficiency: true},
+				{type: "bonus", target: "save:resist-movement", useProficiency: true},
+				{type: "note", value: "Ignore first 10 ft of difficult terrain each turn"},
+			],
+			duration: "Until ended or incapacitated",
+			endConditions: ["Ended as bonus action", "Incapacitated", "Knocked unconscious"],
+			resourceName: "Exertion",
+			resourceCost: 1,
+			detectPatterns: ["heavy stance"],
+			activationAction: "bonus",
+			isGeneric: false,
+		},
+		standTallStance: {
+			id: "standTallStance",
+			name: "Stand Tall Stance",
+			icon: "🗻",
+			description: "Adamant Mountain stance that makes you count as one size larger",
+			effects: [
+				{type: "sizeIncrease", value: 1},
+				{type: "note", value: "Creatures smaller than you have disadvantage on saves vs your combat methods"},
+			],
+			duration: "Until ended or incapacitated",
+			endConditions: ["Ended as bonus action", "Incapacitated"],
+			resourceName: "Exertion",
+			resourceCost: 1,
+			detectPatterns: ["stand tall stance", "stand tall"],
+			activationAction: "bonus",
+		},
+		// Blade Breaker Stances (Grim Hollow)
+		fighterStance: {
+			id: "fighterStance",
+			name: "Combat Stance",
+			icon: "⚔️",
+			description: "A combat stance providing tactical benefits",
+			effects: [], // Effects depend on specific stance, parsed from description
+			duration: "Until you use a bonus action to enter another stance",
+			endConditions: ["Enter different stance", "Incapacitated"],
+			detectPatterns: [],
+			activationAction: "bonus",
+			isGeneric: true,
+			useFeatureDescription: true,
+		},
+		adamantineBull: {
+			id: "adamantineBull",
+			name: "Adamantine Bull",
+			icon: "🐂",
+			description: "Push enemies when they hit you",
+			effects: [
+				{type: "note", value: "Reaction: When hit, push attacker 5ft (Str save)"},
+			],
+			duration: "Until you enter a different stance",
+			endConditions: ["Enter different stance", "Incapacitated"],
+			detectPatterns: ["adamantine bull"],
+			activationAction: "free",
+		},
+		ironPunisher: {
+			id: "ironPunisher",
+			name: "Iron Punisher",
+			icon: "👊",
+			description: "Advantage on melee attacks, but attacks against you have advantage",
+			effects: [
+				{type: "advantage", target: "attack:melee"},
+				{type: "advantage", target: "attacksAgainst"},
+			],
+			duration: "Until you enter a different stance",
+			endConditions: ["Enter different stance", "Incapacitated"],
+			detectPatterns: ["iron punisher"],
+			activationAction: "free",
+		},
+		steelSerpent: {
+			id: "steelSerpent",
+			name: "Steel Serpent",
+			icon: "🐍",
+			description: "Extended reach on your turn",
+			effects: [
+				{type: "bonus", target: "reach", value: 5, conditional: "on your turn"},
+			],
+			duration: "Until you enter a different stance",
+			endConditions: ["Enter different stance", "Incapacitated"],
+			detectPatterns: ["steel serpent"],
+			activationAction: "free",
+		},
+		weightlessMithral: {
+			id: "weightlessMithral",
+			name: "Weightless Mithral",
+			icon: "🪶",
+			description: "Advantage on Dexterity saving throws",
+			effects: [
+				{type: "advantage", target: "save:dex"},
+			],
+			duration: "Until you enter a different stance",
+			endConditions: ["Enter different stance", "Incapacitated"],
+			detectPatterns: ["weightless mithral"],
+			activationAction: "free",
+		},
+		// Monk Subclass Features
+		preciseStrike: {
+			id: "preciseStrike",
+			name: "Precise Strike",
+			icon: "🎯",
+			description: "Target specific body parts for debilitating effects",
+			effects: [], // Effects vary by target location
+			duration: "Instant",
+			resourceName: "Ki Points",
+			resourceCost: 1,
+			detectPatterns: ["precise strike", "debilitating strike"],
+			activationAction: "special", // Part of attack action
+			isGeneric: true,
+		},
+		// Bard Jester's Acts
+		jestersAct: {
+			id: "jestersAct",
+			name: "Jester's Act",
+			icon: "🃏",
+			description: "A theatrical performance that manipulates enemies",
+			effects: [], // Vary by specific act
+			duration: "Varies",
+			resourceName: "Bardic Inspiration",
+			resourceCost: 0, // Some are free, some cost inspiration
+			detectPatterns: ["jester's act", "jester act"],
+			activationAction: "varies",
+			isGeneric: true,
+			useFeatureDescription: true,
+		},
+		pantomime: {
+			id: "pantomime",
+			name: "Pantomime",
+			icon: "🎭",
+			description: "Charm a creature and reduce its speed to 0",
+			effects: [
+				{type: "note", value: "Target charmed and speed 0"},
+			],
+			duration: "Until end of your next turn",
+			detectPatterns: ["pantomime"],
+			activationAction: "action",
+		},
+		tumbler: {
+			id: "tumbler",
+			name: "Tumbler",
+			icon: "🤸",
+			description: "Move through hostile creature spaces",
+			effects: [
+				{type: "note", value: "Can move through hostile creature spaces"},
+			],
+			duration: "This turn",
+			detectPatterns: ["tumbler"],
+			activationAction: "bonus",
+		},
+		// Rogue Trickster Tricks
+		tricksterTrick: {
+			id: "tricksterTrick",
+			name: "Trickster's Trick",
+			icon: "🎪",
+			description: "A deceptive combat trick",
+			effects: [],
+			duration: "Instant",
+			resourceName: "Trick Dice",
+			resourceCost: 1,
+			detectPatterns: ["trickster trick", "trick die"],
+			activationAction: "special",
+			isGeneric: true,
+			useFeatureDescription: true,
+		},
+		// Metamagic (when used as toggle state)
+		metamagic: {
+			id: "metamagic",
+			name: "Metamagic",
+			icon: "✨",
+			description: "Alter how a spell is cast",
+			effects: [],
+			duration: "When casting a spell",
+			resourceName: "Sorcery Points",
+			resourceCost: 1, // Varies by metamagic
+			detectPatterns: [],
+			activationAction: "special",
+			isGeneric: true,
+		},
+		wardingSpell: {
+			id: "wardingSpell",
+			name: "Warding Spell",
+			icon: "🛡️",
+			description: "Gain +1 AC while concentrating on a spell",
+			effects: [
+				{type: "bonus", target: "ac", value: 1, conditional: "while concentrating"},
+			],
+			duration: "While concentrating",
+			resourceName: "Sorcery Points",
+			resourceCost: 2,
+			detectPatterns: ["warding spell"],
+			activationAction: "special",
+		},
+		// Generic homebrew toggle - catch-all for data-driven features
+		homebrewToggle: {
+			id: "homebrewToggle",
+			name: "Active Ability",
+			icon: "⚙️",
+			description: "A homebrew ability that can be activated",
+			effects: [],
+			duration: "Varies",
+			detectPatterns: [],
+			activationAction: "varies",
+			isGeneric: true,
+			useFeatureDescription: true,
+		},
 	};
 
 	/**
@@ -10453,6 +13606,155 @@ class CharacterSheetState {
 	 * @param {string} description - The feature description
 	 * @returns {Array} Array of effect objects
 	 */
+	/**
+	 * Analyze text to determine if it describes a toggle ability vs instant effect
+	 * @param {string} text - The feature description (lowercase, stripped of HTML)
+	 * @returns {object} Analysis result with isToggle, duration, endConditions, confidence
+	 */
+	static analyzeToggleability (text) {
+		if (!text) return {isToggle: false, confidence: 0};
+		
+		const result = {
+			isToggle: false,
+			isInstant: false,
+			duration: null,
+			endConditions: [],
+			confidence: 0,
+			activationAction: null,
+			resourceType: null,
+			resourceCost: null,
+		};
+		
+		// ===== STRONG TOGGLE INDICATORS =====
+		// These strongly suggest the ability is a toggle state
+		const toggleIndicators = [
+			// Stance patterns
+			{pattern: /while (?:in |you (?:are|remain) in )?(?:this|the) stance/i, weight: 10, duration: "Until stance ends"},
+			{pattern: /(?:enter|adopt|take|assume) (?:this|a|an? \w+) stance/i, weight: 8, duration: "Until stance ends"},
+			{pattern: /stance lasts? (?:until|for)/i, weight: 10, duration: "Variable"},
+			{pattern: /(?:you )?enter (?:a|the|this) (?:\w+ )?(?:stance|state|mode|form)/i, weight: 8},
+			
+			// Duration patterns
+			{pattern: /for (?:the next )?(\d+|one|ten) minutes?/i, weight: 9, extractDuration: true},
+			{pattern: /lasts? (?:for )?(\d+) (?:minutes?|hours?|rounds?)/i, weight: 9, extractDuration: true},
+			{pattern: /for the (?:next |)duration/i, weight: 7},
+			{pattern: /until (?:the )?(?:start|end) of your (?:next )?turn/i, weight: 6, duration: "1 turn"},
+			{pattern: /until you (?:end it|choose to end|use.*to end)/i, weight: 10, duration: "Until ended"},
+			{pattern: /this effect (?:lasts|continues) until/i, weight: 8},
+			{pattern: /while (?:this )?(?:effect|ability|feature) is active/i, weight: 9},
+			
+			// Explicit toggle language
+			{pattern: /you can (?:use )?(?:a )?(?:bonus )?action to (?:end|deactivate|stop)/i, weight: 10},
+			{pattern: /(?:activate|invoke|start|begin) (?:this|the) (?:ability|effect|feature)/i, weight: 7},
+			{pattern: /you (?:can )?(?:activate|invoke) (?:it|this)/i, weight: 6},
+			
+			// State-based language
+			{pattern: /while you are (?:in|under|affected by)/i, weight: 7},
+			{pattern: /while (?:this|the) (?:effect|ability) (?:is )?(?:active|in effect)/i, weight: 9},
+			{pattern: /(?:you gain|grants? you) the following benefits?.*until/i, weight: 8},
+			{pattern: /for (?:the )?duration,? you/i, weight: 8},
+			
+			// Resource-based toggles
+			{pattern: /(?:costs?|requires?|spend|expend) (\d+) exertion/i, weight: 5, extractExertion: true},
+			{pattern: /(?:costs?|requires?|spend) (\d+) ki/i, weight: 5, extractKi: true},
+		];
+		
+		// ===== INSTANT EFFECT INDICATORS =====
+		// These suggest the ability is a one-time use, not a toggle
+		const instantIndicators = [
+			{pattern: /when you (?:hit|deal damage|make.*attack|score.*critical)/i, weight: -5},
+			{pattern: /(?:immediately|instantly) (?:deal|take|cause)/i, weight: -7},
+			{pattern: /(?:the|a) creature takes? (\d+d\d+|\d+) (?:\w+ )?damage/i, weight: -4},
+			{pattern: /as a reaction,? when/i, weight: -3},
+			{pattern: /(?:you )?make (?:a|one) (?:\w+ )?attack/i, weight: -4},
+			{pattern: /(?:you )?can reroll/i, weight: -5},
+			{pattern: /once (?:per|on) (?:your|each) turn/i, weight: -2},
+			{pattern: /if (?:you|the) (?:hit|miss|succeed|fail)/i, weight: -3},
+		];
+		
+		// ===== ACTIVATION ACTION DETECTION =====
+		if (/as a bonus action|bonus action[,:]/i.test(text)) {
+			result.activationAction = "bonus";
+		} else if (/as an action(?!\s*surge)|use (?:your|an?) action(?!\s*surge)/i.test(text)) {
+			result.activationAction = "action";
+		} else if (/as a reaction/i.test(text)) {
+			result.activationAction = "reaction";
+		} else if (/no action required|at the start of (?:each of )?your turns?/i.test(text)) {
+			result.activationAction = "free";
+		}
+		
+		// Calculate confidence score
+		let score = 0;
+		
+		for (const indicator of toggleIndicators) {
+			const match = text.match(indicator.pattern);
+			if (match) {
+				score += indicator.weight;
+				
+				if (indicator.duration) {
+					result.duration = indicator.duration;
+				}
+				if (indicator.extractDuration && match[1]) {
+					const num = match[1].match(/\d+/) ? parseInt(match[1]) : (match[1] === "one" ? 1 : 10);
+					result.duration = `${num} ${text.includes("minute") ? "minutes" : text.includes("hour") ? "hours" : "rounds"}`;
+				}
+				if (indicator.extractExertion && match[1]) {
+					result.resourceType = "exertion";
+					result.resourceCost = parseInt(match[1]);
+				}
+				if (indicator.extractKi && match[1]) {
+					result.resourceType = "ki";
+					result.resourceCost = parseInt(match[1]);
+				}
+			}
+		}
+		
+		for (const indicator of instantIndicators) {
+			if (indicator.pattern.test(text)) {
+				score += indicator.weight;
+			}
+		}
+		
+		// Extract end conditions
+		const endConditionPatterns = [
+			{pattern: /(?:ends?|terminated?|stops?|lasts?) (?:when|if|until) you (?:are |become )?(?:incapacitated|unconscious)/i, condition: "Incapacitated"},
+			{pattern: /until you (?:are |become )?(?:incapacitated|unconscious)/i, condition: "Incapacitated"},
+			{pattern: /(?:ends?|terminated?) (?:when|if) you (?:attack|take damage|cast)/i, condition: "Break conditions"},
+			{pattern: /(?:you )?(?:can )?(?:end|stop|choose to end) (?:it|this|the effect) (?:as )?(?:a )?bonus action/i, condition: "Bonus action to end"},
+			{pattern: /choose to end it as a bonus action/i, condition: "Bonus action to end"},
+			{pattern: /enters? (?:a )?different stance/i, condition: "Enter different stance"},
+			{pattern: /(?:ends?|expires?) at the (?:end|start) of your (?:next )?turn/i, condition: "End of turn"},
+			{pattern: /concentration/i, condition: "Lose concentration"},
+		];
+		
+		for (const ec of endConditionPatterns) {
+			if (ec.pattern.test(text)) {
+				result.endConditions.push(ec.condition);
+			}
+		}
+		
+		// Deduplicate end conditions
+		result.endConditions = [...new Set(result.endConditions)];
+		
+		// Make final determination
+		result.confidence = Math.abs(score);
+		result.isToggle = score >= 5;
+		result.isInstant = score <= -5;
+		
+		// If neither clear toggle nor instant, check for state-granting language
+		if (!result.isToggle && !result.isInstant) {
+			// Check for "you gain" followed by benefits - suggests a state
+			if (/you gain (?:the following|these) benefits?/i.test(text) ||
+				/grants? you (?:the following|these)/i.test(text) ||
+				/while (?:you (?:are|have)|this|in)/i.test(text)) {
+				result.isToggle = true;
+				result.confidence = 4;
+			}
+		}
+		
+		return result;
+	}
+
 	static parseEffectsFromDescription (description) {
 		if (!description) return [];
 		
@@ -10582,12 +13884,12 @@ class CharacterSheetState {
 		}
 		
 		// Attacks against have advantage (a penalty)
-		if (/attacks? against you (?:have|has|gain) advantage/i.test(text)) {
+		if (/(?:attacks?|attack rolls?) against you (?:have|has|gain) advantage/i.test(text)) {
 			effects.push({type: "advantage", target: "attacksAgainst"});
 		}
 		
 		// Attacks against have disadvantage (a benefit)
-		if (/attacks? against you (?:have|has|gain) disadvantage/i.test(text)) {
+		if (/(?:attacks?|attack rolls?) against you (?:have|has|gain) disadvantage/i.test(text)) {
 			effects.push({type: "disadvantage", target: "attacksAgainst"});
 		}
 		
@@ -10601,19 +13903,365 @@ class CharacterSheetState {
 			effects.push({type: "note", value: "Resistant to forced movement"});
 		}
 		
+		// ===== TGTT/HOMEBREW SPECIFIC PATTERNS =====
+		
+		// Size increases (e.g., "count as one size larger")
+		if (/count as (?:one size larger|larger|a larger creature)/i.test(text)) {
+			effects.push({type: "sizeIncrease", value: 1});
+			effects.push({type: "note", value: "Counts as one size larger"});
+		}
+		
+		// Reach bonuses (e.g., "+5 feet reach", "increase your reach by 5 feet")
+		const reachMatch = text.match(/(?:reach (?:increases?|is extended) by |gain (?:an? )?(?:extra |additional )?|(?:\+))(\d+) (?:feet |ft\.? )?(?:of )?(?:extra )?reach/i) ||
+			text.match(/(?:\+)?(\d+) (?:feet |ft\.? )?(?:extra |additional )?reach/i);
+		if (reachMatch) {
+			effects.push({type: "bonus", target: "reach", value: parseInt(reachMatch[1])});
+		}
+		
+		// Initiative bonuses
+		const initMatch = text.match(/(?:\+)?(\d+) (?:bonus )?to (?:your )?initiative/i);
+		if (initMatch) {
+			effects.push({type: "bonus", target: "initiative", value: parseInt(initMatch[1])});
+		}
+		
+		// Advantage on initiative
+		if (/advantage on initiative/i.test(text)) {
+			effects.push({type: "advantage", target: "initiative"});
+		}
+		
+		// Can't be surprised
+		if (/(?:can't|cannot) be surprised/i.test(text)) {
+			effects.push({type: "note", value: "Cannot be surprised"});
+		}
+		
+		// ===== SKILL ADVANTAGES =====
+		// Advantage on Acrobatics specifically
+		if (/advantage on (?:dexterity \()?acrobatics(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:acrobatics"});
+		}
+		
+		// Advantage on Stealth
+		if (/advantage on (?:dexterity \()?stealth(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:stealth"});
+		}
+		
+		// Advantage on Perception
+		if (/advantage on (?:wisdom \()?perception(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:perception"});
+		}
+		
+		// Advantage on Athletics
+		if (/advantage on (?:strength \()?athletics(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:athletics"});
+		}
+		
+		// Advantage on Intimidation
+		if (/advantage on (?:charisma \()?intimidation(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:intimidation"});
+		}
+		
+		// Advantage on Insight
+		if (/advantage on (?:wisdom \()?insight(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:insight"});
+		}
+		
+		// Advantage on Deception
+		if (/advantage on (?:charisma \()?deception(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:deception"});
+		}
+		
+		// Advantage on Performance
+		if (/advantage on (?:charisma \()?performance(?:\))?/i.test(text)) {
+			effects.push({type: "advantage", target: "skill:performance"});
+		}
+		
+		// ===== MOVEMENT EFFECTS =====
+		// Can move through hostile creature spaces
+		if (/move through (?:hostile |enemy )?creature(?:'s)? spaces?/i.test(text)) {
+			effects.push({type: "note", value: "Can move through hostile creature spaces"});
+		}
+		
+		// No opportunity attacks against you
+		if (/(?:doesn't|don't|does not|do not) provoke (?:opportunity )?attacks/i.test(text)) {
+			effects.push({type: "note", value: "Does not provoke opportunity attacks"});
+		}
+		
+		// Flying speed
+		const flyMatch = text.match(/(?:gain|have) (?:a )?flying speed (?:of |equal to )?(?:(\d+) feet|your (?:walking )?speed)/i);
+		if (flyMatch) {
+			effects.push({type: "bonus", target: "speed:fly", value: flyMatch[1] ? parseInt(flyMatch[1]) : "walking"});
+		}
+		
+		// Swimming speed
+		const swimMatch = text.match(/(?:gain|have) (?:a )?swimming speed (?:of |equal to )?(?:(\d+) feet|your (?:walking )?speed)/i);
+		if (swimMatch) {
+			effects.push({type: "bonus", target: "speed:swim", value: swimMatch[1] ? parseInt(swimMatch[1]) : "walking"});
+		}
+		
+		// Climbing speed
+		const climbMatch = text.match(/(?:gain|have) (?:a )?climbing speed (?:of |equal to )?(?:(\d+) feet|your (?:walking )?speed)/i);
+		if (climbMatch) {
+			effects.push({type: "bonus", target: "speed:climb", value: climbMatch[1] ? parseInt(climbMatch[1]) : "walking"});
+		}
+		
+		// ===== COMBAT EFFECTS =====
+		// Push/knockback effects (reaction)
+		if (/push (?:the )?(?:creature|target|attacker) (?:up to )?(\d+)? ?(?:feet|ft)/i.test(text)) {
+			const pushMatch = text.match(/push (?:the )?(?:creature|target|attacker) (?:up to )?(\d+)?/i);
+			effects.push({type: "note", value: `Can push creatures${pushMatch?.[1] ? ` ${pushMatch[1]} ft` : ""}`});
+		}
+		
+		// Pull effects
+		if (/pull (?:the )?(?:creature|target) (?:up to )?(\d+)? ?(?:feet|ft)/i.test(text)) {
+			effects.push({type: "note", value: "Can pull creatures"});
+		}
+		
+		// Grapple improvements
+		if (/advantage on (?:checks? )?(?:to )?(?:grapple|maintain.*grapple)/i.test(text)) {
+			effects.push({type: "advantage", target: "grapple"});
+		}
+		
+		// Improved critical (crit on 19-20, 18-20, etc.)
+		const critMatch = text.match(/(?:critical hit|score a critical) on (?:a )?(?:roll of )?(\d+)(?:-20| or higher)/i);
+		if (critMatch) {
+			effects.push({type: "critRange", value: parseInt(critMatch[1])});
+		}
+		
+		// Extra attack
+		if (/(?:make|can make) (?:one |an? )?(?:additional|extra) (?:melee )?attack/i.test(text)) {
+			effects.push({type: "note", value: "Extra attack"});
+		}
+		
+		// Bonus action attack
+		if (/(?:as a )?bonus action.*(?:make|attack)/i.test(text)) {
+			effects.push({type: "note", value: "Bonus action attack available"});
+		}
+		
+		// Reaction attack
+		if (/(?:as a )?reaction.*(?:make|attack)/i.test(text) || /(?:make|attack).*(?:as a )?reaction/i.test(text)) {
+			effects.push({type: "note", value: "Reaction attack available"});
+		}
+		
+		// ===== DEFENSIVE EFFECTS =====
+		// Concentration bonus
+		const concMatch = text.match(/(?:\+)?(\d+|your \w+ modifier) (?:bonus )?to (?:concentration|maintain concentration)/i);
+		if (concMatch) {
+			if (concMatch[1].includes("modifier")) {
+				const modMatch = concMatch[1].match(/your (\w+) modifier/);
+				if (modMatch) {
+					effects.push({type: "bonus", target: "concentration", abilityMod: modMatch[1].substring(0, 3)});
+				}
+			} else {
+				effects.push({type: "bonus", target: "concentration", value: parseInt(concMatch[1])});
+			}
+		}
+		
+		// Immunity to conditions
+		const immunityMatch = text.match(/(?:immune|immunity) to (?:the )?(?:being )?(charmed|frightened|poisoned|paralyzed|stunned|blinded|deafened|exhaustion)/gi);
+		if (immunityMatch) {
+			immunityMatch.forEach(m => {
+				const condition = m.match(/(charmed|frightened|poisoned|paralyzed|stunned|blinded|deafened|exhaustion)/i);
+				if (condition) {
+					effects.push({type: "immunity", target: `condition:${condition[1].toLowerCase()}`});
+				}
+			});
+		}
+		
+		// Can't be charmed/frightened
+		if (/(?:can't|cannot) be (?:charmed|frightened)/i.test(text)) {
+			const cantBeMatch = text.match(/(?:can't|cannot) be (charmed|frightened)/i);
+			if (cantBeMatch) {
+				effects.push({type: "immunity", target: `condition:${cantBeMatch[1].toLowerCase()}`});
+			}
+		}
+		
+		// ===== CONDITION APPLICATION EFFECTS =====
+		// Charm/domination effects
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?charmed/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes charmed"});
+		}
+		
+		// Speed reduced to 0
+		if (/(?:its |their |the )?speed (?:is )?(?:becomes? |reduced to )?0/i.test(text)) {
+			effects.push({type: "note", value: "Target's speed becomes 0"});
+		}
+		
+		// Incapacitated
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?incapacitated/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes incapacitated"});
+		}
+		
+		// Deafened
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?deafened/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes deafened"});
+		}
+		
+		// Blinded
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?blinded/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes blinded"});
+		}
+		
+		// Stunned
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?stunned/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes stunned"});
+		}
+		
+		// Frightened
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?frightened/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes frightened"});
+		}
+		
+		// Paralyzed
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?paralyzed/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes paralyzed"});
+		}
+		
+		// Restrained
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?restrained/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes restrained"});
+		}
+		
+		// Grappled
+		if (/(?:the )?(?:creature|target) (?:is |becomes? )?grappled/i.test(text)) {
+			effects.push({type: "note", value: "Target becomes grappled"});
+		}
+		
+		// Disarm
+		if (/(?:disarm|drop.{0,10}weapon|force.*to drop)/i.test(text)) {
+			effects.push({type: "note", value: "Can disarm target"});
+		}
+		
+		// Knock prone
+		if (/(?:knock|fall|is).{0,10}prone/i.test(text)) {
+			effects.push({type: "note", value: "Can knock target prone"});
+		}
+		
+		// ===== DAMAGE EFFECTS =====
+		// Extra damage dice
+		const extraDmgDiceMatch = text.match(/(?:deal|deals?|add|adds?)\s*(?:an? )?(?:additional|extra)\s*(\d+d\d+)\s*(\w+)?\s*damage/i);
+		if (extraDmgDiceMatch) {
+			const dmgType = extraDmgDiceMatch[2] || "";
+			effects.push({type: "extraDamage", value: extraDmgDiceMatch[1], damageType: dmgType});
+		}
+		
+		// Fixed extra damage
+		const extraDmgFixedMatch = text.match(/(?:deal|deals?)\s*(?:an? )?(?:additional|extra)\s*(\d+)\s*(\w+)?\s*damage/i);
+		if (extraDmgFixedMatch && !extraDmgFixedMatch[1].includes("d")) {
+			const dmgType = extraDmgFixedMatch[2] || "";
+			effects.push({type: "extraDamage", value: parseInt(extraDmgFixedMatch[1]), damageType: dmgType});
+		}
+		
+		// Damage dice upgrade (martial arts die, etc.)
+		if (/damage die (?:becomes?|increases? to|is) (?:a )?(\d+d\d+)/i.test(text)) {
+			const dieMatch = text.match(/damage die (?:becomes?|increases? to|is) (?:a )?(\d+d\d+)/i);
+			if (dieMatch) {
+				effects.push({type: "damageDieUpgrade", value: dieMatch[1]});
+			}
+		}
+		
+		// ===== HEALING EFFECTS =====
+		// Temporary HP
+		const tempHpMatch = text.match(/gain (\d+|(?:your )?\w+ modifier|\d+d\d+(?:\s*\+\s*\d+)?)[^\d]{0,30}temporary hit points/i);
+		if (tempHpMatch) {
+			effects.push({type: "tempHp", value: tempHpMatch[1]});
+		}
+		
+		// Regain hit points
+		const healMatch = text.match(/(?:regain|restore|heal) (\d+d\d+|\d+)[^\d]{0,20}hit points/i);
+		if (healMatch) {
+			effects.push({type: "heal", value: healMatch[1]});
+		}
+		
+		// ===== SENSES =====
+		// Darkvision
+		const darkvisionMatch = text.match(/(?:gain|have) darkvision (?:out to |with a range of )?(\d+) feet/i);
+		if (darkvisionMatch) {
+			effects.push({type: "sense", target: "darkvision", value: parseInt(darkvisionMatch[1])});
+		}
+		
+		// Blindsight
+		const blindsightMatch = text.match(/(?:gain|have) blindsight (?:out to |with a range of )?(\d+) feet/i);
+		if (blindsightMatch) {
+			effects.push({type: "sense", target: "blindsight", value: parseInt(blindsightMatch[1])});
+		}
+		
+		// Tremorsense
+		const tremorsenseMatch = text.match(/(?:gain|have) tremorsense (?:out to |with a range of )?(\d+) feet/i);
+		if (tremorsenseMatch) {
+			effects.push({type: "sense", target: "tremorsense", value: parseInt(tremorsenseMatch[1])});
+		}
+		
+		// ===== SPECIAL EFFECTS =====
+		// Creatures have disadvantage on saves against your effects
+		if (/(?:creatures?|targets?) (?:have|has|makes?) (?:its |their )?(?:saving throws?|saves?) (?:against|vs) (?:you|this|your)/i.test(text) &&
+			/disadvantage/i.test(text)) {
+			effects.push({type: "note", value: "Targets have disadvantage on saves vs your effects"});
+		}
+		
+		// Impose disadvantage on enemy attacks
+		if (/(?:imposes?|(?:creature|target) has) disadvantage on (?:its |their )?(?:next )?attack/i.test(text)) {
+			effects.push({type: "note", value: "Target has disadvantage on attacks"});
+		}
+		
+		// Reroll effects
+		if (/can reroll (?:the |a |one )?(?:damage|attack|saving throw|ability check)/i.test(text)) {
+			const rerollMatch = text.match(/can reroll (?:the |a |one )?(damage|attack|saving throw|ability check)/i);
+			if (rerollMatch) {
+				effects.push({type: "note", value: `Can reroll ${rerollMatch[1]}`});
+			}
+		}
+		
+		// Auto-succeed on saves/checks
+		if (/(?:automatically |auto-)?(?:succeed|success) on (?:the |a |your )?(?:saving throw|save|check)/i.test(text)) {
+			effects.push({type: "note", value: "Auto-succeed on saves/checks"});
+		}
+		
+		// Minimum roll (Reliable Talent style)
+		const minRollMatch = text.match(/treat (?:a |any )?(?:roll|d20) (?:of )?(\d+) or lower as (?:a )?(\d+)/i);
+		if (minRollMatch) {
+			effects.push({type: "minimumRoll", value: parseInt(minRollMatch[2])});
+		}
+		
 		return effects;
 	}
 
 	/**
 	 * Detect activatable features from a feature's description
+	 * Uses intelligent text analysis to determine if an ability is toggle-able
 	 * @param {object} feature - The feature object with name and description
 	 * @returns {object|null} Activation info if this feature is activatable
 	 */
 	static detectActivatableFeature (feature) {
-		if (!feature?.description) return null;
+		if (!feature?.description && !feature?.activatable) return null;
 		
-		const text = feature.description.toLowerCase();
+		const rawText = feature.description || "";
+		const text = rawText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
 		const name = feature.name?.toLowerCase() || "";
+		
+		// ===== DATA-DRIVEN ACTIVATABLE SUPPORT =====
+		// If the feature has explicit activatable data, use that directly
+		if (feature.activatable) {
+			const act = feature.activatable;
+			return {
+				stateTypeId: act.stateTypeId || "homebrewToggle",
+				stateType: act.stateTypeId && this.ACTIVE_STATE_TYPES[act.stateTypeId] 
+					? this.ACTIVE_STATE_TYPES[act.stateTypeId] 
+					: this.ACTIVE_STATE_TYPES.homebrewToggle,
+				matchedBy: "data",
+				activationAction: act.activationAction || act.action || "bonus",
+				exertionCost: act.exertionCost || null,
+				kiCost: act.kiCost || null,
+				sorceryPointCost: act.sorceryPointCost || null,
+				resourceCost: act.resourceCost || null,
+				resourceName: act.resourceName || null,
+				effects: act.effects || this.parseEffectsFromDescription(rawText),
+				duration: act.duration || "Until ended",
+				endConditions: act.endConditions || [],
+				icon: act.icon || null,
+				isDataDriven: true,
+				isToggle: true,
+			};
+		}
 		
 		// Exclude non-activatable features that might match patterns
 		const excludedNames = [
@@ -10626,75 +14274,463 @@ class CharacterSheetState {
 			"combat methods", // Meta ability describing combat system, not activatable
 			"exertion", // Resource description, not activatable
 			"combat traditions", // Meta description
+			"maneuver", // Meta description of maneuver system
+			"metamagic", // Meta description of metamagic list
+			"fighting style", // Usually a passive choice
+			"expertise", // Passive skill enhancement
+			"proficiencies", // Passive
 		];
 		if (excludedNames.includes(name)) return null;
 		
-		// Detect activation action type from description
-		let activationAction = null;
-		let exertionCost = null;
+		// ===== USE INTELLIGENT TOGGLE ANALYSIS =====
+		const toggleAnalysis = this.analyzeToggleability(text);
 		
-		// Check for exertion cost in description like "Bonus Action (1 Exertion Point)" or "(2 Exertion Points)"
-		const exertionMatch = text.match(/(\d+)\s*exertion\s*points?/i);
+		// ===== EXTRACT RESOURCE COSTS =====
+		let exertionCost = null;
+		let kiCost = null;
+		let sorceryPointCost = null;
+		let bardicInspirationCost = null;
+		let focusPointCost = null;
+		let channelDivinityCost = null;
+		let superiorityDiceCost = null;
+		let rageCost = null;
+		
+		// Check for various resource costs
+		// Matches: "1 Exertion Point", "(1 Exertion Point)", "spend 1 exertion", "costs 2 exertion points"
+		const exertionMatch = text.match(/(?:spend|expend|use|costs?)?\s*\(?(\d+)\s*exertion\s*(?:points?)?\)?/i);
 		if (exertionMatch) {
 			exertionCost = parseInt(exertionMatch[1]);
 		}
 		
-		if (/as a bonus action|bonus action \(|use (?:a |your )?bonus action/i.test(text)) {
-			activationAction = "bonus";
-		} else if (/as an action|action \(|use (?:a |your )?action/i.test(text)) {
-			activationAction = "action";
-		} else if (/as a reaction|reaction \(/i.test(text)) {
-			activationAction = "reaction";
-		} else if (/no action required|free action/i.test(text)) {
-			activationAction = "free";
+		// Matches: "spend 1 ki", "1 ki points", "(2 Ki Points)", "for 1 ki"
+		const kiMatch = text.match(/(?:spend|use|costs?|expend)?\s*\(?(\d+)\s*ki\s*(?:points?)?\)?/i) ||
+			text.match(/for (\d+) ki/i);
+		if (kiMatch) {
+			kiCost = parseInt(kiMatch[1]);
 		}
 		
-		// Check against known state types
+		// Focus points (2024 PHB monk) - matches: "(1 Focus Point)", "spend 2 focus points"
+		const focusMatch = text.match(/(?:spend|use|expend)?\s*\(?(\d+)\s*focus\s*(?:points?)?\)?/i);
+		if (focusMatch) {
+			focusPointCost = parseInt(focusMatch[1]);
+		}
+		
+		// Sorcery points - matches: "(2 Sorcery Points)", "spend 3 sorcery points"
+		const spMatch = text.match(/(?:spend|use|expend)?\s*\(?(\d+)\s*sorcery\s*(?:points?)?\)?/i);
+		if (spMatch) {
+			sorceryPointCost = parseInt(spMatch[1]);
+		}
+		
+		const biMatch = text.match(/(?:expend|spend|use)\s*(?:one|a|1|\d+)\s*(?:use of\s*)?(?:your\s*)?bardic\s*inspiration/i);
+		if (biMatch) {
+			bardicInspirationCost = 1;
+		}
+		
+		const cdMatch = text.match(/(?:use|expend)\s*(?:a |one |your )?(?:use of\s*)?channel\s*divinity/i);
+		if (cdMatch) {
+			channelDivinityCost = 1;
+		}
+		
+		const sdMatch = text.match(/(?:expend|spend|use)\s*(?:one|a|1)\s*(?:of your )?superiority\s*(?:dice|die)/i);
+		if (sdMatch) {
+			superiorityDiceCost = 1;
+		}
+		
+		const rageMatch = text.match(/(?:while|when|if).*(?:raging|in.*rage)|(?:requires?|costs?|uses?).*rage/i);
+		if (rageMatch && /rage/i.test(name)) {
+			rageCost = 1;
+		}
+		
+		// Detect activation action
+		let activationAction = toggleAnalysis.activationAction;
+		if (!activationAction) {
+			if (/as a bonus action|bonus action[,:]|use (?:a |your )?bonus action|using your bonus action/i.test(text)) {
+				activationAction = "bonus";
+			} else if (/as an action(?!\s*surge)|use (?:a |your )?action(?! surge)/i.test(text)) {
+				activationAction = "action";
+			} else if (/as a reaction|use (?:a |your )?reaction/i.test(text)) {
+				activationAction = "reaction";
+			} else if (/no action required|free action|at the start of (?:each of )?your turns?/i.test(text)) {
+				activationAction = "free";
+			}
+		}
+		
+		// ===== CHECK AGAINST KNOWN STATE TYPES =====
 		for (const [stateTypeId, stateType] of Object.entries(this.ACTIVE_STATE_TYPES)) {
+			// Skip generic types that shouldn't match by name
+			if (stateType.isGeneric && !stateType.detectPatterns?.length) continue;
+			
 			// Check name match
 			if (name === stateType.name.toLowerCase()) {
-				return {stateTypeId, stateType, matchedBy: "name", activationAction: activationAction || stateType.activationAction, exertionCost};
+				const parsedEffects = this.parseEffectsFromDescription(rawText);
+				return {
+					stateTypeId, 
+					stateType, 
+					matchedBy: "name", 
+					activationAction: activationAction || stateType.activationAction,
+					effects: parsedEffects.length > 0 ? parsedEffects : stateType.effects,
+					duration: toggleAnalysis.duration || stateType.duration,
+					endConditions: toggleAnalysis.endConditions.length > 0 ? toggleAnalysis.endConditions : stateType.endConditions,
+					exertionCost,
+					kiCost,
+					focusPointCost,
+					sorceryPointCost,
+					bardicInspirationCost,
+					channelDivinityCost,
+					superiorityDiceCost,
+					isToggle: true,
+				};
 			}
 			
 			// Check detect patterns
 			if (stateType.detectPatterns) {
 				for (const pattern of stateType.detectPatterns) {
 					if (new RegExp(pattern, "i").test(name) || new RegExp(pattern, "i").test(text)) {
-						return {stateTypeId, stateType, matchedBy: "pattern", activationAction: activationAction || stateType.activationAction, exertionCost};
+						const parsedEffects = this.parseEffectsFromDescription(rawText);
+						return {
+							stateTypeId, 
+							stateType, 
+							matchedBy: "pattern", 
+							activationAction: activationAction || stateType.activationAction,
+							effects: parsedEffects.length > 0 ? parsedEffects : stateType.effects,
+							duration: toggleAnalysis.duration || stateType.duration,
+							endConditions: toggleAnalysis.endConditions.length > 0 ? toggleAnalysis.endConditions : stateType.endConditions,
+							exertionCost,
+							kiCost,
+							focusPointCost,
+							sorceryPointCost,
+							bardicInspirationCost,
+							channelDivinityCost,
+							superiorityDiceCost,
+							isToggle: true,
+						};
 					}
 				}
 			}
 		}
 		
-		// Check for generic activation patterns - more specific patterns for actual activatable abilities
+		// ===== PATTERN-BASED DETECTION FOR SPECIFIC ABILITY TYPES =====
 		const activationPatterns = [
-			{pattern: /you can (?:use )?(?:a |your )?bonus action to (?:enter|start|activate|invoke)/i, action: "bonus"},
-			{pattern: /as a bonus action,? you (?:can )?(?:enter|start|activate|invoke)/i, action: "bonus"},
-			{pattern: /(?:enter|start|activate) (?:a |your )?rage/i, stateTypeId: "rage"},
+			// Rage patterns
+			{pattern: /(?:enter|start|activate|begin) (?:a |your )?rage/i, stateTypeId: "rage"},
 			{pattern: /invoke.*bladesong/i, stateTypeId: "bladesong"},
-			// More specific stance patterns - must be an actual stance ability, not meta description
+			{pattern: /start (?:your |a )?bladesong/i, stateTypeId: "bladesong"},
+			
+			// Combat stance patterns (Level Up A5E, TGTT, Grim Hollow, etc.)
 			{pattern: /this stance lasts until/i, stateTypeId: "combatStance"},
-			{pattern: /while in this stance/i, stateTypeId: "combatStance"},
-			{pattern: /you (?:enter|adopt) (?:a |an? \w+ )?stance/i, stateTypeId: "combatStance"},
+			{pattern: /while (?:you are )?in this stance/i, stateTypeId: "combatStance"},
+			{pattern: /you (?:enter|adopt|assume) (?:a |an? \w+ )?stance/i, stateTypeId: "combatStance"},
+			{pattern: /enter (?:this|the|a) (?:\w+ )?stance/i, stateTypeId: "combatStance"},
+			{pattern: /at the start of each of your turns.*choose.*stance/i, stateTypeId: "fighterStance"},
+			{pattern: /(?:heavy|defensive|aggressive|balanced) stance/i, stateTypeId: "combatStance"},
+			
+			// Wild Shape
+			{pattern: /wild shape/i, stateTypeId: "wildShape"},
+			{pattern: /transform(?:ed)? into (?:a |an? )?beast/i, stateTypeId: "wildShape"},
+			
+			// Monk abilities
+			{pattern: /patient defense/i, stateTypeId: "patientDefense"},
+			{pattern: /flurry of blows/i, stateTypeId: "custom", isInstant: true},
+			{pattern: /step of the wind/i, stateTypeId: "custom", isInstant: true},
+			
+			// Fighter abilities
+			{pattern: /action surge/i, stateTypeId: "custom", isInstant: true},
+			{pattern: /second wind/i, stateTypeId: "custom", isInstant: true},
+			
+			// Barbarian abilities
+			{pattern: /reckless attack/i, stateTypeId: "recklessAttack"},
+			
+			// Jester's Act patterns (TGTT)
+			{pattern: /jester(?:'s)? act/i, stateTypeId: "jestersAct"},
+			{pattern: /as part of.*performance.*you can/i, stateTypeId: "jestersAct"},
+			
+			// Trickster Trick patterns (TGTT)
+			{pattern: /trick die|trick dice/i, stateTypeId: "tricksterTrick"},
+			
+			// Metamagic patterns that are toggleable
+			{pattern: /warding spell.*\+\d+ (?:to your )?ac/i, stateTypeId: "wardingSpell"},
+			
+			// Paladin abilities
+			{pattern: /divine smite/i, stateTypeId: "custom", isInstant: true},
+			{pattern: /lay on hands/i, stateTypeId: "custom", isInstant: true},
+			{pattern: /channel divinity/i, stateTypeId: "custom"},
+			
+			// Warlock abilities
+			{pattern: /eldritch invocation/i, stateTypeId: "custom"},
+			{pattern: /hex(?:blade)?.*curse/i, stateTypeId: "custom"},
 		];
 		
-		for (const {pattern, action, stateTypeId} of activationPatterns) {
-			if (pattern.test(text)) {
-				if (stateTypeId && this.ACTIVE_STATE_TYPES[stateTypeId]) {
-					return {stateTypeId, stateType: this.ACTIVE_STATE_TYPES[stateTypeId], matchedBy: "description", activationAction, exertionCost};
+		for (const {pattern, stateTypeId, isInstant: patternIsInstant} of activationPatterns) {
+			if (pattern.test(text) || pattern.test(name)) {
+				const parsedEffects = this.parseEffectsFromDescription(rawText);
+				if (stateTypeId !== "custom" && this.ACTIVE_STATE_TYPES[stateTypeId]) {
+					return {
+						stateTypeId, 
+						stateType: this.ACTIVE_STATE_TYPES[stateTypeId], 
+						matchedBy: "description", 
+						activationAction: activationAction || this.ACTIVE_STATE_TYPES[stateTypeId].activationAction,
+						effects: parsedEffects.length > 0 ? parsedEffects : this.ACTIVE_STATE_TYPES[stateTypeId].effects,
+						duration: toggleAnalysis.duration || this.ACTIVE_STATE_TYPES[stateTypeId].duration,
+						endConditions: toggleAnalysis.endConditions,
+						exertionCost,
+						kiCost,
+						focusPointCost,
+						sorceryPointCost,
+						bardicInspirationCost,
+						channelDivinityCost,
+						superiorityDiceCost,
+						isToggle: !patternIsInstant,
+						isInstant: patternIsInstant || false,
+					};
 				}
+				
 				// Generic activatable feature
 				return {
 					stateTypeId: "custom",
 					isCustom: true,
-					activationAction: action || activationAction,
+					activationAction: activationAction || "special",
 					matchedBy: "description",
+					effects: parsedEffects,
+					duration: toggleAnalysis.duration,
+					endConditions: toggleAnalysis.endConditions,
 					exertionCost,
+					kiCost,
+					focusPointCost,
+					sorceryPointCost,
+					bardicInspirationCost,
+					channelDivinityCost,
+					superiorityDiceCost,
+					isToggle: !patternIsInstant && toggleAnalysis.isToggle,
+					isInstant: patternIsInstant || toggleAnalysis.isInstant,
+				};
+			}
+		}
+		
+		// ===== USE TOGGLE ANALYSIS FOR GENERIC DETECTION =====
+		// If the analysis indicates this is likely a toggle ability with high confidence
+		if (toggleAnalysis.isToggle && toggleAnalysis.confidence >= 5) {
+			const parsedEffects = this.parseEffectsFromDescription(rawText);
+			
+			// Only consider it activatable if it actually provides some effects
+			if (parsedEffects.length > 0 || /you gain|grants? you|you (?:have|get)/i.test(text)) {
+				return {
+					stateTypeId: "custom",
+					isCustom: true,
+					activationAction: activationAction || toggleAnalysis.activationAction || "bonus",
+					matchedBy: "analysis",
+					effects: parsedEffects,
+					duration: toggleAnalysis.duration,
+					endConditions: toggleAnalysis.endConditions,
+					confidence: toggleAnalysis.confidence,
+					exertionCost,
+					kiCost,
+					focusPointCost,
+					sorceryPointCost,
+					bardicInspirationCost,
+					channelDivinityCost,
+					superiorityDiceCost,
+					isToggle: true,
+				};
+			}
+		}
+		
+		// ===== RESOURCE-COSTING ABILITIES =====
+		// Detect features that cost resources - these are activatable even if not toggle states
+		const hasResourceCost = kiCost || focusPointCost || sorceryPointCost || bardicInspirationCost || 
+			exertionCost || channelDivinityCost || superiorityDiceCost;
+		
+		if (hasResourceCost) {
+			// Must have some indication of being an active choice
+			const isActiveAbility = /you can|when you|as (?:a |an )?\w+ action|expend|spend|use/i.test(text);
+			if (isActiveAbility) {
+				const parsedEffects = this.parseEffectsFromDescription(rawText);
+				return {
+					stateTypeId: "custom",
+					isCustom: true,
+					isToggle: toggleAnalysis.isToggle,
+					isInstant: !toggleAnalysis.isToggle, // Resource abilities are instant unless clearly toggle
+					activationAction: activationAction || "special",
+					matchedBy: "resourceCost",
+					effects: parsedEffects,
+					duration: toggleAnalysis.duration,
+					endConditions: toggleAnalysis.endConditions,
+					exertionCost,
+					kiCost,
+					focusPointCost,
+					sorceryPointCost,
+					bardicInspirationCost,
+					channelDivinityCost,
+					superiorityDiceCost,
 				};
 			}
 		}
 		
 		return null;
+	}
+
+	/**
+	 * Generate a human-readable summary of ability effects
+	 * @param {Array} effects - Array of effect objects from parseEffectsFromDescription
+	 * @returns {string} Human-readable summary
+	 */
+	static summarizeEffects (effects) {
+		if (!effects || effects.length === 0) return "No mechanical effects detected";
+		
+		const summaries = [];
+		
+		for (const effect of effects) {
+			switch (effect.type) {
+				case "bonus":
+					if (effect.useProficiency) {
+						summaries.push(`+Prof to ${this._formatTarget(effect.target)}`);
+					} else if (effect.abilityMod) {
+						summaries.push(`+${effect.abilityMod.toUpperCase()} mod to ${this._formatTarget(effect.target)}`);
+					} else if (effect.value !== undefined) {
+						const sign = effect.value >= 0 ? "+" : "";
+						summaries.push(`${sign}${effect.value} to ${this._formatTarget(effect.target)}`);
+					}
+					break;
+				case "advantage":
+					if (effect.target === "attacksAgainst") {
+						summaries.push("Attacks against you have advantage");
+					} else {
+						summaries.push(`Advantage on ${this._formatTarget(effect.target)}`);
+					}
+					break;
+				case "disadvantage":
+					if (effect.target === "attacksAgainst") {
+						summaries.push("Attacks against you have disadvantage");
+					} else {
+						summaries.push(`Disadvantage on ${this._formatTarget(effect.target)}`);
+					}
+					break;
+				case "resistance":
+					summaries.push(`Resistance to ${effect.target}`);
+					break;
+				case "immunity":
+					summaries.push(`Immunity to ${effect.target.replace("condition:", "")}`);
+					break;
+				case "extraDamage":
+					summaries.push(`+${effect.value}${effect.damageType ? ` ${effect.damageType}` : ""} damage`);
+					break;
+				case "tempHp":
+					summaries.push(`Gain ${effect.value} temp HP`);
+					break;
+				case "heal":
+					summaries.push(`Heal ${effect.value} HP`);
+					break;
+				case "sizeIncrease":
+					summaries.push(`Count as ${effect.value} size larger`);
+					break;
+				case "critRange":
+					summaries.push(`Crit on ${effect.value}-20`);
+					break;
+				case "minimumRoll":
+					summaries.push(`Min roll of ${effect.value}`);
+					break;
+				case "sense":
+					summaries.push(`${effect.target} ${effect.value} ft`);
+					break;
+				case "note":
+					summaries.push(effect.value);
+					break;
+				default:
+					// Skip unknown effect types
+					break;
+			}
+		}
+		
+		return summaries.length > 0 ? summaries.join("; ") : "Effects detected but not summarized";
+	}
+
+	/**
+	 * Format an effect target for human readability
+	 * @private
+	 */
+	static _formatTarget (target) {
+		const targetMap = {
+			"ac": "AC",
+			"attack": "attack rolls",
+			"attack:melee": "melee attacks",
+			"attack:ranged": "ranged attacks",
+			"damage": "damage",
+			"speed": "speed",
+			"speed:walk": "walking speed",
+			"speed:fly": "flying speed",
+			"speed:swim": "swimming speed",
+			"speed:climb": "climbing speed",
+			"initiative": "initiative",
+			"concentration": "concentration saves",
+			"save": "saving throws",
+			"save:str": "STR saves",
+			"save:dex": "DEX saves",
+			"save:con": "CON saves",
+			"save:int": "INT saves",
+			"save:wis": "WIS saves",
+			"save:cha": "CHA saves",
+			"check:str": "STR checks",
+			"check:dex": "DEX checks",
+			"check:con": "CON checks",
+			"check:int": "INT checks",
+			"check:wis": "WIS checks",
+			"check:cha": "CHA checks",
+			"skill:acrobatics": "Acrobatics",
+			"skill:athletics": "Athletics",
+			"skill:stealth": "Stealth",
+			"skill:perception": "Perception",
+			"skill:intimidation": "Intimidation",
+			"skill:deception": "Deception",
+			"skill:insight": "Insight",
+			"skill:performance": "Performance",
+			"reach": "reach",
+			"grapple": "grapple checks",
+		};
+		return targetMap[target] || target;
+	}
+
+	/**
+	 * Get a complete analysis of a feature including toggle status, effects, and costs
+	 * @param {object} feature - The feature object with name and description
+	 * @returns {object|null} Complete feature analysis
+	 */
+	static analyzeFeature (feature) {
+		if (!feature?.description) return null;
+		
+		const activationInfo = this.detectActivatableFeature(feature);
+		const effects = this.parseEffectsFromDescription(feature.description);
+		const rawText = feature.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
+		const toggleAnalysis = this.analyzeToggleability(rawText);
+		
+		return {
+			name: feature.name,
+			isActivatable: !!activationInfo,
+			isToggle: activationInfo?.isToggle || toggleAnalysis.isToggle,
+			isInstant: activationInfo?.isInstant || toggleAnalysis.isInstant,
+			activationInfo,
+			effects,
+			effectsSummary: this.summarizeEffects(effects),
+			duration: activationInfo?.duration || toggleAnalysis.duration,
+			endConditions: activationInfo?.endConditions || toggleAnalysis.endConditions,
+			confidence: toggleAnalysis.confidence,
+			resourceCosts: {
+				exertion: activationInfo?.exertionCost || null,
+				ki: activationInfo?.kiCost || null,
+				focusPoints: activationInfo?.focusPointCost || null,
+				sorceryPoints: activationInfo?.sorceryPointCost || null,
+				bardicInspiration: activationInfo?.bardicInspirationCost || null,
+				channelDivinity: activationInfo?.channelDivinityCost || null,
+				superiorityDice: activationInfo?.superiorityDiceCost || null,
+			},
+			hasResourceCost: !!(
+				activationInfo?.exertionCost || 
+				activationInfo?.kiCost || 
+				activationInfo?.focusPointCost ||
+				activationInfo?.sorceryPointCost || 
+				activationInfo?.bardicInspirationCost ||
+				activationInfo?.channelDivinityCost ||
+				activationInfo?.superiorityDiceCost
+			),
+		};
 	}
 
 	/**
@@ -11227,17 +15263,51 @@ class CharacterSheetState {
 			let resource = null;
 			const stateType = activationInfo.stateType;
 			
-			// Check for exertion cost from description first (e.g., "1 Exertion Point", "2 Exertion Points")
-			if (activationInfo.exertionCost) {
+			// ===== RESOURCE DETECTION =====
+			// Check for explicit resource info from data-driven detection
+			if (activationInfo.isDataDriven && activationInfo.resourceName) {
+				resource = this._findResource(resources, activationInfo.resourceName, activationInfo.resourceCost);
+			}
+			// Check for exertion cost from description (e.g., "1 Exertion Point", "2 Exertion Points")
+			else if (activationInfo.exertionCost) {
 				resource = {
 					id: "exertion",
 					name: "Exertion",
 					current: this.getExertionCurrent(),
 					max: this.getExertionMax(),
 					isExertion: true,
-					cost: activationInfo.exertionCost, // Use cost from description
+					cost: activationInfo.exertionCost,
 				};
-			} else if (stateType?.resourceName) {
+			}
+			// Check for Ki cost
+			else if (activationInfo.kiCost) {
+				const kiResource = resources.find(r => 
+					r.name.toLowerCase().includes("ki") || r.name.toLowerCase().includes("focus points")
+				);
+				if (kiResource) {
+					resource = {...kiResource, cost: activationInfo.kiCost};
+				}
+			}
+			// Check for Sorcery Point cost
+			else if (activationInfo.sorceryPointCost) {
+				const spResource = resources.find(r => 
+					r.name.toLowerCase().includes("sorcery") || r.name.toLowerCase().includes("sorcerer points")
+				);
+				if (spResource) {
+					resource = {...spResource, cost: activationInfo.sorceryPointCost};
+				}
+			}
+			// Check for Bardic Inspiration cost
+			else if (activationInfo.bardicInspirationCost) {
+				const biResource = resources.find(r => 
+					r.name.toLowerCase().includes("bardic inspiration")
+				);
+				if (biResource) {
+					resource = {...biResource, cost: activationInfo.bardicInspirationCost};
+				}
+			}
+			// Check state type's default resource
+			else if (stateType?.resourceName) {
 				// Special case: Exertion is tracked separately, not in resources array
 				if (stateType.resourceName.toLowerCase() === "exertion") {
 					resource = {
@@ -11246,12 +15316,10 @@ class CharacterSheetState {
 						current: this.getExertionCurrent(),
 						max: this.getExertionMax(),
 						isExertion: true,
+						cost: stateType.resourceCost || 1,
 					};
 				} else {
-					resource = resources.find(r => 
-						r.name.toLowerCase() === stateType.resourceName.toLowerCase() ||
-						r.name.toLowerCase().includes(stateType.resourceName.toLowerCase())
-					);
+					resource = this._findResource(resources, stateType.resourceName, stateType.resourceCost);
 				}
 			}
 			// Also check if feature has its own resource (uses)
@@ -11259,14 +15327,19 @@ class CharacterSheetState {
 				resource = resources.find(r => r.featureId === feature.id || r.name === feature.name);
 			}
 			
+			// Determine if this feature is currently active
+			const isActive = activationInfo.stateTypeId !== "custom" 
+				? this.isStateTypeActive(activationInfo.stateTypeId)
+				: this._data.activeStates.some(s => s.sourceFeatureId === feature.id && s.active);
+			
 			activatables.push({
 				feature,
 				activationInfo,
 				resource,
 				stateTypeId: activationInfo.stateTypeId,
-				isActive: activationInfo.stateTypeId !== "custom" 
-					? this.isStateTypeActive(activationInfo.stateTypeId)
-					: this._data.activeStates.some(s => s.sourceFeatureId === feature.id && s.active),
+				isActive,
+				// Include parsed effects from data-driven features
+				effects: activationInfo.effects || null,
 			});
 		}
 		
@@ -11287,6 +15360,26 @@ class CharacterSheetState {
 		}
 		
 		return activatables;
+	}
+
+	/**
+	 * Helper to find a resource by name with fuzzy matching
+	 * @param {Array} resources - The resources array
+	 * @param {string} resourceName - The resource name to find
+	 * @param {number} cost - Optional cost to attach
+	 * @returns {object|null} The resource object or null
+	 */
+	_findResource (resources, resourceName, cost = null) {
+		const nameLower = resourceName.toLowerCase();
+		const resource = resources.find(r => 
+			r.name.toLowerCase() === nameLower ||
+			r.name.toLowerCase().includes(nameLower) ||
+			nameLower.includes(r.name.toLowerCase())
+		);
+		if (resource && cost) {
+			return {...resource, cost};
+		}
+		return resource || null;
 	}
 
 	/**

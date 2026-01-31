@@ -521,7 +521,8 @@ describe("Life Domain (PHB)", () => {
 			subclass: { name: "Life Domain", shortName: "Life", source: "PHB" },
 		});
 		// Domain spells: Bless, Cure Wounds at level 1
-		expect(state.getTotalLevel()).toBe(1);
+		const classes = state.getClasses();
+		expect(classes[0].subclass.shortName).toBe("Life");
 	});
 
 	it("should gain Disciple of Life at level 1", () => {
@@ -531,7 +532,9 @@ describe("Life Domain (PHB)", () => {
 			level: 1,
 			subclass: { name: "Life Domain", shortName: "Life", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDiscipleOfLife).toBe(true);
+		expect(calculations.discipleOfLifeBonus).toBe(2);
 	});
 
 	it("should gain Channel Divinity: Preserve Life at level 2", () => {
@@ -541,7 +544,9 @@ describe("Life Domain (PHB)", () => {
 			level: 2,
 			subclass: { name: "Life Domain", shortName: "Life", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasPreserveLife).toBe(true);
+		expect(calculations.preserveLifeHealing).toBe(10); // 5 × level 2
 	});
 
 	it("should gain Blessed Healer at level 6", () => {
@@ -551,7 +556,8 @@ describe("Life Domain (PHB)", () => {
 			level: 6,
 			subclass: { name: "Life Domain", shortName: "Life", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasBlessedHealer).toBe(true);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -561,7 +567,9 @@ describe("Life Domain (PHB)", () => {
 			level: 8,
 			subclass: { name: "Life Domain", shortName: "Life", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Supreme Healing at level 17", () => {
@@ -571,7 +579,8 @@ describe("Life Domain (PHB)", () => {
 			level: 17,
 			subclass: { name: "Life Domain", shortName: "Life", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasSupremeHealing).toBe(true);
 	});
 });
 
@@ -604,7 +613,10 @@ describe("Light Domain (PHB)", () => {
 			level: 1,
 			subclass: { name: "Light Domain", shortName: "Light", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasWardingFlare).toBe(true);
+		expect(calculations.wardingFlareUses).toBe(3);
 	});
 
 	it("should gain Channel Divinity: Radiance of the Dawn at level 2", () => {
@@ -614,7 +626,8 @@ describe("Light Domain (PHB)", () => {
 			level: 2,
 			subclass: { name: "Light Domain", shortName: "Light", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasRadianceOfTheDawn).toBe(true);
 	});
 
 	it("should gain Improved Flare at level 6", () => {
@@ -624,7 +637,8 @@ describe("Light Domain (PHB)", () => {
 			level: 6,
 			subclass: { name: "Light Domain", shortName: "Light", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasImprovedFlare).toBe(true);
 	});
 
 	it("should gain Potent Spellcasting at level 8", () => {
@@ -634,7 +648,10 @@ describe("Light Domain (PHB)", () => {
 			level: 8,
 			subclass: { name: "Light Domain", shortName: "Light", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasPotentSpellcasting).toBe(true);
+		expect(calculations.potentSpellcastingBonus).toBe(3);
 	});
 
 	it("should gain Corona of Light at level 17", () => {
@@ -644,7 +661,8 @@ describe("Light Domain (PHB)", () => {
 			level: 17,
 			subclass: { name: "Light Domain", shortName: "Light", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasCoronaOfLight).toBe(true);
 	});
 });
 
@@ -677,8 +695,8 @@ describe("Nature Domain (PHB)", () => {
 			level: 1,
 			subclass: { name: "Nature Domain", shortName: "Nature", source: "PHB" },
 		});
-		// Nature Domain grants heavy armor
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasAcolyteOfNature).toBe(true);
 	});
 
 	it("should gain Channel Divinity: Charm Animals and Plants at level 2", () => {
@@ -688,7 +706,8 @@ describe("Nature Domain (PHB)", () => {
 			level: 2,
 			subclass: { name: "Nature Domain", shortName: "Nature", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasCharmAnimalsAndPlants).toBe(true);
 	});
 
 	it("should gain Dampen Elements at level 6", () => {
@@ -698,7 +717,8 @@ describe("Nature Domain (PHB)", () => {
 			level: 6,
 			subclass: { name: "Nature Domain", shortName: "Nature", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDampenElements).toBe(true);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -708,7 +728,9 @@ describe("Nature Domain (PHB)", () => {
 			level: 8,
 			subclass: { name: "Nature Domain", shortName: "Nature", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Master of Nature at level 17", () => {
@@ -718,7 +740,8 @@ describe("Nature Domain (PHB)", () => {
 			level: 17,
 			subclass: { name: "Nature Domain", shortName: "Nature", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasMasterOfNature).toBe(true);
 	});
 });
 
@@ -751,7 +774,10 @@ describe("Tempest Domain (PHB)", () => {
 			level: 1,
 			subclass: { name: "Tempest Domain", shortName: "Tempest", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasWrathOfTheStorm).toBe(true);
+		expect(calculations.wrathOfTheStormUses).toBe(3);
 	});
 
 	it("should gain Channel Divinity: Destructive Wrath at level 2", () => {
@@ -761,7 +787,8 @@ describe("Tempest Domain (PHB)", () => {
 			level: 2,
 			subclass: { name: "Tempest Domain", shortName: "Tempest", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDestructiveWrath).toBe(true);
 	});
 
 	it("should gain Thunderbolt Strike at level 6", () => {
@@ -771,7 +798,8 @@ describe("Tempest Domain (PHB)", () => {
 			level: 6,
 			subclass: { name: "Tempest Domain", shortName: "Tempest", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasThunderboltStrike).toBe(true);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -781,7 +809,9 @@ describe("Tempest Domain (PHB)", () => {
 			level: 8,
 			subclass: { name: "Tempest Domain", shortName: "Tempest", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Stormborn at level 17", () => {
@@ -791,7 +821,8 @@ describe("Tempest Domain (PHB)", () => {
 			level: 17,
 			subclass: { name: "Tempest Domain", shortName: "Tempest", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasStormborn).toBe(true);
 	});
 });
 
@@ -823,7 +854,8 @@ describe("Trickery Domain (PHB)", () => {
 			level: 2,
 			subclass: { name: "Trickery Domain", shortName: "Trickery", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasInvokeDuplicity).toBe(true);
 	});
 
 	it("should gain Channel Divinity: Cloak of Shadows at level 6", () => {
@@ -833,7 +865,8 @@ describe("Trickery Domain (PHB)", () => {
 			level: 6,
 			subclass: { name: "Trickery Domain", shortName: "Trickery", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasCloakOfShadows).toBe(true);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -843,7 +876,9 @@ describe("Trickery Domain (PHB)", () => {
 			level: 8,
 			subclass: { name: "Trickery Domain", shortName: "Trickery", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Improved Duplicity at level 17", () => {
@@ -853,7 +888,8 @@ describe("Trickery Domain (PHB)", () => {
 			level: 17,
 			subclass: { name: "Trickery Domain", shortName: "Trickery", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasImprovedDuplicity).toBe(true);
 	});
 });
 
@@ -886,7 +922,10 @@ describe("War Domain (PHB)", () => {
 			level: 1,
 			subclass: { name: "War Domain", shortName: "War", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasWarPriest).toBe(true);
+		expect(calculations.warPriestUses).toBe(3);
 	});
 
 	it("should gain Channel Divinity: Guided Strike at level 2", () => {
@@ -896,7 +935,9 @@ describe("War Domain (PHB)", () => {
 			level: 2,
 			subclass: { name: "War Domain", shortName: "War", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasGuidedStrike).toBe(true);
+		expect(calculations.guidedStrikeBonus).toBe(10);
 	});
 
 	it("should gain Channel Divinity: War God's Blessing at level 6", () => {
@@ -906,7 +947,8 @@ describe("War Domain (PHB)", () => {
 			level: 6,
 			subclass: { name: "War Domain", shortName: "War", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasWarGodsBlessing).toBe(true);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -916,7 +958,9 @@ describe("War Domain (PHB)", () => {
 			level: 8,
 			subclass: { name: "War Domain", shortName: "War", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Avatar of Battle at level 17", () => {
@@ -926,7 +970,8 @@ describe("War Domain (PHB)", () => {
 			level: 17,
 			subclass: { name: "War Domain", shortName: "War", source: "PHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasAvatarOfBattle).toBe(true);
 	});
 });
 
@@ -958,7 +1003,8 @@ describe("Death Domain (DMG)", () => {
 			level: 1,
 			subclass: { name: "Death Domain", shortName: "Death", source: "DMG" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasReaper).toBe(true);
 	});
 
 	it("should gain Channel Divinity: Touch of Death at level 2", () => {
@@ -968,7 +1014,9 @@ describe("Death Domain (DMG)", () => {
 			level: 2,
 			subclass: { name: "Death Domain", shortName: "Death", source: "DMG" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasTouchOfDeath).toBe(true);
+		expect(calculations.touchOfDeathDamage).toBe(7);
 	});
 
 	it("should gain Inescapable Destruction at level 6", () => {
@@ -978,7 +1026,8 @@ describe("Death Domain (DMG)", () => {
 			level: 6,
 			subclass: { name: "Death Domain", shortName: "Death", source: "DMG" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasInescapableDestruction).toBe(true);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -988,7 +1037,9 @@ describe("Death Domain (DMG)", () => {
 			level: 8,
 			subclass: { name: "Death Domain", shortName: "Death", source: "DMG" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Improved Reaper at level 17", () => {
@@ -998,7 +1049,8 @@ describe("Death Domain (DMG)", () => {
 			level: 17,
 			subclass: { name: "Death Domain", shortName: "Death", source: "DMG" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasImprovedReaper).toBe(true);
 	});
 });
 
@@ -1030,7 +1082,8 @@ describe("Arcana Domain (SCAG)", () => {
 			level: 2,
 			subclass: { name: "Arcana Domain", shortName: "Arcana", source: "SCAG" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasArcaneAbjuration).toBe(true);
 	});
 
 	it("should gain Spell Breaker at level 6", () => {
@@ -1040,7 +1093,8 @@ describe("Arcana Domain (SCAG)", () => {
 			level: 6,
 			subclass: { name: "Arcana Domain", shortName: "Arcana", source: "SCAG" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasSpellBreaker).toBe(true);
 	});
 
 	it("should gain Potent Spellcasting at level 8", () => {
@@ -1050,7 +1104,10 @@ describe("Arcana Domain (SCAG)", () => {
 			level: 8,
 			subclass: { name: "Arcana Domain", shortName: "Arcana", source: "SCAG" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasPotentSpellcasting).toBe(true);
+		expect(calculations.potentSpellcastingBonus).toBe(3);
 	});
 
 	it("should gain Arcane Mastery (wizard spells) at level 17", () => {
@@ -1060,7 +1117,8 @@ describe("Arcana Domain (SCAG)", () => {
 			level: 17,
 			subclass: { name: "Arcana Domain", shortName: "Arcana", source: "SCAG" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasArcaneMastery).toBe(true);
 	});
 });
 
@@ -1092,7 +1150,8 @@ describe("Forge Domain (XGE)", () => {
 			level: 1,
 			subclass: { name: "Forge Domain", shortName: "Forge", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasBlessingOfTheForge).toBe(true);
 	});
 
 	it("should gain Channel Divinity: Artisan's Blessing at level 2", () => {
@@ -1102,7 +1161,8 @@ describe("Forge Domain (XGE)", () => {
 			level: 2,
 			subclass: { name: "Forge Domain", shortName: "Forge", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasArtisansBlessing).toBe(true);
 	});
 
 	it("should gain Soul of the Forge at level 6", () => {
@@ -1112,7 +1172,9 @@ describe("Forge Domain (XGE)", () => {
 			level: 6,
 			subclass: { name: "Forge Domain", shortName: "Forge", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasSoulOfTheForge).toBe(true);
+		expect(calculations.soulOfTheForgeAcBonus).toBe(1);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -1122,7 +1184,9 @@ describe("Forge Domain (XGE)", () => {
 			level: 8,
 			subclass: { name: "Forge Domain", shortName: "Forge", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Saint of Forge and Fire at level 17", () => {
@@ -1132,7 +1196,8 @@ describe("Forge Domain (XGE)", () => {
 			level: 17,
 			subclass: { name: "Forge Domain", shortName: "Forge", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasSaintOfForgeAndFire).toBe(true);
 	});
 });
 
@@ -1164,7 +1229,10 @@ describe("Grave Domain (XGE)", () => {
 			level: 1,
 			subclass: { name: "Grave Domain", shortName: "Grave", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasEyesOfTheGrave).toBe(true);
+		expect(calculations.eyesOfTheGraveUses).toBe(3);
 	});
 
 	it("should gain Channel Divinity: Path to the Grave at level 2", () => {
@@ -1174,7 +1242,8 @@ describe("Grave Domain (XGE)", () => {
 			level: 2,
 			subclass: { name: "Grave Domain", shortName: "Grave", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasPathToTheGrave).toBe(true);
 	});
 
 	it("should gain Sentinel at Death's Door at level 6", () => {
@@ -1184,7 +1253,10 @@ describe("Grave Domain (XGE)", () => {
 			level: 6,
 			subclass: { name: "Grave Domain", shortName: "Grave", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasSentinelAtDeathsDoor).toBe(true);
+		expect(calculations.sentinelAtDeathsDoorUses).toBe(3);
 	});
 
 	it("should gain Potent Spellcasting at level 8", () => {
@@ -1194,7 +1266,10 @@ describe("Grave Domain (XGE)", () => {
 			level: 8,
 			subclass: { name: "Grave Domain", shortName: "Grave", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasPotentSpellcasting).toBe(true);
+		expect(calculations.potentSpellcastingBonus).toBe(3);
 	});
 
 	it("should gain Keeper of Souls at level 17", () => {
@@ -1204,7 +1279,8 @@ describe("Grave Domain (XGE)", () => {
 			level: 17,
 			subclass: { name: "Grave Domain", shortName: "Grave", source: "XGE" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasKeeperOfSouls).toBe(true);
 	});
 });
 
@@ -1236,7 +1312,8 @@ describe("Order Domain (TCE)", () => {
 			level: 1,
 			subclass: { name: "Order Domain", shortName: "Order", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasVoiceOfAuthority).toBe(true);
 	});
 
 	it("should gain Channel Divinity: Order's Demand at level 2", () => {
@@ -1246,7 +1323,8 @@ describe("Order Domain (TCE)", () => {
 			level: 2,
 			subclass: { name: "Order Domain", shortName: "Order", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasOrdersDemand).toBe(true);
 	});
 
 	it("should gain Embodiment of the Law at level 6", () => {
@@ -1256,7 +1334,10 @@ describe("Order Domain (TCE)", () => {
 			level: 6,
 			subclass: { name: "Order Domain", shortName: "Order", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasEmbodimentOfTheLaw).toBe(true);
+		expect(calculations.embodimentOfTheLawUses).toBe(3);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -1266,7 +1347,9 @@ describe("Order Domain (TCE)", () => {
 			level: 8,
 			subclass: { name: "Order Domain", shortName: "Order", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Order's Wrath at level 17", () => {
@@ -1276,7 +1359,9 @@ describe("Order Domain (TCE)", () => {
 			level: 17,
 			subclass: { name: "Order Domain", shortName: "Order", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasOrdersWrath).toBe(true);
+		expect(calculations.ordersWrathDamage).toBe("2d8");
 	});
 });
 
@@ -1308,7 +1393,9 @@ describe("Peace Domain (TCE)", () => {
 			level: 1,
 			subclass: { name: "Peace Domain", shortName: "Peace", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasEmboldeningBond).toBe(true);
+		expect(calculations.emboldeningBondTargets).toBe(2);
 	});
 
 	it("should gain Channel Divinity: Balm of Peace at level 2", () => {
@@ -1318,7 +1405,8 @@ describe("Peace Domain (TCE)", () => {
 			level: 2,
 			subclass: { name: "Peace Domain", shortName: "Peace", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasBalmOfPeace).toBe(true);
 	});
 
 	it("should gain Protective Bond at level 6", () => {
@@ -1328,7 +1416,8 @@ describe("Peace Domain (TCE)", () => {
 			level: 6,
 			subclass: { name: "Peace Domain", shortName: "Peace", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasProtectiveBond).toBe(true);
 	});
 
 	it("should gain Potent Spellcasting at level 8", () => {
@@ -1338,7 +1427,10 @@ describe("Peace Domain (TCE)", () => {
 			level: 8,
 			subclass: { name: "Peace Domain", shortName: "Peace", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		state.setAbilityBase("wis", 16);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasPotentSpellcasting).toBe(true);
+		expect(calculations.potentSpellcastingBonus).toBe(3);
 	});
 
 	it("should gain Expansive Bond at level 17", () => {
@@ -1348,7 +1440,8 @@ describe("Peace Domain (TCE)", () => {
 			level: 17,
 			subclass: { name: "Peace Domain", shortName: "Peace", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasExpansiveBond).toBe(true);
 	});
 });
 
@@ -1380,7 +1473,8 @@ describe("Twilight Domain (TCE)", () => {
 			level: 1,
 			subclass: { name: "Twilight Domain", shortName: "Twilight", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasEyesOfNight).toBe(true);
 	});
 
 	it("should gain Vigilant Blessing at level 1", () => {
@@ -1390,7 +1484,8 @@ describe("Twilight Domain (TCE)", () => {
 			level: 1,
 			subclass: { name: "Twilight Domain", shortName: "Twilight", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(1);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasVigilantBlessing).toBe(true);
 	});
 
 	it("should gain Channel Divinity: Twilight Sanctuary at level 2", () => {
@@ -1400,7 +1495,9 @@ describe("Twilight Domain (TCE)", () => {
 			level: 2,
 			subclass: { name: "Twilight Domain", shortName: "Twilight", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(2);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasTwilightSanctuary).toBe(true);
+		expect(calculations.twilightSanctuaryTempHp).toBe(3);
 	});
 
 	it("should gain Steps of Night at level 6", () => {
@@ -1410,7 +1507,9 @@ describe("Twilight Domain (TCE)", () => {
 			level: 6,
 			subclass: { name: "Twilight Domain", shortName: "Twilight", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasStepsOfNight).toBe(true);
+		expect(calculations.stepsOfNightUses).toBeGreaterThanOrEqual(1);
 	});
 
 	it("should gain Divine Strike at level 8", () => {
@@ -1420,7 +1519,9 @@ describe("Twilight Domain (TCE)", () => {
 			level: 8,
 			subclass: { name: "Twilight Domain", shortName: "Twilight", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(8);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDivineStrike).toBe(true);
+		expect(calculations.divineStrikeDamage).toBe("1d8");
 	});
 
 	it("should gain Twilight Shroud at level 17", () => {
@@ -1430,7 +1531,8 @@ describe("Twilight Domain (TCE)", () => {
 			level: 17,
 			subclass: { name: "Twilight Domain", shortName: "Twilight", source: "TCE" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasTwilightShroud).toBe(true);
 	});
 });
 
@@ -1575,8 +1677,8 @@ describe("Life Domain (XPHB 2024)", () => {
 			level: 3,
 			subclass: { name: "Life Domain", shortName: "Life", source: "XPHB" },
 		});
-		// Life Domain XPHB has spells like Aid, Bless, Cure Wounds at level 3
-		expect(state.getTotalLevel()).toBe(3);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasDiscipleOfLife).toBe(true);
 	});
 
 	it("should gain Blessed Healer at level 6", () => {
@@ -1586,7 +1688,8 @@ describe("Life Domain (XPHB 2024)", () => {
 			level: 6,
 			subclass: { name: "Life Domain", shortName: "Life", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasBlessedHealer).toBe(true);
 	});
 
 	it("should gain Supreme Healing at level 17", () => {
@@ -1596,7 +1699,8 @@ describe("Life Domain (XPHB 2024)", () => {
 			level: 17,
 			subclass: { name: "Life Domain", shortName: "Life", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasSupremeHealing).toBe(true);
 	});
 });
 
@@ -1628,7 +1732,8 @@ describe("Light Domain (XPHB 2024)", () => {
 			level: 6,
 			subclass: { name: "Light Domain", shortName: "Light", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasImprovedFlare).toBe(true);
 	});
 
 	it("should gain Corona of Light at level 17", () => {
@@ -1638,7 +1743,8 @@ describe("Light Domain (XPHB 2024)", () => {
 			level: 17,
 			subclass: { name: "Light Domain", shortName: "Light", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasCoronaOfLight).toBe(true);
 	});
 });
 
@@ -1670,7 +1776,8 @@ describe("Trickery Domain (XPHB 2024)", () => {
 			level: 6,
 			subclass: { name: "Trickery Domain", shortName: "Trickery", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasTrickstersTransposition).toBe(true);
 	});
 
 	it("should gain Improved Duplicity at level 17", () => {
@@ -1680,7 +1787,8 @@ describe("Trickery Domain (XPHB 2024)", () => {
 			level: 17,
 			subclass: { name: "Trickery Domain", shortName: "Trickery", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasImprovedDuplicity).toBe(true);
 	});
 });
 
@@ -1712,7 +1820,8 @@ describe("War Domain (XPHB 2024)", () => {
 			level: 6,
 			subclass: { name: "War Domain", shortName: "War", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(6);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasWarGodsBlessing).toBe(true);
 	});
 
 	it("should gain Avatar of Battle at level 17", () => {
@@ -1722,7 +1831,8 @@ describe("War Domain (XPHB 2024)", () => {
 			level: 17,
 			subclass: { name: "War Domain", shortName: "War", source: "XPHB" },
 		});
-		expect(state.getTotalLevel()).toBe(17);
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasAvatarOfBattle).toBe(true);
 	});
 });
 
