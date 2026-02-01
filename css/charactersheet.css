@@ -2197,8 +2197,19 @@
 }
 
 .charsheet__ability-skill-prof {
-	font-size: 0.5rem;
+	font-size: 0.65rem;
 	color: var(--cs-text-muted, var(--rgb-text-muted));
+	cursor: pointer;
+	padding: 0.25rem 0.35rem;
+	border-radius: 3px;
+	transition: background-color 0.15s ease;
+	min-width: 1.2em;
+	text-align: center;
+}
+
+.charsheet__ability-skill-prof:hover {
+	background: var(--cs-bg-alt, rgba(0, 0, 0, 0.15));
+	transform: scale(1.1);
 }
 
 .charsheet__ability-skill-mini.proficient .charsheet__ability-skill-prof {
@@ -3530,6 +3541,12 @@
 	gap: var(--cs-space-md, 0.75rem);
 }
 
+.charsheet__physical-stat-grid--jumps {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--cs-space-sm, 0.25rem) var(--cs-space-md, 0.5rem);
+}
+
 .charsheet__physical-stat-item {
 	display: flex;
 	flex-direction: column;
@@ -4711,7 +4728,8 @@
 	border-radius: var(--cs-radius-full, 50%);
 	cursor: pointer;
 	transition: all var(--cs-transition-fast, 0.15s ease);
-	background: transparent;
+	background: var(--cs-accent-gold, #f59e0b); /* Default: filled = available */
+	box-shadow: 0 0 4px rgba(245, 158, 11, 0.5);
 }
 
 .charsheet__resource-pip:hover {
@@ -4719,9 +4737,10 @@
 	box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
 }
 
-.charsheet__resource-pip--used {
-	background: var(--cs-accent-gold, #f59e0b);
-	box-shadow: 0 0 4px rgba(245, 158, 11, 0.5);
+.charsheet__resource-pip--used,
+.charsheet__resource-pip.used {
+	background: transparent; /* Used/spent = empty */
+	box-shadow: none;
 }
 
 /* ========================================================================
@@ -7973,7 +7992,8 @@
 	border-radius: 50%;
 	cursor: pointer;
 	transition: all 0.15s ease;
-	background: transparent;
+	background: var(--rgb-name-gold, #d4a700); /* Default: filled = available */
+	box-shadow: 0 0 4px rgba(212, 167, 0, 0.3);
 }
 
 .charsheet__innate-pip:hover {
@@ -7982,8 +8002,8 @@
 }
 
 .charsheet__innate-pip.used {
-	background: var(--rgb-name-gold, #d4a700);
-	box-shadow: 0 0 4px rgba(212, 167, 0, 0.3);
+	background: transparent; /* Used = empty */
+	box-shadow: none;
 }
 
 .charsheet__innate-cast {
@@ -8210,9 +8230,8 @@
 	margin: 0.25rem 0;
 }
 
-.charsheet__resource-pip.used {
-	background: var(--rgb-link);
-}
+/* Combat resource pips use the same .used class - 
+   filled = available, empty/used = spent */
 
 .charsheet__combat-state-item {
 	cursor: pointer;

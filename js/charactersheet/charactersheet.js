@@ -1039,12 +1039,20 @@ class CharacterSheetPage {
 		$("#charsheet-disp-speed").text(speedDisplay);
 
 		// Jump distances based on Strength score
+		// Running jumps require a 10ft running start
+		// Standing jumps are half of running distance
 		const strScore = this._state.getAbilityScore("str");
-		const longJump = strScore; // Long jump = Strength score in feet (with 10ft running start)
-		const highJump = 3 + this._state.getAbilityMod("str"); // High jump = 3 + Str mod in feet (with 10ft running start)
+		const strMod = this._state.getAbilityMod("str");
+		
+		const longJumpRunning = strScore; // Long jump = Strength score in feet (with 10ft running start)
+		const highJumpRunning = 3 + strMod; // High jump = 3 + Str mod in feet (with 10ft running start)
+		const longJumpStanding = Math.floor(longJumpRunning / 2); // Standing = half of running
+		const highJumpStanding = Math.floor(Math.max(0, highJumpRunning) / 2); // Standing = half of running
 
-		$("#charsheet-disp-jump-long").text(`${longJump} ft.`);
-		$("#charsheet-disp-jump-high").text(`${Math.max(0, highJump)} ft.`);
+		$("#charsheet-disp-jump-long").text(`${longJumpRunning}`);
+		$("#charsheet-disp-jump-high").text(`${Math.max(0, highJumpRunning)}`);
+		$("#charsheet-disp-jump-long-stand").text(`${longJumpStanding}`);
+		$("#charsheet-disp-jump-high-stand").text(`${highJumpStanding}`);
 
 		// Carrying capacity (uses state method which respects Thelemar homebrew rules)
 		const carryCapacity = this._state.getCarryingCapacity();
@@ -1724,10 +1732,11 @@ class CharacterSheetPage {
 							const skillModStr = skillMod >= 0 ? `+${skillMod}` : `${skillMod}`;
 							let profIcon = "○";
 							let profClass = "";
-							if (profLevel === 2) { profIcon = "◉"; profClass = "expertise"; }
-							else if (profLevel === 1) { profIcon = "●"; profClass = "proficient"; }
-							return `<div class="charsheet__ability-skill-mini ${profClass}" data-skill="${skillKey}">
-								<span class="charsheet__ability-skill-prof">${profIcon}</span>
+							let profTitle = "Not proficient - Click to toggle";
+							if (profLevel === 2) { profIcon = "◉"; profClass = "expertise"; profTitle = "Expertise - Click to toggle"; }
+							else if (profLevel === 1) { profIcon = "●"; profClass = "proficient"; profTitle = "Proficient - Click to toggle"; }
+							return `<div class="charsheet__ability-skill-mini ${profClass}" data-skill="${skillKey}" title="Click to roll ${s.name}">
+								<span class="charsheet__ability-skill-prof" title="${profTitle}">${profIcon}</span>
 								<span class="charsheet__ability-skill-name">${s.name}</span>
 								<span class="charsheet__ability-skill-mod">${skillModStr}</span>
 							</div>`;
@@ -1753,7 +1762,19 @@ class CharacterSheetPage {
 				e.stopPropagation();
 				this._rollSavingThrow(abl, e);
 			});
+			// Click on proficiency indicator to toggle proficiency
+			$card.find(".charsheet__ability-skill-prof").on("click", (e) => {
+				e.stopPropagation();
+				e.preventDefault();
+				const $skillMini = $(e.currentTarget).closest(".charsheet__ability-skill-mini");
+				const skillKey = $skillMini.data("skill");
+				this._cycleSkillProficiency(skillKey);
+				this._renderAbilitiesDetailed(); // Re-render to update the display
+			});
+			// Click elsewhere on skill row to roll
 			$card.find(".charsheet__ability-skill-mini").on("click", (e) => {
+				// Don't roll if clicking the proficiency indicator (handled above)
+				if ($(e.target).closest(".charsheet__ability-skill-prof").length) return;
 				e.stopPropagation();
 				const skillKey = $(e.currentTarget).data("skill");
 				const skill = skills.find(s => s.name.toLowerCase().replace(/\s+/g, "") === skillKey);
