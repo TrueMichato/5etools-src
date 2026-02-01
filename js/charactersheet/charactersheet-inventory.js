@@ -689,7 +689,7 @@ class CharacterSheetInventory {
 					${item.weight ? `<div><strong>Weight:</strong> ${item.weight} lb.</div>` : ""}
 					${item.ac ? `<div><strong>AC:</strong> ${item.ac}${item.dexterityMax ? ` (max Dex ${item.dexterityMax > 0 ? "+" + item.dexterityMax : item.dexterityMax})` : ""}</div>` : ""}
 					${item.dmg1 ? `<div><strong>Damage:</strong> ${item.dmg1} ${item.dmgType ? Parser.dmgTypeToFull(item.dmgType) : ""}</div>` : ""}
-					${item.property?.length ? `<div><strong>Properties:</strong> ${item.property.map(p => Parser.itemPropertyToFull(p)).join(", ")}</div>` : ""}
+					${item.property?.length ? `<div><strong>Properties:</strong> ${item.property.map(p => this._formatProperty(p)).join(", ")}</div>` : ""}
 				</div>
 				${item.entries?.length ? `
 					<hr>
@@ -1355,10 +1355,10 @@ class CharacterSheetInventory {
 		if (item.weapon) {
 			html += `<p><strong>Damage:</strong> ${item.dmg1 || "—"} ${item.dmgType ? Parser.dmgTypeToFull(item.dmgType) : ""}</p>`;
 			if (item.property?.length) {
-				html += `<p><strong>Properties:</strong> ${item.property.map(p => Parser.itemPropertyToFull(p)).join(", ")}</p>`;
+				html += `<p><strong>Properties:</strong> ${item.property.map(p => this._formatProperty(p)).join(", ")}</p>`;
 			}
 			if (item.mastery?.length) {
-				html += `<p><strong>Mastery:</strong> ${item.mastery.map(m => m.split("|")[0].toTitleCase()).join(", ")}</p>`;
+				html += `<p><strong>Mastery:</strong> ${item.mastery.map(m => this._formatMastery(m)).join(", ")}</p>`;
 			}
 			if (item.range) {
 				html += `<p><strong>Range:</strong> ${item.range}</p>`;
@@ -1998,6 +1998,31 @@ class CharacterSheetInventory {
 
 		// Calculate other bonuses from equipped items
 		this._updateItemBonuses(items);
+	}
+
+	/**
+	 * Edit an item by its ID - scrolls to the item and opens its info modal
+	 * @param {string} itemId - The ID of the item to edit
+	 * @returns {boolean} True if the item was found and handled
+	 */
+	async editItemById (itemId) {
+		const items = this._state.getItems();
+		const item = items.find(i => i.id === itemId);
+		if (!item) return false;
+
+		// Scroll to and highlight the item in the inventory list
+		const $item = $(`.charsheet__item[data-item-id="${itemId}"]`);
+		if ($item.length) {
+			// Scroll the item into view
+			$item[0].scrollIntoView({behavior: "smooth", block: "center"});
+			// Highlight the item briefly
+			$item.addClass("charsheet__item--highlighted");
+			setTimeout(() => $item.removeClass("charsheet__item--highlighted"), 2000);
+		}
+
+		// Open the item info modal
+		await this._showItemInfo(itemId);
+		return true;
 	}
 	// #endregion
 }

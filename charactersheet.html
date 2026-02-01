@@ -404,25 +404,15 @@
 												<span class="charsheet__physical-stat-title">Jumps</span>
 											</div>
 											<div class="charsheet__physical-stat-grid charsheet__physical-stat-grid--jumps">
-												<div class="charsheet__physical-stat-item" title="Long Jump (Running): STR score in feet&#10;Long Jump (Standing): Half of running distance">
-													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-long">0</span>
-													<span class="charsheet__physical-stat-unit">ft.</span>
-													<span class="charsheet__physical-stat-label">Long 🏃</span>
+												<div class="charsheet__physical-stat-item" title="Long Jump (Running/Standing)">
+													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-long-run">0</span>/<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-long-stand">0</span>
+													<span class="charsheet__physical-stat-unit"> ft.</span>
+													<span class="charsheet__physical-stat-label"> Long (🏃/🧍)</span>
 												</div>
-												<div class="charsheet__physical-stat-item" title="High Jump (Running): 3 + STR modifier feet&#10;High Jump (Standing): Half of running distance">
-													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-high">0</span>
-													<span class="charsheet__physical-stat-unit">ft.</span>
-													<span class="charsheet__physical-stat-label">High 🏃</span>
-												</div>
-												<div class="charsheet__physical-stat-item" title="Standing Long Jump: Half of running long jump distance">
-													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-long-stand">0</span>
-													<span class="charsheet__physical-stat-unit">ft.</span>
-													<span class="charsheet__physical-stat-label">Long 🧍</span>
-												</div>
-												<div class="charsheet__physical-stat-item" title="Standing High Jump: Half of running high jump distance">
-													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-high-stand">0</span>
-													<span class="charsheet__physical-stat-unit">ft.</span>
-													<span class="charsheet__physical-stat-label">High 🧍</span>
+												<div class="charsheet__physical-stat-item" title="High Jump (Running/Standing)">
+													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-high-run">0</span>/<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-high-stand">0</span>
+													<span class="charsheet__physical-stat-unit"> ft.</span>
+													<span class="charsheet__physical-stat-label"> High (🏃/🧍)</span>
 												</div>
 											</div>
 										</div>
@@ -442,8 +432,8 @@
 											<div class="charsheet__physical-stat-grid">
 												<div class="charsheet__physical-stat-item charsheet__physical-stat-item--small" title="Push, Drag, or Lift = 2× Carry Capacity">
 													<span class="charsheet__physical-stat-value" id="charsheet-disp-push">300</span>
-													<span class="charsheet__physical-stat-unit">lb.</span>
-													<span class="charsheet__physical-stat-label">Push/Drag</span>
+													<span class="charsheet__physical-stat-unit"> lb.</span>
+													<span class="charsheet__physical-stat-label"> Push/Drag/Lift</span>
 												</div>
 											</div>
 										</div>
@@ -841,7 +831,7 @@
 						<div class="charsheet__section">
 							<h4 class="charsheet__section-title">
 								Conditions
-								<button class="btn btn-xs btn-primary ml-2" id="charsheet-combat-add-condition" title="Add Condition">
+								<button class="ve-btn ve-btn-xs ve-btn-primary ml-2" id="charsheet-combat-add-condition" title="Add Condition">
 									<span class="glyphicon glyphicon-plus"></span>
 								</button>
 							</h4>
@@ -874,7 +864,7 @@
 							</div>
 							<div class="charsheet__quick-states mt-2">
 								<button class="ve-btn ve-btn-xs ve-btn-danger mr-1" id="charsheet-combat-rage" title="Toggle Rage">Rage</button>
-								<button class="ve-btn ve-btn-xs ve-btn-primary mr-1" id="charsheet-combat-dodge" title="Take Dodge action">Dodge</button>
+								<button class="ve-btn ve-btn-xs ve-btn-primary mr-1" id="charsheet-combat-dodge">Dodge</button>
 								<button class="ve-btn ve-btn-xs ve-btn-warning" id="charsheet-combat-concentrate" title="Concentration">Concentrate</button>
 							</div>
 						</div>
