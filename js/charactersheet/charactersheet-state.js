@@ -3787,7 +3787,8 @@ class CharacterSheetState {
 			const customSkill = this._data.customSkills.find(s => 
 				s.name.toLowerCase().replace(/\s+/g, "") === normalizedSkill
 			);
-			ability = customSkill?.ability || "str";
+			// Custom skills can have no ability (empty string or null)
+			ability = customSkill?.ability || null;
 		}
 
 		return this.getSkillModWithAbility(normalizedSkill, ability);
@@ -3796,11 +3797,12 @@ class CharacterSheetState {
 	/**
 	 * Get skill modifier with a specific ability score (for alternate ability skill checks)
 	 * @param {string} skill - The skill key (e.g., "stealth", "athletics")
-	 * @param {string} ability - The ability to use (e.g., "dex", "int", "str")
+	 * @param {string|null} ability - The ability to use (e.g., "dex", "int", "str"), or null for flat bonus
 	 * @returns {number} The total skill modifier
 	 */
 	getSkillModWithAbility (skill, ability) {
-		const mod = this.getAbilityMod(ability);
+		// If no ability, only use proficiency and bonuses (flat skill check)
+		const mod = ability ? this.getAbilityMod(ability) : 0;
 		const profLevel = this.getSkillProficiency(skill);
 		
 		let profBonus = profLevel * this.getProficiencyBonus();
@@ -11737,15 +11739,17 @@ class CharacterSheetState {
 		// Calculate attack bonus and damage for a weapon
 		const isFinesse = item.property?.includes("F");
 		const isRanged = item.type === "R" || item.property?.includes("T");
+		const isMonkWeapon = this.isMonkWeapon?.(item) || item.isMonkWeapon;
 
-		let abilityMod;
-		if (isFinesse) {
-			abilityMod = Math.max(this.getAbilityMod("str"), this.getAbilityMod("dex"));
-		} else if (isRanged) {
-			abilityMod = this.getAbilityMod("dex");
+		let abilityUsed;
+		if (isRanged) {
+			abilityUsed = "dex";
+		} else if (isFinesse || isMonkWeapon) {
+			abilityUsed = this.getAbilityMod("dex") >= this.getAbilityMod("str") ? "dex" : "str";
 		} else {
-			abilityMod = this.getAbilityMod("str");
+			abilityUsed = "str";
 		}
+		const abilityMod = this.getAbilityMod(abilityUsed);
 
 		const profBonus = this._isWeaponProficient(item) ? this.getProficiencyBonus() : 0;
 		const attackBonus = abilityMod + profBonus + (this._data.customModifiers.attackBonus || 0);
@@ -11756,12 +11760,27 @@ class CharacterSheetState {
 
 		return {
 			name: item.name,
+			abilityMod: abilityUsed,
 			attackBonus,
 			damage,
 			damageType: item.dmgType || "bludgeoning",
 			range: item.range || (isRanged ? "80/320 ft." : "5 ft."),
 			properties: item.property || [],
+			isMonkWeapon: !!isMonkWeapon,
 		};
+	}
+
+	isMonkWeapon (item) {
+		const monkLevel = this.getClassLevel("Monk") || 0;
+		if (!monkLevel || !item) return false;
+		// Shortsword or simple melee weapon without heavy/two-handed/special
+		const props = item.property || [];
+		const hasHeavy = props.some(p => p === "H" || p.startsWith("H|"));
+		const hasTwoHanded = props.some(p => p === "2H" || p.startsWith("2H|"));
+		const hasSpecial = props.some(p => p === "S" || p.startsWith("S|"));
+		const isSimpleMelee = item.weaponCategory === "simple" && (item.type === "M" || item.type === "S" || item.type === "MW" || item.type === "SW");
+		const isShortsword = (item.name || "").toLowerCase() === "shortsword";
+		return (isShortsword || isSimpleMelee) && !(hasHeavy || hasTwoHanded || hasSpecial);
 	}
 
 	_isWeaponProficient (weapon) {

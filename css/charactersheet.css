@@ -3542,14 +3542,15 @@
 }
 
 .charsheet__physical-stat-grid--jumps {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--cs-space-sm, 0.25rem) var(--cs-space-md, 0.5rem);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: var(--cs-space-md, 0.75rem);
 }
 
 .charsheet__physical-stat-item {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
 	align-items: center;
 	text-align: center;
 }
@@ -5410,6 +5411,17 @@
 .charsheet__item.equipped {
 	border-color: var(--cs-success, #22c55e);
 	background: rgba(34, 197, 94, 0.05);
+}
+
+.charsheet__item--highlighted {
+	animation: charsheet-highlight-pulse 0.5s ease-in-out 3;
+	border-color: var(--cs-warning, #eab308) !important;
+	box-shadow: 0 0 8px var(--cs-warning, #eab308) !important;
+}
+
+@keyframes charsheet-highlight-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.7; }
 }
 
 .charsheet__item-main {

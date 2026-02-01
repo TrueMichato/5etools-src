@@ -403,9 +403,19 @@ class CharacterSheetCombat {
 
 
 	async _editAttack (attackId) {
-		// Check if it's an auto-generated attack
+		// Check if it's an auto-generated attack from equipped weapon
 		if (attackId?.startsWith?.("auto_")) {
-			JqueryUtil.doToast({type: "warning", content: "Weapon attacks are auto-generated from equipped weapons. Edit the item in Inventory instead."});
+			// Extract the weapon ID from the attack ID (format: auto_weaponId)
+			const weaponId = attackId.substring(5); // Remove "auto_" prefix
+			const weapon = this._state.getInventory().find(item => item.id === weaponId);
+			
+			if (!weapon) {
+				JqueryUtil.doToast({type: "warning", content: "Weapon not found in inventory."});
+				return;
+			}
+
+			// Open the full attack edit modal for the weapon (same as unarmed strike)
+			await this._pShowWeaponAttackModal(weapon);
 			return;
 		}
 
@@ -419,10 +429,328 @@ class CharacterSheetCombat {
 		await this._pShowAttackModal(attack);
 	}
 
+	/**
+	 * Show a full attack edit modal for a weapon - same fields as unarmed strike / manual attacks
+	 * Changes are stored as overrides on the weapon item in inventory
+	 */
+	async _pShowWeaponAttackModal (weapon) {
+		// Build the current attack stats from weapon data + any existing overrides
+		const isRanged = weapon.property?.some(p => p.includes?.("A") || String(p).toLowerCase().includes("ammunition")) || weapon.range;
+		const hasFinesse = weapon.property?.some(p => p.includes?.("F") || String(p).toLowerCase().includes("finesse"));
+		
+		// Get weapon's base stats with overrides
+		const overrides = weapon.attackOverrides || {};
+		const magicBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
+		const magicDmgBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
+		
+		const attack = {
+			name: overrides.name ?? weapon.name,
+			attackBonus: overrides.attackBonus ?? (weapon.customAttackBonus || 0),
+			damage: overrides.damage ?? weapon.dmg1 ?? "1d6",
+			damageType: overrides.damageType ?? (weapon.dmgType ? Parser.dmgTypeToFull(weapon.dmgType).toLowerCase() : "slashing"),
+			damageBonus: overrides.damageBonus ?? (weapon.customDamageBonus || 0),
+			range: overrides.range ?? (weapon.range || ""),
+			properties: overrides.properties ?? (weapon.property?.map(p => this._formatProperty(p)) || []),
+			isMelee: overrides.isMelee ?? !isRanged,
+			abilityMod: overrides.abilityMod ?? (isRanged ? "dex" : (hasFinesse ? "dex" : "str")),
+		};
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `⚔️ Edit ${weapon.name}`,
+			isMinHeight0: true,
+			cbClose: () => {
+				$(document).off("click.attackModalQuickSelect");
+			},
+		});
+
+		$modalInner.addClass("charsheet__attack-modal");
+
+		const $content = $(`<div class="charsheet__attack-form"></div>`).appendTo($modalInner);
+
+		// Info about magic item bonuses
+		if (magicBonus > 0 || magicDmgBonus > 0) {
+			$content.append($(`
+				<div class="ve-small ve-muted mb-2 p-2 rounded" style="background: var(--cs-bg-surface, #1e293b);">
+					<strong>Magic Item Bonuses (auto-applied):</strong> 
+					${magicBonus > 0 ? `+${magicBonus} to hit` : ""}
+					${magicBonus > 0 && magicDmgBonus > 0 ? ", " : ""}
+					${magicDmgBonus > 0 ? `+${magicDmgBonus} damage` : ""}
+				</div>
+			`));
+		}
+
+		// Main Info Section
+		const $mainSection = $(`
+			<div class="charsheet__attack-section">
+				<div class="charsheet__attack-section-header">
+					<span class="charsheet__attack-section-icon">📋</span>
+					<span class="charsheet__attack-section-title">Basic Information</span>
+				</div>
+				<div class="charsheet__attack-field">
+					<label class="charsheet__attack-label">Attack Name</label>
+					<input type="text" class="charsheet__attack-input charsheet__attack-input--name" value="${attack.name}" placeholder="e.g., Longsword">
+				</div>
+				<div class="charsheet__attack-field-row">
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Type</label>
+						<select class="charsheet__attack-select charsheet__attack-select--type">
+							<option value="melee" ${attack.isMelee ? "selected" : ""}>⚔️ Melee</option>
+							<option value="ranged" ${!attack.isMelee ? "selected" : ""}>🏹 Ranged</option>
+						</select>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Ability</label>
+						<select class="charsheet__attack-select charsheet__attack-select--ability">
+							${Parser.ABIL_ABVS.map(a => `<option value="${a}" ${attack.abilityMod === a ? "selected" : ""}>${Parser.attAbvToFull(a)} (${a.toUpperCase()})</option>`).join("")}
+						</select>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Range</label>
+						<input type="text" class="charsheet__attack-input charsheet__attack-input--range" value="${attack.range || ""}" placeholder="5 ft. or 30/120 ft.">
+					</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Combat Stats Section
+		const $combatSection = $(`
+			<div class="charsheet__attack-section">
+				<div class="charsheet__attack-section-header">
+					<span class="charsheet__attack-section-icon">🎯</span>
+					<span class="charsheet__attack-section-title">Combat Statistics</span>
+				</div>
+				<div class="charsheet__attack-field-row">
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Attack Bonus</label>
+						<div class="charsheet__attack-number-input">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--minus" data-field="bonus">−</button>
+							<input type="number" class="charsheet__attack-input charsheet__attack-input--bonus" value="${attack.attackBonus}">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--plus" data-field="bonus">+</button>
+						</div>
+						<div class="ve-small ve-muted">Custom bonus (${magicBonus > 0 ? `+${magicBonus} magic added auto` : "no magic bonus"})</div>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Damage Dice</label>
+						<input type="text" class="charsheet__attack-input charsheet__attack-input--damage" value="${attack.damage}" placeholder="1d8, 2d6, etc.">
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Damage Type</label>
+						<select class="charsheet__attack-select charsheet__attack-select--dmgtype">
+							${["bludgeoning", "piercing", "slashing", "fire", "cold", "lightning", "thunder", "poison", "acid", "necrotic", "radiant", "force", "psychic"].map(t =>
+								`<option value="${t}" ${attack.damageType === t ? "selected" : ""}>${this._getDamageTypeEmoji(t)} ${t.toTitleCase()}</option>`
+							).join("")}
+						</select>
+					</div>
+					<div class="charsheet__attack-field">
+						<label class="charsheet__attack-label">Damage Bonus</label>
+						<div class="charsheet__attack-number-input">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--minus" data-field="dmgbonus">−</button>
+							<input type="number" class="charsheet__attack-input charsheet__attack-input--dmgbonus" value="${attack.damageBonus}">
+							<button class="charsheet__attack-number-btn charsheet__attack-number-btn--plus" data-field="dmgbonus">+</button>
+						</div>
+						<div class="ve-small ve-muted">Custom bonus (${magicDmgBonus > 0 ? `+${magicDmgBonus} magic added auto` : "no magic bonus"})</div>
+					</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Properties Section
+		const $propsSection = $(`
+			<div class="charsheet__attack-section">
+				<div class="charsheet__attack-section-header">
+					<span class="charsheet__attack-section-icon">✨</span>
+					<span class="charsheet__attack-section-title">Properties</span>
+				</div>
+				<div class="charsheet__attack-field">
+					<label class="charsheet__attack-label">Weapon Properties</label>
+					<input type="text" class="charsheet__attack-input charsheet__attack-input--properties" value="${(attack.properties || []).join(", ")}" placeholder="e.g., versatile, finesse, light, two-handed">
+					<div class="charsheet__attack-properties-hint">Common: finesse, light, heavy, reach, thrown, two-handed, versatile</div>
+				</div>
+			</div>
+		`).appendTo($content);
+
+		// Get form elements
+		const $name = $content.find(".charsheet__attack-input--name");
+		const $type = $content.find(".charsheet__attack-select--type");
+		const $ability = $content.find(".charsheet__attack-select--ability");
+		const $range = $content.find(".charsheet__attack-input--range");
+		const $bonus = $content.find(".charsheet__attack-input--bonus");
+		const $damage = $content.find(".charsheet__attack-input--damage");
+		const $damageType = $content.find(".charsheet__attack-select--dmgtype");
+		const $damageBonus = $content.find(".charsheet__attack-input--dmgbonus");
+		const $properties = $content.find(".charsheet__attack-input--properties");
+
+		// Number input +/- buttons
+		$content.find(".charsheet__attack-number-btn").on("click", function () {
+			const field = $(this).data("field");
+			const $input = field === "bonus" ? $bonus : $damageBonus;
+			const delta = $(this).hasClass("charsheet__attack-number-btn--plus") ? 1 : -1;
+			$input.val(parseInt($input.val() || 0) + delta);
+		});
+
+		// Footer buttons
+		const $footer = $(`
+			<div class="charsheet__attack-footer">
+				<button class="charsheet__attack-btn charsheet__attack-btn--reset" title="Reset to weapon defaults">🔄 Reset</button>
+				<button class="charsheet__attack-btn charsheet__attack-btn--cancel">Cancel</button>
+				<button class="charsheet__attack-btn charsheet__attack-btn--save">💾 Save Changes</button>
+			</div>
+		`).appendTo($content);
+
+		// Reset button - clear all overrides
+		$footer.find(".charsheet__attack-btn--reset").on("click", () => {
+			delete weapon.attackOverrides;
+			delete weapon.customAttackBonus;
+			delete weapon.customDamageBonus;
+			this.renderAttacks();
+			this._page._inventory?.render?.();
+			this._page._saveCurrentCharacter?.();
+			JqueryUtil.doToast({type: "success", content: `Reset ${weapon.name} to default stats.`});
+			doClose(true);
+		});
+
+		$footer.find(".charsheet__attack-btn--cancel").on("click", () => doClose(false));
+		$footer.find(".charsheet__attack-btn--save").on("click", () => {
+			// Save overrides to the weapon item
+			weapon.attackOverrides = {
+				name: $name.val().trim(),
+				isMelee: $type.val() === "melee",
+				abilityMod: $ability.val(),
+				range: $range.val().trim(),
+				damage: $damage.val().trim(),
+				damageType: $damageType.val(),
+				properties: $properties.val().split(",").map(p => p.trim()).filter(Boolean),
+			};
+			// Also update legacy custom bonus fields for backward compatibility
+			weapon.customAttackBonus = parseInt($bonus.val()) || 0;
+			weapon.customDamageBonus = parseInt($damageBonus.val()) || 0;
+
+			this.renderAttacks();
+			this._page._inventory?.render?.();
+			this._page._saveCurrentCharacter?.();
+			
+			JqueryUtil.doToast({type: "success", content: `Updated ${weapon.name}.`});
+			doClose(true);
+		});
+
+		// Focus name field
+		setTimeout(() => $name.focus(), 100);
+	}
+
+	/**
+	 * Show a modal to edit weapon bonuses (attack bonus, damage bonus)
+	 * This is for equipped weapons - we store custom bonuses on the inventory item
+	 * @deprecated Use _pShowWeaponAttackModal instead for full editing
+	 */
+	async _pShowWeaponBonusModal (weapon) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `⚔️ Edit ${weapon.name} Bonuses`,
+			isMinHeight0: true,
+		});
+
+		// Get current custom bonuses (these are player-added bonuses, separate from magic item bonuses)
+		const customAttackBonus = weapon.customAttackBonus || 0;
+		const customDamageBonus = weapon.customDamageBonus || 0;
+
+		// Show the weapon's base stats and allow editing bonuses
+		const magicBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
+		const magicDmgBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
+
+		const $content = $(`
+			<div class="charsheet__weapon-bonus-modal">
+				<div class="ve-small ve-muted mb-3">
+					Edit custom bonuses for this weapon. Magic item bonuses (${magicBonus > 0 ? `+${magicBonus}` : "none"}) are applied automatically.
+				</div>
+				
+				<div class="charsheet__attack-section">
+					<div class="charsheet__attack-section-header">
+						<span class="charsheet__attack-section-icon">📋</span>
+						<span class="charsheet__attack-section-title">Weapon Info</span>
+					</div>
+					<div class="ve-flex gap-3 mb-2">
+						<div><strong>Damage:</strong> ${weapon.dmg1 || "1d4"} ${weapon.dmgType || ""}</div>
+						${weapon.property?.length ? `<div><strong>Properties:</strong> ${weapon.property.map(p => this._formatProperty(p)).join(", ")}</div>` : ""}
+					</div>
+				</div>
+
+				<div class="charsheet__attack-section">
+					<div class="charsheet__attack-section-header">
+						<span class="charsheet__attack-section-icon">🎯</span>
+						<span class="charsheet__attack-section-title">Custom Bonuses</span>
+					</div>
+					<div class="charsheet__attack-field-row">
+						<div class="charsheet__attack-field">
+							<label class="charsheet__attack-label">Attack Bonus</label>
+							<div class="charsheet__attack-number-input">
+								<button class="charsheet__attack-number-btn charsheet__attack-number-btn--minus" data-field="attack">−</button>
+								<input type="number" class="charsheet__attack-input charsheet__weapon-bonus-attack" value="${customAttackBonus}">
+								<button class="charsheet__attack-number-btn charsheet__attack-number-btn--plus" data-field="attack">+</button>
+							</div>
+							<div class="ve-small ve-muted">Added to attack rolls</div>
+						</div>
+						<div class="charsheet__attack-field">
+							<label class="charsheet__attack-label">Damage Bonus</label>
+							<div class="charsheet__attack-number-input">
+								<button class="charsheet__attack-number-btn charsheet__attack-number-btn--minus" data-field="damage">−</button>
+								<input type="number" class="charsheet__attack-input charsheet__weapon-bonus-damage" value="${customDamageBonus}">
+								<button class="charsheet__attack-number-btn charsheet__attack-number-btn--plus" data-field="damage">+</button>
+							</div>
+							<div class="ve-small ve-muted">Added to damage rolls</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		`).appendTo($modalInner);
+
+		// Number input buttons
+		$content.find(".charsheet__attack-number-btn").on("click", (e) => {
+			const $btn = $(e.currentTarget);
+			const field = $btn.data("field");
+			const isMinus = $btn.hasClass("charsheet__attack-number-btn--minus");
+			const $input = field === "attack" 
+				? $content.find(".charsheet__weapon-bonus-attack")
+				: $content.find(".charsheet__weapon-bonus-damage");
+			const current = parseInt($input.val()) || 0;
+			$input.val(current + (isMinus ? -1 : 1));
+		});
+
+		// Buttons
+		const $buttons = $(`
+			<div class="ve-flex-v-center ve-flex-h-right mt-3 gap-2">
+				<button class="ve-btn ve-btn-default">Cancel</button>
+				<button class="ve-btn ve-btn-primary">Save</button>
+			</div>
+		`).appendTo($modalInner);
+
+		$buttons.find(".ve-btn-default").on("click", () => doClose(false));
+		$buttons.find(".ve-btn-primary").on("click", () => {
+			// Save the custom bonuses to the weapon in inventory
+			weapon.customAttackBonus = parseInt($content.find(".charsheet__weapon-bonus-attack").val()) || 0;
+			weapon.customDamageBonus = parseInt($content.find(".charsheet__weapon-bonus-damage").val()) || 0;
+
+			// Re-render attacks and save
+			this.renderAttacks();
+			this._page._inventory?.render?.();
+			this._page._saveCurrentCharacter?.();
+			
+			JqueryUtil.doToast({type: "success", content: `Updated bonuses for ${weapon.name}.`});
+			doClose(true);
+		});
+	}
+
 	_removeAttack (attackId) {
-		// Check if it's an auto-generated attack
+		// Check if it's an auto-generated attack from equipped weapon
 		if (attackId?.startsWith?.("auto_")) {
-			JqueryUtil.doToast({type: "warning", content: "Weapon attacks are auto-generated from equipped weapons. Unequip the weapon in Inventory to remove."});
+			// Extract the weapon ID and unequip it
+			const weaponId = attackId.substring(5);
+			const weapon = this._state.getInventory().find(item => item.id === weaponId);
+			if (weapon) {
+				weapon.equipped = false;
+				this._page._inventory?.renderInventory?.();
+				this.renderAttacks();
+				this._page._saveCurrentCharacter?.();
+				JqueryUtil.doToast({type: "success", content: `Unequipped ${weapon.name}.`});
+			}
 			return;
 		}
 
@@ -709,28 +1037,36 @@ class CharacterSheetCombat {
 			// Check if we already have an attack for this weapon
 			const existingAttack = attacks.find(a => a.name === weapon.name);
 			if (!existingAttack) {
+				// Get any user overrides for this weapon's attack
+				const overrides = weapon.attackOverrides || {};
+				
 				// Auto-generate attack from weapon
 				const isRanged = weapon.properties?.some(p => p === "A" || p === "T" || p.startsWith("A|") || p.startsWith("T|"));
 				const hasFinesse = weapon.properties?.some(p => p === "F" || p.startsWith("F|"));
-				const abilityMod = isRanged ? "dex" : (hasFinesse ? "dex" : "str");
-
-				// Calculate magic bonuses - use all three bonus types
-				const attackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
-				const damageBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
-
+				const isMonkWeapon = this._state.isMonkWeapon?.(weapon);
+				const defaultAbility = isRanged ? "dex" : ((hasFinesse || isMonkWeapon) ? (this._state.getAbilityMod("dex") >= this._state.getAbilityMod("str") ? "dex" : "str") : "str");
+				
+				// Calculate total bonuses including magic item bonuses and custom bonuses
+				const magicAttackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
+				const magicDamageBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
+				const customAttackBonus = weapon.customAttackBonus || 0;
+				const customDamageBonus = weapon.customDamageBonus || 0;
+				
 				const autoAttack = {
 					id: `auto_${weapon.id}`,
-					name: weapon.name,
-					isMelee: !isRanged,
-					abilityMod,
-					attackBonus: attackBonus,
-					range: weapon.range || (isRanged ? "80/320 ft." : "5 ft."),
-					damage: weapon.damage || "1d6",
-					damageType: weapon.damageType || "slashing",
-					damageBonus: damageBonus,
-					properties: weapon.properties || [],
+					// Use overrides if present, otherwise use weapon defaults
+					name: overrides.name ?? weapon.name,
+					isMelee: overrides.isMelee ?? !isRanged,
+					abilityMod: overrides.abilityMod ?? defaultAbility,
+					attackBonus: magicAttackBonus + customAttackBonus,
+					range: overrides.range ?? (weapon.range || (isRanged ? "80/320 ft." : "5 ft.")),
+					damage: overrides.damage ?? (weapon.damage || "1d6"),
+					damageType: overrides.damageType ?? (weapon.damageType || "slashing"),
+					damageBonus: magicDamageBonus + customDamageBonus,
+					properties: overrides.properties ?? (weapon.properties || []),
 					mastery: weapon.mastery || [],
 					isAutoGenerated: true,
+					isMonkWeapon: !!isMonkWeapon,
 					sourceItem: weapon, // Keep reference for hover
 				};
 				attacks.push(autoAttack);
@@ -845,14 +1181,12 @@ class CharacterSheetCombat {
 					<button class="ve-btn ve-btn-sm ve-btn-danger charsheet__attack-damage" title="Roll Damage">
 						<span class="glyphicon glyphicon-fire"></span> Damage
 					</button>
-					${!isAutoGenerated && !isNaturalWeapon ? `
-						<button class="ve-btn ve-btn-sm ve-btn-default charsheet__attack-edit" title="Edit">
-							<span class="glyphicon glyphicon-pencil"></span>
-						</button>
-						<button class="ve-btn ve-btn-sm ve-btn-default charsheet__attack-remove" title="Remove">
-							<span class="glyphicon glyphicon-trash"></span>
-						</button>
-					` : ""}
+					<button class="ve-btn ve-btn-sm ve-btn-default charsheet__attack-edit" title="${isAutoGenerated ? "Edit in Inventory" : "Edit"}">
+						<span class="glyphicon glyphicon-pencil"></span>
+					</button>
+					<button class="ve-btn ve-btn-sm ve-btn-default charsheet__attack-remove" title="${isAutoGenerated ? "Unequip Weapon" : "Remove"}">
+						<span class="glyphicon glyphicon-trash"></span>
+					</button>
 				</div>
 			</div>
 		`);
@@ -1044,6 +1378,9 @@ class CharacterSheetCombat {
 	}
 
 	render () {
+		// Always refresh state reference from page at start of render
+		this._state = this._page.getState();
+		
 		this.renderAttacks();
 		this.renderDeathSaves();
 		this.renderCombatSpells();
@@ -1865,23 +2202,35 @@ class CharacterSheetCombat {
 	}
 
 	/**
-	 * Render active states in combat tab (quick access)
+	 * Render active states in combat tab - includes both active states and available activatable features
 	 */
 	renderCombatStates () {
 		const $container = $("#charsheet-combat-states");
 		if (!$container.length) return;
 
-		const allStates = this._state.getActiveStates?.() || [];
+		// Refresh state reference in case called independently (not via render())
+		this._state = this._page.getState();
+		
+		$container.empty();
+		
+		const allStates = this._state?.getActiveStates?.() || [];
 		// Filter for only currently active, non-condition states
 		const activeStates = allStates.filter(s => s.active && !s.isCondition);
 		
 		// Also check for concentration
 		const concentration = this._state.getConcentration?.();
 		
-		if (!activeStates.length && !concentration) {
-			$container.html(`<div class="ve-muted ve-text-center py-2">No active states</div>`);
-		} else {
-			$container.empty();
+		// Get activatable features (same as Overview tab)
+		const activatableFeatures = this._state.getActivatableFeatures?.() || [];
+		const availableFeatures = activatableFeatures.filter(af => !af.isActive);
+		
+		// === Section 1: Currently Active States ===
+		const hasActiveStates = activeStates.length > 0 || concentration;
+		
+		if (hasActiveStates) {
+			const $activeSection = $(`<div class="charsheet__combat-active-section mb-2">
+				<div class="ve-small ve-bold text-success mb-1">● Currently Active</div>
+			</div>`);
 			
 			// Render concentration first if active
 			if (concentration) {
@@ -1897,37 +2246,169 @@ class CharacterSheetCombat {
 					this.renderCombatStates();
 					this._page._renderActiveStates?.();
 					this._page._saveCurrentCharacter?.();
-					this._page._renderCharacter?.(); // Re-render to remove effects
+					this._page._renderCharacter?.();
 				});
-				$container.append($conc);
+				$activeSection.append($conc);
 			}
 			
 			for (const state of activeStates) {
 				const stateType = CharacterSheetState.ACTIVE_STATE_TYPES?.[state.stateTypeId];
+				const tooltipParts = [];
+				if (stateType?.description) tooltipParts.push(stateType.description);
+				if (stateType?.effects?.length) {
+					const effectsStr = stateType.effects.map(e => e.type && e.target ? `${e.type} → ${e.target}` : e.type || "").filter(Boolean).join("; ");
+					if (effectsStr) tooltipParts.push(`Effects: ${effectsStr}`);
+				}
+				const tooltip = tooltipParts.join("\n");
+				
+				// Try to create hoverable name from source feature
+				let stateNameHtml = state.name || stateType?.name || state.stateTypeId;
+				if (state.sourceFeatureId) {
+					const feature = this._state.getFeatures?.().find(f => f.id === state.sourceFeatureId);
+					if (feature) {
+						stateNameHtml = this._page._getFeatureHoverLink?.(feature) || stateNameHtml;
+					}
+				}
+				
+				// Check if this state can be manually ended
+				const isEndable = this._isStateEndable(state, stateType);
+				
 				const $state = $(`
-					<div class="charsheet__combat-state-item badge ${this._getStateBadgeClass(state.stateTypeId)} mr-1 mb-1" data-state-id="${state.id}">
-						${state.icon || stateType?.icon || "⚡"} ${state.name || stateType?.name || state.stateTypeId}
-						<span class="charsheet__state-remove ml-1" title="End">&times;</span>
+					<div class="charsheet__combat-state-item badge ${this._getStateBadgeClass(state.stateTypeId)} mr-1 mb-1" data-state-id="${state.id}" title="${tooltip}">
+						${state.icon || stateType?.icon || "⚡"} <span class="charsheet__state-name-link">${stateNameHtml}</span>
+						${isEndable ? `<span class="charsheet__state-remove ml-1" title="End">&times;</span>` : ""}
 					</div>
 				`);
 
-				$state.find(".charsheet__state-remove").on("click", (e) => {
-					e.stopPropagation();
-					this._state.deactivateState(state.stateTypeId);
-					this.renderCombatStates();
-					this.renderCombatDefenses(); // Update defenses (resistances may change)
-					this.renderCombatEffects(); // Update effects (advantage/disadvantage may change)
-					this._page._renderActiveStates?.();
-					this._page._saveCurrentCharacter?.();
-					this._page._renderCharacter?.(); // Re-render to remove effects
-				});
+				if (isEndable) {
+					$state.find(".charsheet__state-remove").on("click", (e) => {
+						e.stopPropagation();
+						this._state.deactivateState(state.stateTypeId);
+						this.renderCombatStates();
+						this.renderCombatDefenses();
+						this.renderCombatEffects();
+						this._page._renderActiveStates?.();
+						this._page._saveCurrentCharacter?.();
+						this._page._renderCharacter?.();
+					});
+				}
 
-				$container.append($state);
+				$activeSection.append($state);
 			}
+			
+			$container.append($activeSection);
+		}
+		
+		// === Section 2: Available to Activate ===
+		if (availableFeatures.length > 0) {
+			const $availableSection = $(`<div class="charsheet__combat-available-section">
+				<div class="ve-small ve-muted mb-1">Available to Activate</div>
+			</div>`);
+			
+			availableFeatures.forEach(({feature, activationInfo, resource, stateTypeId}) => {
+				const stateType = activationInfo.stateType || CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
+				const icon = stateType?.icon || "⚡";
+				const resourceCost = resource?.cost || activationInfo.exertionCost || stateType?.resourceCost || 1;
+				const hasResourceAvailable = !resource || resource.current >= resourceCost;
+				
+				// Get activation action type
+				const activationAction = activationInfo.activationAction || stateType?.activationAction;
+				const actionLabel = this._getActionLabel(activationAction);
+				
+				// Create hoverable feature name link
+				const featureNameHtml = this._page._getFeatureHoverLink?.(feature) || feature.name;
+				
+				// Build resource info string
+				let resourceInfo = "";
+				let resourceTooltip = "";
+				if (resource) {
+					const shortName = this._getShortResourceName(resource.name);
+					resourceInfo = `${resource.current}/${resource.max} ${shortName}`;
+					resourceTooltip = `Uses ${resourceCost} ${resource.name} (${resource.current}/${resource.max} remaining)`;
+				} else if (activationInfo.exertionCost) {
+					resourceInfo = `${resourceCost} Exertion`;
+					resourceTooltip = `Costs ${resourceCost} Exertion`;
+				}
+				
+				const $row = $(`
+					<div class="charsheet__activatable-row ve-flex-v-center py-1 px-2 mb-1 rounded" 
+						style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b)); font-size: 0.85em;">
+						<span class="mr-1">${icon}</span>
+						<span class="flex-grow-1 text-truncate charsheet__state-name-link">${featureNameHtml}</span>
+						<div class="ve-flex-v-center ml-auto">
+							${actionLabel ? `<span class="ve-small ve-muted mr-1">${actionLabel}</span>` : ""}
+							${resourceInfo ? `<span class="ve-small ve-muted mr-1" title="${resourceTooltip}">${resourceInfo}</span>` : ""}
+							<button class="ve-btn ve-btn-xs ve-btn-success charsheet__activate-btn" 
+								${!hasResourceAvailable ? `disabled title="Not enough ${resource?.name || 'uses'} remaining"` : ''}>
+								Activate
+							</button>
+						</div>
+					</div>
+				`);
+				
+				$row.find(".charsheet__activate-btn").on("click", () => {
+					this._page._activateFeatureState?.(feature, stateTypeId, stateType, resource, resourceCost);
+					// Sync both tabs
+					this.renderCombatStates();
+					this._page._renderActiveStates?.();
+				});
+				
+				$availableSection.append($row);
+			});
+			
+			$container.append($availableSection);
+		}
+		
+		// Show message if nothing to display
+		if (!hasActiveStates && availableFeatures.length === 0) {
+			$container.html(`<div class="ve-muted ve-text-center py-2">No activatable features</div>`);
 		}
 
 		// Set up quick activation buttons
 		this._initQuickStateButtons();
+	}
+
+	/**
+	 * Get action label for activation type
+	 */
+	_getActionLabel (actionType) {
+		switch (actionType) {
+			case "bonus": return "🎯";
+			case "action": return "⚔️";
+			case "reaction": return "↩️";
+			case "free": return "✨";
+			default: return "";
+		}
+	}
+
+	/**
+	 * Get a shortened version of a resource name for compact display
+	 */
+	_getShortResourceName (name) {
+		if (!name) return "";
+		// Common shortenings
+		const shortenings = {
+			"Bardic Inspiration": "Insp",
+			"Channel Divinity": "CD",
+			"Wild Shape": "WS",
+			"Ki Points": "Ki",
+			"Sorcery Points": "SP",
+			"Superiority Dice": "SD",
+			"Lay on Hands": "LoH",
+			"Rage": "Rage",
+			"Bladesong": "BS",
+		};
+		
+		// Check for exact or partial match
+		for (const [full, short] of Object.entries(shortenings)) {
+			if (name.toLowerCase().includes(full.toLowerCase())) return short;
+		}
+		
+		// Default: take first word or abbreviate
+		const words = name.split(/\s+/);
+		if (words.length === 1) return name.length > 8 ? name.slice(0, 6) + "…" : name;
+		// Take initials for multi-word names
+		return words.map(w => w[0]).join("").toUpperCase();
 	}
 
 	_getStateBadgeClass (typeId) {
@@ -1943,7 +2424,71 @@ class CharacterSheetCombat {
 		return classes[typeId] || "badge-secondary";
 	}
 
+	/**
+	 * Check if a state can be manually ended
+	 * Some passive features (like Tough, Unarmored Defense) shouldn't be endable
+	 */
+	_isStateEndable (state, stateType) {
+		// If stateType explicitly says not endable
+		if (stateType?.isPassive || stateType?.notEndable) return false;
+		
+		// If it has a resource cost, it's definitely endable (activated abilities)
+		if (stateType?.resourceCost || stateType?.resourceName) return true;
+		
+		// Check source feature to see if it's a passive ability
+		if (state.sourceFeatureId) {
+			const feature = this._state.getFeatures?.().find(f => f.id === state.sourceFeatureId);
+			if (feature) {
+				const name = feature.name?.toLowerCase() || "";
+				
+				// Passive abilities that shouldn't be endable (truly passive, always-on effects)
+				const passivePatterns = [
+					/^unarmored defense$/i,
+					/^tough$/i,
+					/^durable$/i,
+					/^observant$/i,
+					/^alert$/i,
+				];
+				
+				if (passivePatterns.some(p => p.test(name))) return false;
+			}
+		}
+		
+		return true;
+	}
+
 	_initQuickStateButtons () {
+		// Only show Rage button if rage resource exists in parsed data
+		const hasRageResource = this._state.getResources?.()?.some(r => r.name.toLowerCase().includes("rage"));
+		$("#charsheet-combat-rage").toggle(!!hasRageResource);
+		
+		// Show Concentration button if character has spellcasting
+		// getSpellSlots returns an object keyed by level, not an array
+		const spellSlots = this._state.getSpellSlots?.() || {};
+		const hasSpellSlots = Object.values(spellSlots).some(slot => slot?.max > 0);
+		const hasSpellcasting = hasSpellSlots || this._state.getSpells?.()?.length > 0;
+		$("#charsheet-combat-concentrate").toggle(!!hasSpellcasting);
+
+		// Add hover attributes to Dodge button for action hover tooltip
+		try {
+			const dodgeHash = UrlUtil.encodeForHash(["Dodge", Parser.SRC_XPHB].join(HASH_LIST_SEP));
+			const hoverAttrs = Renderer.hover.getHoverElementAttributes({
+				page: UrlUtil.PG_ACTIONS,
+				source: Parser.SRC_XPHB,
+				hash: dodgeHash,
+			});
+			// Parse the attributes string and apply them to the button
+			const $dodgeBtn = $("#charsheet-combat-dodge");
+			const tempEl = document.createElement("div");
+			tempEl.innerHTML = `<span ${hoverAttrs}></span>`;
+			const span = tempEl.firstChild;
+			for (const attr of span.attributes) {
+				$dodgeBtn.attr(attr.name, attr.value);
+			}
+		} catch (e) {
+			console.warn("[Combat] Error adding Dodge hover attrs:", e);
+		}
+
 		// Rage button
 		$("#charsheet-combat-rage").off("click").on("click", () => {
 			if (this._state.isStateTypeActive?.("rage")) {
@@ -2019,10 +2564,29 @@ class CharacterSheetCombat {
 	}
 
 	_updateQuickButtonStates () {
-		// Update button active states
-		$("#charsheet-combat-rage").toggleClass("active", this._state.isStateTypeActive?.("rage") || false);
-		$("#charsheet-combat-dodge").toggleClass("active", this._state.isStateTypeActive?.("dodge") || false);
-		$("#charsheet-combat-concentrate").toggleClass("active", this._state.isConcentrating?.() || false);
+		// Update button active states - toggle both active class and button color
+		const rageActive = this._state.isStateTypeActive?.("rage") || false;
+		const $rageBtn = $("#charsheet-combat-rage");
+		$rageBtn.toggleClass("active", rageActive);
+		$rageBtn.toggleClass("ve-btn-warning", rageActive).toggleClass("ve-btn-danger", !rageActive);
+		$rageBtn.text(rageActive ? "End Rage" : "Rage");
+		
+		const dodgeActive = this._state.isStateTypeActive?.("dodge") || false;
+		const $dodgeBtn = $("#charsheet-combat-dodge");
+		$dodgeBtn.toggleClass("active", dodgeActive);
+		$dodgeBtn.toggleClass("ve-btn-warning", dodgeActive).toggleClass("ve-btn-primary", !dodgeActive);
+		$dodgeBtn.text(dodgeActive ? "End Dodge" : "Dodge");
+		
+		const concentrating = this._state.isConcentrating?.() || false;
+		const $concBtn = $("#charsheet-combat-concentrate");
+		$concBtn.toggleClass("active", concentrating);
+		$concBtn.toggleClass("ve-btn-info", concentrating).toggleClass("ve-btn-warning", !concentrating);
+		if (concentrating) {
+			const spellName = this._state.getConcentration?.()?.spellName;
+			$concBtn.text(spellName ? `🔮 ${spellName}` : "Concentrating");
+		} else {
+			$concBtn.text("Concentrate");
+		}
 	}
 
 	/**

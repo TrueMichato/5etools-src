@@ -943,12 +943,16 @@ class CharacterSheetPage {
 			// Calculate passive score (10 + modifier) for ALL skills
 			const passiveScore = 10 + mod;
 
+			// Handle skills without ability (custom skills with no ability set)
+			const abilityDisplay = skill.ability ? skill.ability.toUpperCase() : "—";
+			const defaultAbility = skill.ability || "";
+
 			const customClass = skill.isCustom ? " charsheet__skill-row--custom" : "";
 			const $row = $(`
-				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${skill.ability}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
+				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${defaultAbility}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
 					<span class="charsheet__prof-indicator charsheet__prof-indicator--clickable ${profClass}" title="${profTitle}" data-skill="${skillKey}"></span>
 					<span class="charsheet__skill-name">${skill.name}${skill.isCustom ? " ✦" : ""}</span>
-					<span class="charsheet__skill-ability">(${skill.ability.toUpperCase()})</span>
+					<span class="charsheet__skill-ability">(${abilityDisplay})</span>
 					<span class="charsheet__skill-mod">${modStr}</span>
 					<span class="charsheet__skill-passive" title="Passive ${skill.name}: 10 + modifier = ${passiveScore}">${passiveScore}</span>
 					${skill.isCustom ? `<span class="charsheet__skill-delete" title="Remove custom skill">×</span>` : ""}
@@ -1049,9 +1053,9 @@ class CharacterSheetPage {
 		const longJumpStanding = Math.floor(longJumpRunning / 2); // Standing = half of running
 		const highJumpStanding = Math.floor(Math.max(0, highJumpRunning) / 2); // Standing = half of running
 
-		$("#charsheet-disp-jump-long").text(`${longJumpRunning}`);
-		$("#charsheet-disp-jump-high").text(`${Math.max(0, highJumpRunning)}`);
+		$("#charsheet-disp-jump-long-run").text(`${longJumpRunning}`);
 		$("#charsheet-disp-jump-long-stand").text(`${longJumpStanding}`);
+		$("#charsheet-disp-jump-high-run").text(`${Math.max(0, highJumpRunning)}`);
 		$("#charsheet-disp-jump-high-stand").text(`${highJumpStanding}`);
 
 		// Carrying capacity (uses state method which respects Thelemar homebrew rules)
@@ -2093,6 +2097,17 @@ class CharacterSheetPage {
 					// Create hoverable feature name link
 					const featureNameHtml = this._getFeatureHoverLink(feature);
 					
+					// Build resource info string
+					let resourceInfo = "";
+					let resourceTooltip = "";
+					if (resource) {
+						resourceInfo = `${resource.current}/${resource.max} ${resource.name}`;
+						resourceTooltip = `Uses ${resourceCost} ${resource.name} (${resource.current}/${resource.max} remaining)`;
+					} else if (activationInfo.exertionCost) {
+						resourceInfo = `${resourceCost} Exertion`;
+						resourceTooltip = `Costs ${resourceCost} Exertion`;
+					}
+					
 					const $row = $(`
 						<div class="charsheet__activatable-row ve-flex-v-center py-1 px-2 mb-1 rounded" 
 							style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b));">
@@ -2102,9 +2117,10 @@ class CharacterSheetPage {
 							</div>
 							<div class="charsheet__state-controls ml-auto ve-flex-v-center">
 								${actionLabel ? `<span class="ve-small ve-muted mr-1">${actionLabel}</span>` : ""}
+								${resourceInfo ? `<span class="ve-small ve-muted mr-2" title="${resourceTooltip}">${resourceInfo}</span>` : ""}
 								<button class="ve-btn ve-btn-xs ve-btn-success charsheet__activate-btn" 
-									${!hasResourceAvailable ? 'disabled title="No uses remaining"' : ''}>
-									Activate${resourceCost > 0 && resource ? ` (${resourceCost})` : ""}
+									${!hasResourceAvailable ? `disabled title="Not enough ${resource?.name || 'uses'} remaining"` : ''}>
+									Activate
 								</button>
 							</div>
 						</div>
@@ -2167,12 +2183,15 @@ class CharacterSheetPage {
 		const barbarianClass = this._state._data.classes?.find(c => c.name?.toLowerCase() === "barbarian");
 		const hasRecklessAttack = barbarianClass && barbarianClass.level >= 2;
 		
+		// Get hover attributes for Dodge action
+		const dodgeHoverAttrs = this._getActionHoverAttrs("Dodge");
+		
 		const $quickActions = $(`<div class="charsheet__quick-actions mt-2 pt-2 border-top">
 			<span class="ve-small ve-muted mr-2">Quick:</span>
-			<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("dodge") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-dodge-btn">
+			<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("dodge") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-dodge-btn" ${dodgeHoverAttrs}>
 				💨 ${activeStateTypeIds.has("dodge") ? "End Dodge" : "Dodge"}
 			</button>
-			${hasRecklessAttack ? `<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("recklessAttack") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-reckless-btn">
+			${hasRecklessAttack ? `<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("recklessAttack") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-reckless-btn" title="Reckless Attack: You gain advantage on melee weapon attack rolls using Strength, but attack rolls against you have advantage until your next turn.">
 				⚡ ${activeStateTypeIds.has("recklessAttack") ? "End Reckless" : "Reckless"}
 			</button>` : ""}
 		</div>`);
@@ -2313,26 +2332,72 @@ class CharacterSheetPage {
 				nameHtml = this._getFeatureHoverLink(feature);
 			}
 		}
+		// Tooltip from stateType description/effects
+		const tooltipParts = [];
+		if (stateType?.description) tooltipParts.push(stateType.description);
+		if (stateType?.effects?.length) {
+			const effectsStr = stateType.effects.map(e => e.type && e.target ? `${e.type} → ${e.target}` : e.type || "" ).filter(Boolean).join("; ");
+			if (effectsStr) tooltipParts.push(`Effects: ${effectsStr}`);
+		}
+		const tooltip = tooltipParts.join("\n");
+		
+		// Check if this state can be ended (some passive states shouldn't be endable)
+		const isEndable = this._isStateEndable(state, stateType);
 		
 		const $row = $(`
 			<div class="charsheet__state-row ${activeClass} ve-flex-v-center py-2 px-2 mb-1 rounded" 
 				style="background: ${isActive ? "rgba(40, 167, 69, 0.1)" : "transparent"}; border: 1px solid ${isActive ? "var(--bs-success, #28a745)" : "transparent"};">
-				<span class="charsheet__state-icon mr-2" style="font-size: 1.2em;">${icon}</span>
-				<span class="charsheet__state-name ve-bold">${nameHtml}</span>
+				<span class="charsheet__state-icon mr-2" style="font-size: 1.2em;" title="${tooltip}">${icon}</span>
+				<span class="charsheet__state-name ve-bold" title="${tooltip}">${nameHtml}</span>
 				<div class="charsheet__state-controls ml-auto">
-					<button class="ve-btn ve-btn-xs ve-btn-warning charsheet__end-state-btn">End</button>
+					${isEndable ? `<button class="ve-btn ve-btn-xs ve-btn-warning charsheet__end-state-btn">End</button>` : `<span class="ve-small ve-muted" title="This is a passive ability">Passive</span>`}
 				</div>
 			</div>
 		`);
 
-		$row.find(".charsheet__end-state-btn").on("click", () => {
-			this._state.deactivateState(state.stateTypeId);
-			this._saveCurrentCharacter();
-			this._renderActiveStates();
-			this._renderCharacter();
-		});
+		if (isEndable) {
+			$row.find(".charsheet__end-state-btn").on("click", () => {
+				this._state.deactivateState(state.stateTypeId);
+				this._saveCurrentCharacter();
+				this._renderActiveStates();
+				this._renderCharacter();
+			});
+		}
 
 		return $row;
+	}
+
+	/**
+	 * Check if a state can be manually ended
+	 * Some passive features (like Tough, Unarmored Defense) shouldn't be endable
+	 */
+	_isStateEndable (state, stateType) {
+		// If stateType explicitly says not endable
+		if (stateType?.isPassive || stateType?.notEndable) return false;
+		
+		// If it has a resource cost, it's definitely endable (activated abilities)
+		if (stateType?.resourceCost || stateType?.resourceName) return true;
+		
+		// Check source feature to see if it's a passive ability
+		if (state.sourceFeatureId) {
+			const feature = this._state.getFeatures().find(f => f.id === state.sourceFeatureId);
+			if (feature) {
+				const name = feature.name?.toLowerCase() || "";
+				
+				// Passive abilities that shouldn't be endable (truly passive, always-on effects)
+				const passivePatterns = [
+					/^unarmored defense$/i,
+					/^tough$/i,
+					/^durable$/i,
+					/^observant$/i,
+					/^alert$/i,
+				];
+				
+				if (passivePatterns.some(p => p.test(name))) return false;
+			}
+		}
+		
+		return true;
 	}
 
 	/**
@@ -2411,7 +2476,8 @@ class CharacterSheetPage {
 				// Auto-generate attack from weapon
 				const isRanged = weapon.properties?.some(p => p === "A" || p === "T" || p.startsWith("A|") || p.startsWith("T|"));
 				const hasFinesse = weapon.properties?.some(p => p === "F" || p.startsWith("F|"));
-				const abilityMod = isRanged ? "dex" : (hasFinesse ? "dex" : "str");
+				const isMonkWeapon = this._state.isMonkWeapon?.(weapon);
+				const abilityMod = isRanged ? "dex" : ((hasFinesse || isMonkWeapon) ? (this._state.getAbilityMod("dex") >= this._state.getAbilityMod("str") ? "dex" : "str") : "str");
 
 				// Calculate magic bonuses
 				const attackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
@@ -4170,6 +4236,26 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Get hover attributes for an action (Dodge, Disengage, etc.)
+	 * @param {string} actionName - The action name
+	 * @param {string} [source] - Source book abbreviation (defaults to XPHB)
+	 * @returns {string} Hover attributes string to embed in an element
+	 */
+	_getActionHoverAttrs (actionName, source = Parser.SRC_XPHB) {
+		try {
+			const hash = UrlUtil.encodeForHash([actionName, source].join(HASH_LIST_SEP));
+			return Renderer.hover.getHoverElementAttributes({
+				page: UrlUtil.PG_ACTIONS,
+				source,
+				hash,
+			});
+		} catch (e) {
+			console.warn("[CharSheet] Error getting action hover attrs:", e);
+			return `title="${actionName}"`;
+		}
+	}
+
+	/**
 	 * Create a condition hover link (instance method)
 	 * @param {string} condition - Condition name
 	 * @returns {string} HTML string for the link
@@ -5163,6 +5249,7 @@ class CharacterSheetPage {
 		});
 
 		const abilityOptions = [
+			{value: "", label: "None (flat bonus)"},
 			{value: "str", label: "Strength"},
 			{value: "dex", label: "Dexterity"},
 			{value: "con", label: "Constitution"},
