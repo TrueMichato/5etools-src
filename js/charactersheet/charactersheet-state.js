@@ -8859,6 +8859,261 @@ class CharacterSheetState {
 					if (isXPHB && level >= 20) {
 						calculations.hasWordsOfCreation = true;
 					}
+
+					// =====================================================================
+					// Bard Subclass Features (College)
+					// =====================================================================
+					const subclassName = cls.subclass?.name;
+					if (subclassName && level >= 3) {
+						const chaMod = this.getAbilityMod("cha");
+
+						switch (subclassName) {
+							case "College of Lore": {
+								// Bonus Proficiencies (level 3) - 3 skill proficiencies
+								calculations.hasLoreBonusProficiencies = true;
+								calculations.loreBonusSkills = 3;
+
+								// Cutting Words (level 3) - use Bardic Inspiration to subtract from enemy roll
+								calculations.hasCuttingWords = true;
+								calculations.cuttingWordsDie = inspirationDie;
+
+								// Additional Magical Secrets (level 6) - 2 extra spells from any class
+								if (level >= 6) {
+									calculations.hasAdditionalMagicalSecrets = true;
+									calculations.additionalMagicalSecretsCount = 2;
+								}
+
+								// Peerless Skill (level 14) - add Bardic Inspiration to own ability checks
+								if (level >= 14) {
+									calculations.hasPeerlessSkill = true;
+									calculations.peerlessSkillDie = inspirationDie;
+								}
+								break;
+							}
+
+							case "College of Valor": {
+								// Bonus Proficiencies (level 3) - medium armor, shields, martial weapons
+								calculations.hasValorBonusProficiencies = true;
+
+								// Combat Inspiration (level 3) - inspiration can add to AC or damage
+								calculations.hasCombatInspiration = true;
+								calculations.combatInspirationDie = inspirationDie;
+
+								// Extra Attack (level 6)
+								if (level >= 6) {
+									calculations.hasExtraAttack = true;
+									calculations.attacksPerAction = 2;
+								}
+
+								// Battle Magic (level 14) - bonus action weapon attack after casting spell
+								if (level >= 14) {
+									calculations.hasBattleMagic = true;
+								}
+								break;
+							}
+
+							case "College of Glamour": {
+								// Mantle of Inspiration (level 3) - give temp HP and movement to allies
+								calculations.hasMantleOfInspiration = true;
+								calculations.mantleOfInspirationTempHp = 5 + level;
+								calculations.mantleOfInspirationTargets = Math.max(1, chaMod);
+
+								// Enthralling Performance (level 3) - charm after 1-minute performance
+								calculations.hasEnthrallingPerformance = true;
+								calculations.enthrallingPerformanceTargets = Math.max(1, chaMod);
+								calculations.enthrallingPerformanceDc = 8 + profBonus + chaMod;
+
+								// Mantle of Majesty (level 6) - command spell as bonus action
+								if (level >= 6) {
+									calculations.hasMantleOfMajesty = true;
+									calculations.mantleOfMajestyDc = 8 + profBonus + chaMod;
+								}
+
+								// Unbreakable Majesty (level 14) - enemies have disadvantage on attacks
+								if (level >= 14) {
+									calculations.hasUnbreakableMajesty = true;
+								}
+								break;
+							}
+
+							case "College of Swords": {
+								// Bonus Proficiencies (level 3) - medium armor, scimitar
+								calculations.hasSwordsBonusProficiencies = true;
+
+								// Fighting Style (level 3) - Dueling or Two-Weapon Fighting
+								calculations.hasFightingStyle = true;
+
+								// Blade Flourish (level 3) - extra damage and effects on hit
+								calculations.hasBladeFlourish = true;
+								calculations.bladeFlourish = {
+									die: inspirationDie,
+									// Defensive Flourish: add to AC
+									defensiveAcBonus: inspirationDie,
+									// Slashing Flourish: damage nearby enemy
+									slashingDamage: inspirationDie,
+									// Mobile Flourish: push and move
+									mobilePushDistance: `5 + ${inspirationDie}`,
+								};
+
+								// Extra Attack (level 6)
+								if (level >= 6) {
+									calculations.hasExtraAttack = true;
+									calculations.attacksPerAction = 2;
+								}
+
+								// Master's Flourish (level 14) - use d6 instead of Inspiration die
+								if (level >= 14) {
+									calculations.hasMastersFlourish = true;
+									calculations.mastersFlourish = true;
+								}
+								break;
+							}
+
+							case "College of Whispers": {
+								// Psychic Blades (level 3) - extra psychic damage
+								calculations.hasPsychicBlades = true;
+								calculations.psychicBladesDamage = level >= 15 ? "8d6" : level >= 10 ? "5d6" : level >= 5 ? "3d6" : "2d6";
+
+								// Words of Terror (level 3) - frighten creature after conversation
+								calculations.hasWordsOfTerror = true;
+								calculations.wordsOfTerrorDc = 8 + profBonus + chaMod;
+
+								// Mantle of Whispers (level 6) - steal shadow to disguise
+								if (level >= 6) {
+									calculations.hasMantleOfWhispers = true;
+								}
+
+								// Shadow Lore (level 14) - charm creature that knows secret
+								if (level >= 14) {
+									calculations.hasShadowLore = true;
+									calculations.shadowLoreDc = 8 + profBonus + chaMod;
+								}
+								break;
+							}
+
+							case "College of Creation": {
+								// Mote of Potential (level 3) - enhance Bardic Inspiration
+								calculations.hasMoteOfPotential = true;
+								calculations.moteOfPotentialDie = inspirationDie;
+								calculations.moteAbilityCheckBonus = inspirationDie; // Roll twice, use highest
+								calculations.moteAttackDamage = inspirationDie; // Thunder damage to target + nearby
+								calculations.moteSavingThrowTempHp = `${inspirationDie} + ${chaMod}`; // Temp HP on save
+
+								// Performance of Creation (level 3) - create nonmagical item
+								calculations.hasPerformanceOfCreation = true;
+								calculations.createdItemMaxGp = level * 20;
+								calculations.createdItemMaxSize = level >= 14 ? "Huge" : level >= 6 ? "Large" : "Medium";
+								calculations.createdItemDuration = level >= 14 ? "hours" : "hours"; // Equal to proficiency bonus hours
+
+								// Animating Performance (level 6) - animate Large or smaller object
+								if (level >= 6) {
+									calculations.hasAnimatingPerformance = true;
+									calculations.dancingItemHp = 10 + 5 * level;
+									calculations.dancingItemAc = 16;
+									calculations.dancingItemAttackBonus = profBonus + chaMod;
+									calculations.dancingItemDamage = `1d10 + ${profBonus}`;
+								}
+
+								// Creative Crescendo (level 14) - create multiple items
+								if (level >= 14) {
+									calculations.hasCreativeCrescendo = true;
+									calculations.simultaneousCreations = Math.max(1, chaMod);
+								}
+								break;
+							}
+
+							case "College of Eloquence": {
+								// Silver Tongue (level 3) - minimum 10 on Persuasion/Deception
+								calculations.hasSilverTongue = true;
+								calculations.silverTongueMinimum = 10;
+
+								// Unsettling Words (level 3) - subtract Inspiration die from next save
+								calculations.hasUnsettlingWords = true;
+								calculations.unsettlingWordsDie = inspirationDie;
+
+								// Unfailing Inspiration (level 6) - inspiration die not expended on failure
+								if (level >= 6) {
+									calculations.hasUnfailingInspiration = true;
+								}
+
+								// Universal Speech (level 6) - speak to any creatures understanding
+								if (level >= 6) {
+									calculations.hasUniversalSpeech = true;
+									calculations.universalSpeechTargets = Math.max(1, chaMod);
+								}
+
+								// Infectious Inspiration (level 14) - grant new inspiration as reaction
+								if (level >= 14) {
+									calculations.hasInfectiousInspiration = true;
+									calculations.infectiousInspirationUses = Math.max(1, chaMod);
+								}
+								break;
+							}
+
+							case "College of Spirits": {
+								// Guiding Whispers (level 3) - guidance cantrip
+								calculations.hasGuidingWhispers = true;
+								calculations.guidanceCantrip = true;
+
+								// Spiritual Focus (level 3) - use focus for Bard spells, add d6 to healing/damage
+								calculations.hasSpiritualFocus = true;
+								if (level >= 6) {
+									calculations.spiritualFocusBonus = "1d6";
+								}
+
+								// Tales from Beyond (level 3) - expend Inspiration for random effect
+								calculations.hasTalesFromBeyond = true;
+								calculations.spiritTaleDie = level >= 14 ? "1d12" : level >= 6 ? "1d8" : "1d6";
+								calculations.spiritTaleDc = 8 + profBonus + chaMod;
+
+								// Spirit Session (level 6) - learn spell temporarily
+								if (level >= 6) {
+									calculations.hasSpiritSession = true;
+									calculations.spiritSessionMaxSpellLevel = Math.ceil(profBonus / 2);
+								}
+
+								// Mystical Connection (level 14) - roll tale die twice
+								if (level >= 14) {
+									calculations.hasMysticalConnection = true;
+								}
+								break;
+							}
+
+							case "College of Dance": {
+								// Dazzling Footwork (level 3) - unarmored defense (10 + DEX + CHA)
+								const dexMod = this.getAbilityMod("dex");
+								calculations.hasDazzlingFootwork = true;
+								calculations.danceUnarmoredDefense = 10 + dexMod + chaMod;
+								calculations.danceSpeedBonus = 10; // +10 ft speed with no armor/shield
+
+								// Inspiring Movement (level 3) - reaction to let ally move
+								calculations.hasInspiringMovement = true;
+
+								// Leading Evasion (level 6) - DEX saves within 5 ft add inspiration die
+								if (level >= 6) {
+									calculations.hasLeadingEvasion = true;
+									calculations.leadingEvasionDie = inspirationDie;
+								}
+
+								// Tandem Footwork (level 6) - bonus action Bardic Inspiration adds to initiative
+								if (level >= 6) {
+									calculations.hasTandemFootwork = true;
+									calculations.tandemFootworkDie = inspirationDie;
+								}
+
+								// Irresistible Dance (level 14) - enhance Otto's Irresistible Dance
+								if (level >= 14) {
+									calculations.hasIrresistibleDance = true;
+									calculations.irresistibleDanceDamage = `${chaMod}d10`; // Psychic damage on save
+								}
+								break;
+							}
+
+							default:
+								// Unrecognized subclass - set generic flag
+								calculations[`has${subclassName.replace(/\s+/g, "")}`] = true;
+						}
+					}
 					break;
 				}
 				case "Ranger": {

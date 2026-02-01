@@ -338,7 +338,15 @@ describe("College of Lore (PHB)", () => {
 				level: 6,
 				subclass: {name: "College of Lore", shortName: "Lore", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAdditionalMagicalSecrets).toBe(true);
+			expect(calculations.additionalMagicalSecretsCount).toBe(2);
+		});
+
+		it("should not have Additional Magical Secrets before level 6", () => {
+			// Already level 3 from beforeEach
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAdditionalMagicalSecrets).toBeUndefined();
 		});
 	});
 
@@ -350,7 +358,58 @@ describe("College of Lore (PHB)", () => {
 				level: 14,
 				subclass: {name: "College of Lore", shortName: "Lore", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPeerlessSkill).toBe(true);
+			expect(calculations.peerlessSkillDie).toBe("1d10"); // d10 at level 10-14
+		});
+
+		it("should have d12 Peerless Skill die at level 15+", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 15,
+				subclass: {name: "College of Lore", shortName: "Lore", source: "PHB"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.peerlessSkillDie).toBe("1d12");
+		});
+
+		it("should not have Peerless Skill before level 14", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 10,
+				subclass: {name: "College of Lore", shortName: "Lore", source: "PHB"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPeerlessSkill).toBeUndefined();
+		});
+	});
+
+	describe("Cutting Words", () => {
+		it("should have Cutting Words at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCuttingWords).toBe(true);
+			expect(calculations.cuttingWordsDie).toBe("1d6"); // Level 3 = d6
+		});
+
+		it("should scale Cutting Words die with level", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 10,
+				subclass: {name: "College of Lore", shortName: "Lore", source: "PHB"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.cuttingWordsDie).toBe("1d10");
+		});
+	});
+
+	describe("Bonus Proficiencies", () => {
+		it("should have 3 bonus skill proficiencies at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasLoreBonusProficiencies).toBe(true);
+			expect(calculations.loreBonusSkills).toBe(3);
 		});
 	});
 });
@@ -382,6 +441,21 @@ describe("College of Valor (PHB)", () => {
 		expect(classes[0].subclass.name).toBe("College of Valor");
 	});
 
+	describe("Combat Inspiration", () => {
+		it("should have Combat Inspiration at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCombatInspiration).toBe(true);
+			expect(calculations.combatInspirationDie).toBe("1d6");
+		});
+	});
+
+	describe("Bonus Proficiencies", () => {
+		it("should have martial weapon and armor proficiencies at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasValorBonusProficiencies).toBe(true);
+		});
+	});
+
 	describe("Extra Attack (Level 6)", () => {
 		it("should have Extra Attack at level 6", () => {
 			state.addClass({
@@ -390,7 +464,15 @@ describe("College of Valor (PHB)", () => {
 				level: 6,
 				subclass: {name: "College of Valor", shortName: "Valor", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasExtraAttack).toBe(true);
+			expect(calculations.attacksPerAction).toBe(2);
+		});
+
+		it("should not have Extra Attack before level 6", () => {
+			// Already level 3 from beforeEach
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasExtraAttack).toBeUndefined();
 		});
 	});
 
@@ -402,7 +484,19 @@ describe("College of Valor (PHB)", () => {
 				level: 14,
 				subclass: {name: "College of Valor", shortName: "Valor", source: "PHB"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBattleMagic).toBe(true);
+		});
+
+		it("should not have Battle Magic before level 14", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 10,
+				subclass: {name: "College of Valor", shortName: "Valor", source: "PHB"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBattleMagic).toBeUndefined();
 		});
 	});
 });
@@ -431,6 +525,34 @@ describe("College of Glamour (XGE)", () => {
 		expect(classes[0].subclass.name).toBe("College of Glamour");
 	});
 
+	describe("Mantle of Inspiration", () => {
+		it("should have Mantle of Inspiration at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMantleOfInspiration).toBe(true);
+			expect(calculations.mantleOfInspirationTempHp).toBe(8); // 5 + level 3
+			expect(calculations.mantleOfInspirationTargets).toBe(3); // CHA mod = 3
+		});
+
+		it("should scale temp HP with level", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 10,
+				subclass: {name: "College of Glamour", shortName: "Glamour", source: "XGE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.mantleOfInspirationTempHp).toBe(15); // 5 + level 10
+		});
+	});
+
+	describe("Enthralling Performance", () => {
+		it("should have Enthralling Performance at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasEnthrallingPerformance).toBe(true);
+			expect(calculations.enthrallingPerformanceDc).toBe(13); // 8 + 2 (prof) + 3 (CHA)
+		});
+	});
+
 	describe("Mantle of Majesty (Level 6)", () => {
 		it("should have Mantle of Majesty at level 6", () => {
 			state.addClass({
@@ -439,7 +561,14 @@ describe("College of Glamour (XGE)", () => {
 				level: 6,
 				subclass: {name: "College of Glamour", shortName: "Glamour", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMantleOfMajesty).toBe(true);
+			expect(calculations.mantleOfMajestyDc).toBe(14); // 8 + 3 (prof) + 3 (CHA)
+		});
+
+		it("should not have Mantle of Majesty before level 6", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMantleOfMajesty).toBeUndefined();
 		});
 	});
 
@@ -451,7 +580,8 @@ describe("College of Glamour (XGE)", () => {
 				level: 14,
 				subclass: {name: "College of Glamour", shortName: "Glamour", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasUnbreakableMajesty).toBe(true);
 		});
 	});
 });
@@ -481,6 +611,39 @@ describe("College of Swords (XGE)", () => {
 		expect(classes[0].subclass.name).toBe("College of Swords");
 	});
 
+	describe("Fighting Style", () => {
+		it("should have Fighting Style at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasFightingStyle).toBe(true);
+		});
+	});
+
+	describe("Blade Flourish", () => {
+		it("should have Blade Flourish at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBladeFlourish).toBe(true);
+			expect(calculations.bladeFlourish.die).toBe("1d6");
+		});
+
+		it("should scale Blade Flourish die with level", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 10,
+				subclass: {name: "College of Swords", shortName: "Swords", source: "XGE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bladeFlourish.die).toBe("1d10");
+		});
+	});
+
+	describe("Bonus Proficiencies", () => {
+		it("should have medium armor and scimitar proficiency at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSwordsBonusProficiencies).toBe(true);
+		});
+	});
+
 	describe("Extra Attack (Level 6)", () => {
 		it("should have Extra Attack at level 6", () => {
 			state.addClass({
@@ -489,7 +652,9 @@ describe("College of Swords (XGE)", () => {
 				level: 6,
 				subclass: {name: "College of Swords", shortName: "Swords", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasExtraAttack).toBe(true);
+			expect(calculations.attacksPerAction).toBe(2);
 		});
 	});
 
@@ -501,7 +666,8 @@ describe("College of Swords (XGE)", () => {
 				level: 14,
 				subclass: {name: "College of Swords", shortName: "Swords", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMastersFlourish).toBe(true);
 		});
 	});
 });
@@ -530,11 +696,52 @@ describe("College of Whispers (XGE)", () => {
 		expect(classes[0].subclass.name).toBe("College of Whispers");
 	});
 
-	describe("Psychic Blades Damage Scaling", () => {
-		it("should scale damage with level", () => {
-			// Psychic Blades: 2d6 at 3, 3d6 at 5, 5d6 at 10, 8d6 at 15
-			const level = state.getClasses()[0].level;
-			expect(level).toBe(3);
+	describe("Psychic Blades", () => {
+		it("should have Psychic Blades at level 3 with 2d6 damage", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPsychicBlades).toBe(true);
+			expect(calculations.psychicBladesDamage).toBe("2d6");
+		});
+
+		it("should have 3d6 Psychic Blades at level 5", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 5,
+				subclass: {name: "College of Whispers", shortName: "Whispers", source: "XGE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.psychicBladesDamage).toBe("3d6");
+		});
+
+		it("should have 5d6 Psychic Blades at level 10", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 10,
+				subclass: {name: "College of Whispers", shortName: "Whispers", source: "XGE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.psychicBladesDamage).toBe("5d6");
+		});
+
+		it("should have 8d6 Psychic Blades at level 15", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 15,
+				subclass: {name: "College of Whispers", shortName: "Whispers", source: "XGE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.psychicBladesDamage).toBe("8d6");
+		});
+	});
+
+	describe("Words of Terror", () => {
+		it("should have Words of Terror at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasWordsOfTerror).toBe(true);
+			expect(calculations.wordsOfTerrorDc).toBe(13); // 8 + 2 (prof) + 3 (CHA)
 		});
 	});
 
@@ -546,7 +753,8 @@ describe("College of Whispers (XGE)", () => {
 				level: 6,
 				subclass: {name: "College of Whispers", shortName: "Whispers", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMantleOfWhispers).toBe(true);
 		});
 	});
 
@@ -558,7 +766,9 @@ describe("College of Whispers (XGE)", () => {
 				level: 14,
 				subclass: {name: "College of Whispers", shortName: "Whispers", source: "XGE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasShadowLore).toBe(true);
+			expect(calculations.shadowLoreDc).toBe(16); // 8 + 5 (prof at level 14) + 3 (CHA mod)
 		});
 	});
 });
@@ -587,6 +797,45 @@ describe("College of Creation (TCE)", () => {
 		expect(classes[0].subclass.name).toBe("College of Creation");
 	});
 
+	describe("Mote of Potential", () => {
+		it("should have Mote of Potential at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMoteOfPotential).toBe(true);
+			expect(calculations.moteOfPotentialDie).toBe("1d6");
+		});
+	});
+
+	describe("Performance of Creation", () => {
+		it("should have Performance of Creation at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPerformanceOfCreation).toBe(true);
+			expect(calculations.createdItemMaxGp).toBe(60); // level * 20 = 3 * 20
+			expect(calculations.createdItemMaxSize).toBe("Medium");
+		});
+
+		it("should allow Large items at level 6", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 6,
+				subclass: {name: "College of Creation", shortName: "Creation", source: "TCE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.createdItemMaxSize).toBe("Large");
+		});
+
+		it("should allow Huge items at level 14", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 14,
+				subclass: {name: "College of Creation", shortName: "Creation", source: "TCE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.createdItemMaxSize).toBe("Huge");
+		});
+	});
+
 	describe("Animating Performance (Level 6)", () => {
 		it("should have Animating Performance at level 6", () => {
 			state.addClass({
@@ -595,7 +844,21 @@ describe("College of Creation (TCE)", () => {
 				level: 6,
 				subclass: {name: "College of Creation", shortName: "Creation", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasAnimatingPerformance).toBe(true);
+			expect(calculations.dancingItemHp).toBe(40); // 10 + 5 * 6
+			expect(calculations.dancingItemAc).toBe(16);
+		});
+
+		it("should scale Dancing Item HP with level", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 10,
+				subclass: {name: "College of Creation", shortName: "Creation", source: "TCE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.dancingItemHp).toBe(60); // 10 + 5 * 10
 		});
 	});
 
@@ -607,7 +870,9 @@ describe("College of Creation (TCE)", () => {
 				level: 14,
 				subclass: {name: "College of Creation", shortName: "Creation", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasCreativeCrescendo).toBe(true);
+			expect(calculations.simultaneousCreations).toBe(3); // CHA mod
 		});
 	});
 });
@@ -638,20 +903,42 @@ describe("College of Eloquence (TCE)", () => {
 
 	describe("Silver Tongue", () => {
 		it("should have Silver Tongue at level 3", () => {
-			// Silver Tongue: treat d20 roll of 9 or lower as 10 for Persuasion/Deception
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSilverTongue).toBe(true);
+			expect(calculations.silverTongueMinimum).toBe(10);
+		});
+	});
+
+	describe("Unsettling Words", () => {
+		it("should have Unsettling Words at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasUnsettlingWords).toBe(true);
+			expect(calculations.unsettlingWordsDie).toBe("1d6");
 		});
 	});
 
 	describe("Unfailing Inspiration & Universal Speech (Level 6)", () => {
-		it("should have level 6 features", () => {
+		it("should have Unfailing Inspiration at level 6", () => {
 			state.addClass({
 				name: "Bard",
 				source: "PHB",
 				level: 6,
 				subclass: {name: "College of Eloquence", shortName: "Eloquence", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasUnfailingInspiration).toBe(true);
+		});
+
+		it("should have Universal Speech at level 6", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 6,
+				subclass: {name: "College of Eloquence", shortName: "Eloquence", source: "TCE"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasUniversalSpeech).toBe(true);
+			expect(calculations.universalSpeechTargets).toBe(3); // CHA mod
 		});
 	});
 
@@ -663,7 +950,9 @@ describe("College of Eloquence (TCE)", () => {
 				level: 14,
 				subclass: {name: "College of Eloquence", shortName: "Eloquence", source: "TCE"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasInfectiousInspiration).toBe(true);
+			expect(calculations.infectiousInspirationUses).toBe(3); // CHA mod
 		});
 	});
 });
@@ -692,6 +981,62 @@ describe("College of Spirits (VRGR)", () => {
 		expect(classes[0].subclass.name).toBe("College of Spirits");
 	});
 
+	describe("Guiding Whispers", () => {
+		it("should have Guiding Whispers at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasGuidingWhispers).toBe(true);
+			expect(calculations.guidanceCantrip).toBe(true);
+		});
+	});
+
+	describe("Spiritual Focus", () => {
+		it("should have Spiritual Focus at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSpiritualFocus).toBe(true);
+		});
+
+		it("should add d6 to healing/damage at level 6", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 6,
+				subclass: {name: "College of Spirits", shortName: "Spirits", source: "VRGR"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.spiritualFocusBonus).toBe("1d6");
+		});
+	});
+
+	describe("Tales from Beyond", () => {
+		it("should have Tales from Beyond at level 3 with d6", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasTalesFromBeyond).toBe(true);
+			expect(calculations.spiritTaleDie).toBe("1d6");
+		});
+
+		it("should use d8 for Tales from Beyond at level 6", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 6,
+				subclass: {name: "College of Spirits", shortName: "Spirits", source: "VRGR"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.spiritTaleDie).toBe("1d8");
+		});
+
+		it("should use d12 for Tales from Beyond at level 14", () => {
+			state.addClass({
+				name: "Bard",
+				source: "PHB",
+				level: 14,
+				subclass: {name: "College of Spirits", shortName: "Spirits", source: "VRGR"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.spiritTaleDie).toBe("1d12");
+		});
+	});
+
 	describe("Spirit Session (Level 6)", () => {
 		it("should have Spirit Session at level 6", () => {
 			state.addClass({
@@ -700,7 +1045,9 @@ describe("College of Spirits (VRGR)", () => {
 				level: 6,
 				subclass: {name: "College of Spirits", shortName: "Spirits", source: "VRGR"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSpiritSession).toBe(true);
+			expect(calculations.spiritSessionMaxSpellLevel).toBe(2); // ceil(3/2) = 2 at prof +3
 		});
 	});
 
@@ -712,7 +1059,8 @@ describe("College of Spirits (VRGR)", () => {
 				level: 14,
 				subclass: {name: "College of Spirits", shortName: "Spirits", source: "VRGR"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasMysticalConnection).toBe(true);
 		});
 	});
 });
@@ -867,39 +1215,68 @@ describe("College of Dance (XPHB)", () => {
 
 	describe("Dazzling Footwork", () => {
 		it("should have Dazzling Footwork at level 3", () => {
-			expect(state.getTotalLevel()).toBe(3);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasDazzlingFootwork).toBe(true);
 		});
 
 		it("should calculate Unarmored Defense as 10 + DEX + CHA", () => {
+			const calculations = state.getFeatureCalculations();
 			// AC = 10 + DEX mod + CHA mod = 10 + 3 + 3 = 16
-			const dexMod = state.getAbilityMod("dex");
-			const chaMod = state.getAbilityMod("cha");
-			const expectedAC = 10 + dexMod + chaMod;
-			expect(expectedAC).toBe(16);
+			expect(calculations.danceUnarmoredDefense).toBe(16);
+		});
+
+		it("should have +10 ft speed bonus", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.danceSpeedBonus).toBe(10);
 		});
 	});
 
-	describe("Inspiring Movement (Level 6)", () => {
-		it("should have Inspiring Movement at level 6", () => {
+	describe("Inspiring Movement", () => {
+		it("should have Inspiring Movement at level 3", () => {
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasInspiringMovement).toBe(true);
+		});
+	});
+
+	describe("Leading Evasion (Level 6)", () => {
+		it("should have Leading Evasion at level 6", () => {
 			state.addClass({
 				name: "Bard",
 				source: "XPHB",
 				level: 6,
 				subclass: {name: "College of Dance", shortName: "Dance", source: "XPHB"},
 			});
-			expect(state.getTotalLevel()).toBe(6);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasLeadingEvasion).toBe(true);
+			expect(calculations.leadingEvasionDie).toBe("1d8"); // Level 5+ = d8
 		});
 	});
 
-	describe("Leading Evasion (Level 14)", () => {
-		it("should have Leading Evasion at level 14", () => {
+	describe("Tandem Footwork (Level 6)", () => {
+		it("should have Tandem Footwork at level 6", () => {
+			state.addClass({
+				name: "Bard",
+				source: "XPHB",
+				level: 6,
+				subclass: {name: "College of Dance", shortName: "Dance", source: "XPHB"},
+			});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasTandemFootwork).toBe(true);
+			expect(calculations.tandemFootworkDie).toBe("1d8");
+		});
+	});
+
+	describe("Irresistible Dance (Level 14)", () => {
+		it("should have Irresistible Dance at level 14", () => {
 			state.addClass({
 				name: "Bard",
 				source: "XPHB",
 				level: 14,
 				subclass: {name: "College of Dance", shortName: "Dance", source: "XPHB"},
 			});
-			expect(state.getTotalLevel()).toBe(14);
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasIrresistibleDance).toBe(true);
+			expect(calculations.irresistibleDanceDamage).toBe("3d10"); // CHA mod = 3
 		});
 	});
 });

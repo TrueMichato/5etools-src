@@ -8,44 +8,88 @@ While the character sheet has extensive functionality and test coverage, several
 
 ---
 
-## Implementation Gaps
+## Implementation Status
 
-### Subclass Feature Calculations
+### Fully Implemented Subclasses ✅
 
-Many subclasses have boolean flags (`hasFeature`) but lack the mechanical calculations needed for full functionality.
+The following classes have **complete** mechanical calculations for all subclasses:
 
-#### Artificer Subclasses
+#### Artificer Subclasses ✅
+All Artificer subclasses are fully implemented with mechanical calculations:
+- **Alchemist**: `experimentalElixirCount`, `alchemicalSavantBonus`, `restorativeReagentsUses`, `restorativeReagentsTempHp`
+- **Armorer**: `thunderGauntletsDamage`, `defensiveFieldTempHp`, `lightningLauncherDamage`, `infiltratorSpeedBonus`
+- **Artillerist**: `eldritchCannonHp`, `flamethrowerDamage`, `forceBallistaDamage`, `protectorTempHp`, `maxCannons`, `arcaneFirearmDamage`
+- **Battle Smith**: `steelDefenderHp`, `arcaneJoltDamage`, `arcaneJoltUses`, `deflectAttackDamage`
 
-| Subclass | Missing Calculations |
-|----------|---------------------|
-| **Alchemist** | Experimental elixir count, alchemical savant bonus |
-| **Armorer** | Armor model features, Thunder Gauntlets/Lightning Launcher damage |
-| **Artillerist** | Cannon damage progression, cannon HP calculation |
-| **Battle Smith** | Steel Defender HP, arcane jolt damage |
+#### Druid Circles ✅
+All Druid circles are fully implemented:
+- **Moon**: `combatWildShape`, `moonFormsCr`, `wildShapeHealPerSlotLevel`, `primalStrike`
+- **Land**: `naturalRecoverySlots`
+- **Dreams**: `balmOfSummerCourtDice`, `balmOfSummerCourtPool`, `hiddenPathsUses`
+- **Shepherd**: `spiritTotemHp`, `mightySwarmHealingBonus`
+- **Spores**: `haloOfSporesDamage`, `symbioticEntityTempHp`, `fungalInfestationUses`
+- **Stars**: `starryFormUses`, `cosmicOmenUses`, `archerFormDamage`, `chaliceFormHealing`
+- **Wildfire**: `wildfireSpiritHp`, `cauterizingFlamesUses`, `blazingRevivalHp`
 
-#### Druid Circles
+#### Cleric Domains ✅
+All 14 Cleric domains are fully implemented:
+- **Life**: `discipleOfLifeBonus`, `preserveLifeHealing`, `blessedHealerBonus`, `divineStrikeDamage`
+- **Light**: `wardingFlareUses`, `radianceOfTheDawnDamage`
+- **War**: `warPriestUses`, `guidedStrikeBonus`, `avatarOfBattleResistance`
+- **Knowledge**: `visionOfThePastUses`
+- **Nature**: `dampenElementsUses`, `divineStrikeDamage`
+- **Tempest**: `wrathOfTheStormUses`, `thunderboltStrikePushDistance`, `divineStrikeDamage`
+- **Trickery**: `invokeDeplicityUses`, `divineStrikeDamage`
+- **Forge**: `blessingOfTheForgeBonusAc`, `soulOfTheForgeResistances`, `divineStrikeDamage`
+- **Grave**: `sentinelAtDeathsDoorUses`, `eyesOfTheGraveUses`, `potentSpellcastingBonus`
+- **Twilight**: `eyesOfNightDarkvisionBonus`, `twilightSanctuaryTempHp`, `stepsOfNightUses`
+- **Peace**: `emboldingBondRange`, `protectiveBondRange`, `balm`
+- **Order**: `voiceOfAuthorityDamage`, `ordersWrath`, `divineStrikeDamage`
+- **Death**: `reaper`, `deathTouchDamage`, `divineStrikeDamage`
+- **Arcana**: `arcaneAburationUses`, `potentSpellcastingBonus`
 
-| Circle | Missing Calculations |
-|--------|---------------------|
-| **Moon** | Combat Wild Shape CR limits, Primal Strike |
-| **Land** | Natural Recovery slot values |
-| **Dreams** | Balm of the Summer Court healing dice |
-| **Spores** | Halo of Spores damage, Symbiotic Entity temp HP |
-| **Stars** | Starry Form effects, Cosmic Omen uses |
-| **Wildfire** | Wildfire Spirit HP, Fiery Teleportation damage |
+#### Bard Colleges ✅
+All Bard colleges are fully implemented:
+- **Lore**: `cuttingWordsDie`, `additionalMagicalSecretsCount`, `peerlessSkillDie`
+- **Valor**: `combatInspirationDie`, `attacksPerAction`, `hasBattleMagic`
+- **Glamour**: `mantleOfInspirationTempHp`, `enthrallingPerformanceDc`, `mantleOfMajestyDc`
+- **Swords**: `bladeFlourish` (with die, AC bonus, damage), `hasMastersFlourish`
+- **Whispers**: `psychicBladesDamage`, `wordsOfTerrorDc`, `shadowLoreDc`
+- **Creation**: `moteOfPotentialDie`, `createdItemMaxGp`, `dancingItemHp`
+- **Eloquence**: `silverTongueMinimum`, `unsettlingWordsDie`, `infectiousInspirationUses`
+- **Spirits**: `spiritTaleDie`, `spiritSessionMaxSpellLevel`, `spiritualFocusBonus`
+- **Dance**: `danceUnarmoredDefense`, `leadingEvasionDie`, `irresistibleDanceDamage`
 
-#### Other Classes with Partial Subclass Support
+#### Ranger Conclaves ✅
+All Ranger subclasses are fully implemented:
+- **Beast Master**: `companionProfBonus`, `companionAttacks`, `hasShareSpells`
+- **Hunter**: `colossusSlayerDamage`, `multiattackDefenseBonus`, `hasSuperiorHuntersDefense`
+- **Gloom Stalker**: `dreadAmbusherInitiativeBonus`, `umbralSightDarkvisionBonus`, `hasShadowyDodge`
+- **Horizon Walker**: `planarWarriorDamage`, `distantStrikeTeleportRange`, `hasSpectralDefense`
+- **Monster Slayer**: `huntersSenseUses`, `slayersPreyDamage`, `supernaturalDefenseBonus`
+- **Fey Wanderer**: `dreadfulStrikesDamage`, `otherworldlyGlamourBonus`, `mistyWandererUses`
+- **Swarmkeeper**: `gatheredSwarmDamage`, `writhingTideFlySpeed`, `swarmingDispersalUses`
+- **Drakewarden**: `drakeProfBonus`, `drakesBreathDamage`, `drakesBreathDc`
 
-| Class | Issue |
-|-------|-------|
-| **Cleric** | Most domains need mechanical calculations (healing bonuses, uses per rest) |
-| **Ranger** | Beast Master companion stats not fully implemented |
-| **Fighter** | Eldritch Knight bonded weapon features incomplete |
-| **Paladin** | Oath features need specific mechanical values |
+---
 
-### Anti-Pattern in Tests
+## Remaining Implementation Gaps
 
-Some tests use weak verification patterns that don't actually test mechanical correctness:
+### Classes with Partial Subclass Support
+
+All core classes (Artificer, Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock, Wizard) now have **comprehensive mechanical calculations** for their subclasses.
+
+The following edge cases may need additional work:
+
+| Class | Note |
+|-------|------|
+| **Monk** | Some XPHB 2024-specific subclasses may need verification |
+| **Sorcerer** | Metamagic interaction tracking not fully tested |
+| **Warlock** | Pact Boon interactions with invocations not tracked |
+
+### Anti-Pattern in Tests (Mostly Resolved)
+
+Previous tests used weak verification patterns. These have been largely corrected:
 
 ```javascript
 // PROBLEMATIC: This always passes regardless of implementation
