@@ -1729,13 +1729,13 @@ class CharacterSheetSpells {
 
 			slotsRendered++;
 			const current = this._state.getSpellSlotsCurrent(level);
-			const used = max - current;
 
-			// Build pips HTML with inline styles for debugging
+			// Build pips HTML - filled = available, empty = used
+			// Show first 'current' pips as filled (available), rest as empty (used)
 			let pipsHtml = "";
 			for (let i = 0; i < max; i++) {
-				const isUsed = i < used;
-				pipsHtml += `<span class="charsheet__spell-slot-pip ${isUsed ? "charsheet__spell-slot-pip--used" : ""}" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #337ab7; border-radius: 50%; margin: 2px; ${isUsed ? "background: #337ab7;" : "background: transparent;"}"></span>`;
+				const isAvailable = i < current; // First 'current' slots are available (filled)
+				pipsHtml += `<span class="charsheet__spell-slot-pip ${isAvailable ? "" : "charsheet__spell-slot-pip--used"}" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #337ab7; border-radius: 50%; margin: 2px; ${isAvailable ? "background: #337ab7;" : "background: transparent;"}"></span>`;
 			}
 
 			const $row = $(`
@@ -1747,7 +1747,7 @@ class CharacterSheetSpells {
 				</div>
 			`);
 
-			console.log("[CharSheet Spells] renderSlots: Level", level, "max:", max, "current:", current, "used:", used, "pipsHtml length:", pipsHtml.length);
+			console.log("[CharSheet Spells] renderSlots: Level", level, "max:", max, "current:", current, "pipsHtml length:", pipsHtml.length);
 
 			$container.append($row);
 		}
@@ -1756,12 +1756,12 @@ class CharacterSheetSpells {
 		const pactSlots = this._state.getPactSlots();
 		if (pactSlots && pactSlots.max > 0) {
 			slotsRendered++;
-			const pactUsed = pactSlots.max - pactSlots.current;
 
+			// Build pips - filled = available, empty = used
 			let pactPipsHtml = "";
 			for (let i = 0; i < pactSlots.max; i++) {
-				const isUsed = i < pactUsed;
-				pactPipsHtml += `<span class="charsheet__spell-slot-pip charsheet__spell-slot-pip--pact ${isUsed ? "charsheet__spell-slot-pip--used" : ""}" data-pact-slot="true" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #9b59b6; border-radius: 50%; margin: 2px; ${isUsed ? "background: #9b59b6;" : "background: transparent;"}"></span>`;
+				const isAvailable = i < pactSlots.current;
+				pactPipsHtml += `<span class="charsheet__spell-slot-pip charsheet__spell-slot-pip--pact ${isAvailable ? "" : "charsheet__spell-slot-pip--used"}" data-pact-slot="true" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #9b59b6; border-radius: 50%; margin: 2px; ${isAvailable ? "background: #9b59b6;" : "background: transparent;"}"></span>`;
 			}
 
 			const $pactRow = $(`
@@ -1926,9 +1926,9 @@ class CharacterSheetSpells {
 		if (spell.atWill) {
 			usageInfo = '<span class="badge badge-success">At Will</span>';
 		} else if (spell.uses) {
-			const usedPips = spell.uses.max - spell.uses.current;
+			// Build pips: filled = available, empty (used class) = spent
 			const pipsHtml = Array.from({length: spell.uses.max}, (_, i) => 
-				`<span class="charsheet__innate-pip ${i < usedPips ? "used" : ""}" data-spell-id="${spellId}"></span>`,
+				`<span class="charsheet__innate-pip ${i < spell.uses.current ? "" : "used"}" data-spell-id="${spellId}"></span>`,
 			).join("");
 			usageInfo = `<span class="charsheet__innate-uses">${pipsHtml}</span>`;
 		} else {

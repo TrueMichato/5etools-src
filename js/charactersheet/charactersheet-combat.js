@@ -1220,15 +1220,27 @@ class CharacterSheetCombat {
 		if (this._page?.getHoverLink && feature.source) {
 			try {
 				// Try to get hover link based on feature type
-				let hoverPage = null;
 				if (feature.optionalFeatureTypes?.length) {
-					hoverPage = UrlUtil.PG_OPT_FEATURES;
+					nameHtml = this._page.getHoverLink(UrlUtil.PG_OPT_FEATURES, feature.name, feature.source);
+					hasHoverLink = true;
 				} else if (feature.featureType === "Class" && feature.className) {
-					// Class features - try classFeature page
-					hoverPage = "classFeature";
-				}
-				if (hoverPage) {
-					nameHtml = this._page.getHoverLink(hoverPage, feature.name, feature.source);
+					// Class features - use proper page and hash
+					const storedClass = this._state.getClasses()?.find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
+					const classSource = feature.classSource || feature.source || storedClass?.source || Parser.SRC_XPHB;
+					
+					const hashInput = {
+						name: feature.name,
+						className: feature.className,
+						classSource: classSource,
+						level: feature.level || 1,
+						source: feature.source || Parser.SRC_XPHB,
+					};
+					if (feature.subclassName || feature.isSubclassFeature) {
+						hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
+						hashInput.subclassSource = feature.subclassSource || storedClass?.subclass?.source || feature.source || Parser.SRC_XPHB;
+					}
+					const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASS_SUBCLASS_FEATURES](hashInput);
+					nameHtml = this._page.getHoverLink(UrlUtil.PG_CLASS_SUBCLASS_FEATURES, feature.name, feature.source, hash);
 					hasHoverLink = true;
 				}
 			} catch {
@@ -1818,13 +1830,13 @@ class CharacterSheetCombat {
 
 		$container.empty();
 		for (const resource of combatResources) {
-			const used = resource.max - resource.current;
+			// Build pips - filled = available, empty = used
 			const $resource = $(`
 				<div class="charsheet__combat-resource-item mb-2" data-resource-id="${resource.id}">
 					<div class="charsheet__combat-resource-name ve-small font-weight-bold">${resource.name}</div>
 					<div class="charsheet__combat-resource-pips">
 						${Array.from({length: resource.max}, (_, i) => `
-							<span class="charsheet__resource-pip ${i < used ? "used" : ""}" data-pip-index="${i}" title="Click to use/restore"></span>
+							<span class="charsheet__resource-pip ${i < resource.current ? "" : "used"}" data-pip-index="${i}" title="Click to use/restore"></span>
 						`).join("")}
 					</div>
 					<div class="ve-small ve-muted">${resource.current}/${resource.max}${resource.recharge ? ` (${resource.recharge})` : ""}</div>
@@ -1836,10 +1848,10 @@ class CharacterSheetCombat {
 				const pipIndex = $(e.currentTarget).data("pip-index");
 				const isUsed = $(e.currentTarget).hasClass("used");
 				if (isUsed) {
-					// Restore one use
+					// Restore one use (pip was empty/used, now fill it)
 					this._state.setResourceCurrent(resource.id, resource.current + 1);
 				} else {
-					// Use one
+					// Use one (pip was filled/available, now empty it)
 					this._state.setResourceCurrent(resource.id, resource.current - 1);
 				}
 				this.renderCombatResources();
@@ -2278,11 +2290,11 @@ class CharacterSheetCombat {
 		}
 
 		// Update resource pips in the resources section
+		// Filled = available, empty = used
 		const $resourcePips = $('[data-resource-id="exertion"] .charsheet__resource-pip--exertion');
 		if ($resourcePips.length) {
-			const used = max - current;
 			$resourcePips.each((i, pip) => {
-				$(pip).toggleClass("used", i < used);
+				$(pip).toggleClass("used", i >= current); // Empty (used) if index >= current available
 			});
 		}
 	}
@@ -2905,16 +2917,8 @@ class CharacterSheetCombat {
 	 * Remove a combat method from the character
 	 */
 	_removeCombatMethod (method) {
-		const features = this._state.getFeatures();
-		const idx = features.findIndex(f => 
-			f.name === method.name && 
-			(f.source === method.source || !method.source)
-		);
-		if (idx >= 0) {
-			features.splice(idx, 1);
-			this._state.setFeatures(features);
-			JqueryUtil.doToast({type: "info", content: `Removed ${method.name}.`});
-		}
+		this._state.removeFeature(method.name, method.source);
+		JqueryUtil.doToast({type: "info", content: `Removed ${method.name}.`});
 	}
 
 	/**

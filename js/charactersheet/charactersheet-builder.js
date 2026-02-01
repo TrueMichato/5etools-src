@@ -555,10 +555,23 @@ class CharacterSheetBuilder {
 				this._state.setSpeed("walk", this._selectedRace.speed);
 			} else {
 				if (this._selectedRace.speed.walk) this._state.setSpeed("walk", this._selectedRace.speed.walk);
-				if (this._selectedRace.speed.fly) this._state.setSpeed("fly", this._selectedRace.speed.fly);
-				if (this._selectedRace.speed.swim) this._state.setSpeed("swim", this._selectedRace.speed.swim);
-				if (this._selectedRace.speed.climb) this._state.setSpeed("climb", this._selectedRace.speed.climb);
-				if (this._selectedRace.speed.burrow) this._state.setSpeed("burrow", this._selectedRace.speed.burrow);
+				// Handle non-walk speeds - true means "equal to walking speed"
+				["fly", "swim", "climb", "burrow"].forEach(speedType => {
+					const speedValue = this._selectedRace.speed[speedType];
+					if (speedValue === true) {
+						// Add a named modifier with equalToWalk instead of setting to 1
+						this._state.addNamedModifier({
+							name: `${this._selectedRace.name} ${speedType.charAt(0).toUpperCase() + speedType.slice(1)} Speed`,
+							type: `speed:${speedType}`,
+							value: 0,
+							equalToWalk: true,
+							sourceType: "race",
+							enabled: true,
+						});
+					} else if (typeof speedValue === "number" && speedValue > 0) {
+						this._state.setSpeed(speedType, speedValue);
+					}
+				});
 			}
 		}
 
@@ -568,10 +581,23 @@ class CharacterSheetBuilder {
 				this._state.setSpeed("walk", this._selectedSubrace.speed);
 			} else {
 				if (this._selectedSubrace.speed.walk) this._state.setSpeed("walk", this._selectedSubrace.speed.walk);
-				if (this._selectedSubrace.speed.fly) this._state.setSpeed("fly", this._selectedSubrace.speed.fly);
-				if (this._selectedSubrace.speed.swim) this._state.setSpeed("swim", this._selectedSubrace.speed.swim);
-				if (this._selectedSubrace.speed.climb) this._state.setSpeed("climb", this._selectedSubrace.speed.climb);
-				if (this._selectedSubrace.speed.burrow) this._state.setSpeed("burrow", this._selectedSubrace.speed.burrow);
+				// Handle non-walk speeds - true means "equal to walking speed"
+				["fly", "swim", "climb", "burrow"].forEach(speedType => {
+					const speedValue = this._selectedSubrace.speed[speedType];
+					if (speedValue === true) {
+						// Add a named modifier with equalToWalk instead of setting to 1
+						this._state.addNamedModifier({
+							name: `${this._selectedSubrace.name} ${speedType.charAt(0).toUpperCase() + speedType.slice(1)} Speed`,
+							type: `speed:${speedType}`,
+							value: 0,
+							equalToWalk: true,
+							sourceType: "race",
+							enabled: true,
+						});
+					} else if (typeof speedValue === "number" && speedValue > 0) {
+						this._state.setSpeed(speedType, speedValue);
+					}
+				});
 			}
 		}
 

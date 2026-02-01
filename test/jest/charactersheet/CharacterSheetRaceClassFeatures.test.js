@@ -294,6 +294,67 @@ describe("Race, Background, and Class Feature Tests", () => {
 	});
 
 	// ==========================================================================
+	// Race Speed Traits (Equal to Walk)
+	// ==========================================================================
+	describe("Race Speed Traits", () => {
+		describe("Tabaxi (MPMM) - Climb Speed Equal to Walk", () => {
+			it("should handle climb speed equal to walking speed via named modifier", () => {
+				// Simulate what the builder does when race has speed: { walk: 30, climb: true }
+				state.setSpeed("walk", 30);
+				state.addNamedModifier({
+					name: "Tabaxi Climb Speed",
+					type: "speed:climb",
+					value: 0,
+					equalToWalk: true,
+					sourceType: "race",
+					enabled: true,
+				});
+
+				// Walk speed should be 30
+				expect(state.getSpeed("walk")).toBe(30);
+				// Climb speed should equal walk speed (30), not 1
+				expect(state.getSpeed("climb")).toBe(30);
+			});
+
+			it("should update climb speed when walk speed changes", () => {
+				state.setSpeed("walk", 30);
+				state.addNamedModifier({
+					name: "Tabaxi Climb Speed",
+					type: "speed:climb",
+					value: 0,
+					equalToWalk: true,
+					sourceType: "race",
+					enabled: true,
+				});
+
+				// Increase base walk speed
+				state.setSpeed("walk", 40);
+
+				// Walk speed should be 40
+				expect(state.getSpeed("walk")).toBe(40);
+				// Climb speed should also be 40 (equal to walk)
+				expect(state.getSpeed("climb")).toBe(40);
+			});
+		});
+
+		describe("Aarakocra (MPMM) - Fly Speed Equal to Walk", () => {
+			it("should handle fly speed equal to walking speed", () => {
+				state.setSpeed("walk", 30);
+				state.addNamedModifier({
+					name: "Aarakocra Fly Speed",
+					type: "speed:fly",
+					value: 0,
+					equalToWalk: true,
+					sourceType: "race",
+					enabled: true,
+				});
+
+				expect(state.getSpeed("fly")).toBe(30);
+			});
+		});
+	});
+
+	// ==========================================================================
 	// Background Features
 	// ==========================================================================
 	describe("Background Features", () => {
