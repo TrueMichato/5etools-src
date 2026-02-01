@@ -178,14 +178,38 @@ class CharacterSheetPage {
 				// Match by class name
 				if (sc.className !== cls.name) return false;
 				
-				// Match by class source - be flexible with source matching
+				// Match by class source - be flexible with source matching for homebrew compatibility
 				const scClassSource = sc.classSource || Parser.SRC_PHB;
-				// Allow XPHB subclasses to match with PHB classes and vice versa
-				const sourceMatches = scClassSource === cls.source ||
-					(scClassSource === Parser.SRC_PHB && cls.source === Parser.SRC_XPHB) ||
-					(scClassSource === Parser.SRC_XPHB && cls.source === Parser.SRC_PHB);
 				
-				return sourceMatches;
+				// Direct source match
+				if (scClassSource === cls.source) return true;
+				
+				// Allow XPHB subclasses to match with PHB classes and vice versa
+				if ((scClassSource === Parser.SRC_PHB && cls.source === Parser.SRC_XPHB) ||
+					(scClassSource === Parser.SRC_XPHB && cls.source === Parser.SRC_PHB)) {
+					return true;
+				}
+				
+				// Allow homebrew subclasses targeting XPHB/PHB to match with homebrew classes of the same name
+				// This handles cases like TGTT subclasses that target base classes
+				const isBaseSource = [Parser.SRC_PHB, Parser.SRC_XPHB].includes(scClassSource);
+				const isClassHomebrew = ![Parser.SRC_PHB, Parser.SRC_XPHB].includes(cls.source);
+				if (isBaseSource && isClassHomebrew) {
+					return true;
+				}
+				
+				// Also allow homebrew subclasses to match base classes
+				// This handles cases where a homebrew subclass should work with the standard class
+				const isSubclassHomebrew = ![Parser.SRC_PHB, Parser.SRC_XPHB].includes(sc.source);
+				const isClassBase = [Parser.SRC_PHB, Parser.SRC_XPHB].includes(cls.source);
+				if (isSubclassHomebrew && isClassBase && scClassSource !== cls.source) {
+					// Check if subclass classSource points to one of the base sources
+					if (scClassSource === Parser.SRC_PHB || scClassSource === Parser.SRC_XPHB) {
+						return true;
+					}
+				}
+				
+				return false;
 			});
 		});
 	}
