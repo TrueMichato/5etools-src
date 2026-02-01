@@ -1,0 +1,642 @@
+# Components Reference
+
+This document provides a detailed reference for each component in the character sheet system.
+
+## CharacterSheetPage
+
+**File**: `js/charactersheet/charactersheet.js`  
+**Lines**: ~5,861  
+**Role**: Main Controller
+
+### Constructor
+
+```javascript
+constructor() {
+    this._state = new CharacterSheetState();
+    this._builder = null;
+    this._combat = null;
+    this._spells = null;
+    this._inventory = null;
+    this._features = null;
+    this._rest = null;
+    this._export = null;
+    this._levelUp = null;
+    this._layout = null;
+    
+    // Data caches
+    this._races = [];
+    this._classes = [];
+    this._subclasses = [];
+    // ... more caches
+}
+```
+
+### Key Methods
+
+| Method | Description |
+|--------|-------------|
+| `pInit()` | Async initialization - loads data, creates UI, initializes modules |
+| `_pLoadData()` | Loads all 5etools JSON data files |
+| `_initUi()` | Creates DOM elements for the sheet |
+| `_initEventListeners()` | Binds all event handlers |
+| `getState()` | Returns the CharacterSheetState instance |
+| `saveCharacter()` | Persists current character to localStorage |
+| `loadCharacter(id)` | Loads a character by ID |
+| `renderAll()` | Re-renders entire UI |
+| `rollDice(count, sides)` | Utility for dice rolling |
+
+### Data Caches
+
+The page maintains caches for quick access to 5etools data:
+
+```javascript
+this._races = [];              // All races/species
+this._classes = [];            // All classes
+this._subclasses = [];         // All subclasses
+this._classFeatures = [];      // All class features
+this._subclassFeatures = [];   // All subclass features
+this._backgrounds = [];        // All backgrounds
+this._spellsData = [];         // All spells
+this._itemsData = [];          // All items
+this._featsData = [];          // All feats
+this._optionalFeaturesData = []; // Invocations, maneuvers, etc.
+this._skillsData = [];         // Skill definitions
+this._conditionsData = [];     // Condition definitions
+this._languagesData = [];      // Language definitions
+```
+
+---
+
+## CharacterSheetState
+
+**File**: `js/charactersheet/charactersheet-state.js`  
+**Lines**: ~16,315  
+**Role**: Data Model & Calculation Engine
+
+### Data Structure
+
+```javascript
+this._data = {
+    // Basic Info
+    name: "",
+    race: null,
+    background: null,
+    alignment: "",
+    
+    // Classes
+    classes: [],  // [{name, level, subclass, source, hitDiceUsed}]
+    
+    // Ability Scores
+    abilityScores: {
+        str: {base: 10, racialBonus: 0, asiBonus: 0, miscBonus: 0},
+        dex: {base: 10, racialBonus: 0, asiBonus: 0, miscBonus: 0},
+        // ... con, int, wis, cha
+    },
+    
+    // Hit Points
+    hp: {current: 0, max: 0, temp: 0},
+    hitDice: [],  // [{type: "Fighter", die: 10, max: 1, current: 1}]
+    
+    // Death Saves
+    deathSaves: {successes: 0, failures: 0},
+    
+    // Proficiencies
+    savingThrowProficiencies: [],
+    skillProficiencies: [],
+    toolProficiencies: [],
+    languageProficiencies: [],
+    weaponProficiencies: [],
+    armorProficiencies: [],
+    
+    // Expertise
+    skillExpertise: [],
+    
+    // Spells
+    spellSlots: {},       // {1: {max: 4, current: 4}, ...}
+    pactSlots: {},        // Warlock pact magic
+    knownSpells: [],
+    preparedSpells: [],
+    
+    // Inventory
+    items: [],
+    currency: {cp: 0, sp: 0, ep: 0, gp: 0, pp: 0},
+    
+    // Features
+    features: [],
+    feats: [],
+    
+    // Active States
+    activeStates: [],     // Rage, Bladesong, etc.
+    conditions: [],       // Blinded, Poisoned, etc.
+    
+    // Custom Modifiers
+    customModifiers: {
+        ac: 0,
+        initiative: 0,
+        speed: {walk: 0, fly: 0, swim: 0, climb: 0},
+        // ... more
+    },
+    
+    // Attacks
+    attacks: [],
+    
+    // Notes
+    notes: "",
+    
+    // Resources
+    resources: [],        // Custom trackable resources
+};
+```
+
+### Static Properties
+
+#### ACTIVE_STATE_TYPES
+
+Predefined toggle states with their effects:
+
+```javascript
+static ACTIVE_STATE_TYPES = {
+    rage: {
+        id: "rage",
+        name: "Rage",
+        icon: "💢",
+        effects: [
+            {type: "advantage", target: "check:str"},
+            {type: "advantage", target: "save:str"},
+            {type: "resistance", target: "damage:bludgeoning"},
+            // ...
+        ],
+        duration: "1 minute",
+        endConditions: ["No attack for 1 turn", "Unconscious"],
+    },
+    bladesong: { /* ... */ },
+    combatStance: { /* ... */ },
+    // ... more state types
+};
+```
+
+#### CONDITION_EFFECTS
+
+Standard D&D conditions and their mechanical effects:
+
+```javascript
+static CONDITION_EFFECTS = {
+    blinded: {
+        name: "Blinded",
+        icon: "👁️‍🗨️",
+        effects: [
+            {type: "disadvantage", target: "attack"},
+            {type: "advantage", target: "attacksAgainst"},
+        ],
+    },
+    // ... more conditions
+};
+```
+
+### Key Instance Methods
+
+#### Basic Getters/Setters
+
+```javascript
+// Name
+getName()
+setName(name)
+
+// Race
+getRace()
+setRace(race)
+
+// Classes
+getClasses()
+addClass(classObj)
+removeClass(className)
+getTotalLevel()
+getClassLevel(className)
+```
+
+#### Ability Scores
+
+```javascript
+// Get total score (base + all bonuses)
+getAbilityScore(ability)  // e.g., getAbilityScore("str")
+
+// Get modifier (Math.floor((score - 10) / 2))
+getAbilityMod(ability)
+
+// Set components
+setAbilityBase(ability, value)
+setAbilityRacialBonus(ability, value)
+setAbilityAsiBonus(ability, value)
+setAbilityMiscBonus(ability, value)
+```
+
+#### Computed Values
+
+```javascript
+// Proficiency bonus based on total level
+getProficiencyBonus()
+
+// Armor Class (complex calculation)
+getAc()
+
+// Initiative modifier
+getInitiativeMod()
+
+// Spell save DC for a class
+getSpellSaveDc(className)
+
+// Spell attack bonus for a class
+getSpellAttackBonus(className)
+
+// Passive scores
+getPassivePerception()
+getPassiveInvestigation()
+getPassiveInsight()
+```
+
+#### Feature Calculations
+
+The most important method for class mechanics:
+
+```javascript
+getFeatureCalculations() {
+    // Returns object with all computed class features:
+    // - Barbarian: rageDamage, ragesPerDay, brutalCritical
+    // - Monk: martialArtsDie, kiPoints, kiSaveDc
+    // - Fighter: superiorityDice, secondWindHealing
+    // ... etc for all classes
+}
+```
+
+#### Active States
+
+```javascript
+// Add a new active state
+addActiveState(stateTypeId, options)
+
+// Remove/deactivate
+removeActiveState(stateId)
+deactivateStatesByType(stateTypeId)
+
+// Query
+isStateTypeActive(stateTypeId)
+getActiveStates()
+getActiveStateEffects()
+```
+
+### Static Utility Methods
+
+```javascript
+// Parse feature text for limited uses
+static parseFeatureUses(text, getAbilityMod, getProfBonus)
+
+// Parse effects from description
+static parseEffectsFromDescription(description)
+
+// Detect if feature is activatable
+static detectActivatableFeature(feature)
+
+// Analyze toggle-ability
+static analyzeToggleability(text)
+
+// Summarize effects for display
+static summarizeEffects(effects)
+```
+
+---
+
+## CharacterSheetBuilder
+
+**File**: `js/charactersheet/charactersheet-builder.js`  
+**Lines**: ~5,783  
+**Role**: Character Creation Wizard
+
+### Wizard Steps
+
+| Step | Content |
+|------|---------|
+| 1 | Race/Species selection |
+| 2 | Class selection |
+| 3 | Ability score assignment |
+| 4 | Background selection |
+| 5 | Skills, tools, languages |
+| 6 | Review and finalize |
+
+### Key State Properties
+
+```javascript
+this._currentStep = 1;
+this._selectedRace = null;
+this._selectedSubrace = null;
+this._selectedClass = null;
+this._selectedSubclass = null;
+this._selectedBackground = null;
+this._abilityMethod = "standard";  // "standard", "pointbuy", "manual"
+this._abilityScores = {str: null, dex: null, con: null, int: null, wis: null, cha: null};
+this._selectedSkills = [];
+this._selectedExpertise = [];
+this._useTashasRules = false;
+```
+
+### Key Methods
+
+```javascript
+show()           // Open the builder modal
+_renderStep(n)   // Render step n content
+_nextStep()      // Advance to next step
+_prevStep()      // Go back to previous step
+_finalize()      // Apply choices and create character
+```
+
+---
+
+## CharacterSheetCombat
+
+**File**: `js/charactersheet/charactersheet-combat.js`  
+**Lines**: ~3,028  
+**Role**: Combat Actions & Tracking
+
+### Key Methods
+
+```javascript
+// Attacks
+_showAttackCreator()
+_addAttack(attackData)
+_rollAttack(attackId, event)  // event for advantage/disadvantage keys
+_rollDamage(attackId)
+
+// Initiative
+_rollInitiative(event)
+
+// Death Saves
+_rollDeathSave(isSuccess)
+_resetDeathSaves()
+
+// Conditions
+_onAddCondition()
+renderCombatConditions()
+
+// Combat Methods (TGTT exertion system)
+_useMethod(methodId)
+_modifyExertion(delta)
+```
+
+### Attack Data Structure
+
+```javascript
+{
+    id: "unique-id",
+    name: "Longsword",
+    attackBonus: 5,
+    damage: "1d8+3",
+    damageType: "slashing",
+    properties: ["versatile"],
+    range: "5 ft",
+    notes: "",
+}
+```
+
+---
+
+## CharacterSheetSpells
+
+**File**: `js/charactersheet/charactersheet-spells.js`  
+**Lines**: ~2,661  
+**Role**: Spellcasting Management
+
+### Key Methods
+
+```javascript
+// Spell Slots
+_toggleSlot(level, $pip)
+_recoverSlots(level, amount)
+
+// Spell Management
+_showSpellPicker()
+_addSpell(spell)
+_removeSpell(spellId)
+_togglePrepared(spellId)
+
+// Casting
+_castSpell(spellId)
+_showCastingDialog(spell)
+
+// Rendering
+renderSpellSlots()
+_renderSpellList()
+```
+
+### Spell Data Structure
+
+```javascript
+{
+    id: "unique-id",
+    name: "Fireball",
+    level: 3,
+    school: "evocation",
+    castingTime: "1 action",
+    range: "150 feet",
+    components: {v: true, s: true, m: "a tiny ball of bat guano"},
+    duration: "Instantaneous",
+    description: "...",
+    source: "PHB",
+    classes: ["sorcerer", "wizard"],
+    prepared: true,  // for prepared casters
+    alwaysPrepared: false,  // domain spells, etc.
+}
+```
+
+---
+
+## CharacterSheetInventory
+
+**File**: `js/charactersheet/charactersheet-inventory.js`  
+**Lines**: ~2,008  
+**Role**: Items & Equipment
+
+### Key Methods
+
+```javascript
+// Items
+_showItemPicker()
+_addItem(item)
+_removeItem(itemId)
+_changeQuantity(itemId, delta)
+
+// Equipment
+_toggleEquipped(itemId)
+_toggleAttuned(itemId)
+
+// Charges
+_useCharge(itemId)
+_restoreCharge(itemId)
+
+// Currency
+_updateCurrency(type, value)
+
+// Encumbrance
+_calculateEncumbrance()
+```
+
+### Item Data Structure
+
+```javascript
+{
+    id: "unique-id",
+    name: "Plate Armor",
+    type: "armor",
+    weight: 65,
+    value: "1500 gp",
+    quantity: 1,
+    equipped: true,
+    attuned: false,
+    charges: {current: 0, max: 0},
+    properties: [],
+    ac: 18,
+    notes: "",
+}
+```
+
+---
+
+## CharacterSheetFeatures
+
+**File**: `js/charactersheet/charactersheet-features.js`  
+**Lines**: ~1,585  
+**Role**: Feature Display & Tracking
+
+### Key Methods
+
+```javascript
+// Feats
+_showFeatPicker()
+_addFeat(feat)
+_removeFeat(featId)
+
+// Features
+_renderFeatures()
+_getFeatureDescription(feature)
+_toggleFeatureExpand(featureId)
+
+// Feature Uses
+_useFeature(featureId)
+_recoverFeatureUses(featureId)
+```
+
+---
+
+## CharacterSheetRest
+
+**File**: `js/charactersheet/charactersheet-rest.js`  
+**Lines**: ~391  
+**Role**: Rest Mechanics
+
+### Key Methods
+
+```javascript
+// Short Rest
+_showShortRestDialog()
+_performShortRest(hitDiceSpent)
+
+// Long Rest
+_showLongRestDialog()
+_performLongRest()
+```
+
+### Short Rest Effects
+
+1. Spend hit dice to heal
+2. Recover certain class features
+3. Recover Warlock pact slots
+
+### Long Rest Effects
+
+1. Regain all HP
+2. Recover hit dice (up to half total)
+3. Recover all spell slots
+4. Recover all class features
+5. Reset death saves
+
+---
+
+## CharacterSheetLevelUp
+
+**File**: `js/charactersheet/charactersheet-levelup.js`  
+**Lines**: ~3,628  
+**Role**: Level Progression
+
+### Key Methods
+
+```javascript
+// Main flow
+showLevelUpDialog(className)
+_applyLevelUp(choices)
+
+// Feature options
+_findFeatureOptions(feature, characterLevel)
+_renderFeatureChoices(features)
+
+// ASI/Feats
+_renderASIChoice()
+_applyASI(choices)
+```
+
+### Level Up Choices
+
+- Class features automatically applied
+- Subclass selection (at appropriate level)
+- Ability Score Improvement or Feat
+- Optional feature choices (invocations, maneuvers)
+- Spell selection for casters
+
+---
+
+## CharacterSheetExport
+
+**File**: `js/charactersheet/charactersheet-export.js`  
+**Lines**: ~322  
+**Role**: Import/Export
+
+### Export Formats
+
+1. **JSON**: Full character data for backup/transfer
+2. **Print/PDF**: Browser print dialog
+
+### Key Methods
+
+```javascript
+_showExportDialog()
+_exportJson()
+_showImportDialog()
+_importJson(jsonStr)
+_printCharacter()
+```
+
+---
+
+## CharacterSheetLayout
+
+**File**: `js/charactersheet/charactersheet-layout.js`  
+**Lines**: ~618  
+**Role**: UI Customization
+
+### Features
+
+- Drag-and-drop section reordering
+- Per-character layout persistence
+- Reset to default layout
+- Edit mode toggle
+
+### Key Methods
+
+```javascript
+_initDragDrop(container)
+_saveLayoutForTab(tabId)
+_loadLayoutForTab(tabId)
+_resetLayout()
+toggleEditMode()
+```
+
+---
+
+*Previous: [Architecture](./02-architecture.md) | Next: [State Management](./04-state-management.md)*
