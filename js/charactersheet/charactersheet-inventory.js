@@ -1815,7 +1815,8 @@ class CharacterSheetInventory {
 	_renderCurrency () {
 		const currency = this._state.getCurrency();
 		["cp", "sp", "ep", "gp", "pp"].forEach(c => {
-			$(`#charsheet-currency-${c}`).val(currency[c] || 0);
+			// Update inventory tab currency inputs
+			$(`#charsheet-inv-ipt-${c}`).val(currency[c] || 0);
 		});
 
 		// Calculate total value in GP
@@ -1826,12 +1827,34 @@ class CharacterSheetInventory {
 			(currency.gp || 0) +
 			(currency.pp || 0) * 10;
 
-		$("#charsheet-currency-total").text(`${totalGP.toFixed(2)} GP`);
+		const $total = $("#charsheet-inv-currency-total");
+		if (totalGP > 0) {
+			$total.text(`≈ ${totalGP.toFixed(1)} GP`).show();
+		} else {
+			$total.hide();
+		}
+	}
+
+	/**
+	 * Initialize currency input handlers for inventory tab
+	 */
+	_initCurrencyInputs () {
+		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
+			$(`#charsheet-inv-ipt-${currency}`).off("change").on("change", (e) => {
+				const value = parseInt(e.target.value) || 0;
+				this._state.setCurrency(currency, value);
+				this._renderCurrency();
+				// Also update overview currency display
+				this._page?._renderCurrency?.();
+				this._page?.saveCharacter?.();
+			});
+		});
 	}
 
 	render () {
 		this._renderItemList();
 		this._renderCurrency();
+		this._initCurrencyInputs();
 		this._updateEncumbrance();
 		this._renderEquippedItems();
 		this._renderAttunedItems();

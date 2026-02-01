@@ -8022,6 +8022,61 @@
 	background: linear-gradient(135deg, var(--rgb-btn-primary) 0%, rgba(255, 193, 7, 0.5) 100%);
 }
 
+/* Spellbook Layout (Wizard) */
+.charsheet__spell-section {
+	margin-bottom: 1rem;
+	border-radius: var(--cs-radius-md, 8px);
+	overflow: hidden;
+}
+
+.charsheet__spell-section--prepared {
+	background: linear-gradient(135deg, rgba(var(--rgb-success-rgb, 40, 167, 69), 0.05) 0%, rgba(var(--rgb-success-rgb, 40, 167, 69), 0.1) 100%);
+	border: 1px solid rgba(var(--rgb-success-rgb, 40, 167, 69), 0.2);
+}
+
+.charsheet__spell-section--spellbook {
+	background: linear-gradient(135deg, rgba(var(--rgb-info-rgb, 23, 162, 184), 0.05) 0%, rgba(var(--rgb-info-rgb, 23, 162, 184), 0.1) 100%);
+	border: 1px solid rgba(var(--rgb-info-rgb, 23, 162, 184), 0.2);
+}
+
+.charsheet__spell-section-header {
+	display: flex;
+	align-items: center;
+	padding: 0.5rem 0.75rem;
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.charsheet__spell-section--prepared .charsheet__spell-section-header {
+	background: rgba(var(--rgb-success-rgb, 40, 167, 69), 0.15);
+	color: var(--rgb-success, #28a745);
+}
+
+.charsheet__spell-section--spellbook .charsheet__spell-section-header {
+	background: rgba(var(--rgb-info-rgb, 23, 162, 184), 0.15);
+	color: var(--rgb-info, #17a2b8);
+}
+
+.charsheet__spell-section-icon {
+	margin-right: 0.5rem;
+}
+
+.charsheet__spell-section-content {
+	padding: 0.5rem;
+}
+
+.charsheet__spell-group--compact {
+	margin-bottom: 0.5rem;
+}
+
+.charsheet__spell-group-header--small {
+	font-size: 0.85rem;
+	padding: 0.25rem 0;
+	color: var(--rgb-text-muted, #888);
+}
+
 /* ========================================================================
    Rest Modal Styles
    ======================================================================== */

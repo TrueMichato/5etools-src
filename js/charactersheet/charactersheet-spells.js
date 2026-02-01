@@ -1804,6 +1804,11 @@ class CharacterSheetSpells {
 		const spells = this._state.getSpells();
 		console.log("[CharSheet Spells] _renderSpellList: spells count", spells.length, spells);
 
+		// Check if this character has a spellbook-style caster (Wizard)
+		const classes = this._state.getClasses() || [];
+		const hasSpellbook = classes.some(c => c.name === "Wizard");
+		const spellcastingInfo = this._state.getSpellcastingInfo();
+
 		// Apply filters
 		let filtered = spells;
 		if (this._spellFilter) {
@@ -1813,6 +1818,24 @@ class CharacterSheetSpells {
 			filtered = filtered.filter(s => s.level === parseInt(this._spellLevelFilter));
 		}
 
+		// For spellbook casters, separate prepared vs unprepared spells
+		if (hasSpellbook && filtered.some(s => s.level > 0)) {
+			this._renderSpellbookLayout($container, filtered, spellcastingInfo);
+		} else {
+			// Standard layout for known casters
+			this._renderStandardSpellLayout($container, filtered, spellcastingInfo);
+		}
+
+		const innateSpells = this._state.getInnateSpells();
+		if (!filtered.length && !innateSpells.length) {
+			$container.append(`<p class="ve-muted text-center">No spells</p>`);
+		}
+	}
+
+	/**
+	 * Render standard spell layout - grouped by level
+	 */
+	_renderStandardSpellLayout ($container, spells, spellcastingInfo) {
 		// Group by level
 		const grouped = {
 			0: {name: "Cantrips", spells: []},
@@ -1827,14 +1850,13 @@ class CharacterSheetSpells {
 			9: {name: "9th Level", spells: []},
 		};
 
-		filtered.forEach(spell => {
+		spells.forEach(spell => {
 			if (grouped[spell.level]) {
 				grouped[spell.level].spells.push(spell);
 			}
 		});
 
 		// Update Cantrips header with count
-		const spellcastingInfo = this._state.getSpellcastingInfo();
 		if (spellcastingInfo && spellcastingInfo.cantripsKnown > 0) {
 			const allCantrips = this._state.getCantripsKnown();
 			const count = allCantrips.filter(c => !c.sourceFeature).length;
@@ -1866,11 +1888,145 @@ class CharacterSheetSpells {
 
 			$container.append($group);
 		});
+	}
 
-		const innateSpells = this._state.getInnateSpells();
-		if (!filtered.length && !innateSpells.length) {
-			$container.append(`<p class="ve-muted text-center">No spells</p>`);
+	/**
+	 * Render spellbook layout - separates prepared spells from unprepared (for Wizards)
+	 */
+	_renderSpellbookLayout ($container, spells, spellcastingInfo) {
+		const cantrips = spells.filter(s => s.level === 0);
+		const leveledSpells = spells.filter(s => s.level > 0);
+		const preparedSpells = leveledSpells.filter(s => s.prepared || s.alwaysPrepared);
+		const unpreparedSpells = leveledSpells.filter(s => !s.prepared && !s.alwaysPrepared);
+
+		// Calculate prepared limits
+		const currentPrepared = preparedSpells.length;
+		const maxPrepared = spellcastingInfo?.preparedMax || spellcastingInfo?.max || 0;
+		const preparedColorClass = currentPrepared > maxPrepared ? "text-danger" : (currentPrepared === maxPrepared ? "text-success" : "");
+
+		// Render cantrips first (always "prepared")
+		if (cantrips.length) {
+			let cantripsHeader = "Cantrips";
+			if (spellcastingInfo && spellcastingInfo.cantripsKnown > 0) {
+				const allCantrips = this._state.getCantripsKnown();
+				const count = allCantrips.filter(c => !c.sourceFeature).length;
+				const limit = spellcastingInfo.cantripsKnown;
+				const colorClass = count > limit ? "text-danger" : (count === limit ? "text-success" : "");
+				cantripsHeader = `Cantrips <span class="ve-small ${colorClass}">(${count}/${limit})</span>`;
+			}
+
+			const $cantripsGroup = $(`
+				<div class="charsheet__spell-group">
+					<h5 class="charsheet__spell-group-header">${cantripsHeader}</h5>
+					<div class="charsheet__spell-group-list"></div>
+				</div>
+			`);
+
+			const $list = $cantripsGroup.find(".charsheet__spell-group-list");
+			cantrips.sort((a, b) => a.name.localeCompare(b.name)).forEach(spell => {
+				$list.append(this._renderSpellItem(spell));
+			});
+			$container.append($cantripsGroup);
 		}
+
+		// Render PREPARED spells section
+		const $preparedSection = $(`
+			<div class="charsheet__spell-section charsheet__spell-section--prepared">
+				<h4 class="charsheet__spell-section-header">
+					<span class="charsheet__spell-section-icon">📖</span>
+					Prepared Spells
+					<span class="ve-small ${preparedColorClass} ml-2">(${currentPrepared}/${maxPrepared})</span>
+				</h4>
+				<div class="charsheet__spell-section-content" id="charsheet-prepared-spells-content"></div>
+			</div>
+		`);
+
+		const $preparedContent = $preparedSection.find("#charsheet-prepared-spells-content");
+
+		if (preparedSpells.length) {
+			// Group prepared spells by level
+			const groupedPrepared = this._groupSpellsByLevel(preparedSpells);
+			this._renderGroupedSpells($preparedContent, groupedPrepared);
+		} else {
+			$preparedContent.append(`<p class="ve-muted ve-text-center py-2">No spells prepared. Prepare spells from your spellbook below.</p>`);
+		}
+
+		$container.append($preparedSection);
+
+		// Render SPELLBOOK section (unprepared spells)
+		const totalInSpellbook = leveledSpells.length;
+		const $spellbookSection = $(`
+			<div class="charsheet__spell-section charsheet__spell-section--spellbook">
+				<h4 class="charsheet__spell-section-header">
+					<span class="charsheet__spell-section-icon">📚</span>
+					Spellbook
+					<span class="ve-small ve-muted ml-2">(${totalInSpellbook} spells total)</span>
+				</h4>
+				<div class="charsheet__spell-section-content" id="charsheet-spellbook-content"></div>
+			</div>
+		`);
+
+		const $spellbookContent = $spellbookSection.find("#charsheet-spellbook-content");
+
+		if (unpreparedSpells.length) {
+			// Group unprepared spells by level
+			const groupedUnprepared = this._groupSpellsByLevel(unpreparedSpells);
+			this._renderGroupedSpells($spellbookContent, groupedUnprepared, true); // true = show prepare button
+		} else if (preparedSpells.length) {
+			$spellbookContent.append(`<p class="ve-muted ve-text-center py-2">All spellbook spells are currently prepared!</p>`);
+		} else {
+			$spellbookContent.append(`<p class="ve-muted ve-text-center py-2">No spells in spellbook. Add spells using the + button above.</p>`);
+		}
+
+		$container.append($spellbookSection);
+	}
+
+	/**
+	 * Group spells by level into an object
+	 */
+	_groupSpellsByLevel (spells) {
+		const grouped = {};
+		spells.forEach(spell => {
+			if (!grouped[spell.level]) {
+				grouped[spell.level] = [];
+			}
+			grouped[spell.level].push(spell);
+		});
+		return grouped;
+	}
+
+	/**
+	 * Render grouped spells into a container
+	 */
+	_renderGroupedSpells ($container, groupedSpells, showPrepareHint = false) {
+		const levelNames = {
+			1: "1st Level",
+			2: "2nd Level", 
+			3: "3rd Level",
+			4: "4th Level",
+			5: "5th Level",
+			6: "6th Level",
+			7: "7th Level",
+			8: "8th Level",
+			9: "9th Level",
+		};
+
+		Object.entries(groupedSpells).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).forEach(([level, spells]) => {
+			const $group = $(`
+				<div class="charsheet__spell-group charsheet__spell-group--compact">
+					<h5 class="charsheet__spell-group-header charsheet__spell-group-header--small">${levelNames[level] || `Level ${level}`}</h5>
+					<div class="charsheet__spell-group-list"></div>
+				</div>
+			`);
+
+			const $list = $group.find(".charsheet__spell-group-list");
+			spells.sort((a, b) => a.name.localeCompare(b.name)).forEach(spell => {
+				const $item = this._renderSpellItem(spell, showPrepareHint);
+				$list.append($item);
+			});
+
+			$container.append($group);
+		});
 	}
 
 	/**
