@@ -2690,9 +2690,107 @@ class CharacterSheetState {
 		
 		// Migrate modifiers: re-process modifiers that may be missing special flags
 		this._migrateModifiers();
+
+		// Migrate spells: ensure concentration/ritual flags are set correctly
+		this._migrateSpells();
 		
 		// Ensure unarmed strike exists for all characters
 		this.ensureUnarmedStrike();
+	}
+
+	/**
+	 * Migrate spell data to ensure concentration and ritual flags are set correctly.
+	 * Older saves may have these as false because they were stored from raw spell data
+	 * that uses duration[].concentration instead of a top-level concentration property.
+	 */
+	_migrateSpells () {
+		// Known concentration spells (common ones)
+		const knownConcentrationSpells = new Set([
+			"bless", "bane", "detect magic", "detect evil and good", "detect thoughts",
+			"shield of faith", "protection from evil and good", "hunter's mark", "hex",
+			"hold person", "invisibility", "levitate", "spider climb", "fly", "haste",
+			"slow", "hypnotic pattern", "major image", "conjure animals", "conjure elemental",
+			"dominate person", "hold monster", "wall of force", "true seeing", "eyebite",
+			"flesh to stone", "globe of invulnerability", "sunbeam", "reverse gravity",
+			"dominate monster", "sunburst", "alter self", "barkskin", "blur", "call lightning",
+			"calm emotions", "cloud of daggers", "crown of madness", "darkness", "darkvision",
+			"dust devil", "enlarge/reduce", "enthrall", "flaming sphere", "gust of wind",
+			"heat metal", "hold person", "magic weapon", "moonbeam", "phantasmal force",
+			"prayer of healing", "protection from poison", "ray of enfeeblement", "see invisibility",
+			"silence", "spiritual weapon", "suggestion", "warding bond", "web", "zone of truth",
+			"animate dead", "beacon of hope", "bestow curse", "blink", "clairvoyance",
+			"conjure barrage", "crusader's mantle", "daylight", "elemental weapon", "fear",
+			"feign death", "gaseous form", "hunger of hadar", "leomund's tiny hut",
+			"lightning bolt", "mass healing word", "meld into stone", "protection from energy",
+			"sleet storm", "speak with dead", "spirit guardians", "stinking cloud",
+			"vampiric touch", "water breathing", "water walk", "wind wall",
+			"arcane eye", "banishment", "black tentacles", "blight", "compulsion",
+			"confusion", "conjure minor elementals", "conjure woodland beings",
+			"control water", "death ward", "dimension door", "divination",
+			"dominate beast", "fabricate", "fire shield", "freedom of movement",
+			"giant insect", "greater invisibility", "guardian of faith", "hallucinatory terrain",
+			"ice storm", "locate creature", "mordenkainen's faithful hound",
+			"mordenkainen's private sanctum", "otiluke's resilient sphere", "phantasmal killer",
+			"polymorph", "staggering smite", "stone shape", "stoneskin", "wall of fire",
+			"animate objects", "antilife shell", "awaken", "bigby's hand",
+			"cloudkill", "commune", "commune with nature", "cone of cold",
+			"conjure elemental", "contact other plane", "contagion", "creation",
+			"dispel evil and good", "dream", "geas", "greater restoration",
+			"hallow", "hold monster", "insect plague", "legend lore",
+			"mass cure wounds", "mislead", "modify memory", "passwall",
+			"planar binding", "raise dead", "rary's telepathic bond", "reincarnate",
+			"scrying", "seeming", "skill empowerment", "swift quiver",
+			"telekinesis", "teleportation circle", "transmute rock", "tree stride",
+			"wall of stone", "witch bolt", "wrathful smite", "compelled duel",
+			"ensnaring strike", "searing smite", "thunderous smite", "branding smite",
+			"warding bond", "blinding smite", "elemental weapon", "crusader's mantle",
+			"aura of vitality", "aura of purity", "staggering smite", "banishing smite",
+			"destructive wave", "holy weapon", "circle of power", "guardian of nature",
+		]);
+
+		const knownRitualSpells = new Set([
+			"alarm", "comprehend languages", "detect magic", "detect poison and disease",
+			"find familiar", "identify", "illusory script", "purify food and drink",
+			"speak with animals", "tensers floating disk", "unseen servant", "augury",
+			"beast sense", "gentle repose", "locate animals or plants", "magic mouth",
+			"silence", "skywrite", "feign death", "leomund's tiny hut", "meld into stone",
+			"phantom steed", "speak with dead", "water breathing", "water walk",
+			"commune", "commune with nature", "contact other plane", "rary's telepathic bond",
+			"divination", "forbiddance", "drawmij's instant summons",
+		]);
+
+		let migratedCount = 0;
+
+		// Check spells
+		if (this._data.spellcasting?.spellsKnown?.length) {
+			this._data.spellcasting.spellsKnown.forEach(spell => {
+				const spellNameLower = spell.name?.toLowerCase();
+				if (!spell.concentration && knownConcentrationSpells.has(spellNameLower)) {
+					spell.concentration = true;
+					migratedCount++;
+				}
+				if (!spell.ritual && knownRitualSpells.has(spellNameLower)) {
+					spell.ritual = true;
+					migratedCount++;
+				}
+			});
+		}
+
+		// Check cantrips (some concentration cantrips exist)
+		const concentrationCantrips = new Set(["true strike", "blade ward"]);
+		if (this._data.spellcasting?.cantripsKnown?.length) {
+			this._data.spellcasting.cantripsKnown.forEach(spell => {
+				const spellNameLower = spell.name?.toLowerCase();
+				if (!spell.concentration && concentrationCantrips.has(spellNameLower)) {
+					spell.concentration = true;
+					migratedCount++;
+				}
+			});
+		}
+
+		if (migratedCount > 0) {
+			console.log(`[CharSheet State] Migrated ${migratedCount} spells with concentration/ritual flags`);
+		}
 	}
 	
 	/**

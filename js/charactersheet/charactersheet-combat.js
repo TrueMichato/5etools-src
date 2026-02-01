@@ -2548,7 +2548,44 @@ class CharacterSheetCombat {
 					this._page._renderCharacter?.(); // Re-render to remove effects
 				}
 			} else {
-				const spellName = await InputUiUtil.pGetUserString({title: "Concentrating on which spell?"});
+				// Get character's known spells with concentration
+				const allSpells = this._state.getSpells() || [];
+				console.log("[Combat] All spells for concentration check:", allSpells.map(s => ({name: s.name, concentration: s.concentration, level: s.level})));
+				const concentrationSpells = allSpells.filter(spell => {
+					// Check the stored concentration boolean property
+					// (duration array format won't work for stored spells as duration is stored as string)
+					return spell.concentration === true;
+				});
+				console.log("[Combat] Concentration spells found:", concentrationSpells.length, concentrationSpells.map(s => s.name));
+
+				let spellName;
+				if (concentrationSpells.length > 0) {
+					// Build choice values - spell names plus a custom option
+					const values = concentrationSpells.map(s => s.name);
+					values.push("__OTHER__");
+
+					const result = await InputUiUtil.pGetUserEnum({
+						title: "Select Concentration Spell",
+						values: values,
+						fnDisplay: (val) => {
+							if (val === "__OTHER__") return "-- Enter other spell --";
+							const spell = concentrationSpells.find(s => s.name === val);
+							return spell ? `${spell.name} (Level ${spell.level || 0})` : val;
+						},
+						isResolveItem: true,
+						isAllowNull: true,
+					});
+
+					if (result === "__OTHER__") {
+						spellName = await InputUiUtil.pGetUserString({title: "Enter spell name"});
+					} else {
+						spellName = result;
+					}
+				} else {
+					// No concentration spells found, fallback to text input
+					spellName = await InputUiUtil.pGetUserString({title: "Concentrating on which spell?"});
+				}
+
 				if (spellName) {
 					this._state.setConcentration(spellName);
 					this.renderCombatStates();
@@ -2558,6 +2595,78 @@ class CharacterSheetCombat {
 				}
 			}
 			this._updateQuickButtonStates();
+		});
+
+		// Concentration Save button - roll CON save to maintain concentration
+		$("#charsheet-combat-conc-save").off("click").on("click", async () => {
+			if (!this._state.isConcentrating?.()) {
+				JqueryUtil.doToast({type: "warning", content: "You are not currently concentrating on a spell."});
+				return;
+			}
+
+			// Ask for damage amount to calculate DC
+			const damageStr = await InputUiUtil.pGetUserString({
+				title: "Concentration Save",
+				default: "0",
+				htmlDescription: `
+					<p>Enter the damage you took to calculate the DC.</p>
+					<p class="ve-muted ve-small">DC = max(10, damage ÷ 2)</p>
+				`,
+			});
+
+			if (damageStr === null) return;
+
+			const damage = parseInt(damageStr) || 0;
+			const dc = Math.max(10, Math.floor(damage / 2));
+
+			// Roll CON save
+			const conMod = this._state.getAbilityMod?.("con") || 0;
+			const profBonus = this._state.getProficiencyBonus?.() || 0;
+			
+			// Check if character has proficiency in CON saves
+			const saves = this._state.getSavingThrowProficiencies?.() || [];
+			const hasConProf = saves.includes("con") || saves.includes("constitution");
+			
+			// Check for War Caster feat (advantage on concentration saves)
+			const features = this._state.getFeatures?.() || [];
+			const hasWarCaster = features.some(f => 
+				f.name?.toLowerCase().includes("war caster") || 
+				f.name?.toLowerCase().includes("warcaster")
+			);
+
+			const totalBonus = conMod + (hasConProf ? profBonus : 0);
+			
+			// Roll the d20
+			const roll1 = this._page.rollDice(1, 20);
+			const roll2 = hasWarCaster ? this._page.rollDice(1, 20) : null;
+			const roll = hasWarCaster ? Math.max(roll1, roll2) : roll1;
+			const total = roll + totalBonus;
+			const success = total >= dc;
+
+			// Build result message
+			let rollStr = `d20(${roll})`;
+			if (hasWarCaster) {
+				rollStr = `d20(${roll1}, ${roll2}) = ${roll} (War Caster advantage)`;
+			}
+
+			const bonusStr = totalBonus >= 0 ? `+${totalBonus}` : `${totalBonus}`;
+			const resultEmoji = success ? "✅" : "❌";
+			const resultText = success ? "SUCCESS - Concentration maintained!" : "FAILED - Concentration broken!";
+
+			JqueryUtil.doToast({
+				type: success ? "success" : "danger",
+				content: `${resultEmoji} Concentration Save vs DC ${dc}: ${rollStr} ${bonusStr} = ${total}. ${resultText}`,
+			});
+
+			// If failed, break concentration
+			if (!success) {
+				this._state.breakConcentration?.();
+				this.renderCombatStates();
+				this._page._renderActiveStates?.();
+				this._page._saveCurrentCharacter?.();
+				this._page._renderCharacter?.();
+				this._updateQuickButtonStates();
+			}
 		});
 
 		this._updateQuickButtonStates();
@@ -2587,6 +2696,10 @@ class CharacterSheetCombat {
 		} else {
 			$concBtn.text("Concentrate");
 		}
+
+		// Show/hide concentration save button based on whether concentrating
+		const $concSaveBtn = $("#charsheet-combat-conc-save");
+		$concSaveBtn.toggle(concentrating);
 	}
 
 	/**

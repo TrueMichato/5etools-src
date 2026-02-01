@@ -1004,8 +1004,10 @@ class CharacterSheetSpells {
 				// Multi-select source filter
 				if (selectedSources.has("__NONE__")) return false; // No sources selected
 				if (selectedSources.size > 0 && !selectedSources.has(spell.source)) return false;
-				if (filterRitual && !spell.ritual) return false;
-				if (filterConcentration && !spell.concentration) return false;
+				// Ritual is stored in spell.meta.ritual
+				if (filterRitual && !spell.meta?.ritual) return false;
+				// Concentration is stored in spell.duration[].concentration
+				if (filterConcentration && !spell.duration?.some?.(d => d.concentration)) return false;
 				if (filterVerbal && (!spell.components?.v)) return false;
 				if (filterSomatic && (!spell.components?.s)) return false;
 				if (filterMaterial && (!spell.components?.m)) return false;
@@ -1265,6 +1267,11 @@ class CharacterSheetSpells {
 				content: limitCheck.warning,
 			});
 		}
+
+		// Detect concentration from duration array (raw spell data format)
+		const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+		// Detect ritual from meta object (raw spell data format)
+		const isRitual = spell.ritual || spell.meta?.ritual || false;
 		
 		this._state.addSpell({
 			name: spell.name,
@@ -1272,8 +1279,8 @@ class CharacterSheetSpells {
 			level: spell.level,
 			school: spell.school,
 			prepared: spell.level === 0, // Cantrips are always prepared
-			ritual: spell.ritual || false,
-			concentration: spell.concentration || false,
+			ritual: isRitual,
+			concentration: isConcentration,
 			castingTime: this._getCastingTime(spell),
 			range: this._getRange(spell),
 			components: this._getComponents(spell),

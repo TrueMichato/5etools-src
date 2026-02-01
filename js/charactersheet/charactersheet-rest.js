@@ -27,8 +27,11 @@ class CharacterSheetRest {
 		const maxHp = this._state.getHp().max;
 		const hitDice = this._state.getHitDice();
 		const availableHitDice = hitDice.filter(hd => hd.current > 0);
+		const conditions = this._state.getConditionNames?.() || [];
+		const isConcentrating = this._state.isConcentrating?.();
+		const concentration = this._state.getConcentration?.();
 
-		if (currentHp >= maxHp && !availableHitDice.length) {
+		if (currentHp >= maxHp && !availableHitDice.length && !conditions.length && !isConcentrating) {
 			JqueryUtil.doToast({type: "info", content: "You're already at full health with no hit dice to spend."});
 			return;
 		}
@@ -44,6 +47,10 @@ class CharacterSheetRest {
 		const spentDice = {};
 
 		const $totalHealing = $(`<span class="charsheet__rest-healing-value">0</span>`);
+
+		// Track which conditions to remove
+		const conditionsToRemove = new Set();
+		let shouldBreakConcentration = false;
 
 		$$`<div class="charsheet__rest-modal">
 			<div class="charsheet__rest-intro">
@@ -62,7 +69,44 @@ class CharacterSheetRest {
 				${$totalHealing}
 				<span class="charsheet__rest-healing-label">HP</span>
 			</div>
+			
+			${conditions.length > 0 || isConcentrating ? `
+			<div class="charsheet__rest-section">
+				<div class="charsheet__rest-section-title">🛡️ Conditions & Effects</div>
+				<div class="charsheet__rest-options" id="short-rest-conditions-container">
+					<p class="ve-muted ve-small mb-2">Select conditions or effects to remove during rest:</p>
+				</div>
+			</div>
+			` : ""}
 		</div>`.appendTo($modalInner);
+
+		// Render condition checkboxes
+		if (conditions.length > 0 || isConcentrating) {
+			const $condContainer = $modalInner.find("#short-rest-conditions-container");
+			
+			// Concentration first
+			if (isConcentrating) {
+				const $cbConc = $(`<input type="checkbox">`);
+				$cbConc.on("change", () => { shouldBreakConcentration = $cbConc.is(":checked"); });
+				$$`<label class="charsheet__rest-option">
+					${$cbConc}
+					<span>🔮 Break Concentration (${concentration?.spellName || "unknown spell"})</span>
+				</label>`.appendTo($condContainer);
+			}
+			
+			// Conditions
+			conditions.forEach(condition => {
+				const $cb = $(`<input type="checkbox">`);
+				$cb.on("change", () => {
+					if ($cb.is(":checked")) conditionsToRemove.add(condition);
+					else conditionsToRemove.delete(condition);
+				});
+				$$`<label class="charsheet__rest-option">
+					${$cb}
+					<span>⚠️ Remove: ${condition}</span>
+				</label>`.appendTo($condContainer);
+			});
+		}
 
 		// Render hit dice options
 		const $hdContainer = $modalInner.find("#short-rest-hit-dice-container");
@@ -137,12 +181,28 @@ class CharacterSheetRest {
 					this._state.setPactSlotsCurrent(pactSlots.max);
 				}
 
+				// Remove selected conditions
+				conditionsToRemove.forEach(condition => {
+					this._state.removeCondition?.(condition);
+				});
+
+				// Break concentration if requested
+				if (shouldBreakConcentration) {
+					this._state.breakConcentration?.();
+				}
+
 				this._page.saveCharacter();
 				this._page.renderCharacter();
 				doClose(true);
+				
+				let message = `😴 Short rest complete!`;
+				if (totalHealing > 0) message += ` Recovered ${totalHealing} HP.`;
+				if (conditionsToRemove.size > 0) message += ` Removed ${conditionsToRemove.size} condition(s).`;
+				if (shouldBreakConcentration) message += ` Broke concentration.`;
+				
 				JqueryUtil.doToast({
 					type: "success",
-					content: `😴 Short rest complete! Recovered ${totalHealing} HP.`,
+					content: message,
 				});
 			});
 
@@ -160,6 +220,9 @@ class CharacterSheetRest {
 		const totalCurrentHd = hitDice.reduce((sum, hd) => sum + hd.current, 0);
 		const currentExhaustion = this._state.getExhaustion();
 		const newHdTotal = Math.min(totalMaxHd, totalCurrentHd + Math.max(1, Math.floor(totalMaxHd / 2)));
+		const conditions = this._state.getConditionNames?.() || [];
+		const isConcentrating = this._state.isConcentrating?.();
+		const concentration = this._state.getConcentration?.();
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🌙 Long Rest",
@@ -169,6 +232,11 @@ class CharacterSheetRest {
 
 		const $cbResetTempHp = $(`<input type="checkbox" checked>`);
 		const $cbClearExhaustion = $(`<input type="checkbox" ${currentExhaustion > 0 ? "checked" : "disabled"}>`);
+		const $cbBreakConcentration = isConcentrating ? $(`<input type="checkbox" checked>`) : null;
+
+		// Track which conditions to remove
+		const conditionsToRemove = new Set(conditions); // All checked by default for long rest
+		const conditionCheckboxes = [];
 
 		$$`<div class="charsheet__rest-modal">
 			<div class="charsheet__rest-intro">
@@ -233,7 +301,43 @@ class CharacterSheetRest {
 					</label>
 				</div>
 			</div>
+			
+			${conditions.length > 0 || isConcentrating ? `
+			<div class="charsheet__rest-section">
+				<div class="charsheet__rest-section-title">🛡️ Conditions & Effects</div>
+				<div class="charsheet__rest-options" id="long-rest-conditions-container">
+					<p class="ve-muted ve-small mb-2">Conditions to remove during rest (uncheck to keep):</p>
+				</div>
+			</div>
+			` : ""}
 		</div>`.appendTo($modalInner);
+
+		// Render condition checkboxes
+		if (conditions.length > 0 || isConcentrating) {
+			const $condContainer = $modalInner.find("#long-rest-conditions-container");
+			
+			// Concentration first
+			if (isConcentrating) {
+				$$`<label class="charsheet__rest-option">
+					${$cbBreakConcentration}
+					<span>🔮 Break Concentration (${concentration?.spellName || "unknown spell"})</span>
+				</label>`.appendTo($condContainer);
+			}
+			
+			// Conditions (checked by default for long rest)
+			conditions.forEach(condition => {
+				const $cb = $(`<input type="checkbox" checked>`);
+				conditionCheckboxes.push({condition, $cb});
+				$cb.on("change", () => {
+					if ($cb.is(":checked")) conditionsToRemove.add(condition);
+					else conditionsToRemove.delete(condition);
+				});
+				$$`<label class="charsheet__rest-option">
+					${$cb}
+					<span>⚠️ Remove: ${condition}</span>
+				</label>`.appendTo($condContainer);
+			});
+		}
 
 		// Footer buttons
 		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
@@ -275,6 +379,16 @@ class CharacterSheetRest {
 					}
 				}
 
+				// Remove selected conditions
+				conditionsToRemove.forEach(condition => {
+					this._state.removeCondition?.(condition);
+				});
+
+				// Break concentration if requested
+				if ($cbBreakConcentration?.is(":checked")) {
+					this._state.breakConcentration?.();
+				}
+
 				// Reset death saves
 				this._state.setDeathSaves({successes: 0, failures: 0});
 
@@ -284,9 +398,13 @@ class CharacterSheetRest {
 
 				doClose(true);
 
+				let message = "🌙 Long rest complete! All resources restored.";
+				if (conditionsToRemove.size > 0) message += ` Removed ${conditionsToRemove.size} condition(s).`;
+				if ($cbBreakConcentration?.is(":checked")) message += ` Broke concentration.`;
+
 				JqueryUtil.doToast({
 					type: "success",
-					content: "🌙 Long rest complete! All resources restored.",
+					content: message,
 				});
 			});
 
