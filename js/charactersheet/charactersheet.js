@@ -2348,40 +2348,94 @@ class CharacterSheetPage {
 		const activeClass = isActive ? "charsheet__state--active" : "charsheet__state--inactive";
 		const icon = state.icon || stateType?.icon || "⚡";
 		
+		// Check if this is a spell effect
+		const isSpellEffect = state.isSpellEffect || state.sourceFeatureId?.startsWith("spell_");
+		
 		// Try to create hoverable name by finding the source feature
 		let nameHtml = state.name;
-		if (state.sourceFeatureId) {
+		if (state.sourceFeatureId && !isSpellEffect) {
 			const feature = this._state.getFeatures().find(f => f.id === state.sourceFeatureId);
 			if (feature) {
 				nameHtml = this._getFeatureHoverLink(feature);
 			}
 		}
-		// Tooltip from stateType description/effects
+		
+		// Build tooltip from stateType description/effects
 		const tooltipParts = [];
 		if (stateType?.description) tooltipParts.push(stateType.description);
+		if (state.description) tooltipParts.push(state.description);
 		if (stateType?.effects?.length) {
 			const effectsStr = stateType.effects.map(e => e.type && e.target ? `${e.type} → ${e.target}` : e.type || "" ).filter(Boolean).join("; ");
+			if (effectsStr) tooltipParts.push(`Effects: ${effectsStr}`);
+		}
+		if (state.customEffects?.length) {
+			const effectsStr = state.customEffects.map(e => {
+				if (e.target === "ac") return `+${e.value} AC`;
+				if (e.dice) return `+${e.dice} to rolls`;
+				return e.type || "";
+			}).filter(Boolean).join("; ");
 			if (effectsStr) tooltipParts.push(`Effects: ${effectsStr}`);
 		}
 		const tooltip = tooltipParts.join("\n");
 		
 		// Check if this state can be ended (some passive states shouldn't be endable)
-		const isEndable = this._isStateEndable(state, stateType);
+		const isEndable = this._isStateEndable(state, stateType) || isSpellEffect;
+		
+		// Build duration/reminder info for spell effects
+		let durationHtml = "";
+		if (isSpellEffect && state.duration) {
+			if (state.duration.amount && state.duration.unit) {
+				durationHtml = `<span class="ve-small ve-muted ml-2">(${state.duration.amount} ${state.duration.unit})</span>`;
+			}
+		}
+		
+		// Show concentration warning for spell effects
+		let concentrationHtml = "";
+		if (isSpellEffect && state.concentration) {
+			concentrationHtml = `<span class="ve-small text-warning ml-1" title="Requires concentration">🔮</span>`;
+		}
+		
+		// Show conditions granted by spell
+		let grantsConditionsHtml = "";
+		if (isSpellEffect && state.grantsConditions?.length > 0) {
+			grantsConditionsHtml = `<span class="ve-small text-info ml-2" title="This spell grants these conditions">(Grants: ${state.grantsConditions.join(", ")})</span>`;
+		}
+		
+		// Style differently for spell effects
+		const bgColor = isActive 
+			? (isSpellEffect ? "rgba(147, 51, 234, 0.15)" : "rgba(40, 167, 69, 0.1)") 
+			: "transparent";
+		const borderColor = isActive 
+			? (isSpellEffect ? "var(--bs-purple, #6f42c1)" : "var(--bs-success, #28a745)") 
+			: "transparent";
 		
 		const $row = $(`
 			<div class="charsheet__state-row ${activeClass} ve-flex-v-center py-2 px-2 mb-1 rounded" 
-				style="background: ${isActive ? "rgba(40, 167, 69, 0.1)" : "transparent"}; border: 1px solid ${isActive ? "var(--bs-success, #28a745)" : "transparent"};">
+				style="background: ${bgColor}; border: 1px solid ${borderColor};">
 				<span class="charsheet__state-icon mr-2" style="font-size: 1.2em;" title="${tooltip}">${icon}</span>
-				<span class="charsheet__state-name ve-bold" title="${tooltip}">${nameHtml}</span>
-				<div class="charsheet__state-controls ml-auto">
-					${isEndable ? `<button class="ve-btn ve-btn-xs ve-btn-warning charsheet__end-state-btn">End</button>` : `<span class="ve-small ve-muted" title="This is a passive ability">Passive</span>`}
+				<span class="charsheet__state-name ve-bold" title="${tooltip}">${nameHtml}${concentrationHtml}</span>
+				${durationHtml}${grantsConditionsHtml}
+				<div class="charsheet__state-controls ml-auto ve-flex-v-center">
+					${isSpellEffect ? `<span class="ve-small ve-muted mr-2" title="Remember to end this when the spell ends">Spell Effect</span>` : ""}
+					${isEndable ? `<button class="ve-btn ve-btn-xs ${isSpellEffect ? "ve-btn-danger" : "ve-btn-warning"} charsheet__end-state-btn">${isSpellEffect ? "End Spell" : "End"}</button>` : `<span class="ve-small ve-muted" title="This is a passive ability">Passive</span>`}
 				</div>
 			</div>
 		`);
 
 		if (isEndable) {
 			$row.find(".charsheet__end-state-btn").on("click", () => {
-				this._state.deactivateState(state.stateTypeId);
+				if (isSpellEffect) {
+					// For spell effects that grant conditions, also remove those conditions
+					if (state.grantsConditions?.length > 0) {
+						for (const conditionName of state.grantsConditions) {
+							this._state.removeCondition(conditionName);
+						}
+					}
+					// Remove the spell effect state
+					this._state.removeActiveState(state.id);
+				} else {
+					this._state.deactivateState(state.stateTypeId);
+				}
 				this._saveCurrentCharacter();
 				this._renderActiveStates();
 				this._renderCharacter();

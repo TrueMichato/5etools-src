@@ -15835,6 +15835,12 @@ class CharacterSheetState {
 			// For concentration
 			spellName: options.spellName || null,
 			spellLevel: options.spellLevel || null,
+			concentration: options.concentration || false,
+			// For spell effects
+			isSpellEffect: options.isSpellEffect || false,
+			duration: options.duration || null,
+			// For spell effects that grant conditions
+			grantsConditions: options.grantsConditions || null,
 			// For Wild Shape
 			beastData: options.beastData || null,
 		};
@@ -16623,6 +16629,839 @@ class CharacterSheetState {
 	}
 	// #endregion
 	// #endregion
+	// #endregion
+
+	// #region Spell Effects
+	/**
+	 * Parse spell effects from a spell's structured data
+	 * @param {object} spell - The spell data object
+	 * @returns {object} Parsed effect information
+	 */
+	static parseSpellEffects (spell) {
+		if (!spell) return {};
+
+		const effects = {};
+
+		// Parse damage information
+		if (spell.damageInflict?.length > 0) {
+			effects.damage = {
+				type: spell.damageInflict[0],
+			};
+
+			// Extract dice from entries
+			const damageEntry = CharacterSheetState._findDiceInEntries(spell.entries, "damage");
+			if (damageEntry) {
+				effects.damage.dice = damageEntry.dice;
+			}
+		}
+
+		// Parse healing
+		if (spell.miscTags?.includes("HL")) {
+			effects.healing = {};
+			const healingEntry = CharacterSheetState._findDiceInEntries(spell.entries, "dice");
+			if (healingEntry) {
+				effects.healing.dice = healingEntry.dice;
+				// Check if spellcasting modifier is added
+				effects.healing.addModifier = CharacterSheetState._entriesContainModifier(spell.entries);
+			}
+		}
+
+		// Parse conditions
+		if (spell.conditionInflict?.length > 0) {
+			effects.conditions = spell.conditionInflict.map(c => c.toLowerCase());
+		}
+
+		// Parse saving throw
+		if (spell.savingThrow?.length > 0) {
+			effects.savingThrow = {
+				ability: spell.savingThrow[0].toLowerCase(),
+				onSuccess: CharacterSheetState._parseSaveSuccess(spell.entries),
+			};
+		}
+
+		// Parse spell attack
+		if (spell.spellAttack?.length > 0) {
+			effects.attack = {
+				type: spell.spellAttack[0] === "R" ? "ranged" : "melee",
+			};
+		}
+
+		// Parse scaling (cantrip or upcast)
+		if (spell.scalingLevelDice) {
+			effects.scaling = {
+				type: "cantrip",
+				levels: spell.scalingLevelDice.scaling,
+			};
+		}
+
+		// Parse upcast scaling from entriesHigherLevel
+		if (spell.entriesHigherLevel?.length > 0) {
+			const upcastInfo = CharacterSheetState._parseUpcastScaling(spell.entriesHigherLevel);
+			if (upcastInfo) {
+				effects.upcast = upcastInfo;
+			}
+		}
+
+		// Parse concentration
+		if (spell.duration?.some(d => d.concentration)) {
+			effects.concentration = true;
+		}
+
+		// Parse duration
+		if (spell.duration?.length > 0) {
+			const dur = spell.duration[0];
+			if (dur.type === "timed" && dur.duration) {
+				effects.duration = {
+					amount: dur.duration.amount,
+					unit: dur.duration.type,
+				};
+			} else if (dur.type === "instant") {
+				effects.duration = {type: "instant"};
+			}
+		}
+
+		// Parse target type
+		effects.target = CharacterSheetState._parseTargetType(spell);
+
+		// Parse buffs
+		const buffs = CharacterSheetState._parseBuffs(spell);
+		if (buffs.length > 0) {
+			effects.buffs = buffs;
+		}
+
+		// Parse temp HP
+		const tempHp = CharacterSheetState._parseTempHp(spell);
+		if (tempHp) {
+			effects.tempHp = tempHp;
+		}
+
+		return effects;
+	}
+
+	/**
+	 * Find dice notation in spell entries
+	 * @private
+	 */
+	static _findDiceInEntries (entries, type = "damage") {
+		if (!entries) return null;
+
+		const text = JSON.stringify(entries);
+		const pattern = type === "damage"
+			? /{@damage\s+(\d+d\d+)}/
+			: /{@dice\s+(\d+d\d+)}/;
+
+		const match = text.match(pattern);
+		if (match) {
+			return {dice: match[1]};
+		}
+		return null;
+	}
+
+	/**
+	 * Check if spell entries mention adding spellcasting modifier
+	 * @private
+	 */
+	static _entriesContainModifier (entries) {
+		if (!entries) return false;
+		const text = JSON.stringify(entries).toLowerCase();
+		return text.includes("spellcasting ability modifier") ||
+			text.includes("spellcasting modifier") ||
+			text.includes("ability modifier") ||
+			text.includes("your spellcasting") ||
+			text.includes("plus your") ||
+			/\+\s*your/.test(text);
+	}
+
+	/**
+	 * Parse what happens on a successful save
+	 * @private
+	 */
+	static _parseSaveSuccess (entries) {
+		if (!entries) return "none";
+		const text = JSON.stringify(entries).toLowerCase();
+		if (text.includes("half as much damage") || text.includes("half damage")) {
+			return "half";
+		}
+		if (text.includes("no effect") || text.includes("isn't affected")) {
+			return "none";
+		}
+		return "none";
+	}
+
+	/**
+	 * Parse upcast scaling from higher level entries
+	 * @private
+	 */
+	static _parseUpcastScaling (entriesHigherLevel) {
+		if (!entriesHigherLevel?.length) return null;
+
+		const text = JSON.stringify(entriesHigherLevel);
+
+		// Look for scaledamage pattern
+		const damageMatch = text.match(/{@scaledamage[^|]*\|[^|]*\|(\d+d\d+)}/);
+		if (damageMatch) {
+			return {
+				perLevel: damageMatch[1],
+				type: "damage",
+			};
+		}
+
+		// Look for scaledice pattern (healing)
+		const healMatch = text.match(/{@scaledice[^|]*\|[^|]*\|(\d+d\d+)}/);
+		if (healMatch) {
+			return {
+				perLevel: healMatch[1],
+				type: "healing",
+			};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Parse target type from spell data
+	 * @private
+	 */
+	static _parseTargetType (spell) {
+		const target = {};
+
+		// Check range
+		if (spell.range?.distance?.type === "self") {
+			target.type = "self";
+			return target;
+		}
+
+		if (spell.range?.distance?.type === "touch") {
+			target.type = "touch";
+			return target;
+		}
+
+		// Check area tags
+		if (spell.areaTags) {
+			const text = JSON.stringify(spell.entries || []).toLowerCase();
+			
+			if (spell.areaTags.includes("S")) {
+				target.type = "area";
+				target.shape = "sphere";
+				// Try to parse radius from entries
+				const radiusMatch = text.match(/(\d+)-foot[- ]radius/);
+				if (radiusMatch) {
+					target.radius = parseInt(radiusMatch[1]);
+				}
+				// Also try to parse target count for multi-target area spells
+				const countMatch = text.match(/(?:up to\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:creatures?|targets?)/);
+				if (countMatch) {
+					const numWords = {one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10};
+					target.count = numWords[countMatch[1]] || parseInt(countMatch[1]);
+				}
+			} else if (spell.areaTags.includes("ST")) {
+				target.type = "single";
+			} else if (spell.areaTags.includes("MT")) {
+				target.type = "multiple";
+				// Try to parse max targets
+				const countMatch = text.match(/(?:up to\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:creatures?|targets?)/);
+				if (countMatch) {
+					const numWords = {one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10};
+					target.count = numWords[countMatch[1]] || parseInt(countMatch[1]);
+				}
+			}
+		} else if (!target.type) {
+			// Default to single target if no area tags
+			target.type = "single";
+		}
+
+		return target;
+	}
+
+	/**
+	 * Parse buff effects from spell
+	 * @private
+	 */
+	static _parseBuffs (spell) {
+		const buffs = [];
+		const text = JSON.stringify(spell.entries || []).toLowerCase();
+
+		// AC bonus
+		const acMatch = text.match(/\+(\d+)\s*bonus\s*to\s*ac/);
+		if (acMatch) {
+			buffs.push({
+				target: "ac",
+				value: parseInt(acMatch[1]),
+			});
+		}
+
+		// Roll bonus (like Bless)
+		const rollBonusMatch = text.match(/{@dice\s+(\d+d\d+)}\s*to\s*the\s*roll/);
+		if (rollBonusMatch) {
+			buffs.push({
+				type: "rollBonus",
+				dice: rollBonusMatch[1],
+				applies: ["attack", "save"],
+			});
+		}
+
+		// Check for miscTags that indicate AC modification
+		if (spell.miscTags?.includes("MAC")) {
+			if (!buffs.some(b => b.target === "ac")) {
+				// Look for the actual bonus value
+				const acValueMatch = text.match(/(\+\d+)\s*bonus\s*to\s*ac/);
+				if (acValueMatch) {
+					buffs.push({
+						target: "ac",
+						value: parseInt(acValueMatch[1]),
+					});
+				}
+			}
+		}
+
+		return buffs;
+	}
+
+	/**
+	 * Parse temporary HP from spell
+	 * @private
+	 */
+	static _parseTempHp (spell) {
+		const text = JSON.stringify(spell.entries || []).toLowerCase();
+
+		const tempHpMatch = text.match(/(\d+)\s*temporary\s*hit\s*points?/);
+		if (tempHpMatch) {
+			return {
+				amount: parseInt(tempHpMatch[1]),
+			};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Parse damage from a text entry
+	 * @param {string} entry - The text entry to parse
+	 * @returns {object|null} Parsed damage info or null
+	 */
+	static parseDamageFromEntry (entry) {
+		if (!entry) return null;
+
+		const diceMatch = entry.match(/{@damage\s+(\d+d\d+)}/);
+		if (!diceMatch) return null;
+
+		const damage = {
+			dice: diceMatch[1],
+		};
+
+		// Try to find damage type
+		const text = entry.toLowerCase();
+		const damageTypes = ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
+		for (const type of damageTypes) {
+			if (text.includes(type)) {
+				damage.type = type;
+				break;
+			}
+		}
+
+		return damage;
+	}
+
+	/**
+	 * Parse all damage instances from a text entry
+	 * @param {string} entry - The text entry to parse
+	 * @returns {array} Array of damage objects
+	 */
+	static parseAllDamageFromEntry (entry) {
+		if (!entry) return [];
+
+		const damages = [];
+		const dicePattern = /{@damage\s+(\d+d\d+)}/g;
+		let match;
+
+		while ((match = dicePattern.exec(entry)) !== null) {
+			damages.push({dice: match[1]});
+		}
+
+		return damages;
+	}
+
+	/**
+	 * Parse scaling from entry text
+	 * @param {string} entry - The text entry to parse
+	 * @returns {object|null} Scaling info or null
+	 */
+	static parseScalingFromEntry (entry) {
+		if (!entry) return null;
+
+		const match = entry.match(/{@scaledamage[^|]*\|[^|]*\|(\d+d\d+)}/);
+		if (match) {
+			return {perLevel: match[1]};
+		}
+		return null;
+	}
+
+	/**
+	 * Parse healing from a text entry
+	 * @param {string} entry - The text entry to parse
+	 * @returns {object|null} Parsed healing info or null
+	 */
+	static parseHealingFromEntry (entry) {
+		if (!entry) return null;
+
+		const healing = {};
+		const text = entry.toLowerCase();
+
+		// Look for dice healing
+		const diceMatch = entry.match(/{@dice\s+(\d+d\d+)}/);
+		if (diceMatch) {
+			healing.dice = diceMatch[1];
+		}
+
+		// Check for modifier addition
+		if (text.includes("spellcasting ability modifier") ||
+			text.includes("spellcasting modifier") ||
+			text.includes("ability modifier")) {
+			healing.addModifier = true;
+		}
+
+		// Look for flat healing
+		const flatMatch = text.match(/increase(?:s)?\s*by\s*(\d+)/);
+		if (flatMatch) {
+			healing.flat = parseInt(flatMatch[1]);
+		}
+
+		if (Object.keys(healing).length === 0) return null;
+		return healing;
+	}
+
+	/**
+	 * Parse conditions from a text entry
+	 * @param {string} entry - The text entry to parse
+	 * @returns {array} Array of condition names (lowercase)
+	 */
+	static parseConditionsFromEntry (entry) {
+		if (!entry) return [];
+
+		const conditions = [];
+		const conditionPattern = /{@condition\s+([^}]+)}/gi;
+		let match;
+
+		while ((match = conditionPattern.exec(entry)) !== null) {
+			conditions.push(match[1].toLowerCase());
+		}
+
+		return conditions;
+	}
+
+	/**
+	 * Parse duration end condition from entry text
+	 * @param {string} entry - The text entry to parse
+	 * @returns {object} Duration info
+	 */
+	static parseDurationFromEntry (entry) {
+		if (!entry) return {};
+
+		const text = entry.toLowerCase();
+		const duration = {};
+
+		if (text.includes("repeat the save") || text.includes("repeat the saving throw")) {
+			duration.endCondition = "save";
+		}
+
+		return duration;
+	}
+
+	/**
+	 * Calculate spell damage including upcast scaling
+	 * @param {object} spell - The spell data
+	 * @param {number} slotLevel - The slot level being used
+	 * @param {CharacterSheetState} caster - The caster's state
+	 * @returns {object} Damage result with dice, total, and type
+	 */
+	static calculateSpellDamage (spell, slotLevel, caster) {
+		const parsed = CharacterSheetState.parseSpellEffects(spell);
+		const result = {};
+
+		// Handle cantrip scaling
+		if (spell.level === 0 && parsed.scaling?.type === "cantrip") {
+			const casterLevel = caster.getTotalLevel();
+			const scaling = parsed.scaling.levels;
+
+			// Find the highest level bracket that applies
+			let dice = scaling[1] || "1d10"; // Default
+			for (const [lvl, dmgDice] of Object.entries(scaling)) {
+				if (casterLevel >= parseInt(lvl)) {
+					dice = dmgDice;
+				}
+			}
+			result.dice = dice;
+		} else if (parsed.damage?.dice) {
+			// Base damage
+			let baseDice = parsed.damage.dice;
+
+			// Apply upcast scaling
+			if (parsed.upcast && slotLevel > spell.level) {
+				const levelsAbove = slotLevel - spell.level;
+				const upcastDice = parsed.upcast.perLevel;
+				const match = baseDice.match(/(\d+)d(\d+)/);
+				const upcastMatch = upcastDice.match(/(\d+)d(\d+)/);
+
+				if (match && upcastMatch) {
+					const baseCount = parseInt(match[1]);
+					const dieSize = match[2];
+					const upcastCount = parseInt(upcastMatch[1]);
+
+					const totalDice = baseCount + (upcastCount * levelsAbove);
+					baseDice = `${totalDice}d${dieSize}`;
+				}
+			}
+
+			result.dice = baseDice;
+		}
+
+		// Calculate total (mock for now - in real implementation this would roll)
+		if (result.dice) {
+			const match = result.dice.match(/(\d+)d(\d+)/);
+			if (match) {
+				const count = parseInt(match[1]);
+				const size = parseInt(match[2]);
+				// Use Renderer.dice if available, otherwise calculate average
+				if (globalThis.Renderer?.dice?.parseRandomise2) {
+					result.total = globalThis.Renderer.dice.parseRandomise2(`{@dice ${result.dice}}`);
+				} else {
+					// Average for testing
+					result.total = Math.floor(count * (size + 1) / 2);
+				}
+			}
+		}
+
+		result.type = parsed.damage?.type || spell.damageInflict?.[0];
+
+		return result;
+	}
+
+	/**
+	 * Calculate spell healing including upcast scaling
+	 * @param {object} spell - The spell data
+	 * @param {number} slotLevel - The slot level being used
+	 * @param {CharacterSheetState} caster - The caster's state
+	 * @returns {object} Healing result with dice, modifier, and total
+	 */
+	static calculateSpellHealing (spell, slotLevel, caster) {
+		const parsed = CharacterSheetState.parseSpellEffects(spell);
+		const result = {};
+
+		if (!parsed.healing?.dice) {
+			return result;
+		}
+
+		let baseDice = parsed.healing.dice;
+
+		// Apply upcast scaling
+		if (parsed.upcast && slotLevel > spell.level) {
+			const levelsAbove = slotLevel - spell.level;
+			const upcastDice = parsed.upcast.perLevel;
+			const match = baseDice.match(/(\d+)d(\d+)/);
+			const upcastMatch = upcastDice.match(/(\d+)d(\d+)/);
+
+			if (match && upcastMatch) {
+				const baseCount = parseInt(match[1]);
+				const dieSize = match[2];
+				const upcastCount = parseInt(upcastMatch[1]);
+
+				const totalDice = baseCount + (upcastCount * levelsAbove);
+				baseDice = `${totalDice}d${dieSize}`;
+			}
+		}
+
+		result.dice = baseDice;
+
+		// Add spellcasting modifier if applicable
+		if (parsed.healing.addModifier) {
+			const ability = caster.getSpellcastingAbility();
+			result.modifier = ability ? caster.getAbilityMod(ability) : 0;
+		} else {
+			// Check if spell explicitly adds modifier
+			const text = JSON.stringify(spell.entries || []).toLowerCase();
+			if (text.includes("spellcasting ability modifier")) {
+				const ability = caster.getSpellcastingAbility();
+				result.modifier = ability ? caster.getAbilityMod(ability) : 0;
+			} else {
+				result.modifier = 0;
+			}
+		}
+
+		// Calculate total
+		if (result.dice) {
+			const match = result.dice.match(/(\d+)d(\d+)/);
+			if (match) {
+				const count = parseInt(match[1]);
+				const size = parseInt(match[2]);
+				if (globalThis.Renderer?.dice?.parseRandomise2) {
+					result.total = globalThis.Renderer.dice.parseRandomise2(`{@dice ${result.dice}}`) + result.modifier;
+				} else {
+					result.total = Math.floor(count * (size + 1) / 2) + result.modifier;
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Calculate damage after a successful save
+	 * @param {number} fullDamage - The full damage amount
+	 * @param {string} onSuccess - What happens on success ("half", "none")
+	 * @returns {number} The resulting damage
+	 */
+	static calculateSaveDamage (fullDamage, onSuccess) {
+		if (onSuccess === "half") {
+			return Math.floor(fullDamage / 2);
+		}
+		if (onSuccess === "none") {
+			return 0;
+		}
+		return fullDamage;
+	}
+
+	/**
+	 * Apply a spell condition to a target
+	 * @param {object} spell - The spell being cast
+	 * @param {CharacterSheetState} target - The target character
+	 * @param {object} options - Options including saveResult
+	 */
+	static applySpellCondition (spell, target, options = {}) {
+		if (options.saveResult === "success") return;
+
+		const parsed = CharacterSheetState.parseSpellEffects(spell);
+		if (!parsed.conditions?.length) return;
+
+		for (const condition of parsed.conditions) {
+			// Capitalize first letter for condition name
+			const conditionName = condition.charAt(0).toUpperCase() + condition.slice(1);
+			target.addCondition(conditionName);
+		}
+	}
+
+	/**
+	 * Apply a spell buff to a target
+	 * @param {object} spell - The spell being cast
+	 * @param {CharacterSheetState} target - The target character
+	 * @param {object} options - Options including slotLevel
+	 */
+	static applySpellBuff (spell, target, options = {}) {
+		const parsed = CharacterSheetState.parseSpellEffects(spell);
+
+		// Apply temp HP
+		if (parsed.tempHp) {
+			let amount = parsed.tempHp.amount;
+
+			// Apply upcast scaling for temp HP
+			if (options.slotLevel && spell.level && options.slotLevel > spell.level) {
+				const levelsAbove = options.slotLevel - spell.level;
+				// Check if spell scales temp HP (like Armor of Agathys)
+				const text = JSON.stringify(spell.entriesHigherLevel || []).toLowerCase();
+				if (text.includes("temporary hit points")) {
+					const scaleMatch = text.match(/increase(?:s)?\s*by\s*(\d+)/);
+					if (scaleMatch) {
+						amount += parseInt(scaleMatch[1]) * levelsAbove;
+					}
+				}
+			}
+
+			target.setTempHp(amount);
+		}
+
+		// Convert parsed buffs to proper effect format for customEffects
+		const customEffects = [];
+		if (parsed.buffs?.length > 0) {
+			for (const buff of parsed.buffs) {
+				customEffects.push({
+					type: "bonus",
+					target: buff.target,
+					value: buff.value,
+					dice: buff.dice,
+					source: spell.name,
+				});
+			}
+		}
+
+		// Add as active state - use "custom" state type
+		const stateOptions = {
+			name: spell.name,
+			sourceFeatureId: `spell_${spell.name}_${spell.source || ""}`,
+			description: `Spell effect from ${spell.name}`,
+			customEffects: customEffects,
+		};
+
+		// Add concentration and duration info
+		if (parsed.concentration) {
+			stateOptions.concentration = true;
+		}
+		if (parsed.duration) {
+			stateOptions.duration = parsed.duration;
+		}
+
+		// Store spell-specific data
+		stateOptions.isSpellEffect = true;
+
+		target.addActiveState("custom", stateOptions);
+	}
+
+	/**
+	 * Get valid targets for a spell
+	 * @param {object} spell - The spell data
+	 * @returns {object} Target validity info
+	 */
+	static getValidTargets (spell) {
+		const parsed = CharacterSheetState.parseSpellEffects(spell);
+		const result = {};
+
+		if (parsed.target?.type === "self") {
+			result.selfOnly = true;
+			return result;
+		}
+
+		// Healing spells can target self or allies
+		if (parsed.healing) {
+			result.canTargetSelf = true;
+			result.canTargetAlly = true;
+		}
+
+		// Damage/condition spells can target enemies
+		if (parsed.damage || parsed.conditions?.length > 0) {
+			result.canTargetEnemy = true;
+		}
+
+		// Multi-target
+		if (parsed.target?.count) {
+			result.maxTargets = parsed.target.count;
+		}
+
+		return result;
+	}
+
+	/**
+	 * Apply the full effect of a spell
+	 * @param {object} spell - The spell being cast
+	 * @param {CharacterSheetState} caster - The caster's state
+	 * @param {CharacterSheetState} target - The target's state
+	 * @param {object} options - Cast options
+	 * @returns {object} Result of the spell effect
+	 */
+	static applySpellEffect (spell, caster, target, options = {}) {
+		const parsed = CharacterSheetState.parseSpellEffects(spell);
+		const result = {};
+
+		// Healing
+		if (parsed.healing) {
+			result.type = "healing";
+			const healing = CharacterSheetState.calculateSpellHealing(spell, options.slotLevel || spell.level, caster);
+
+			// Override with provided roll if given
+			result.amount = options.healingRoll !== undefined ? options.healingRoll + (healing.modifier || 0) : healing.total;
+
+			// Apply to target
+			const hp = target.getHp();
+			const newCurrent = Math.min(hp.max, hp.current + result.amount);
+			target._data.hp.current = newCurrent;
+		}
+
+		// Damage
+		if (parsed.damage) {
+			result.type = "damage";
+			const damage = CharacterSheetState.calculateSpellDamage(spell, options.slotLevel || spell.level, caster);
+
+			let totalDamage = options.damageRoll !== undefined ? options.damageRoll : damage.total;
+
+			// Apply save reduction
+			if (options.saveResult === "success" && parsed.savingThrow?.onSuccess === "half") {
+				totalDamage = Math.floor(totalDamage / 2);
+			}
+
+			result.amount = totalDamage;
+			result.damageType = damage.type;
+
+			// Apply to target
+			const hp = target.getHp();
+			const newCurrent = Math.max(0, hp.current - totalDamage);
+			target._data.hp.current = newCurrent;
+		}
+
+		// Conditions
+		if (parsed.conditions?.length > 0 && options.saveResult !== "success") {
+			CharacterSheetState.applySpellCondition(spell, target, options);
+			result.conditionApplied = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * Execute a complete spell cast
+	 * @param {object} spell - The spell being cast
+	 * @param {CharacterSheetState} caster - The caster's state
+	 * @param {object} options - Cast options
+	 * @returns {object} Complete cast result
+	 */
+	static executeSpellCast (spell, caster, options = {}) {
+		const result = {success: true};
+		const parsed = CharacterSheetState.parseSpellEffects(spell);
+
+		// Handle attack roll
+		if (parsed.attack) {
+			const attackBonus = caster.getSpellAttackBonus();
+			const roll = options.attackRoll || (Math.floor(Math.random() * 20) + 1);
+			result.attackResult = {
+				roll: roll,
+				total: roll + attackBonus,
+				hit: true, // For now, assume hit - actual implementation would compare to AC
+			};
+		}
+
+		// Handle damage
+		if (parsed.damage) {
+			const damage = CharacterSheetState.calculateSpellDamage(spell, options.slotLevel || spell.level, caster);
+
+			// Apply save reduction if target saved
+			if (parsed.savingThrow && options.saveResult === "success") {
+				damage.total = CharacterSheetState.calculateSaveDamage(damage.total, parsed.savingThrow.onSuccess);
+			}
+
+			result.damage = damage;
+		}
+
+		// Handle healing
+		if (parsed.healing) {
+			const healing = CharacterSheetState.calculateSpellHealing(spell, options.slotLevel || spell.level, caster);
+			result.healing = healing;
+
+			// Apply to self if targeting self
+			if (options.target === "self") {
+				const hp = caster.getHp();
+				const newCurrent = Math.min(hp.max, hp.current + healing.total);
+				caster._data.hp.current = newCurrent;
+			}
+		}
+
+		// Handle condition application
+		if (parsed.conditions?.length > 0) {
+			// Determine if save was failed
+			const dc = caster.getSpellSaveDC();
+			const saveRoll = options.targetSaveRoll || 10;
+			const saveFailed = saveRoll < dc;
+
+			if (saveFailed) {
+				result.conditionApplied = true;
+			}
+		}
+
+		// Handle concentration
+		if (parsed.concentration) {
+			// Set concentration - use the proper signature (spellName, spellLevel)
+			if (caster.setConcentration) {
+				caster.setConcentration(spell.name, options.slotLevel || spell.level);
+			}
+		}
+
+		return result;
+	}
 	// #endregion
 
 	// #region Serialization

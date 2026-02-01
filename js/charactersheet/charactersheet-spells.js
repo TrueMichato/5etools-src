@@ -1496,6 +1496,14 @@ class CharacterSheetSpells {
 	}
 
 	_showCastResult (spell, slotLevel = null, isPactSlot = false) {
+		// Delegate to the enhanced spell effects handler
+		this._handleSpellEffects(spell, slotLevel, isPactSlot);
+	}
+
+	/**
+	 * Enhanced spell effects handler with target selection and effect application
+	 */
+	async _handleSpellEffects (spell, slotLevel = null, isPactSlot = false) {
 		const upcast = slotLevel && slotLevel > spell.level ? ` (at level ${slotLevel})` : "";
 		const slotType = isPactSlot ? " [Pact Slot]" : "";
 
@@ -1503,6 +1511,7 @@ class CharacterSheetSpells {
 		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
 		let attackInfo = "";
 		let damageInfo = "";
+		let effectsApplied = [];
 
 		if (spellData) {
 			const spellcastingMod = this._state.getAbilityMod(this._state.getSpellcastingAbility() || "int");
@@ -1524,19 +1533,234 @@ class CharacterSheetSpells {
 				attackInfo += `<br>Save DC: <strong>${saveDC}</strong> (${spellData.savingThrow.join("/")} save)`;
 			}
 
-			// Roll damage if spell has damage
-			damageInfo = this._rollSpellDamage(spellData, slotLevel, spell.level);
+			// Parse spell effects to determine what the spell does
+			const effects = CharacterSheetState.parseSpellEffects(spellData);
+			const targetInfo = CharacterSheetState.getValidTargets(spellData);
 
-			// Roll healing if spell heals
-			if (!damageInfo) {
-				damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level);
+			// Determine if we should ask for a target
+			const needsTargetSelection = !targetInfo.selfOnly && (
+				effects.healing ||
+				effects.buffs?.length > 0 ||
+				effects.tempHp ||
+				effects.conditions?.length > 0
+			);
+
+			// Handle target selection for beneficial effects
+			if (needsTargetSelection) {
+				const targetChoice = await this._promptSpellTarget(spell, spellData, effects, targetInfo);
+				
+				if (targetChoice === "self") {
+					effectsApplied = await this._applySpellEffectsToSelf(spell, spellData, effects, slotLevel);
+				} else if (targetChoice === "other") {
+					// For others, just show the roll results - we can't track their HP
+					damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level) ||
+						this._rollSpellDamage(spellData, slotLevel, spell.level);
+				}
+				// If cancelled, still show the basic cast info
+			} else if (targetInfo.selfOnly) {
+				// Self-only spells automatically target self
+				effectsApplied = await this._applySpellEffectsToSelf(spell, spellData, effects, slotLevel);
+			} else {
+				// Damage or other effects targeting enemies
+				damageInfo = this._rollSpellDamage(spellData, slotLevel, spell.level);
+
+				// Roll healing if spell heals but targets others by default (like Mass Cure Wounds)
+				if (!damageInfo) {
+					damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level);
+				}
 			}
+		}
+
+		// Build the toast message
+		let toastContent = `Cast ${spell.name}${upcast}${slotType}${attackInfo}${damageInfo}`;
+		
+		if (effectsApplied.length > 0) {
+			toastContent += `<br><span class="text-success">✓ Applied: ${effectsApplied.join(", ")}</span>`;
 		}
 
 		JqueryUtil.doToast({
 			type: "success",
-			content: $(`<div>Cast ${spell.name}${upcast}${slotType}${attackInfo}${damageInfo}</div>`),
+			content: $(`<div>${toastContent}</div>`),
 		});
+
+		// Update UI to show new active states
+		if (effectsApplied.length > 0) {
+			this._page._renderActiveStates?.();
+			this._page._combat?.renderCombatStates?.();
+			this._page._renderHp?.();
+		}
+	}
+
+	/**
+	 * Prompt user to select a target for the spell
+	 */
+	async _promptSpellTarget (spell, spellData, effects, targetInfo) {
+		const effectDescriptions = [];
+		
+		if (effects.healing) {
+			const healDice = effects.healing.dice || "healing";
+			effectDescriptions.push(`Heal (${healDice}${effects.healing.addModifier ? " + modifier" : ""})`);
+		}
+		if (effects.tempHp) {
+			effectDescriptions.push(`Gain ${effects.tempHp.amount} temporary HP`);
+		}
+		if (effects.buffs?.length > 0) {
+			for (const buff of effects.buffs) {
+				if (buff.target === "ac") {
+					effectDescriptions.push(`+${buff.value} AC`);
+				} else if (buff.type === "rollBonus") {
+					effectDescriptions.push(`+${buff.dice} to attacks/saves`);
+				}
+			}
+		}
+		if (effects.conditions?.length > 0) {
+			// For beneficial conditions (like from buff spells on self)
+			effectDescriptions.push(`Apply: ${effects.conditions.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(", ")}`);
+		}
+
+		const effectsText = effectDescriptions.length > 0 
+			? `<div class="mt-2"><strong>Effects:</strong> ${effectDescriptions.join(", ")}</div>`
+			: "";
+
+		const durationText = effects.duration 
+			? `<div class="ve-muted ve-small">Duration: ${effects.duration.amount || "Until ended"} ${effects.duration.unit || ""}</div>`
+			: "";
+
+		const concentrationText = effects.concentration
+			? `<div class="text-warning ve-small">⚠ Requires Concentration</div>`
+			: "";
+
+		return InputUiUtil.pGetUserEnum({
+			title: `${spell.name} - Choose Target`,
+			htmlDescription: `
+				<div>Who is the target of this spell?</div>
+				${effectsText}
+				${durationText}
+				${concentrationText}
+			`,
+			values: ["Self", "Another creature"],
+			fnDisplay: v => v,
+			isResolveItem: true,
+		}).then(result => {
+			if (result == null) return null;
+			return result === "Self" ? "self" : "other";
+		});
+	}
+
+	/**
+	 * Apply spell effects to self and return list of applied effects
+	 */
+	async _applySpellEffectsToSelf (spell, spellData, effects, slotLevel) {
+		const appliedEffects = [];
+		const spellcastingMod = this._state.getAbilityMod(this._state.getSpellcastingAbility() || "int");
+
+		// Apply healing
+		if (effects.healing) {
+			const healingResult = CharacterSheetState.calculateSpellHealing(spellData, slotLevel || spell.level, this._state);
+			const healAmount = healingResult.total || 0;
+			
+			if (healAmount > 0) {
+				const hp = this._state.getHp();
+				const newHp = Math.min(hp.max, hp.current + healAmount);
+				const actualHealing = newHp - hp.current;
+				this._state.setHp(hp.max, newHp);
+				appliedEffects.push(`Healed ${actualHealing} HP`);
+			}
+		}
+
+		// Apply temporary HP
+		if (effects.tempHp) {
+			let tempHpAmount = effects.tempHp.amount;
+			
+			// Handle upcast scaling for temp HP
+			if (slotLevel && spellData.level && slotLevel > spellData.level && spellData.entriesHigherLevel) {
+				const text = JSON.stringify(spellData.entriesHigherLevel).toLowerCase();
+				if (text.includes("temporary hit points")) {
+					const scaleMatch = text.match(/increase(?:s)?\s*by\s*(\d+)/);
+					if (scaleMatch) {
+						tempHpAmount += parseInt(scaleMatch[1]) * (slotLevel - spellData.level);
+					}
+				}
+			}
+			
+			this._state.setTempHp(tempHpAmount);
+			appliedEffects.push(`+${tempHpAmount} temp HP`);
+		}
+
+		// Check if spell grants conditions - if so, apply the condition itself
+		// The condition system already handles the mechanical effects
+		const conditionsToApply = [];
+		if (effects.conditions?.length > 0) {
+			// Determine which conditions can be self-targeted (beneficial conditions)
+			const hostileConditions = ["blinded", "charmed", "deafened", "frightened", "grappled", 
+				"paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"];
+			
+			for (const condition of effects.conditions) {
+				const conditionLower = condition.toLowerCase();
+				// Only apply non-hostile conditions to self
+				// "invisible" is a beneficial condition when cast on self
+				if (!hostileConditions.includes(conditionLower)) {
+					const conditionName = condition.charAt(0).toUpperCase() + condition.slice(1);
+					this._state.addCondition(conditionName);
+					conditionsToApply.push(conditionName);
+					appliedEffects.push(`${conditionName} condition applied`);
+				}
+			}
+		}
+
+		// For condition-granting spells, create an active state to track duration/concentration
+		// but DON'T add customEffects (the condition itself provides the effects)
+		if (conditionsToApply.length > 0 && (effects.duration || effects.concentration)) {
+			this._state.addActiveState("custom", {
+				name: spell.name,
+				icon: effects.concentration ? "🔮" : "✨",
+				description: `Grants: ${conditionsToApply.join(", ")}`,
+				sourceFeatureId: `spell_${spell.name}_${Date.now()}`,
+				customEffects: [], // Empty - condition provides the effects
+				isSpellEffect: true,
+				concentration: effects.concentration || false,
+				duration: effects.duration,
+				grantsConditions: conditionsToApply, // Track which conditions this spell grants
+			});
+		}
+		// For buff spells that DON'T grant conditions, apply the parsed buff effects
+		else if ((effects.buffs?.length > 0 || effects.duration) && conditionsToApply.length === 0) {
+			const stateId = this._state.addActiveState("custom", {
+				name: spell.name,
+				icon: effects.concentration ? "🔮" : "✨",
+				description: `Spell effect: ${spell.name}`,
+				sourceFeatureId: `spell_${spell.name}_${Date.now()}`,
+				customEffects: effects.buffs?.map(buff => ({
+					type: "bonus",
+					target: buff.target,
+					value: buff.value,
+					dice: buff.dice,
+				})) || [],
+				isSpellEffect: true,
+				concentration: effects.concentration || false,
+				duration: effects.duration,
+			});
+
+			// Build description of buffs
+			const buffDescriptions = [];
+			for (const buff of (effects.buffs || [])) {
+				if (buff.target === "ac") {
+					buffDescriptions.push(`+${buff.value} AC`);
+				} else if (buff.type === "rollBonus") {
+					buffDescriptions.push(`+${buff.dice} to rolls`);
+				}
+			}
+			if (buffDescriptions.length > 0) {
+				appliedEffects.push(buffDescriptions.join(", "));
+			} else if (stateId) {
+				appliedEffects.push(`${spell.name} active`);
+			}
+		}
+
+		// Save character after applying effects
+		this._page.saveCharacter();
+
+		return appliedEffects;
 	}
 
 	_rollSpellDamage (spellData, slotLevel, baseLevel) {
