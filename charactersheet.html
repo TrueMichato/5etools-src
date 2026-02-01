@@ -406,13 +406,13 @@
 											<div class="charsheet__physical-stat-grid charsheet__physical-stat-grid--jumps">
 												<div class="charsheet__physical-stat-item" title="Long Jump (Running/Standing)">
 													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-long-run">0</span>/<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-long-stand">0</span>
-													<span class="charsheet__physical-stat-unit"> ft.</span>
-													<span class="charsheet__physical-stat-label"> Long (🏃/🧍)</span>
+													<span class="charsheet__physical-stat-unit ml-1">ft.</span>
+													<span class="charsheet__physical-stat-label ml-1">Long (🏃/🧍)</span>
 												</div>
 												<div class="charsheet__physical-stat-item" title="High Jump (Running/Standing)">
 													<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-high-run">0</span>/<span class="charsheet__physical-stat-value" id="charsheet-disp-jump-high-stand">0</span>
-													<span class="charsheet__physical-stat-unit"> ft.</span>
-													<span class="charsheet__physical-stat-label"> High (🏃/🧍)</span>
+													<span class="charsheet__physical-stat-unit ml-1">ft.</span>
+													<span class="charsheet__physical-stat-label ml-1">High (🏃/🧍)</span>
 												</div>
 											</div>
 										</div>
@@ -432,8 +432,8 @@
 											<div class="charsheet__physical-stat-grid">
 												<div class="charsheet__physical-stat-item charsheet__physical-stat-item--small" title="Push, Drag, or Lift = 2× Carry Capacity">
 													<span class="charsheet__physical-stat-value" id="charsheet-disp-push">300</span>
-													<span class="charsheet__physical-stat-unit"> lb.</span>
-													<span class="charsheet__physical-stat-label"> Push/Drag/Lift</span>
+													<span class="charsheet__physical-stat-unit ml-1">lb.</span>
+													<span class="charsheet__physical-stat-label ml-1">Push/Drag/Lift</span>
 												</div>
 											</div>
 										</div>
@@ -1026,6 +1026,41 @@
 							<h4 class="charsheet__section-title">Attuned Items</h4>
 							<div id="charsheet-attuned-list">
 								<div class="ve-muted ve-text-center py-2">No attuned items (0/3)</div>
+							</div>
+						</div>
+						<!-- Currency Section in Inventory Tab -->
+						<div class="charsheet__section charsheet__section--currency-inv">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">💰</span>
+								Currency
+								<span class="charsheet__currency-total ve-small" id="charsheet-inv-currency-total"></span>
+							</h4>
+							<div class="charsheet__currency-grid charsheet__currency-grid--compact">
+								<div class="charsheet__currency-item charsheet__currency--cp" data-currency="cp">
+									<span class="charsheet__currency-icon">🟤</span>
+									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-inv-ipt-cp" value="0" min="0">
+									<span class="charsheet__currency-label">CP</span>
+								</div>
+								<div class="charsheet__currency-item charsheet__currency--sp" data-currency="sp">
+									<span class="charsheet__currency-icon">⚪</span>
+									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-inv-ipt-sp" value="0" min="0">
+									<span class="charsheet__currency-label">SP</span>
+								</div>
+								<div class="charsheet__currency-item charsheet__currency--ep" data-currency="ep">
+									<span class="charsheet__currency-icon">🔵</span>
+									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-inv-ipt-ep" value="0" min="0">
+									<span class="charsheet__currency-label">EP</span>
+								</div>
+								<div class="charsheet__currency-item charsheet__currency--gp" data-currency="gp">
+									<span class="charsheet__currency-icon">🟡</span>
+									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-inv-ipt-gp" value="0" min="0">
+									<span class="charsheet__currency-label">GP</span>
+								</div>
+								<div class="charsheet__currency-item charsheet__currency--pp" data-currency="pp">
+									<span class="charsheet__currency-icon">⚪</span>
+									<input type="number" class="form-control form-control--minimal charsheet__ipt-currency" id="charsheet-inv-ipt-pp" value="0" min="0">
+									<span class="charsheet__currency-label">PP</span>
+								</div>
 							</div>
 						</div>
 					</div>
