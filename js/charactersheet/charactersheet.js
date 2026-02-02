@@ -1066,14 +1066,27 @@ class CharacterSheetPage {
 		
 		$("#charsheet-disp-speed").text(speedDisplay);
 
-		// Jump distances based on Strength score
-		// Running jumps require a 10ft running start
-		// Standing jumps are half of running distance
-		const strScore = this._state.getAbilityScore("str");
-		const strMod = this._state.getAbilityMod("str");
+		// Jump distances
+		// Standard rules: Long jump = STR score, High jump = 3 + STR mod
+		// Thelemar rules: Long jump = 8 + Athletics mod, High jump = 2 + Athletics × 0.5
+		// Running jumps require a 10ft running start; standing jumps are half
+		const useThelemarJumping = this._state.getSettings()?.thelemar_jumping;
 		
-		const longJumpRunning = strScore; // Long jump = Strength score in feet (with 10ft running start)
-		const highJumpRunning = 3 + strMod; // High jump = 3 + Str mod in feet (with 10ft running start)
+		let longJumpRunning, highJumpRunning;
+		
+		if (useThelemarJumping) {
+			// Thelemar rules: Athletics-based
+			const athleticsMod = this._state.getSkillMod("athletics");
+			longJumpRunning = 8 + athleticsMod; // Long jump = 8 + Athletics modifier
+			highJumpRunning = Math.floor(2 + athleticsMod * 0.5); // High jump = 2 + Athletics × 0.5
+		} else {
+			// Standard rules: Strength-based
+			const strScore = this._state.getAbilityScore("str");
+			const strMod = this._state.getAbilityMod("str");
+			longJumpRunning = strScore; // Long jump = Strength score in feet
+			highJumpRunning = 3 + strMod; // High jump = 3 + Str mod in feet
+		}
+		
 		const longJumpStanding = Math.floor(longJumpRunning / 2); // Standing = half of running
 		const highJumpStanding = Math.floor(Math.max(0, highJumpRunning) / 2); // Standing = half of running
 
@@ -1081,6 +1094,22 @@ class CharacterSheetPage {
 		$("#charsheet-disp-jump-long-stand").text(`${longJumpStanding}`);
 		$("#charsheet-disp-jump-high-run").text(`${Math.max(0, highJumpRunning)}`);
 		$("#charsheet-disp-jump-high-stand").text(`${highJumpStanding}`);
+
+		// Update tooltips based on rules being used
+		if (useThelemarJumping) {
+			const athleticsMod = this._state.getSkillMod("athletics");
+			const longTooltip = `Long Jump (Thelemar): 8 + Athletics (${athleticsMod >= 0 ? "+" : ""}${athleticsMod}) = ${longJumpRunning} ft. running, ${longJumpStanding} ft. standing`;
+			const highTooltip = `High Jump (Thelemar): 2 + Athletics × 0.5 = ${Math.max(0, highJumpRunning)} ft. running, ${highJumpStanding} ft. standing`;
+			$(".charsheet__physical-stat-item[title*='Long Jump']").attr("title", longTooltip);
+			$(".charsheet__physical-stat-item[title*='High Jump']").attr("title", highTooltip);
+		} else {
+			const strScore = this._state.getAbilityScore("str");
+			const strMod = this._state.getAbilityMod("str");
+			const longTooltip = `Long Jump: STR score (${strScore}) = ${longJumpRunning} ft. running, ${longJumpStanding} ft. standing`;
+			const highTooltip = `High Jump: 3 + STR mod (${strMod >= 0 ? "+" : ""}${strMod}) = ${Math.max(0, highJumpRunning)} ft. running, ${highJumpStanding} ft. standing`;
+			$(".charsheet__physical-stat-item[title*='Long Jump']").attr("title", longTooltip);
+			$(".charsheet__physical-stat-item[title*='High Jump']").attr("title", highTooltip);
+		}
 
 		// Carrying capacity (uses state method which respects Thelemar homebrew rules)
 		const carryCapacity = this._state.getCarryingCapacity();
@@ -1091,6 +1120,18 @@ class CharacterSheetPage {
 		$("#charsheet-disp-weight").text(currentWeight.toFixed(1));
 		$("#charsheet-disp-carry").text(carryCapacity);
 		$("#charsheet-disp-push").text(pushDragLift);
+
+		// Update carrying capacity tooltip based on rules
+		const useThelemarCarry = this._state.getSettings()?.thelemar_carryWeight;
+		if (useThelemarCarry) {
+			const mightMod = this._state.getSkillMod("might");
+			const carryTooltip = `Carry Capacity (Thelemar): 50 + 25 × Might mod (${mightMod >= 0 ? "+" : ""}${mightMod}) = ${carryCapacity} lb.\nPush/Drag/Lift: ${pushDragLift} lb.`;
+			$(".charsheet__physical-stat-group--carry").attr("title", carryTooltip);
+		} else {
+			const strScore = this._state.getAbilityScore("str");
+			const carryTooltip = `Carry Capacity: STR (${strScore}) × 15 = ${carryCapacity} lb.\nPush/Drag/Lift: ${pushDragLift} lb.`;
+			$(".charsheet__physical-stat-group--carry").attr("title", carryTooltip);
+		}
 
 		// Update carry bar visualization
 		const carryPercent = carryCapacity > 0 ? Math.min(100, (currentWeight / carryCapacity) * 100) : 0;
@@ -1614,28 +1655,10 @@ class CharacterSheetPage {
 		}
 		$effect.html(effectText);
 
-		// Render rules toggle if container exists
-		if ($rulesToggle.length && !$rulesToggle.data("initialized")) {
-			$rulesToggle.data("initialized", true);
-			$rulesToggle.html(`
-				<select id="charsheet-exhaustion-rules-select" class="ve-form-control ve-form-control--sm">
-					<option value="2024" ${rules === "2024" ? "selected" : ""}>2024 Rules</option>
-					<option value="2014" ${rules === "2014" ? "selected" : ""}>2014 Rules</option>
-					<option value="thelemar" ${rules === "thelemar" ? "selected" : ""}>Thelemar Rules</option>
-				</select>
-			`);
-			$rulesToggle.find("select").on("change", (e) => {
-				this._state.setExhaustionRules(e.target.value);
-				this._saveCurrentCharacter();
-				this._renderExhaustion();
-				this._renderCombatStats(); // Re-render to update speed
-				// Re-render spells to update DC
-				if (this._spellsModule) {
-					this._spellsModule.render();
-				}
-			});
-		} else if ($rulesToggle.length) {
-			$rulesToggle.find("select").val(rules);
+		// Show which rules are being used (non-editable - change in Settings)
+		if ($rulesToggle.length) {
+			const rulesLabel = rules === "thelemar" ? "Thelemar" : rules === "2014" ? "2014" : "2024";
+			$rulesToggle.html(`<span class="ve-muted ve-small" title="Change exhaustion rules in Settings">Using ${rulesLabel} rules</span>`);
 		}
 	}
 
@@ -4463,12 +4486,14 @@ class CharacterSheetPage {
 
 		// Thelemar homebrew rules
 		const currentThelemar_carryWeight = this._state.getSettings()?.thelemar_carryWeight || false;
+		const currentThelemar_jumping = this._state.getSettings()?.thelemar_jumping || false;
 		const currentThelemar_linguisticsBonus = this._state.getSettings()?.thelemar_linguisticsBonus || false;
 		const currentThelemar_criticalRolls = this._state.getSettings()?.thelemar_criticalRolls || false;
 		const currentThelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
+		const currentThelemar_itemUtilization = this._state.getSettings()?.thelemar_itemUtilization || false;
 		
 		// Master toggle for all Thelemar rules (uses currentExhaustionRules from above)
-		const allThelemar = currentThelemar_carryWeight && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls && currentThelemar_asiFeat && currentExhaustionRules === "thelemar";
+		const allThelemar = currentThelemar_carryWeight && currentThelemar_jumping && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls && currentThelemar_asiFeat && currentThelemar_itemUtilization && currentExhaustionRules === "thelemar";
 		const $thelemar_masterToggle = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--master">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-all" ${allThelemar ? "checked" : ""}>
@@ -4515,6 +4540,30 @@ class CharacterSheetPage {
 				<span class="charsheet__settings-checkbox-text">
 					<span class="charsheet__settings-checkbox-title">📈 ASI + Feat at Level 4</span>
 					<span class="charsheet__settings-checkbox-desc">At level 4, gain both an ASI and a feat instead of choosing one</span>
+				</span>
+			</label>
+		</div>`;
+
+		// Thelemar jumping rules (Athletics-based)
+		const currentThelemar_jumping = this._state.getSettings()?.thelemar_jumping || false;
+		const $thelemar_jumping = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-thelemar-jumping" ${currentThelemar_jumping ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">🦘 Jumping Rules</span>
+					<span class="charsheet__settings-checkbox-desc">Athletics-based: Long jump = 8 + Athletics mod; High jump = 2 + Athletics × 0.5</span>
+				</span>
+			</label>
+		</div>`;
+
+		// Thelemar item utilization (healing potions as action = max healing)
+		const currentThelemar_itemUtilization = this._state.getSettings()?.thelemar_itemUtilization || false;
+		const $thelemar_itemUtilization = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-thelemar-item-util" ${currentThelemar_itemUtilization ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">🧪 Item Utilization</span>
+					<span class="charsheet__settings-checkbox-desc">Bonus action items can be used as an action for maximum effect (no roll)</span>
 				</span>
 			</label>
 		</div>`;
@@ -4596,9 +4645,11 @@ class CharacterSheetPage {
 				${$thelemar_masterToggle}
 				<div class="charsheet__settings-thelemar-sub">
 					${$thelemar_carryWeight}
+					${$thelemar_jumping}
 					${$thelemar_linguisticsBonus}
 					${$thelemar_criticalRolls}
 					${$thelemar_asiFeat}
+					${$thelemar_itemUtilization}
 				</div>
 			</div>
 		</div>`.appendTo($modalInner);
@@ -4665,12 +4716,14 @@ class CharacterSheetPage {
 		// Thelemar master toggle helper - defined early so exhaustion handler can use it
 		const updateMasterToggleState = () => {
 			const carryChecked = $modalInner.find("#settings-thelemar-carry").prop("checked");
+			const jumpingChecked = $modalInner.find("#settings-thelemar-jumping").prop("checked");
 			const lingChecked = $modalInner.find("#settings-thelemar-linguistics").prop("checked");
 			const critsChecked = $modalInner.find("#settings-thelemar-crits").prop("checked");
 			const asiFeatChecked = $modalInner.find("#settings-thelemar-asifeat").prop("checked");
+			const itemUtilChecked = $modalInner.find("#settings-thelemar-item-util").prop("checked");
 			const exhaustionRules = $modalInner.find("#settings-exhaustion-rules").val();
 			const exhaustionIsThelemar = exhaustionRules === "thelemar";
-			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && lingChecked && critsChecked && asiFeatChecked && exhaustionIsThelemar);
+			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && jumpingChecked && lingChecked && critsChecked && asiFeatChecked && itemUtilChecked && exhaustionIsThelemar);
 		};
 
 		// Exhaustion rules handler
@@ -4691,9 +4744,11 @@ class CharacterSheetPage {
 			const isChecked = e.target.checked;
 			// Set all sub-toggles
 			$modalInner.find("#settings-thelemar-carry").prop("checked", isChecked).trigger("change");
+			$modalInner.find("#settings-thelemar-jumping").prop("checked", isChecked).trigger("change");
 			$modalInner.find("#settings-thelemar-linguistics").prop("checked", isChecked).trigger("change");
 			$modalInner.find("#settings-thelemar-crits").prop("checked", isChecked).trigger("change");
 			$modalInner.find("#settings-thelemar-asifeat").prop("checked", isChecked).trigger("change");
+			$modalInner.find("#settings-thelemar-item-util").prop("checked", isChecked).trigger("change");
 			// Also set exhaustion rules
 			$modalInner.find("#settings-exhaustion-rules").val(isChecked ? "thelemar" : "2024").trigger("change");
 		});
@@ -4704,6 +4759,13 @@ class CharacterSheetPage {
 			// Update encumbrance display
 			this._inventory?._updateEncumbrance?.();
 			// Also update combat stats which shows carry capacity
+			this._renderCombatStats();
+			updateMasterToggleState();
+		});
+
+		// Thelemar jumping rules handler
+		$modalInner.find("#settings-thelemar-jumping").on("change", (e) => {
+			this._state.setSetting("thelemar_jumping", e.target.checked);
 			this._renderCombatStats();
 			updateMasterToggleState();
 		});
@@ -4738,6 +4800,12 @@ class CharacterSheetPage {
 		// Thelemar ASI+Feat at level 4 handler
 		$modalInner.find("#settings-thelemar-asifeat").on("change", (e) => {
 			this._state.setSetting("thelemar_asiFeat", e.target.checked);
+			updateMasterToggleState();
+		});
+
+		// Thelemar item utilization handler
+		$modalInner.find("#settings-thelemar-item-util").on("change", (e) => {
+			this._state.setSetting("thelemar_itemUtilization", e.target.checked);
 			updateMasterToggleState();
 		});
 
