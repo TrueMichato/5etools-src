@@ -113,34 +113,34 @@ class CharacterSheetSpells {
 		const className = characterClass.name;
 		const classSource = characterClass.source;
 		const filteredSpells = this._page.filterByAllowedSources(this._allSpells);
-		
+
 		// Check if we should include core spell lists for homebrew classes
 		const settings = this._state.getSettings?.() || {};
 		const includeCoreSpells = settings.includeCoreSpellsForHomebrew !== false; // Default true
-		
+
 		// Determine if this is a non-standard source (homebrew/third-party)
 		const isNonStandardSource = classSource && !["PHB", "XPHB", "TCE", "XGE"].includes(classSource);
-		
+
 		const classSpells = filteredSpells.filter(spell => {
 			// Use Renderer.spell.getCombinedClasses to get properly merged class data
 			const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
 			if (!fromClassList?.length) return false;
-			
+
 			// Check if spell is on this class's list
 			const matchesExact = fromClassList.some(c => c.name.toLowerCase() === className.toLowerCase());
 			if (matchesExact) return true;
-			
+
 			// For homebrew/third-party classes: also include spells from the equivalent core class
 			// if the setting is enabled
 			if (includeCoreSpells && isNonStandardSource) {
 				// Check if any PHB/XPHB class with the same name has this spell
-				const matchesCore = fromClassList.some(c => 
-					c.name.toLowerCase() === className.toLowerCase() && 
-					["PHB", "XPHB"].includes(c.source)
+				const matchesCore = fromClassList.some(c =>
+					c.name.toLowerCase() === className.toLowerCase()
+					&& ["PHB", "XPHB"].includes(c.source),
 				);
 				if (matchesCore) return true;
 			}
-			
+
 			return false;
 		});
 
@@ -314,14 +314,14 @@ class CharacterSheetSpells {
 
 		// Build enhanced filter UI - single row with source pushed to right
 		const $filterRow = $(`<div class="charsheet__modal-filter-row"></div>`).appendTo($modalInner);
-		
+
 		// Helper function to position dropdown towards center of modal
 		const positionDropdown = ($dropdown, $btn) => {
 			const btnRect = $btn[0].getBoundingClientRect();
 			const modalRect = $modalInner[0].getBoundingClientRect();
 			const btnCenterX = btnRect.left + btnRect.width / 2;
 			const modalCenterX = modalRect.left + modalRect.width / 2;
-			
+
 			// If button is to the left of center, open dropdown to the right
 			// If button is to the right of center, open dropdown to the left
 			if (btnCenterX < modalCenterX) {
@@ -330,11 +330,11 @@ class CharacterSheetSpells {
 				$dropdown.removeClass("open-right").addClass("open-left");
 			}
 		};
-		
+
 		// Search input with icon
 		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterRow);
 		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search spells by name...">`).appendTo($searchWrapper);
-		
+
 		// Get all unique classes and subclasses from spells for the filters
 		// Use Renderer.spell.getCombinedClasses to get properly merged class/subclass data
 		const allSpellClasses = new Set(); // Class names only
@@ -359,14 +359,14 @@ class CharacterSheetSpells {
 				});
 			}
 		});
-		
+
 		// Get character's classes and subclasses for default filtering
 		const characterClasses = this._state.getClasses();
 		const characterClassNames = characterClasses.map(c => c.name);
 		const characterSubclassNames = characterClasses
 			.filter(c => c.subclass)
 			.map(c => `${c.name}: ${c.subclass}`);
-		
+
 		// Sort class names - character classes first, then alphabetically
 		const sortedClassNames = [...allSpellClasses].sort((a, b) => {
 			const aIsChar = characterClassNames.includes(a);
@@ -375,7 +375,7 @@ class CharacterSheetSpells {
 			if (!aIsChar && bIsChar) return 1;
 			return a.localeCompare(b);
 		});
-		
+
 		// Show ALL subclasses that have spell lists, but highlight player's class's subclasses
 		// Sort: player's subclass first, then player's class's other subclasses, then rest alphabetically
 		const sortedSubclassNames = [...allSpellSubclasses.keys()].sort((a, b) => {
@@ -385,7 +385,7 @@ class CharacterSheetSpells {
 			const bIsCharSubclass = characterSubclassNames.includes(b);
 			const aIsCharClass = characterClassNames.includes(aClass);
 			const bIsCharClass = characterClassNames.includes(bClass);
-			
+
 			// Player's actual subclass first
 			if (aIsCharSubclass && !bIsCharSubclass) return -1;
 			if (!aIsCharSubclass && bIsCharSubclass) return 1;
@@ -398,7 +398,7 @@ class CharacterSheetSpells {
 			const [, bSub] = b.split(": ");
 			return aSub.localeCompare(bSub);
 		});
-		
+
 		// ===== CLASS FILTER =====
 		let selectedClasses = new Set(characterClassNames.length > 0 ? characterClassNames : []); // Default to character's classes
 		const $classDropdown = $(`
@@ -416,26 +416,26 @@ class CharacterSheetSpells {
 					</div>
 					<div class="charsheet__source-multiselect-list">
 						${sortedClassNames.map(className => {
-							const isCharClass = characterClassNames.includes(className);
-							const defaultChecked = isCharClass || characterClassNames.length === 0;
-							return `
+		const isCharClass = characterClassNames.includes(className);
+		const defaultChecked = isCharClass || characterClassNames.length === 0;
+		return `
 								<label class="charsheet__source-multiselect-item${isCharClass ? " charsheet__source-multiselect-item--highlight" : ""}">
 									<input type="checkbox" value="${className}"${defaultChecked ? " checked" : ""}>
 									<span class="charsheet__source-multiselect-check">✓</span>
 									<span class="charsheet__source-multiselect-label">${className}${isCharClass ? " ★" : ""}</span>
 								</label>
 							`;
-						}).join("")}
+	}).join("")}
 					</div>
 				</div>
 			</div>
 		`).appendTo($filterRow);
-		
+
 		// Class dropdown behavior
 		const $classBtn = $classDropdown.find(".charsheet__source-multiselect-btn");
 		const $classDropdownMenu = $classDropdown.find(".charsheet__source-multiselect-dropdown");
 		const $classText = $classDropdown.find(".charsheet__source-multiselect-text");
-		
+
 		$classBtn.on("click", (e) => {
 			e.stopPropagation();
 			positionDropdown($classDropdownMenu, $classBtn);
@@ -447,7 +447,7 @@ class CharacterSheetSpells {
 			$subschoolDropdownMenu?.removeClass("open");
 			$subclassDropdownMenu?.removeClass("open");
 		});
-		
+
 		const updateClassText = () => {
 			const checked = $classDropdown.find("input:checked");
 			if (checked.length === 0) {
@@ -465,7 +465,7 @@ class CharacterSheetSpells {
 			}
 			renderList();
 		};
-		
+
 		$classDropdown.find("input[type=checkbox]").on("change", updateClassText);
 		$classDropdown.find("[data-action=all]").on("click", () => {
 			$classDropdown.find("input").prop("checked", true);
@@ -483,9 +483,9 @@ class CharacterSheetSpells {
 			$classDropdown.find("input").prop("checked", false);
 			updateClassText();
 		});
-		
+
 		$classDropdownMenu.on("click", (e) => e.stopPropagation());
-		
+
 		// ===== SUBCLASS FILTER (SEPARATE) =====
 		// Calculate which subclasses will be checked by default (same logic as the HTML)
 		const defaultCheckedSubclasses = sortedSubclassNames.filter(subclassName => {
@@ -495,22 +495,22 @@ class CharacterSheetSpells {
 			return isCharSubclass || (characterSubclassNames.length === 0 && isCharClass);
 		});
 		// If all would be checked, use empty set (= all). Otherwise use the specific ones.
-		let selectedSubclasses = defaultCheckedSubclasses.length === sortedSubclassNames.length 
-			? new Set() 
+		let selectedSubclasses = defaultCheckedSubclasses.length === sortedSubclassNames.length
+			? new Set()
 			: new Set(defaultCheckedSubclasses.length > 0 ? defaultCheckedSubclasses : ["__NONE__"]);
 		const $subclassDropdown = sortedSubclassNames.length > 0 ? $(`
 			<div class="charsheet__source-multiselect charsheet__subclass-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📚</span>
 					<span class="charsheet__source-multiselect-text">${
-						defaultCheckedSubclasses.length === sortedSubclassNames.length 
-							? "All Expanded Lists"
-							: defaultCheckedSubclasses.length === 0 
-								? "No Expanded Lists" 
-								: defaultCheckedSubclasses.length === 1
-									? defaultCheckedSubclasses[0].split(": ")[1]
-									: `${defaultCheckedSubclasses.length} Expanded Lists`
-					}</span>
+	defaultCheckedSubclasses.length === sortedSubclassNames.length
+		? "All Expanded Lists"
+		: defaultCheckedSubclasses.length === 0
+			? "No Expanded Lists"
+			: defaultCheckedSubclasses.length === 1
+				? defaultCheckedSubclasses[0].split(": ")[1]
+				: `${defaultCheckedSubclasses.length} Expanded Lists`
+}</span>
 					<span class="charsheet__source-multiselect-arrow">▼</span>
 				</button>
 				<div class="charsheet__source-multiselect-dropdown charsheet__subclass-dropdown">
@@ -522,12 +522,12 @@ class CharacterSheetSpells {
 					<div class="charsheet__source-multiselect-list" style="max-height: 300px;">
 						<div class="charsheet__source-multiselect-hint">Subclasses that add extra spells:</div>
 						${sortedSubclassNames.map(subclassName => {
-							const isCharSubclass = characterSubclassNames.includes(subclassName);
-							const [className, subName] = subclassName.split(": ");
-							const isCharClass = characterClassNames.includes(className);
-							// Default checked: player's actual subclass, or all if player has no subclass
-							const defaultChecked = isCharSubclass || (characterSubclassNames.length === 0 && isCharClass);
-							return `
+		const isCharSubclass = characterSubclassNames.includes(subclassName);
+		const [className, subName] = subclassName.split(": ");
+		const isCharClass = characterClassNames.includes(className);
+		// Default checked: player's actual subclass, or all if player has no subclass
+		const defaultChecked = isCharSubclass || (characterSubclassNames.length === 0 && isCharClass);
+		return `
 								<label class="charsheet__source-multiselect-item${isCharSubclass ? " charsheet__source-multiselect-item--highlight" : isCharClass ? " charsheet__source-multiselect-item--related" : ""}">
 									<input type="checkbox" value="${subclassName}"${defaultChecked ? " checked" : ""}>
 									<span class="charsheet__source-multiselect-check">✓</span>
@@ -536,20 +536,20 @@ class CharacterSheetSpells {
 									</span>
 								</label>
 							`;
-						}).join("")}
+	}).join("")}
 					</div>
 				</div>
 			</div>
 		`).appendTo($filterRow) : null;
-		
+
 		// Subclass dropdown behavior
 		let $subclassDropdownMenu = null;
 		const $subclassText = $subclassDropdown?.find(".charsheet__source-multiselect-text");
-		
+
 		if ($subclassDropdown) {
 			const $subclassBtn = $subclassDropdown.find(".charsheet__source-multiselect-btn");
 			$subclassDropdownMenu = $subclassDropdown.find(".charsheet__source-multiselect-dropdown");
-			
+
 			$subclassBtn.on("click", (e) => {
 				e.stopPropagation();
 				positionDropdown($subclassDropdownMenu, $subclassBtn);
@@ -561,7 +561,7 @@ class CharacterSheetSpells {
 				$sourceDropdownMenu?.removeClass("open");
 				$subschoolDropdownMenu?.removeClass("open");
 			});
-			
+
 			const updateSubclassText = () => {
 				const checked = $subclassDropdown.find("input:checked");
 				if (checked.length === 0) {
@@ -581,7 +581,7 @@ class CharacterSheetSpells {
 				}
 				renderList();
 			};
-			
+
 			$subclassDropdown.find("input[type=checkbox]").on("change", updateSubclassText);
 			$subclassDropdown.find("[data-action=all]").on("click", () => {
 				$subclassDropdown.find("input").prop("checked", true);
@@ -599,10 +599,10 @@ class CharacterSheetSpells {
 				$subclassDropdown.find("input").prop("checked", false);
 				updateSubclassText();
 			});
-			
+
 			$subclassDropdownMenu.on("click", (e) => e.stopPropagation());
 		}
-		
+
 		// Multi-select level filter
 		let selectedLevels = new Set(); // Empty = all levels
 		const levelOptions = [
@@ -647,7 +647,7 @@ class CharacterSheetSpells {
 		const $levelBtn = $levelDropdown.find(".charsheet__source-multiselect-btn");
 		const $levelDropdownMenu = $levelDropdown.find(".charsheet__source-multiselect-dropdown");
 		const $levelText = $levelDropdown.find(".charsheet__source-multiselect-text");
-		
+
 		$levelBtn.on("click", (e) => {
 			e.stopPropagation();
 			positionDropdown($levelDropdownMenu, $levelBtn);
@@ -718,7 +718,7 @@ class CharacterSheetSpells {
 		const $schoolBtn = $schoolDropdown.find(".charsheet__source-multiselect-btn");
 		const $schoolDropdownMenu = $schoolDropdown.find(".charsheet__source-multiselect-dropdown");
 		const $schoolText = $schoolDropdown.find(".charsheet__source-multiselect-text");
-		
+
 		$schoolBtn.on("click", (e) => {
 			e.stopPropagation();
 			positionDropdown($schoolDropdownMenu, $schoolBtn);
@@ -759,12 +759,12 @@ class CharacterSheetSpells {
 
 		// Collect unique subschools from spells
 		const allSubschools = [...new Set(spells.flatMap(s => s.subschools || []))].sort();
-		
+
 		// Multi-select subschool filter (only show if there are subschools)
 		let selectedSubschools = new Set(); // Empty = all (no filter)
 		let $subschoolDropdown = null;
 		let $subschoolDropdownMenu = null;
-		
+
 		if (allSubschools.length > 0) {
 			// Parse subschool into display name
 			const formatSubschool = (sub) => {
@@ -804,7 +804,7 @@ class CharacterSheetSpells {
 			$subschoolDropdownMenu = $subschoolDropdown.find(".charsheet__source-multiselect-dropdown");
 			const $subschoolBtn = $subschoolDropdown.find(".charsheet__source-multiselect-btn");
 			const $subschoolText = $subschoolDropdown.find(".charsheet__source-multiselect-text");
-			
+
 			$subschoolBtn.on("click", (e) => {
 				e.stopPropagation();
 				positionDropdown($subschoolDropdownMenu, $subschoolBtn);
@@ -843,7 +843,7 @@ class CharacterSheetSpells {
 				$subschoolDropdown.find("input").prop("checked", false);
 				updateSubschoolText();
 			});
-			
+
 			$subschoolDropdownMenu.on("click", (e) => e.stopPropagation());
 		}
 
@@ -880,7 +880,7 @@ class CharacterSheetSpells {
 		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
 		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
 		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
-		
+
 		$sourceBtn.on("click", (e) => {
 			e.stopPropagation();
 			positionDropdown($sourceDropdownMenu, $sourceBtn);
@@ -945,7 +945,7 @@ class CharacterSheetSpells {
 
 		// Quick filter buttons row
 		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
-		
+
 		let filterRitual = false;
 		let filterConcentration = false;
 		let filterVerbal = false;
@@ -973,21 +973,21 @@ class CharacterSheetSpells {
 				if (searchTerm && !spell.name.toLowerCase().includes(searchTerm)) return false;
 				// Class filter (separate from subclass)
 				if (selectedClasses.has("__NONE__") && selectedSubclasses.has("__NONE__")) return false;
-				
+
 				// Get spell's class and subclass sources using Renderer.spell.getCombinedClasses
 				const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
 				const fromSubclass = Renderer.spell.getCombinedClasses(spell, "fromSubclass");
 				const spellClasses = fromClassList?.map(c => c.name) || [];
 				const spellSubclasses = fromSubclass?.map(sc => `${sc.class.name}: ${sc.subclass.name}`) || [];
-				
+
 				// Check class filter (if classes are selected)
 				const passesClassFilter = selectedClasses.size === 0 || spellClasses.some(c => selectedClasses.has(c));
 				// Check subclass filter (if subclasses are selected)
 				const passesSubclassFilter = selectedSubclasses.size === 0 || spellSubclasses.some(sc => selectedSubclasses.has(sc));
-				
+
 				// Spell passes if it matches EITHER the class filter OR the subclass filter (union)
 				if (!passesClassFilter && !passesSubclassFilter) return false;
-				
+
 				// Multi-select level filter
 				if (selectedLevels.has("__NONE__")) return false;
 				if (selectedLevels.size > 0 && !selectedLevels.has(String(spell.level))) return false;
@@ -1048,7 +1048,7 @@ class CharacterSheetSpells {
 					const spellId = `${spell.name}|${spell.source}`;
 					const isKnown = knownSpellIds.includes(spellId);
 					const school = Parser.spSchoolAbvToFull(spell.school);
-					
+
 					// Build component string
 					const components = [];
 					if (spell.components?.v) components.push("V");
@@ -1083,9 +1083,9 @@ class CharacterSheetSpells {
 								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}${subschoolStr}</div>
 							</div>
 							${isKnown
-								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
-								: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-picker-add">+ Add</button>`
-							}
+		? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
+		: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-picker-add">+ Add</button>`
+}
 						</div>
 					`);
 
@@ -1163,7 +1163,7 @@ class CharacterSheetSpells {
 
 		const school = Parser.spSchoolAbvToFull(spell.school);
 		const level = spell.level === 0 ? "Cantrip" : `Level ${spell.level}`;
-		
+
 		// Build component string
 		const components = [];
 		if (spell.components?.v) components.push("V");
@@ -1272,7 +1272,7 @@ class CharacterSheetSpells {
 		const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
 		// Detect ritual from meta object (raw spell data format)
 		const isRitual = spell.ritual || spell.meta?.ritual || false;
-		
+
 		this._state.addSpell({
 			name: spell.name,
 			source: spell.source,
@@ -1288,7 +1288,7 @@ class CharacterSheetSpells {
 		});
 
 		console.log("[CharSheet Spells] After add, total spells:", this._state.getSpells().length);
-		
+
 		this._renderSpellList();
 		// Update combat spells tab (cantrips are auto-prepared)
 		if (this._page._combat) {
@@ -1475,14 +1475,14 @@ class CharacterSheetSpells {
 		// Check for Wild Shape (can't cast most spells while transformed)
 		// Would need to check if character has active Wild Shape state
 		const activeStates = this._state.getActiveStates?.() || [];
-		const wildShapeState = activeStates.find(s => 
+		const wildShapeState = activeStates.find(s =>
 			s.name?.toLowerCase().includes("wild shape") && s.active,
 		);
 		if (wildShapeState) {
 			// Note: Some druids can cast spells in Wild Shape (e.g., Moon Druid at high levels)
 			// For now, show a warning but allow casting - DM can rule
 			// Could add a feature check for Beast Spells here
-			const hasBeastSpells = this._state.getFeatures?.()?.some(f => 
+			const hasBeastSpells = this._state.getFeatures?.()?.some(f =>
 				f.name?.toLowerCase().includes("beast spells"),
 			);
 			if (!hasBeastSpells) {
@@ -1539,22 +1539,22 @@ class CharacterSheetSpells {
 
 			// Determine if we should ask for a target
 			const needsTargetSelection = !targetInfo.selfOnly && (
-				effects.healing ||
-				effects.buffs?.length > 0 ||
-				effects.tempHp ||
-				effects.conditions?.length > 0
+				effects.healing
+				|| effects.buffs?.length > 0
+				|| effects.tempHp
+				|| effects.conditions?.length > 0
 			);
 
 			// Handle target selection for beneficial effects
 			if (needsTargetSelection) {
 				const targetChoice = await this._promptSpellTarget(spell, spellData, effects, targetInfo);
-				
+
 				if (targetChoice === "self") {
 					effectsApplied = await this._applySpellEffectsToSelf(spell, spellData, effects, slotLevel);
 				} else if (targetChoice === "other") {
 					// For others, just show the roll results - we can't track their HP
-					damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level) ||
-						this._rollSpellDamage(spellData, slotLevel, spell.level);
+					damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level)
+						|| this._rollSpellDamage(spellData, slotLevel, spell.level);
 				}
 				// If cancelled, still show the basic cast info
 			} else if (targetInfo.selfOnly) {
@@ -1573,7 +1573,7 @@ class CharacterSheetSpells {
 
 		// Build the toast message
 		let toastContent = `Cast ${spell.name}${upcast}${slotType}${attackInfo}${damageInfo}`;
-		
+
 		if (effectsApplied.length > 0) {
 			toastContent += `<br><span class="text-success">✓ Applied: ${effectsApplied.join(", ")}</span>`;
 		}
@@ -1596,7 +1596,7 @@ class CharacterSheetSpells {
 	 */
 	async _promptSpellTarget (spell, spellData, effects, targetInfo) {
 		const effectDescriptions = [];
-		
+
 		if (effects.healing) {
 			const healDice = effects.healing.dice || "healing";
 			effectDescriptions.push(`Heal (${healDice}${effects.healing.addModifier ? " + modifier" : ""})`);
@@ -1618,11 +1618,11 @@ class CharacterSheetSpells {
 			effectDescriptions.push(`Apply: ${effects.conditions.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(", ")}`);
 		}
 
-		const effectsText = effectDescriptions.length > 0 
+		const effectsText = effectDescriptions.length > 0
 			? `<div class="mt-2"><strong>Effects:</strong> ${effectDescriptions.join(", ")}</div>`
 			: "";
 
-		const durationText = effects.duration 
+		const durationText = effects.duration
 			? `<div class="ve-muted ve-small">Duration: ${effects.duration.amount || "Until ended"} ${effects.duration.unit || ""}</div>`
 			: "";
 
@@ -1658,7 +1658,7 @@ class CharacterSheetSpells {
 		if (effects.healing) {
 			const healingResult = CharacterSheetState.calculateSpellHealing(spellData, slotLevel || spell.level, this._state);
 			const healAmount = healingResult.total || 0;
-			
+
 			if (healAmount > 0) {
 				const hp = this._state.getHp();
 				const newHp = Math.min(hp.max, hp.current + healAmount);
@@ -1671,7 +1671,7 @@ class CharacterSheetSpells {
 		// Apply temporary HP
 		if (effects.tempHp) {
 			let tempHpAmount = effects.tempHp.amount;
-			
+
 			// Handle upcast scaling for temp HP
 			if (slotLevel && spellData.level && slotLevel > spellData.level && spellData.entriesHigherLevel) {
 				const text = JSON.stringify(spellData.entriesHigherLevel).toLowerCase();
@@ -1682,7 +1682,7 @@ class CharacterSheetSpells {
 					}
 				}
 			}
-			
+
 			this._state.setTempHp(tempHpAmount);
 			appliedEffects.push(`+${tempHpAmount} temp HP`);
 		}
@@ -1692,9 +1692,9 @@ class CharacterSheetSpells {
 		const conditionsToApply = [];
 		if (effects.conditions?.length > 0) {
 			// Determine which conditions can be self-targeted (beneficial conditions)
-			const hostileConditions = ["blinded", "charmed", "deafened", "frightened", "grappled", 
+			const hostileConditions = ["blinded", "charmed", "deafened", "frightened", "grappled",
 				"paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"];
-			
+
 			for (const condition of effects.conditions) {
 				const conditionLower = condition.toLowerCase();
 				// Only apply non-hostile conditions to self
@@ -2008,7 +2008,7 @@ class CharacterSheetSpells {
 		}
 
 		console.log("[CharSheet Spells] renderSlots: rendered", slotsRendered, "levels of slots");
-		
+
 		// Show if no slots
 		if (!$container.children().length) {
 			$container.append(`<p class="ve-muted">No spell slots available</p>`);
@@ -2225,7 +2225,7 @@ class CharacterSheetSpells {
 	_renderGroupedSpells ($container, groupedSpells, showPrepareHint = false) {
 		const levelNames = {
 			1: "1st Level",
-			2: "2nd Level", 
+			2: "2nd Level",
 			3: "3rd Level",
 			4: "4th Level",
 			5: "5th Level",
@@ -2311,19 +2311,19 @@ class CharacterSheetSpells {
 		// Build usage info
 		let usageInfo;
 		if (spell.atWill) {
-			usageInfo = '<span class="badge badge-success">At Will</span>';
+			usageInfo = "<span class=\"badge badge-success\">At Will</span>";
 		} else if (spell.uses) {
 			// Build pips: filled = available, empty (used class) = spent
-			const pipsHtml = Array.from({length: spell.uses.max}, (_, i) => 
+			const pipsHtml = Array.from({length: spell.uses.max}, (_, i) =>
 				`<span class="charsheet__innate-pip ${i < spell.uses.current ? "" : "used"}" data-spell-id="${spellId}"></span>`,
 			).join("");
 			usageInfo = `<span class="charsheet__innate-uses">${pipsHtml}</span>`;
 		} else {
-			usageInfo = '<span class="badge badge-secondary">1/day</span>';
+			usageInfo = "<span class=\"badge badge-secondary\">1/day</span>";
 		}
 
-		const sourceInfo = spell.sourceFeature 
-			? `<span class="ve-muted ve-small">(${spell.sourceFeature})</span>` 
+		const sourceInfo = spell.sourceFeature
+			? `<span class="ve-muted ve-small">(${spell.sourceFeature})</span>`
 			: "";
 
 		const $item = $(`
@@ -2450,8 +2450,8 @@ class CharacterSheetSpells {
 		}
 
 		// Build source badge if from a feature
-		const sourceBadge = sourceFeature 
-			? `<span class="badge badge-warning charsheet__spell-source-badge" title="From: ${sourceFeature}">${this._truncateFeatureName(sourceFeature)}</span>` 
+		const sourceBadge = sourceFeature
+			? `<span class="badge badge-warning charsheet__spell-source-badge" title="From: ${sourceFeature}">${this._truncateFeatureName(sourceFeature)}</span>`
 			: "";
 
 		return $(`
@@ -2496,7 +2496,7 @@ class CharacterSheetSpells {
 	_truncateFeatureName (name) {
 		if (!name) return "";
 		if (name.length <= 12) return name;
-		return name.substring(0, 10) + "…";
+		return `${name.substring(0, 10)}…`;
 	}
 
 	/**
@@ -2555,11 +2555,11 @@ class CharacterSheetSpells {
 	render () {
 		// Calculate spell slots based on class/level before rendering
 		this._state.calculateSpellSlots();
-		
+
 		this.renderSlots();
 		this._renderSpellList();
 		this._renderSpellcastingStats();
-		
+
 		console.log("[CharSheet Spells] Rendered. Spells:", this._state.getSpells().length, "Slots:", this._state.getSpellSlotsMax(1));
 	}
 
@@ -2605,15 +2605,15 @@ class CharacterSheetSpells {
 
 		const mod = this._state.getAbilityMod(ability);
 		const prof = this._state.getProficiencyBonus();
-		
+
 		// Get item bonuses for spell attack and DC
 		const itemBonuses = this._state.getItemBonuses?.() || {};
 		const spellAttackBonus = itemBonuses.spellAttack || 0;
 		const spellDcBonus = itemBonuses.spellSaveDc || 0;
-		
+
 		// Get exhaustion DC penalty (Thelemar rules only)
 		const exhaustionDcPenalty = this._state._getExhaustionDcPenalty?.() || 0;
-		
+
 		const attackBonus = mod + prof + spellAttackBonus;
 		const saveDC = 8 + mod + prof + spellDcBonus - exhaustionDcPenalty;
 		const abilityFull = {
@@ -2639,7 +2639,7 @@ class CharacterSheetSpells {
 	_renderSpellTrackingUI () {
 		const spellcastingInfo = this._state.getSpellcastingInfo();
 		const $trackingContainer = $("#charsheet-spell-tracking");
-		
+
 		// Hide all tracking boxes by default
 		$("#charsheet-known-caster-info").hide();
 		$("#charsheet-prepared-caster-info-2014").hide();
@@ -2659,7 +2659,7 @@ class CharacterSheetSpells {
 		const preparedSpells = leveledSpells.filter(s => s.prepared || s.alwaysPrepared);
 		// Manual spells = those not from features (count against limit)
 		const manualLeveledSpells = leveledSpells.filter(s => !s.sourceFeature);
-		
+
 		// Cantrips count (excluding feature-granted ones)
 		const cantripsChosen = allCantrips.filter(c => !c.sourceFeature).length;
 		const cantripsMax = spellcastingInfo.cantripsKnown || 0;
@@ -2669,7 +2669,7 @@ class CharacterSheetSpells {
 			const $cantripsInfo = $("#charsheet-cantrips-info").show();
 			$("#charsheet-cantrips-current").text(cantripsChosen);
 			$("#charsheet-cantrips-max").text(cantripsMax);
-			
+
 			// Handle over-limit state
 			const $count = $cantripsInfo.find(".charsheet__spell-tracking-count");
 			if (cantripsChosen > cantripsMax) {
@@ -2688,10 +2688,10 @@ class CharacterSheetSpells {
 			// Only count manual spells (not from features) against the limit
 			const currentKnown = manualLeveledSpells.length;
 			const maxKnown = spellcastingInfo.spellsKnownMax || spellcastingInfo.max;
-			
+
 			$("#charsheet-spells-known-current").text(currentKnown);
 			$("#charsheet-spells-known-max").text(maxKnown);
-			
+
 			// Handle over-limit state
 			const $count = $knownInfo.find(".charsheet__spell-tracking-count");
 			if (currentKnown > maxKnown) {
@@ -2706,12 +2706,12 @@ class CharacterSheetSpells {
 			const is2024 = spellcastingInfo.is2024;
 			const currentPrepared = preparedSpells.length;
 			const maxPrepared = spellcastingInfo.preparedMax || spellcastingInfo.max;
-			
+
 			if (is2024) {
 				const $preparedInfo = $("#charsheet-prepared-caster-info-2024").show();
 				$("#charsheet-spells-prepared-current-2024").text(currentPrepared);
 				$("#charsheet-spells-prepared-max-2024").text(maxPrepared);
-				
+
 				const $count = $preparedInfo.find(".charsheet__spell-tracking-count");
 				if (currentPrepared > maxPrepared) {
 					$count.addClass("charsheet__spell-tracking-count--over");
@@ -2724,7 +2724,7 @@ class CharacterSheetSpells {
 				const $preparedInfo = $("#charsheet-prepared-caster-info-2014").show();
 				$("#charsheet-spells-prepared-current-2014").text(currentPrepared);
 				$("#charsheet-spells-prepared-max-2014").text(maxPrepared);
-				
+
 				const $count = $preparedInfo.find(".charsheet__spell-tracking-count");
 				if (currentPrepared > maxPrepared) {
 					$count.addClass("charsheet__spell-tracking-count--over");
@@ -2739,7 +2739,7 @@ class CharacterSheetSpells {
 			// This is a complex case, show a simplified combined view
 			const hasKnown = spellcastingInfo.byClass?.some(c => c.type === "known");
 			const hasPrepared = spellcastingInfo.byClass?.some(c => c.type === "prepared");
-			
+
 			if (hasKnown) {
 				const $knownInfo = $("#charsheet-known-caster-info").show();
 				const knownClasses = spellcastingInfo.byClass.filter(c => c.type === "known");
@@ -2747,20 +2747,20 @@ class CharacterSheetSpells {
 				// For multiclass, only count manual spells against limit
 				$("#charsheet-spells-known-current").text(manualLeveledSpells.length);
 				$("#charsheet-spells-known-max").text(totalKnownMax);
-				
+
 				// Update hint for multiclass
 				$knownInfo.find(".charsheet__spell-tracking-hint").text(
 					`From: ${knownClasses.map(c => c.className).join(", ")}`,
 				);
 			}
-			
+
 			if (hasPrepared) {
 				const $preparedInfo = $("#charsheet-prepared-caster-info-2014").show();
 				const preparedClasses = spellcastingInfo.byClass.filter(c => c.type === "prepared");
 				const totalPreparedMax = preparedClasses.reduce((sum, c) => sum + (c.preparedMax || c.max || 0), 0);
 				$("#charsheet-spells-prepared-current-2014").text(preparedSpells.length);
 				$("#charsheet-spells-prepared-max-2014").text(totalPreparedMax);
-				
+
 				// Update hint for multiclass
 				$preparedInfo.find(".charsheet__spell-tracking-hint").text(
 					`From: ${preparedClasses.map(c => c.className).join(", ")}`,
@@ -2906,7 +2906,7 @@ class CharacterSheetSpells {
 		const renderList = (filter = "") => {
 			$list.empty();
 
-			const filtered = filter 
+			const filtered = filter
 				? matchingSpells.filter(s => s.name.toLowerCase().includes(filter))
 				: matchingSpells;
 
@@ -2928,9 +2928,9 @@ class CharacterSheetSpells {
 							<span class="ve-small ve-muted">${school}${spell.ritual ? " (ritual)" : ""} • ${Parser.sourceJsonToAbv(spell.source)}</span>
 						</div>
 						${isKnown
-							? `<span class="ve-muted ve-small">Already known</span>`
-							: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-choice-select">Select</button>`
-						}
+		? `<span class="ve-muted ve-small">Already known</span>`
+		: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-choice-select">Select</button>`
+}
 					</div>
 				`);
 
@@ -2971,7 +2971,7 @@ class CharacterSheetSpells {
 			isMinHeight0: true,
 		});
 
-		const levelSchool = spell.level === 0 
+		const levelSchool = spell.level === 0
 			? `${Parser.spSchoolAbvToFull(spell.school)} cantrip`
 			: `${Parser.spLevelToFull(spell.level)}-level ${Parser.spSchoolAbvToFull(spell.school).toLowerCase()}`;
 
@@ -2984,9 +2984,9 @@ class CharacterSheetSpells {
 			infoLines.push(`<strong>Casting Time:</strong> ${time.number} ${time.unit}`);
 		}
 		if (spell.range) {
-			const rangeStr = spell.range.distance?.type === "self" ? "Self" 
+			const rangeStr = spell.range.distance?.type === "self" ? "Self"
 				: spell.range.distance?.type === "touch" ? "Touch"
-				: `${spell.range.distance?.amount || ""} ${spell.range.distance?.type || ""}`.trim();
+					: `${spell.range.distance?.amount || ""} ${spell.range.distance?.type || ""}`.trim();
 			infoLines.push(`<strong>Range:</strong> ${rangeStr}`);
 		}
 		if (spell.components) {
@@ -3003,7 +3003,7 @@ class CharacterSheetSpells {
 			const dur = spell.duration[0];
 			let durStr = "Instantaneous";
 			if (dur.type === "timed") {
-				durStr = dur.concentration 
+				durStr = dur.concentration
 					? `Concentration, up to ${dur.duration.amount} ${dur.duration.type}`
 					: `${dur.duration.amount} ${dur.duration.type}`;
 			} else if (dur.type === "permanent") {

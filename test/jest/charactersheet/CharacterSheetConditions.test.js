@@ -447,20 +447,20 @@ describe("CharacterSheetConditions", () => {
 
 		it("should have conditional disadvantage on attacks", () => {
 			const effects = state.getActiveStateEffects();
-			const attackDisadvantage = effects.find(e => 
-				e.type === "disadvantage" && 
-				e.target === "attack" && 
-				e.condition
+			const attackDisadvantage = effects.find(e =>
+				e.type === "disadvantage"
+				&& e.target === "attack"
+				&& e.condition,
 			);
 			expect(attackDisadvantage).toBeDefined();
 		});
 
 		it("should have conditional disadvantage on checks", () => {
 			const effects = state.getActiveStateEffects();
-			const checkDisadvantage = effects.find(e => 
-				e.type === "disadvantage" && 
-				e.target === "check" && 
-				e.condition
+			const checkDisadvantage = effects.find(e =>
+				e.type === "disadvantage"
+				&& e.target === "check"
+				&& e.condition,
 			);
 			expect(checkDisadvantage).toBeDefined();
 		});
@@ -520,9 +520,9 @@ describe("CharacterSheetConditions", () => {
 		it("should stack effects from multiple conditions", () => {
 			state.addCondition({name: "Blinded", source: "XPHB"});
 			state.addCondition({name: "Poisoned", source: "XPHB"});
-			
+
 			const effects = state.getActiveStateEffects();
-			
+
 			// Both should add disadvantage on attacks (counts once but from both sources)
 			const attackDisadvantages = effects.filter(e => e.type === "disadvantage" && e.target === "attack");
 			expect(attackDisadvantages.length).toBeGreaterThanOrEqual(2);
@@ -531,7 +531,7 @@ describe("CharacterSheetConditions", () => {
 		it("should combine speed-reducing conditions", () => {
 			state.addCondition({name: "Grappled", source: "XPHB"});
 			state.addCondition({name: "Restrained", source: "XPHB"});
-			
+
 			// Both set speed to 0
 			const multiplier = state.getSpeedMultiplierFromConditions();
 			expect(multiplier).toBe(0);
@@ -540,7 +540,7 @@ describe("CharacterSheetConditions", () => {
 		it("should combine incapacitating conditions", () => {
 			state.addCondition({name: "Paralyzed", source: "XPHB"});
 			state.addCondition({name: "Stunned", source: "XPHB"});
-			
+
 			expect(state.isIncapacitated()).toBe(true);
 		});
 
@@ -548,9 +548,9 @@ describe("CharacterSheetConditions", () => {
 			state.addCondition({name: "Blinded", source: "XPHB"});
 			state.addCondition({name: "Poisoned", source: "XPHB"});
 			state.addCondition({name: "Frightened", source: "XPHB"});
-			
+
 			state.removeCondition({name: "Poisoned", source: "XPHB"});
-			
+
 			expect(state.hasCondition("Blinded")).toBe(true);
 			expect(state.hasCondition("Poisoned")).toBe(false);
 			expect(state.hasCondition("Frightened")).toBe(true);
@@ -564,12 +564,12 @@ describe("CharacterSheetConditions", () => {
 		it("should replace all conditions", () => {
 			state.addCondition({name: "Blinded", source: "XPHB"});
 			state.addCondition({name: "Poisoned", source: "XPHB"});
-			
+
 			state.setConditions([
 				{name: "Grappled", source: "XPHB"},
 				{name: "Restrained", source: "XPHB"},
 			]);
-			
+
 			expect(state.hasCondition("Blinded")).toBe(false);
 			expect(state.hasCondition("Poisoned")).toBe(false);
 			expect(state.hasCondition("Grappled")).toBe(true);
@@ -579,12 +579,12 @@ describe("CharacterSheetConditions", () => {
 		it("should preserve existing conditions that are in new set", () => {
 			state.addCondition({name: "Blinded", source: "XPHB"});
 			state.addCondition({name: "Poisoned", source: "XPHB"});
-			
+
 			state.setConditions([
 				{name: "Blinded", source: "XPHB"}, // Keep
 				{name: "Grappled", source: "XPHB"}, // Add
 			]);
-			
+
 			expect(state.hasCondition("Blinded")).toBe(true);
 			expect(state.hasCondition("Poisoned")).toBe(false);
 			expect(state.hasCondition("Grappled")).toBe(true);
@@ -657,7 +657,7 @@ describe("CharacterSheetConditions", () => {
 			});
 
 			state.addCondition({name: "Hexed", source: "HB"});
-			
+
 			const conditionStates = state.getConditionStates();
 			expect(conditionStates.some(s => s.conditionName === "Hexed")).toBe(true);
 		});
@@ -667,7 +667,7 @@ describe("CharacterSheetConditions", () => {
 			expect(() => {
 				state.addCondition({name: "TotallyMadeUp", source: "HB"});
 			}).not.toThrow();
-			
+
 			// Condition should still be tracked
 			expect(state.hasCondition("TotallyMadeUp")).toBe(true);
 		});
@@ -679,10 +679,10 @@ describe("CharacterSheetConditions", () => {
 	describe("Condition State Integration", () => {
 		it("should create condition states with proper structure", () => {
 			state.addCondition({name: "Blinded", source: "XPHB"});
-			
+
 			const conditionStates = state.getConditionStates();
 			expect(conditionStates.length).toBeGreaterThan(0);
-			
+
 			const blindedState = conditionStates.find(s => s.conditionName === "Blinded");
 			expect(blindedState).toBeDefined();
 			expect(blindedState.isCondition).toBe(true);
@@ -692,23 +692,23 @@ describe("CharacterSheetConditions", () => {
 
 		it("should include condition effects in active state effects", () => {
 			state.addCondition({name: "Blinded", source: "XPHB"});
-			
+
 			const effects = state.getActiveStateEffects();
 			expect(effects.length).toBeGreaterThan(0);
 		});
 
 		it("should distinguish between condition states and other active states", () => {
 			state.addCondition({name: "Blinded", source: "XPHB"});
-			
+
 			// Add a non-condition active state
 			state.addActiveState("dodge", {name: "Dodging"});
-			
+
 			const conditionStates = state.getConditionStates();
 			const allActiveStates = state.getActiveStates();
-			
+
 			// Condition states should only include conditions
 			expect(conditionStates.every(s => s.isCondition)).toBe(true);
-			
+
 			// All active states should include both
 			expect(allActiveStates.length).toBeGreaterThan(conditionStates.length);
 		});
@@ -746,7 +746,7 @@ describe("CharacterSheetConditions", () => {
 			OFFICIAL_CONDITIONS_2024.forEach(condition => {
 				state.addCondition(condition);
 			});
-			
+
 			const conditions = state.getConditions();
 			expect(conditions.length).toBe(OFFICIAL_CONDITIONS_2024.length);
 		});
@@ -755,23 +755,23 @@ describe("CharacterSheetConditions", () => {
 			OFFICIAL_CONDITIONS_2024.forEach(condition => {
 				state.addCondition(condition);
 			});
-			
+
 			state.clearConditions();
-			
+
 			expect(state.getConditions().length).toBe(0);
 			expect(state.getConditionStates().length).toBe(0);
 		});
 
 		it("every official condition should have defined effects", () => {
 			const missingEffects = [];
-			
+
 			OFFICIAL_CONDITIONS_2024.forEach(condition => {
 				const effects = CharacterSheetState.getConditionEffects(condition.name);
 				if (!effects) {
 					missingEffects.push(condition.name);
 				}
 			});
-			
+
 			expect(missingEffects).toEqual([]);
 		});
 	});
@@ -795,11 +795,11 @@ describe("CharacterSheetConditions", () => {
 		it("should track exhaustion levels separately from conditions", () => {
 			state.setExhaustion(3);
 			expect(state.getExhaustion()).toBe(3);
-			
+
 			// Adding exhaustion as a condition should still work for tracking
 			state.addCondition({name: "Exhaustion", source: "XPHB"});
 			expect(state.hasCondition("Exhaustion")).toBe(true);
-			
+
 			// But levels are tracked separately
 			expect(state.getExhaustion()).toBe(3);
 		});
@@ -813,10 +813,10 @@ describe("CharacterSheetConditions", () => {
 			// First check normal speed
 			const baseSpeed = state.getWalkSpeed();
 			expect(baseSpeed).toBeGreaterThan(0);
-			
+
 			// Add grappled
 			state.addCondition({name: "Grappled", source: "XPHB"});
-			
+
 			// Speed multiplier should be 0
 			const multiplier = state.getSpeedMultiplierFromConditions();
 			expect(multiplier).toBe(0);
@@ -826,7 +826,7 @@ describe("CharacterSheetConditions", () => {
 			// Add multiple speed-reducing conditions
 			state.addCondition({name: "Grappled", source: "XPHB"});
 			state.addCondition({name: "Restrained", source: "XPHB"});
-			
+
 			// Both set speed to 0, result should still be 0
 			const multiplier = state.getSpeedMultiplierFromConditions();
 			expect(multiplier).toBe(0);
@@ -838,7 +838,7 @@ describe("CharacterSheetConditions", () => {
 				name: "Test Speed State",
 				customEffects: [{type: "bonus", target: "speed", value: 10}],
 			});
-			
+
 			const speedBonus = state.getSpeedBonusFromStates();
 			expect(speedBonus).toBe(10);
 		});
@@ -847,10 +847,10 @@ describe("CharacterSheetConditions", () => {
 			// No conditions - no auto-fails
 			expect(state.hasAutoFailFromConditions("save:str")).toBe(false);
 			expect(state.hasAutoFailFromConditions("save:dex")).toBe(false);
-			
+
 			// Add paralyzed
 			state.addCondition({name: "Paralyzed", source: "XPHB"});
-			
+
 			// Now should auto-fail STR and DEX
 			expect(state.hasAutoFailFromConditions("save:str")).toBe(true);
 			expect(state.hasAutoFailFromConditions("save:dex")).toBe(true);
@@ -862,11 +862,11 @@ describe("CharacterSheetConditions", () => {
 		it("should correctly track incapacitated status", () => {
 			// No conditions
 			expect(state.isIncapacitated()).toBe(false);
-			
+
 			// Add incapacitating condition
 			state.addCondition({name: "Stunned", source: "XPHB"});
 			expect(state.isIncapacitated()).toBe(true);
-			
+
 			// Remove it
 			state.removeCondition({name: "Stunned", source: "XPHB"});
 			expect(state.isIncapacitated()).toBe(false);
@@ -882,7 +882,7 @@ describe("CharacterSheetConditions", () => {
 				name: "TestCondition",
 				entries: ["Your speed is 0."],
 			};
-			
+
 			const parsed = CharacterSheetState.parseConditionFromEntries(conditionData);
 			const speedZero = parsed.effects.find(e => e.type === "setSpeed" && e.value === 0);
 			expect(speedZero).toBeDefined();
@@ -893,7 +893,7 @@ describe("CharacterSheetConditions", () => {
 				name: "TestCondition",
 				entries: ["Your attack rolls have disadvantage."],
 			};
-			
+
 			const parsed = CharacterSheetState.parseConditionFromEntries(conditionData);
 			const attackDisadvantage = parsed.effects.find(e => e.type === "disadvantage" && e.target === "attack");
 			expect(attackDisadvantage).toBeDefined();
@@ -904,7 +904,7 @@ describe("CharacterSheetConditions", () => {
 				name: "TestCondition",
 				entries: ["Attack rolls against you have advantage."],
 			};
-			
+
 			const parsed = CharacterSheetState.parseConditionFromEntries(conditionData);
 			const attacksAgainstAdvantage = parsed.effects.find(e => e.type === "advantage" && e.target === "attacksAgainst");
 			expect(attacksAgainstAdvantage).toBeDefined();
@@ -915,7 +915,7 @@ describe("CharacterSheetConditions", () => {
 				name: "TestCondition",
 				entries: ["You automatically fail Strength and Dexterity saving throws."],
 			};
-			
+
 			const parsed = CharacterSheetState.parseConditionFromEntries(conditionData);
 			const autoFailStr = parsed.effects.find(e => e.type === "autoFail" && e.target === "save:str");
 			const autoFailDex = parsed.effects.find(e => e.type === "autoFail" && e.target === "save:dex");
@@ -928,7 +928,7 @@ describe("CharacterSheetConditions", () => {
 				name: "TestCondition",
 				entries: ["You have disadvantage on ability checks."],
 			};
-			
+
 			const parsed = CharacterSheetState.parseConditionFromEntries(conditionData);
 			const checkDisadvantage = parsed.effects.find(e => e.type === "disadvantage" && e.target === "check");
 			expect(checkDisadvantage).toBeDefined();
@@ -939,7 +939,7 @@ describe("CharacterSheetConditions", () => {
 				name: "TestCondition",
 				entries: ["Your speed is halved."],
 			};
-			
+
 			const parsed = CharacterSheetState.parseConditionFromEntries(conditionData);
 			const speedHalved = parsed.effects.find(e => e.type === "speedMultiplier" && e.value === 0.5);
 			expect(speedHalved).toBeDefined();
@@ -960,7 +960,7 @@ describe("CharacterSheetConditions", () => {
 				],
 				source: "HB",
 			});
-			
+
 			const effects = CharacterSheetState.getConditionEffects("Dazed");
 			expect(effects).not.toBeNull();
 			expect(effects.source).toBe("HB");
@@ -977,9 +977,9 @@ describe("CharacterSheetConditions", () => {
 				],
 				source: "HB",
 			});
-			
+
 			state.addCondition({name: "Marked", source: "HB"});
-			
+
 			const effects = state.getActiveStateEffects();
 			const attacksAgainstAdvantage = effects.find(e => e.type === "advantage" && e.target === "attacksAgainst");
 			expect(attacksAgainstAdvantage).toBeDefined();
@@ -994,7 +994,7 @@ describe("CharacterSheetConditions", () => {
 				effects: [{type: "note", value: "Homebrew effect"}],
 				source: "HB",
 			});
-			
+
 			// getConditionEffects should return built-in first
 			const effects = CharacterSheetState.getConditionEffects("Blinded");
 			expect(effects.icon).toBe("👁️‍🗨️"); // Built-in icon, not homebrew
@@ -1008,12 +1008,12 @@ describe("CharacterSheetConditions", () => {
 				effects: [{type: "disadvantage", target: "check"}],
 				source: "MyHomebrew",
 			});
-			
+
 			state.addCondition({name: "Cursed", source: "MyHomebrew"});
-			
+
 			// Should have the condition
 			expect(state.hasCondition("Cursed")).toBe(true);
-			
+
 			// Should have exact match with source
 			const conditions = state.getConditions();
 			const cursed = conditions.find(c => c.name === "Cursed");
@@ -1053,14 +1053,14 @@ describe("CharacterSheetConditions", () => {
 	describe("Condition Icons and Display", () => {
 		it("each condition should have a unique icon", () => {
 			const icons = new Set();
-			
+
 			OFFICIAL_CONDITIONS_2024.forEach(condition => {
 				const def = CharacterSheetState.getConditionEffects(condition.name);
 				if (def) {
 					icons.add(def.icon);
 				}
 			});
-			
+
 			// Most conditions should have unique icons (some may share)
 			expect(icons.size).toBeGreaterThan(10);
 		});

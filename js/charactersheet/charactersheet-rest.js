@@ -83,7 +83,7 @@ class CharacterSheetRest {
 		// Render condition checkboxes
 		if (conditions.length > 0 || isConcentrating) {
 			const $condContainer = $modalInner.find("#short-rest-conditions-container");
-			
+
 			// Concentration first
 			if (isConcentrating) {
 				const $cbConc = $(`<input type="checkbox">`);
@@ -93,7 +93,7 @@ class CharacterSheetRest {
 					<span>🔮 Break Concentration (${concentration?.spellName || "unknown spell"})</span>
 				</label>`.appendTo($condContainer);
 			}
-			
+
 			// Conditions
 			conditions.forEach(condition => {
 				const $cb = $(`<input type="checkbox">`);
@@ -194,12 +194,12 @@ class CharacterSheetRest {
 				this._page.saveCharacter();
 				this._page.renderCharacter();
 				doClose(true);
-				
+
 				let message = `😴 Short rest complete!`;
 				if (totalHealing > 0) message += ` Recovered ${totalHealing} HP.`;
 				if (conditionsToRemove.size > 0) message += ` Removed ${conditionsToRemove.size} condition(s).`;
 				if (shouldBreakConcentration) message += ` Broke concentration.`;
-				
+
 				JqueryUtil.doToast({
 					type: "success",
 					content: message,
@@ -315,7 +315,7 @@ class CharacterSheetRest {
 		// Render condition checkboxes
 		if (conditions.length > 0 || isConcentrating) {
 			const $condContainer = $modalInner.find("#long-rest-conditions-container");
-			
+
 			// Concentration first
 			if (isConcentrating) {
 				$$`<label class="charsheet__rest-option">
@@ -323,7 +323,7 @@ class CharacterSheetRest {
 					<span>🔮 Break Concentration (${concentration?.spellName || "unknown spell"})</span>
 				</label>`.appendTo($condContainer);
 			}
-			
+
 			// Conditions (checked by default for long rest)
 			conditions.forEach(condition => {
 				const $cb = $(`<input type="checkbox" checked>`);

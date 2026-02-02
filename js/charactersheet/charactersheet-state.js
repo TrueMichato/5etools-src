@@ -60,12 +60,18 @@ class FeatureUsesParser {
 		const abilityModMatch = plainText.match(/(?:times|uses)?\s*equal\s*to\s*(?:your\s*)?(\w+)\s*modifier/i);
 		if (!uses && abilityModMatch && getAbilityMod) {
 			const abilityMap = {
-				strength: "str", str: "str",
-				dexterity: "dex", dex: "dex",
-				constitution: "con", con: "con",
-				intelligence: "int", int: "int",
-				wisdom: "wis", wis: "wis",
-				charisma: "cha", cha: "cha",
+				strength: "str",
+				str: "str",
+				dexterity: "dex",
+				dex: "dex",
+				constitution: "con",
+				con: "con",
+				intelligence: "int",
+				int: "int",
+				wisdom: "wis",
+				wis: "wis",
+				charisma: "cha",
+				cha: "cha",
 			};
 			const ability = abilityMap[abilityModMatch[1].toLowerCase()];
 			if (ability) {
@@ -77,12 +83,18 @@ class FeatureUsesParser {
 		const onePlusAbilityMatch = plainText.match(/1\s*\+\s*(?:your\s*)?(\w+)\s*modifier/i);
 		if (!uses && onePlusAbilityMatch && getAbilityMod) {
 			const abilityMap = {
-				strength: "str", str: "str",
-				dexterity: "dex", dex: "dex",
-				constitution: "con", con: "con",
-				intelligence: "int", int: "int",
-				wisdom: "wis", wis: "wis",
-				charisma: "cha", cha: "cha",
+				strength: "str",
+				str: "str",
+				dexterity: "dex",
+				dex: "dex",
+				constitution: "con",
+				con: "con",
+				intelligence: "int",
+				int: "int",
+				wisdom: "wis",
+				wis: "wis",
+				charisma: "cha",
+				cha: "cha",
 			};
 			const ability = abilityMap[onePlusAbilityMatch[1].toLowerCase()];
 			if (ability) {
@@ -114,8 +126,8 @@ class FeatureUsesParser {
 	static hasLimitedUses (text) {
 		if (!text) return false;
 		const plainText = text.replace(/<[^>]*>/g, " ").toLowerCase();
-		return /(?:times?|uses?|once|twice).*(?:rest|dawn|dusk)/i.test(plainText) ||
-			/(?:regain|recover).*(?:expended|all|uses)/i.test(plainText);
+		return /(?:times?|uses?|once|twice).*(?:rest|dawn|dusk)/i.test(plainText)
+			|| /(?:regain|recover).*(?:expended|all|uses)/i.test(plainText);
 	}
 }
 
@@ -231,8 +243,8 @@ class NaturalWeaponParser {
 		if (!text) return false;
 		const plainText = text.replace(/<[^>]*>/g, " ").toLowerCase();
 		// Handle both singular and plural forms: "natural weapon", "natural weapons", "natural melee weapons"
-		return /natural\s*(?:melee\s*)?weapons?|unarmed\s*strike.*(?:deal|damage)|melee\s*weapon\s*attack/i.test(plainText) &&
-			/\d+d\d+/i.test(plainText);
+		return /natural\s*(?:melee\s*)?weapons?|unarmed\s*strike.*(?:deal|damage)|melee\s*weapon\s*attack/i.test(plainText)
+			&& /\d+d\d+/i.test(plainText);
 	}
 }
 
@@ -501,7 +513,7 @@ class SpellGrantParser {
 	 */
 	static _parseSpellRef (spellRef, additionalProps = {}) {
 		if (!spellRef || typeof spellRef !== "string") return null;
-		
+
 		const [name, source] = spellRef.split("|");
 		return {
 			name: name.toTitleCase(),
@@ -518,7 +530,7 @@ class SpellGrantParser {
 		if (!text) return [];
 
 		const spells = [];
-		
+
 		// Look for {@spell SpellName} or {@spell SpellName|Source} references
 		const spellPattern = /\{@spell\s+([^}|]+)(?:\|([^}]+))?\}/gi;
 		let match;
@@ -566,8 +578,8 @@ class SpellGrantParser {
 	 */
 	static grantsSpells (text) {
 		if (!text) return false;
-		return /\{@spell/i.test(text) && 
-			(/can cast|learn|know|at will|without expending|gain access/i.test(text));
+		return /\{@spell/i.test(text)
+			&& (/can cast|learn|know|at will|without expending|gain access/i.test(text));
 	}
 }
 
@@ -591,7 +603,7 @@ class FeatureModifierParser {
 
 		const modifiers = [];
 		const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
-		
+
 		// Debug: Log the plaintext for proficiency bonus features
 		if (/proficiency\s*bonus/i.test(plainText)) {
 			console.log(`[FeatureModifierParser] Checking "${sourceName}" for proficiency bonus patterns. PlainText:`, plainText.substring(0, 200));
@@ -841,7 +853,7 @@ class FeatureModifierParser {
 				// "bonus to X checks equal to your proficiency bonus" patterns
 				// Pattern 1: "bonus to Charisma (Intimidation) checks equal to your proficiency bonus"
 				{pattern: new RegExp(`(?:gain\\s*(?:a\\s*)?)?bonus\\s*to\\s*(?:your\\s*)?(?:\\w+\\s*\\(?\\s*)?${skill}(?:\\s*\\))?\\s*(?:checks?)?\\s*equal\\s*to\\s*(?:your\\s*)?proficiency\\s*bonus`, "gi"), proficiencyBonus: true},
-				// Pattern 2: "bonus equal to proficiency bonus to/on X checks" 
+				// Pattern 2: "bonus equal to proficiency bonus to/on X checks"
 				{pattern: new RegExp(`(?:gain\\s*(?:a\\s*)?)?bonus\\s*(?:equal\\s*to\\s*(?:your\\s*)?proficiency\\s*bonus)\\s*(?:to|on)\\s*(?:your\\s*)?(?:\\w+\\s*\\(?\\s*)?${skill}(?:\\s*\\))?\\s*(?:checks?)?`, "gi"), proficiencyBonus: true},
 				// Pattern 3: Simpler pattern - "bonus ... to ... {skill} ... equal to ... proficiency bonus"
 				{pattern: new RegExp(`bonus\\s+[^.]*?${skill}[^.]*?equal\\s+to\\s+(?:your\\s+)?proficiency\\s+bonus`, "gi"), proficiencyBonus: true},
@@ -1244,8 +1256,8 @@ class FeatureModifierParser {
 		// NO TRAVEL PENALTIES
 		// ===================
 		// "don't take the -5 penalty to your passive Perception score" when traveling at fast pace
-		if (/travel\s+at\s+a\s+fast\s+pace.*don.?t\s+take\s+the\s+-?\d+\s+penalty/gi.test(plainText) ||
-			/don.?t\s+take\s+the\s+-?\d+\s+penalty.*fast\s+pace/gi.test(plainText)) {
+		if (/travel\s+at\s+a\s+fast\s+pace.*don.?t\s+take\s+the\s+-?\d+\s+penalty/gi.test(plainText)
+			|| /don.?t\s+take\s+the\s+-?\d+\s+penalty.*fast\s+pace/gi.test(plainText)) {
 			modifiers.push({
 				type: "travel:fastPace",
 				value: 0,
@@ -1786,13 +1798,13 @@ class FeatureModifierParser {
 	static hasModifiers (text) {
 		if (!text) return false;
 		const plainText = text.replace(/<[^>]*>/g, " ").toLowerCase();
-		return /[+\-−]\s*\d+\s*(bonus\s*)?(to|on|feet|ft)/i.test(plainText) ||
-			/(?:ac|armor\s*class|saving\s*throws?|attack\s*rolls?|damage|speed|initiative|hit\s*points?|darkvision)\s*(?:increase|decrease|bonus|penalty|is\s*(?:increased|reduced))/i.test(plainText) ||
-			/(?:strength|dexterity|constitution|intelligence|wisdom|charisma)(?:\s*score)?\s*(?:increase|decrease)/i.test(plainText) ||
-			/gain(?:s)?\s*(?:darkvision|blindsight|tremorsense|truesight)/i.test(plainText) ||
-			/proficien(?:cy|t)\s*(?:in|with)/i.test(plainText) ||
-			/(?:ac|armor\s*class)\s+(?:equals?|is)\s+\d+/i.test(plainText) ||
-			/natural\s+armor/i.test(plainText);
+		return /[+\-−]\s*\d+\s*(bonus\s*)?(to|on|feet|ft)/i.test(plainText)
+			|| /(?:ac|armor\s*class|saving\s*throws?|attack\s*rolls?|damage|speed|initiative|hit\s*points?|darkvision)\s*(?:increase|decrease|bonus|penalty|is\s*(?:increased|reduced))/i.test(plainText)
+			|| /(?:strength|dexterity|constitution|intelligence|wisdom|charisma)(?:\s*score)?\s*(?:increase|decrease)/i.test(plainText)
+			|| /gain(?:s)?\s*(?:darkvision|blindsight|tremorsense|truesight)/i.test(plainText)
+			|| /proficien(?:cy|t)\s*(?:in|with)/i.test(plainText)
+			|| /(?:ac|armor\s*class)\s+(?:equals?|is)\s+\d+/i.test(plainText)
+			|| /natural\s+armor/i.test(plainText);
 	}
 }
 
@@ -1801,20 +1813,20 @@ globalThis.FeatureModifierParser = FeatureModifierParser;
 
 /**
  * FeatureEffectRegistry
- * 
+ *
  * A data-driven registry that maps feature names/identifiers to their mechanical effects.
  * This allows the system to apply effects generically based on feature NAME rather than
  * which class the feature came from, enabling homebrew support.
- * 
+ *
  * Features are matched by normalized name (lowercase, trimmed). Multiple effects can be
  * defined per feature. Each effect follows the standard effect schema used by
  * _aggregateFeatureEffects().
- * 
+ *
  * Usage:
- *   FeatureEffectRegistry.getEffects("Purity of Body") 
+ *   FeatureEffectRegistry.getEffects("Purity of Body")
  *   // Returns [{type: "immunity", damageType: "poison"}, {type: "conditionImmunity", ...}]
- * 
- *   FeatureEffectRegistry.hasEffects("Some Custom Feature") 
+ *
+ *   FeatureEffectRegistry.hasEffects("Some Custom Feature")
  *   // Returns true if feature has registered effects
  */
 const FeatureEffectRegistry = {
@@ -1839,20 +1851,20 @@ const FeatureEffectRegistry = {
 		// === EVASION ===
 		// Appears in: Monk 7, Rogue 7, Ranger (Hunter) 15
 		this.register("Evasion", [
-			{type: "savingThrowProperty", save: "dex", property: "halfToNone"}
+			{type: "savingThrowProperty", save: "dex", property: "halfToNone"},
 		]);
 
 		// === EXTRA ATTACK ===
 		// Appears in: Barbarian 5, Bard (Valor/Swords) 6, Fighter 5, Monk 5, Paladin 5, Ranger 5
 		// Note: Count is handled by calculations, not registry
 		this.register("Extra Attack", [
-			{type: "attackCount", count: 2}
+			{type: "attackCount", count: 2},
 		]);
 
 		// === LAND'S STRIDE ===
 		// Appears in: Druid (Land) 6, Ranger 8
 		this.register("Land's Stride", [
-			{type: "movement", property: "ignoreDifficultTerrain", conditional: "nonmagical"}
+			{type: "movement", property: "ignoreDifficultTerrain", conditional: "nonmagical"},
 		]);
 
 		// === TIMELESS BODY ===
@@ -1870,13 +1882,13 @@ const FeatureEffectRegistry = {
 	_registerClassFeatures () {
 		// ======= ARTIFICER =======
 		this.register("Tool Expertise", [
-			{type: "toolBonus", bonus: "expertise"}
+			{type: "toolBonus", bonus: "expertise"},
 		]);
 		this.register("Magic Item Savant", [
-			{type: "attunement", maxSlots: 5, ignoreRequirements: true}
+			{type: "attunement", maxSlots: 5, ignoreRequirements: true},
 		]);
 		this.register("Soul of Artifice", [
-			{type: "modifier", modType: "save:all", value: "attunedItems"}
+			{type: "modifier", modType: "save:all", value: "attunedItems"},
 		]);
 
 		// ======= BARBARIAN =======
@@ -1886,28 +1898,28 @@ const FeatureEffectRegistry = {
 			{type: "resistance", damageType: "slashing", conditional: "while raging", enabled: false},
 		]);
 		this.register("Danger Sense", [
-			{type: "modifier", modType: "save:dex:advantage", value: 1, conditional: "against effects you can see"}
+			{type: "modifier", modType: "save:dex:advantage", value: 1, conditional: "against effects you can see"},
 		]);
 		this.register("Fast Movement", [
-			{type: "speed", speedType: "walk", value: 10, conditional: "while not wearing heavy armor"}
+			{type: "speed", speedType: "walk", value: 10, conditional: "while not wearing heavy armor"},
 		]);
 		this.register("Feral Instinct", [
-			{type: "modifier", modType: "initiative:advantage", value: 1}
+			{type: "modifier", modType: "initiative:advantage", value: 1},
 		]);
 		this.register("Indomitable Might", [
-			{type: "modifier", modType: "ability:str:minimum", value: "strScore"}
+			{type: "modifier", modType: "ability:str:minimum", value: "strScore"},
 		]);
 
 		// ======= BARD =======
 		this.register("Jack of All Trades", [
-			{type: "skillBonus", bonus: "halfProficiency", requiresProficiency: false}
+			{type: "skillBonus", bonus: "halfProficiency", requiresProficiency: false},
 		]);
 		this.register("Countercharm", [
 			{type: "modifier", modType: "save:advantage:frightened", value: 1, conditional: "while you can hear the bard"},
 			{type: "modifier", modType: "save:advantage:charmed", value: 1, conditional: "while you can hear the bard"},
 		]);
 		this.register("Superior Inspiration", [
-			{type: "resourceProperty", resource: "bardicInspiration", property: "regainOnInitiative"}
+			{type: "resourceProperty", resource: "bardicInspiration", property: "regainOnInitiative"},
 		]);
 
 		// ======= CLERIC =======
@@ -1915,18 +1927,18 @@ const FeatureEffectRegistry = {
 
 		// ======= DRUID =======
 		this.register("Beast Spells", [
-			{type: "spellcastingProperty", property: "castWhileWildShaped"}
+			{type: "spellcastingProperty", property: "castWhileWildShaped"},
 		]);
 		this.register("Archdruid", [
-			{type: "resourceProperty", resource: "wildShape", property: "unlimited"}
+			{type: "resourceProperty", resource: "wildShape", property: "unlimited"},
 		]);
 
 		// ======= FIGHTER =======
 		this.register("Defense", [ // Fighting Style
-			{type: "acBonus", value: 1, conditional: "while wearing armor"}
+			{type: "acBonus", value: 1, conditional: "while wearing armor"},
 		]);
 		this.register("Dueling", [ // Fighting Style
-			{type: "damageBonus", value: 2, conditional: "one-handed melee weapon, no other weapons"}
+			{type: "damageBonus", value: 2, conditional: "one-handed melee weapon, no other weapons"},
 		]);
 
 		// ======= MONK =======
@@ -1952,37 +1964,37 @@ const FeatureEffectRegistry = {
 			{type: "saveProficiency", ability: "cha"},
 		]);
 		this.register("Tongue of the Sun and Moon", [
-			{type: "language", language: "All (spoken)"}
+			{type: "language", language: "All (spoken)"},
 		]);
 		this.register("Ki-Empowered Strikes", [
-			{type: "weaponProperty", property: "magical", weaponType: "unarmed"}
+			{type: "weaponProperty", property: "magical", weaponType: "unarmed"},
 		]);
 		this.register("Empowered Strikes", [ // 2024 version
-			{type: "weaponProperty", property: "magical", weaponType: "unarmed"}
+			{type: "weaponProperty", property: "magical", weaponType: "unarmed"},
 		]);
 
 		// ======= PALADIN =======
 		this.register("Divine Health", [
-			{type: "conditionImmunity", condition: "diseased"}
+			{type: "conditionImmunity", condition: "diseased"},
 		]);
 		this.register("Aura of Courage", [
-			{type: "conditionImmunity", condition: "frightened"}
+			{type: "conditionImmunity", condition: "frightened"},
 		]);
 
 		// ======= RANGER =======
 		this.register("Feral Senses", [
-			{type: "sense", sense: "blindsight", range: 30}
+			{type: "sense", sense: "blindsight", range: 30},
 		]);
 
 		// ======= ROGUE =======
 		this.register("Slippery Mind", [
-			{type: "saveProficiency", ability: "wis"}
+			{type: "saveProficiency", ability: "wis"},
 		]);
 		this.register("Blindsense", [
-			{type: "sense", sense: "blindsight", range: 10}
+			{type: "sense", sense: "blindsight", range: 10},
 		]);
 		this.register("Reliable Talent", [
-			{type: "skillMinimum", minimum: 10, requiresProficiency: true}
+			{type: "skillMinimum", minimum: 10, requiresProficiency: true},
 		]);
 
 		// ======= SORCERER =======
@@ -2004,7 +2016,7 @@ const FeatureEffectRegistry = {
 	_registerSubclassFeatures () {
 		// ======= ARTIFICER SUBCLASSES =======
 		this.register("Battle Ready", [
-			{type: "attackAbility", ability: "int", weaponType: "magic"}
+			{type: "attackAbility", ability: "int", weaponType: "magic"},
 		]);
 
 		// ======= BARBARIAN SUBCLASSES =======
@@ -2014,10 +2026,10 @@ const FeatureEffectRegistry = {
 		]);
 		// Bear Totem
 		this.register("Bear Spirit", [
-			{type: "modifier", modType: "resistance:all-except-psychic", value: 1, conditional: "while raging", enabled: false}
+			{type: "modifier", modType: "resistance:all-except-psychic", value: 1, conditional: "while raging", enabled: false},
 		]);
 		this.register("Totem Spirit: Bear", [
-			{type: "modifier", modType: "resistance:all-except-psychic", value: 1, conditional: "while raging", enabled: false}
+			{type: "modifier", modType: "resistance:all-except-psychic", value: 1, conditional: "while raging", enabled: false},
 		]);
 
 		// ======= CLERIC SUBCLASSES =======
@@ -2027,15 +2039,15 @@ const FeatureEffectRegistry = {
 			{type: "resistance", damageType: "fire"},
 		]);
 		this.register("Saint of Forge and Fire", [
-			{type: "immunity", damageType: "fire"}
+			{type: "immunity", damageType: "fire"},
 		]);
 		// Twilight Domain
 		this.register("Eyes of Night", [
-			{type: "sense", sense: "darkvision", range: 300}
+			{type: "sense", sense: "darkvision", range: 300},
 		]);
 		// Death Domain
 		this.register("Inescapable Destruction", [
-			{type: "damageProperty", property: "ignoreResistance", damageType: "necrotic"}
+			{type: "damageProperty", property: "ignoreResistance", damageType: "necrotic"},
 		]);
 
 		// ======= DRUID SUBCLASSES =======
@@ -2066,23 +2078,23 @@ const FeatureEffectRegistry = {
 		]);
 		// Swashbuckler
 		this.register("Rakish Audacity", [
-			{type: "initiativeBonus", value: "cha"}
+			{type: "initiativeBonus", value: "cha"},
 		]);
 		// Inquisitive
 		this.register("Ear for Deceit", [
-			{type: "skillMinimum", skill: "insight", minimum: 8}
+			{type: "skillMinimum", skill: "insight", minimum: 8},
 		]);
 
 		// ======= SORCERER SUBCLASSES =======
 		// Draconic Bloodline
 		this.register("Dragon Wings", [
-			{type: "speed", speedType: "fly", value: "walk", conditional: "while not wearing armor"}
+			{type: "speed", speedType: "fly", value: "walk", conditional: "while not wearing armor"},
 		]);
 
 		// ======= WARLOCK SUBCLASSES =======
 		// Fiend
 		this.register("Fiendish Resilience", [
-			{type: "resistance", damageType: "choice", userSelectable: true}
+			{type: "resistance", damageType: "choice", userSelectable: true},
 		]);
 
 		// ======= WIZARD SUBCLASSES =======
@@ -2114,7 +2126,7 @@ const FeatureEffectRegistry = {
 
 		// Halfling features
 		this.register("Brave", [
-			{type: "modifier", modType: "save:advantage:frightened", value: 1}
+			{type: "modifier", modType: "save:advantage:frightened", value: 1},
 		]);
 		this.register("Lucky", [
 			{type: "modifier", modType: "reroll:1:attack", value: 1},
@@ -2131,12 +2143,12 @@ const FeatureEffectRegistry = {
 
 		// Tiefling features
 		this.register("Hellish Resistance", [
-			{type: "resistance", damageType: "fire"}
+			{type: "resistance", damageType: "fire"},
 		]);
 
 		// Dragonborn features
 		this.register("Draconic Resistance", [
-			{type: "resistance", damageType: "ancestry"} // Type depends on ancestry choice
+			{type: "resistance", damageType: "ancestry"}, // Type depends on ancestry choice
 		]);
 
 		// Aasimar features
@@ -2155,7 +2167,7 @@ const FeatureEffectRegistry = {
 
 		// Yuan-ti features
 		this.register("Magic Resistance", [
-			{type: "modifier", modType: "save:advantage:magic", value: 1}
+			{type: "modifier", modType: "save:advantage:magic", value: 1},
 		]);
 		this.register("Poison Immunity", [
 			{type: "immunity", damageType: "poison"},
@@ -2284,8 +2296,8 @@ const FeatureEffectRegistry = {
 
 		// Saving throw proficiencies
 		if (featureData.savingThrowProficiencies) {
-			const saveProfs = Array.isArray(featureData.savingThrowProficiencies) 
-				? featureData.savingThrowProficiencies 
+			const saveProfs = Array.isArray(featureData.savingThrowProficiencies)
+				? featureData.savingThrowProficiencies
 				: [featureData.savingThrowProficiencies];
 			saveProfs.forEach(sp => {
 				if (typeof sp === "string") {
@@ -2593,7 +2605,7 @@ class CharacterSheetState {
 
 			// Named modifiers list (for detailed tracking with sources/notes)
 			// Each modifier: {id, name, type, value, note, enabled, sourceFeatureId?}
-			// type: "ac", "initiative", "speed:walk", "speed:fly", "attack", "damage", "spellDc", "spellAttack", 
+			// type: "ac", "initiative", "speed:walk", "speed:fly", "attack", "damage", "spellDc", "spellAttack",
 			//       "save:all", "save:str", "skill:all", "skill:stealth", "check:all", "check:str",
 			//       "ability:str", "hp", "sense:darkvision", "carryCapacity", "proficiencyBonus"
 			namedModifiers: [],
@@ -2642,12 +2654,12 @@ class CharacterSheetState {
 				return false;
 			}
 		}
-		
+
 		// Handle version-wrapped data from serialize()
 		if (data.version && data.data) {
 			data = data.data;
 		}
-		
+
 		this._data = {
 			...this._getDefaultState(),
 			...MiscUtil.copyFast(data),
@@ -2669,7 +2681,7 @@ class CharacterSheetState {
 		// Ensure nested customModifiers objects exist
 		this._data.customModifiers.speed = {...this._getDefaultState().customModifiers.speed, ...this._data.customModifiers.speed};
 		this._data.customModifiers.senses = {...this._getDefaultState().customModifiers.senses, ...this._data.customModifiers.senses};
-		
+
 		// Ensure namedModifiers array exists
 		if (!Array.isArray(this._data.namedModifiers)) {
 			this._data.namedModifiers = [];
@@ -2687,13 +2699,13 @@ class CharacterSheetState {
 
 		// Migrate features: infer featureType for old saves that don't have it
 		this._migrateFeatures();
-		
+
 		// Migrate modifiers: re-process modifiers that may be missing special flags
 		this._migrateModifiers();
 
 		// Migrate spells: ensure concentration/ritual flags are set correctly
 		this._migrateSpells();
-		
+
 		// Ensure unarmed strike exists for all characters
 		this.ensureUnarmedStrike();
 	}
@@ -2792,7 +2804,7 @@ class CharacterSheetState {
 			console.log(`[CharSheet State] Migrated ${migratedCount} spells with concentration/ritual flags`);
 		}
 	}
-	
+
 	/**
 	 * Migrate old modifier data to include special flags
 	 * This re-parses feature descriptions to extract proficiencyBonus, abilityMod, etc.
@@ -2800,30 +2812,30 @@ class CharacterSheetState {
 	_migrateModifiers () {
 		if (!this._data.namedModifiers?.length) return;
 		if (!this._data.features?.length) return;
-		
+
 		// Check if migration is needed (look for modifiers with notes mentioning proficiency but no flag)
-		const needsMigration = this._data.namedModifiers.some(mod => 
-			mod.note?.toLowerCase().includes("proficiency bonus") && !mod.proficiencyBonus
+		const needsMigration = this._data.namedModifiers.some(mod =>
+			mod.note?.toLowerCase().includes("proficiency bonus") && !mod.proficiencyBonus,
 		);
-		
+
 		if (!needsMigration) return;
-		
+
 		console.log("[CharSheet State] Migrating modifiers to add special flags...");
-		
+
 		// For each feature that has associated modifiers, re-parse and update flags
 		this._data.features.forEach(feature => {
 			if (!feature.description) return;
-			
+
 			// Find modifiers from this feature
-			const featureModifiers = this._data.namedModifiers.filter(m => 
-				m.sourceFeatureId === feature.id || m.note?.includes(`From ${feature.name}`)
+			const featureModifiers = this._data.namedModifiers.filter(m =>
+				m.sourceFeatureId === feature.id || m.note?.includes(`From ${feature.name}`),
 			);
-			
+
 			if (!featureModifiers.length) return;
-			
+
 			// Re-parse the feature to get the correct flags
 			const parsedModifiers = FeatureModifierParser.parseModifiers(feature.description, feature.name);
-			
+
 			// Update each existing modifier with the correct flags
 			featureModifiers.forEach(existingMod => {
 				// Find a matching parsed modifier by type
@@ -3153,14 +3165,14 @@ class CharacterSheetState {
 		// Most martial classes get Extra Attack at 5
 		const extraAttackClasses = ["Barbarian", "Monk", "Paladin", "Ranger"];
 		const hasExtraAttack = this._data.classes.some(c =>
-			extraAttackClasses.includes(c.name) && c.level >= 5
+			extraAttackClasses.includes(c.name) && c.level >= 5,
 		);
 
 		if (hasExtraAttack) return 2;
 
 		// Check for Extra Attack feature directly
 		const extraAttackFeature = this._data.features.find(f =>
-			f.name.toLowerCase().includes("extra attack")
+			f.name.toLowerCase().includes("extra attack"),
 		);
 		if (extraAttackFeature) return 2;
 
@@ -3315,7 +3327,7 @@ class CharacterSheetState {
 		if (!this._data.customModifiers.abilityScores) {
 			this._data.customModifiers.abilityScores = {};
 		}
-		this._data.customModifiers.abilityScores[ability] = 
+		this._data.customModifiers.abilityScores[ability] =
 			(this._data.customModifiers.abilityScores[ability] || 0) + bonus;
 	}
 
@@ -3401,7 +3413,7 @@ class CharacterSheetState {
 		const maxHp = this.getMaxHp();
 		const wasAtZero = this._data.hp.current === 0;
 		this._data.hp.current = Math.min(maxHp, this._data.hp.current + amount);
-		
+
 		// Reset death saves when healing from 0 HP
 		if (wasAtZero && this._data.hp.current > 0) {
 			this.resetDeathSaves();
@@ -3531,7 +3543,7 @@ class CharacterSheetState {
 			const classNames = this._data.classes
 				.filter(cls => this._getClassHitDie(cls.name) === dieSize)
 				.map(cls => cls.name);
-			
+
 			result.push({
 				type,
 				die: dieSize,
@@ -3584,14 +3596,14 @@ class CharacterSheetState {
 
 		if (dieType && this._data.hitDice[dieType]?.current > 0) {
 			this._data.hitDice[dieType].current--;
-			
+
 			// Roll the hit die and heal (average roll for deterministic behavior)
 			// Hit die type is like "d8" or "d10"
 			const dieSize = parseInt(dieType.replace("d", ""), 10) || 8;
 			const averageRoll = Math.ceil(dieSize / 2) + 1; // Average rounded up
 			const conMod = this.getAbilityMod("con");
 			const healAmount = Math.max(1, averageRoll + conMod); // Minimum 1 HP
-			
+
 			this.heal(healAmount);
 			return true;
 		}
@@ -3856,7 +3868,7 @@ class CharacterSheetState {
 	getSkillMod (skill) {
 		// Normalize skill key to lowercase without spaces
 		const normalizedSkill = skill.toLowerCase().replace(/\s+/g, "");
-		
+
 		const skillAbilities = {
 			acrobatics: "dex",
 			animalhandling: "wis",
@@ -3882,8 +3894,8 @@ class CharacterSheetState {
 
 		// If not a standard skill, check custom skills
 		if (!ability) {
-			const customSkill = this._data.customSkills.find(s => 
-				s.name.toLowerCase().replace(/\s+/g, "") === normalizedSkill
+			const customSkill = this._data.customSkills.find(s =>
+				s.name.toLowerCase().replace(/\s+/g, "") === normalizedSkill,
 			);
 			// Custom skills can have no ability (empty string or null)
 			ability = customSkill?.ability || null;
@@ -3902,19 +3914,19 @@ class CharacterSheetState {
 		// If no ability, only use proficiency and bonuses (flat skill check)
 		const mod = ability ? this.getAbilityMod(ability) : 0;
 		const profLevel = this.getSkillProficiency(skill);
-		
+
 		let profBonus = profLevel * this.getProficiencyBonus();
-		
+
 		// Jack of All Trades: add half proficiency bonus to skills you're not proficient in
 		if (profLevel === 0 && this.hasJackOfAllTrades()) {
 			profBonus = Math.floor(this.getProficiencyBonus() / 2);
 		}
-		
+
 		// Get custom modifiers (specific skill + "all skills" bonus)
 		const custom = this.getSkillCustomMod(skill);
 		// Add item bonuses (ability check bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.abilityCheck || 0;
-		
+
 		// Get feature modifiers from named modifiers (from features like "Mark of the Wilderness")
 		const featureBonus = this._getSkillFeatureBonus(skill);
 
@@ -3931,7 +3943,7 @@ class CharacterSheetState {
 		const skillModifiers = this.getNamedModifiersByType(`skill:${skill}`);
 		console.log(`[CharSheet State] Found ${skillModifiers.length} modifiers for skill:${skill}:`, skillModifiers);
 		let total = 0;
-		
+
 		skillModifiers.forEach(mod => {
 			if (mod.proficiencyBonus) {
 				// "bonus equal to your proficiency bonus"
@@ -3948,18 +3960,36 @@ class CharacterSheetState {
 				total += mod.value || 0;
 			}
 		});
-		
+
 		// Also check active state effects for skill bonuses
 		// Map skill to ability for check:ability:skill format
 		const skillToAbility = {
 			athletics: "str",
-			acrobatics: "dex", sleightofhand: "dex", stealth: "dex",
-			arcana: "int", history: "int", investigation: "int", nature: "int", religion: "int",
-			animalhandling: "wis", insight: "wis", medicine: "wis", perception: "wis", survival: "wis",
-			deception: "cha", intimidation: "cha", performance: "cha", persuasion: "cha",
+			acrobatics: "dex",
+			sleightofhand: "dex",
+			stealth: "dex",
+			arcana: "int",
+			history: "int",
+			investigation: "int",
+			nature: "int",
+			religion: "int",
+			animalhandling: "wis",
+			insight: "wis",
+			medicine: "wis",
+			perception: "wis",
+			survival: "wis",
+			deception: "cha",
+			intimidation: "cha",
+			performance: "cha",
+			persuasion: "cha",
 			// Custom skills
-			cooking: "wis", culture: "int", endurance: "con", engineering: "int",
-			harvesting: "wis", linguistics: "int", might: "str",
+			cooking: "wis",
+			culture: "int",
+			endurance: "con",
+			engineering: "int",
+			harvesting: "wis",
+			linguistics: "int",
+			might: "str",
 		};
 		const ability = skillToAbility[skill] || "int";
 		const stateBonus = this.getSkillBonusFromStates(skill, ability);
@@ -3967,7 +3997,7 @@ class CharacterSheetState {
 			console.log(`[CharSheet State] Adding ${stateBonus} from active states for ${skill}`);
 			total += stateBonus;
 		}
-		
+
 		// Thelemar rules: Linguistics gets +1 for each language known (except Common)
 		if (skill === "linguistics" && this._data.settings?.thelemar_linguisticsBonus) {
 			const languages = this._data.languages || [];
@@ -3977,7 +4007,7 @@ class CharacterSheetState {
 				total += languageBonus;
 			}
 		}
-		
+
 		console.log(`[CharSheet State] Total feature bonus for ${skill}: ${total}`);
 		return total;
 	}
@@ -3986,8 +4016,8 @@ class CharacterSheetState {
 	 * Check if the character has the Jack of All Trades feature
 	 */
 	hasJackOfAllTrades () {
-		return this._data.features.some(f => 
-			f.name?.toLowerCase().includes("jack of all trades")
+		return this._data.features.some(f =>
+			f.name?.toLowerCase().includes("jack of all trades"),
 		);
 	}
 
@@ -3998,10 +4028,10 @@ class CharacterSheetState {
 	hasFavoredFoe () {
 		return this._data.features.some(f => {
 			const nameLower = f.name?.toLowerCase() || "";
-			return nameLower.includes("favored foe") || 
-				nameLower.includes("favored enemy") ||
-				nameLower.includes("favourite foe") ||
-				nameLower.includes("favourite enemy");
+			return nameLower.includes("favored foe")
+				|| nameLower.includes("favored enemy")
+				|| nameLower.includes("favourite foe")
+				|| nameLower.includes("favourite enemy");
 		});
 	}
 
@@ -4088,14 +4118,14 @@ class CharacterSheetState {
 		if (this._data.ac.shield) {
 			const isMonkUnarmored = !this._data.ac.armor && this._hasMonkUnarmoredDefense();
 			// Check if current AC formula forbids shields
-			const formulaForbidsShield = bestAcFormula?.formula?.formulaType === "unarmoredDefense" && 
-				bestAcFormula.ac > (10 + dexMod); // Only matters if we're using the formula
-			
+			const formulaForbidsShield = bestAcFormula?.formula?.formulaType === "unarmoredDefense"
+				&& bestAcFormula.ac > (10 + dexMod); // Only matters if we're using the formula
+
 			if (!isMonkUnarmored && !formulaForbidsShield) {
 				// Shield bonus: if explicit bonus set, use it; otherwise default to 2
 				// For magic shields, bonus includes the magic enhancement (e.g., Shield +1 = bonus of 3)
-				const shieldBonus = (typeof this._data.ac.shield === "object" && this._data.ac.shield.bonus !== undefined) 
-					? this._data.ac.shield.bonus 
+				const shieldBonus = (typeof this._data.ac.shield === "object" && this._data.ac.shield.bonus !== undefined)
+					? this._data.ac.shield.bonus
 					: 2;
 				ac += shieldBonus;
 			}
@@ -4199,7 +4229,7 @@ class CharacterSheetState {
 			bestAc = Math.max(bestAc, monkAc);
 		}
 
-		// As per rules: "If you have multiple ways to calculate your Armor Class, 
+		// As per rules: "If you have multiple ways to calculate your Armor Class,
 		// you can benefit from only one at a time" - we automatically use the best one
 		return bestAc;
 	}
@@ -4327,14 +4357,14 @@ class CharacterSheetState {
 		// Shield
 		if (this._data.ac.shield) {
 			const isMonkUnarmored = !this._data.ac.armor && this._hasMonkUnarmoredDefense();
-			const formulaForbidsShield = usedFormula?.formulaType === "unarmoredDefense" && 
-				(usedFormula.base || 10) + (usedFormula.addDex ? dexMod : 0) > (10 + dexMod);
-			
+			const formulaForbidsShield = usedFormula?.formulaType === "unarmoredDefense"
+				&& (usedFormula.base || 10) + (usedFormula.addDex ? dexMod : 0) > (10 + dexMod);
+
 			if (!isMonkUnarmored && !formulaForbidsShield) {
 				const baseShieldBonus = 2;
 				const magicBonus = (typeof this._data.ac.shield === "object") ? (this._data.ac.shield.bonus || 0) : 0;
 				const shieldName = (typeof this._data.ac.shield === "object") ? (this._data.ac.shield.name || "Shield") : "Shield";
-				
+
 				if (magicBonus > 0) {
 					components.push({type: "shield", name: shieldName, value: baseShieldBonus, icon: "🛡️"});
 					components.push({type: "magic", name: `+${magicBonus} Shield`, value: magicBonus, icon: "✨"});
@@ -4403,29 +4433,29 @@ class CharacterSheetState {
 		// Check for monk class
 		const monkClass = this._data.classes.find(c => c.name === "Monk");
 		if (!monkClass || monkClass.level < 2) return 0;
-		
+
 		// Check if wearing armor or shield
-		const equippedArmor = this._data.inventory.find(item => 
+		const equippedArmor = this._data.inventory.find(item =>
 			item.equipped && item.item?.type === "LA" || item.item?.type === "MA" || item.item?.type === "HA",
 		);
-		const equippedShield = this._data.inventory.find(item => 
+		const equippedShield = this._data.inventory.find(item =>
 			item.equipped && item.item?.type === "S",
 		);
-		
+
 		// Bonus only applies when not wearing armor or shield
 		if (equippedArmor || equippedShield) return 0;
-		
+
 		// Calculate bonus based on monk level
 		const level = monkClass.level;
 		return level >= 18 ? 30 : level >= 14 ? 25 : level >= 10 ? 20 : level >= 6 ? 15 : 10;
 	}
-	
+
 	getSpeed (type) {
 		// If a type is specified, return just that speed value as a number
 		if (type) {
 			return this.getSpeedByType(type);
 		}
-		
+
 		// Otherwise return the formatted string for display
 		const speedMods = this._data.customModifiers.speed || {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
@@ -4435,7 +4465,7 @@ class CharacterSheetState {
 
 		// Check for "equal to walk" modifiers for each speed type
 		const getSpeedWithEqualToWalk = (speedType, base, bonus) => {
-			const equalToWalkMod = this._data.namedModifiers?.find(m => 
+			const equalToWalkMod = this._data.namedModifiers?.find(m =>
 				m.type === `speed:${speedType}` && m.equalToWalk && m.enabled,
 			);
 			if (equalToWalkMod) {
@@ -4472,16 +4502,16 @@ class CharacterSheetState {
 		const speedMods = this._data.customModifiers.speed || {};
 		let base = this._data.speed[type] || 0;
 		const bonus = speedMods[type] || 0;
-		
+
 		// Check for "equal to walk" modifiers (e.g., "swimming speed equal to your walking speed")
-		const equalToWalkMod = this._data.namedModifiers?.find(m => 
+		const equalToWalkMod = this._data.namedModifiers?.find(m =>
 			m.type === `speed:${type}` && m.equalToWalk && m.enabled,
 		);
 		if (equalToWalkMod) {
 			// Override base with walking speed
 			base = Math.max(base, this.getWalkSpeed());
 		}
-		
+
 		return base + bonus;
 	}
 	// #endregion
@@ -4489,12 +4519,12 @@ class CharacterSheetState {
 	// #region Initiative
 	getInitiative () {
 		let initiative = this.getAbilityMod("dex") + (this._data.customModifiers.initiative || 0);
-		
+
 		// Jack of All Trades adds half proficiency to initiative (it's a DEX ability check)
 		if (this.hasJackOfAllTrades()) {
 			initiative += Math.floor(this.getProficiencyBonus() / 2);
 		}
-		
+
 		return initiative;
 	}
 	// #endregion
@@ -4959,7 +4989,7 @@ class CharacterSheetState {
 			"Artificer": "artificer",
 			"Warlock": "pact",
 		};
-		
+
 		// Fallback for known third-caster subclasses
 		const subclassProgressionFallback = {
 			"Eldritch Knight": "1/3",
@@ -4974,11 +5004,11 @@ class CharacterSheetState {
 		for (const cls of classes) {
 			const className = cls.name;
 			const level = cls.level || 1;
-			
+
 			// Get caster progression: prefer stored value, then check subclass, then fallback
-			let progression = cls.casterProgression 
-				|| cls.subclass?.casterProgression 
-				|| subclassProgressionFallback[cls.subclass?.name] 
+			let progression = cls.casterProgression
+				|| cls.subclass?.casterProgression
+				|| subclassProgressionFallback[cls.subclass?.name]
 				|| classProgressionFallback[className]
 				|| null;
 
@@ -5004,15 +5034,15 @@ class CharacterSheetState {
 
 		// Standard spell slot progression table (by caster level)
 		const slotTable = {
-			1:  [2, 0, 0, 0, 0, 0, 0, 0, 0],
-			2:  [3, 0, 0, 0, 0, 0, 0, 0, 0],
-			3:  [4, 2, 0, 0, 0, 0, 0, 0, 0],
-			4:  [4, 3, 0, 0, 0, 0, 0, 0, 0],
-			5:  [4, 3, 2, 0, 0, 0, 0, 0, 0],
-			6:  [4, 3, 3, 0, 0, 0, 0, 0, 0],
-			7:  [4, 3, 3, 1, 0, 0, 0, 0, 0],
-			8:  [4, 3, 3, 2, 0, 0, 0, 0, 0],
-			9:  [4, 3, 3, 3, 1, 0, 0, 0, 0],
+			1: [2, 0, 0, 0, 0, 0, 0, 0, 0],
+			2: [3, 0, 0, 0, 0, 0, 0, 0, 0],
+			3: [4, 2, 0, 0, 0, 0, 0, 0, 0],
+			4: [4, 3, 0, 0, 0, 0, 0, 0, 0],
+			5: [4, 3, 2, 0, 0, 0, 0, 0, 0],
+			6: [4, 3, 3, 0, 0, 0, 0, 0, 0],
+			7: [4, 3, 3, 1, 0, 0, 0, 0, 0],
+			8: [4, 3, 3, 2, 0, 0, 0, 0, 0],
+			9: [4, 3, 3, 3, 1, 0, 0, 0, 0],
 			10: [4, 3, 3, 3, 2, 0, 0, 0, 0],
 			11: [4, 3, 3, 3, 2, 1, 0, 0, 0],
 			12: [4, 3, 3, 3, 2, 1, 0, 0, 0],
@@ -5047,15 +5077,15 @@ class CharacterSheetState {
 			// Pact Magic slot progression table
 			// [number of slots, slot level]
 			const pactSlotTable = {
-				1:  [1, 1],
-				2:  [2, 1],
-				3:  [2, 2],
-				4:  [2, 2],
-				5:  [2, 3],
-				6:  [2, 3],
-				7:  [2, 4],
-				8:  [2, 4],
-				9:  [2, 5],
+				1: [1, 1],
+				2: [2, 1],
+				3: [2, 2],
+				4: [2, 2],
+				5: [2, 3],
+				6: [2, 3],
+				7: [2, 4],
+				8: [2, 4],
+				9: [2, 5],
 				10: [2, 5],
 				11: [3, 5],
 				12: [3, 5],
@@ -5071,7 +5101,7 @@ class CharacterSheetState {
 
 			const [pactSlots, pactLevel] = pactSlotTable[Math.min(warlockLevel, 20)] || [0, 0];
 			const existing = this._data.spellcasting.pactSlots;
-			
+
 			if (existing && existing.max === pactSlots && existing.level === pactLevel) {
 				// Keep current value
 			} else {
@@ -5259,8 +5289,8 @@ class CharacterSheetState {
 	addKnownSpell (spell) { this.addSpell(spell, spell.prepared); }
 
 	// Innate spell management
-	getInnateSpells () { 
-		return [...(this._data.spellcasting.innateSpells || [])]; 
+	getInnateSpells () {
+		return [...(this._data.spellcasting.innateSpells || [])];
 	}
 
 	addInnateSpell (spell) {
@@ -5617,15 +5647,15 @@ class CharacterSheetState {
 									// Spells known (PHB) or prepared (XPHB)
 									if (is2024) {
 										// XPHB prepared spell progression
-										const preparedSpells = level >= 19 ? 13 : level >= 17 ? 12 : level >= 15 ? 11 : level >= 14 ? 10 :
-											level >= 13 ? 9 : level >= 11 ? 8 : level >= 10 ? 7 : level >= 8 ? 6 : level >= 7 ? 5 :
-											level >= 4 ? 4 : 3;
+										const preparedSpells = level >= 19 ? 13 : level >= 17 ? 12 : level >= 15 ? 11 : level >= 14 ? 10
+											: level >= 13 ? 9 : level >= 11 ? 8 : level >= 10 ? 7 : level >= 8 ? 6 : level >= 7 ? 5
+												: level >= 4 ? 4 : 3;
 										calculations.preparedSpells = preparedSpells;
 									} else {
 										// PHB spells known progression
-										const spellsKnown = level >= 20 ? 13 : level >= 19 ? 13 : level >= 16 ? 12 : level >= 14 ? 11 :
-											level >= 13 ? 10 : level >= 11 ? 9 : level >= 10 ? 8 : level >= 8 ? 7 : level >= 7 ? 6 :
-											level >= 4 ? 4 : 3;
+										const spellsKnown = level >= 20 ? 13 : level >= 19 ? 13 : level >= 16 ? 12 : level >= 14 ? 11
+											: level >= 13 ? 10 : level >= 11 ? 9 : level >= 10 ? 8 : level >= 8 ? 7 : level >= 7 ? 6
+												: level >= 4 ? 4 : 3;
 										calculations.spellsKnown = spellsKnown;
 									}
 								}
@@ -7431,15 +7461,15 @@ class CharacterSheetState {
 					// Spells known (PHB) or Prepared spells (XPHB)
 					if (is2024) {
 						// XPHB: prepared spells progression
-						const preparedSpells = level >= 19 ? 15 : level >= 17 ? 14 : level >= 15 ? 13 : level >= 13 ? 12 :
-							level >= 11 ? 11 : level >= 10 ? 10 : level >= 9 ? 9 : level >= 8 ? 9 : level >= 7 ? 8 :
-							level >= 6 ? 7 : level >= 5 ? 7 : level >= 4 ? 6 : level >= 3 ? 5 : level >= 2 ? 4 : 2;
+						const preparedSpells = level >= 19 ? 15 : level >= 17 ? 14 : level >= 15 ? 13 : level >= 13 ? 12
+							: level >= 11 ? 11 : level >= 10 ? 10 : level >= 9 ? 9 : level >= 8 ? 9 : level >= 7 ? 8
+								: level >= 6 ? 7 : level >= 5 ? 7 : level >= 4 ? 6 : level >= 3 ? 5 : level >= 2 ? 4 : 2;
 						calculations.preparedSpells = preparedSpells;
 					} else {
 						// PHB: spells known progression
-						const spellsKnown = level >= 19 ? 15 : level >= 17 ? 14 : level >= 15 ? 13 : level >= 13 ? 12 :
-							level >= 11 ? 11 : level >= 9 ? 10 : level >= 8 ? 9 : level >= 7 ? 8 : level >= 6 ? 7 :
-							level >= 5 ? 6 : level >= 4 ? 5 : level >= 3 ? 4 : level >= 2 ? 3 : 2;
+						const spellsKnown = level >= 19 ? 15 : level >= 17 ? 14 : level >= 15 ? 13 : level >= 13 ? 12
+							: level >= 11 ? 11 : level >= 9 ? 10 : level >= 8 ? 9 : level >= 7 ? 8 : level >= 6 ? 7
+								: level >= 5 ? 6 : level >= 4 ? 5 : level >= 3 ? 4 : level >= 2 ? 3 : 2;
 						calculations.spellsKnown = spellsKnown;
 					}
 
@@ -7451,11 +7481,11 @@ class CharacterSheetState {
 						// XPHB: similar progression
 						let invocationsKnown;
 						if (is2024) {
-							invocationsKnown = level >= 18 ? 8 : level >= 15 ? 7 : level >= 12 ? 6 : level >= 9 ? 5 :
-								level >= 7 ? 4 : level >= 5 ? 3 : level >= 2 ? 2 : 1;
+							invocationsKnown = level >= 18 ? 8 : level >= 15 ? 7 : level >= 12 ? 6 : level >= 9 ? 5
+								: level >= 7 ? 4 : level >= 5 ? 3 : level >= 2 ? 2 : 1;
 						} else {
-							invocationsKnown = level >= 18 ? 8 : level >= 15 ? 7 : level >= 12 ? 6 : level >= 9 ? 5 :
-								level >= 7 ? 4 : level >= 5 ? 3 : level >= 2 ? 2 : 0;
+							invocationsKnown = level >= 18 ? 8 : level >= 15 ? 7 : level >= 12 ? 6 : level >= 9 ? 5
+								: level >= 7 ? 4 : level >= 5 ? 3 : level >= 2 ? 2 : 0;
 						}
 						calculations.invocationsKnown = invocationsKnown;
 					}
@@ -7609,7 +7639,7 @@ class CharacterSheetState {
 								// Defy Death (level 6)
 								if (level >= 6) {
 									calculations.hasDefyDeath = true;
-									calculations.defyDeathHealing = "1d8+" + chaMod;
+									calculations.defyDeathHealing = `1d8+${chaMod}`;
 								}
 
 								// Undying Nature (level 10)
@@ -7620,7 +7650,7 @@ class CharacterSheetState {
 								// Indestructible Life (level 14)
 								if (level >= 14) {
 									calculations.hasIndestructibleLife = true;
-									calculations.indestructibleLifeHealing = "1d8+" + level;
+									calculations.indestructibleLifeHealing = `1d8+${level}`;
 								}
 								break;
 							}
@@ -7648,7 +7678,7 @@ class CharacterSheetState {
 								// Searing Vengeance (level 14)
 								if (level >= 14) {
 									calculations.hasSearingVengeance = true;
-									calculations.searingVengeanceDamage = "2d8+" + chaMod;
+									calculations.searingVengeanceDamage = `2d8+${chaMod}`;
 								}
 								break;
 							}
@@ -7738,7 +7768,7 @@ class CharacterSheetState {
 							case "Undead": {
 								// Form of Dread (level 1)
 								calculations.hasFormOfDread = true;
-								calculations.formOfDreadTempHp = "1d10+" + level;
+								calculations.formOfDreadTempHp = `1d10+${level}`;
 								calculations.formOfDreadUses = profBonus;
 
 								// Grave Touched (level 6)
@@ -7779,16 +7809,16 @@ class CharacterSheetState {
 					// Spells known (PHB) or Prepared (XPHB)
 					if (is2024) {
 						// XPHB prepared spells progression
-						const preparedSpells = level >= 20 ? 22 : level >= 19 ? 21 : level >= 18 ? 20 : level >= 17 ? 19 :
-							level >= 16 ? 18 : level >= 15 ? 18 : level >= 14 ? 17 : level >= 13 ? 17 : level >= 12 ? 16 :
-							level >= 11 ? 16 : level >= 10 ? 15 : level >= 9 ? 14 : level >= 8 ? 12 : level >= 7 ? 11 :
-							level >= 6 ? 10 : level >= 5 ? 9 : level >= 4 ? 7 : level >= 3 ? 6 : level >= 2 ? 4 : 2;
+						const preparedSpells = level >= 20 ? 22 : level >= 19 ? 21 : level >= 18 ? 20 : level >= 17 ? 19
+							: level >= 16 ? 18 : level >= 15 ? 18 : level >= 14 ? 17 : level >= 13 ? 17 : level >= 12 ? 16
+								: level >= 11 ? 16 : level >= 10 ? 15 : level >= 9 ? 14 : level >= 8 ? 12 : level >= 7 ? 11
+									: level >= 6 ? 10 : level >= 5 ? 9 : level >= 4 ? 7 : level >= 3 ? 6 : level >= 2 ? 4 : 2;
 						calculations.preparedSpells = preparedSpells;
 					} else {
 						// PHB spells known progression
-						const spellsKnown = level >= 17 ? 15 : level >= 15 ? 14 : level >= 13 ? 13 : level >= 11 ? 12 :
-							level >= 10 ? 11 : level >= 9 ? 10 : level >= 8 ? 9 : level >= 7 ? 8 : level >= 6 ? 7 :
-							level >= 5 ? 6 : level >= 4 ? 5 : level >= 3 ? 4 : level >= 2 ? 3 : 2;
+						const spellsKnown = level >= 17 ? 15 : level >= 15 ? 14 : level >= 13 ? 13 : level >= 11 ? 12
+							: level >= 10 ? 11 : level >= 9 ? 10 : level >= 8 ? 9 : level >= 7 ? 8 : level >= 6 ? 7
+								: level >= 5 ? 6 : level >= 4 ? 5 : level >= 3 ? 4 : level >= 2 ? 3 : 2;
 						calculations.spellsKnown = spellsKnown;
 					}
 
@@ -10127,7 +10157,7 @@ class CharacterSheetState {
 								calculations.protectorTempHpDice = level >= 9 ? "2d8" : "1d8";
 								calculations.protectorTempHpBonus = intMod;
 								calculations.protectorTempHp = level >= 9 ? `2d8+${intMod}` : `1d8+${intMod}`;
-								
+
 								// Max cannons (1, or 2 at level 15)
 								calculations.maxCannons = level >= 15 ? 2 : 1;
 
@@ -10214,15 +10244,15 @@ class CharacterSheetState {
 
 	/**
 	 * Aggregate all feature effects from calculations into a standardized array.
-	 * 
+	 *
 	 * This method uses a multi-source approach to gather effects:
 	 * 1. STORED FEATURES: Check features in _data.features for effects via FeatureEffectRegistry
 	 * 2. FEATURE DATA: Parse effects from feature data properties (resist, immune, etc.)
 	 * 3. CALCULATION FLAGS: Fall back to calculation flags for features identified by calculations
-	 * 
+	 *
 	 * This design enables homebrew support - any feature with effects defined in the registry
 	 * or in its data will work regardless of what class it came from.
-	 * 
+	 *
 	 * Effect types:
 	 * - resistance: { type: "resistance", damageType: "fire", source: "...", conditional?: "..." }
 	 * - immunity: { type: "immunity", damageType: "poison", source: "..." }
@@ -10238,7 +10268,7 @@ class CharacterSheetState {
 	 * - acBonus: { type: "acBonus", value: 1, source: "...", conditional?: "..." }
 	 * - initiativeBonus: { type: "initiativeBonus", value: 3, source: "..." }
 	 * - modifier: { type: "modifier", modType: "ac|attack|damage|...", value: 1, source: "...", conditional?: "...", enabled?: false }
-	 * 
+	 *
 	 * @param {object} calculations - The feature calculations object
 	 * @returns {Array} Array of standardized effect objects
 	 */
@@ -10253,20 +10283,20 @@ class CharacterSheetState {
 		if (this._data.features?.length) {
 			this._data.features.forEach(feature => {
 				if (!feature.name) return;
-				
+
 				// Try to get effects from the registry by feature name
 				const registryEffects = FeatureEffectRegistry.getEffects(feature.name);
 				if (registryEffects.length > 0) {
 					effects.push(...registryEffects);
 					processedFeatures.add(feature.name.toLowerCase());
 				}
-				
+
 				// Also parse effects from feature data properties (resist, immune, etc.)
 				// This handles effects defined directly on the feature rather than by name
 				if (feature.entryData || feature.resist || feature.immune || feature.conditionImmune) {
 					const dataEffects = FeatureEffectRegistry.parseDataEffects(
 						feature.entryData || feature,
-						feature.name
+						feature.name,
 					);
 					if (dataEffects.length > 0) {
 						effects.push(...dataEffects);
@@ -10289,7 +10319,7 @@ class CharacterSheetState {
 	 * Process effects based on calculation flags.
 	 * This is the fallback mechanism for when features aren't stored in _data.features
 	 * but are indicated by calculation flags like hasPurityOfBody, hasDiamondSoul, etc.
-	 * 
+	 *
 	 * @param {object} calculations - The feature calculations
 	 * @param {Array} effects - The effects array to append to
 	 * @param {Set} processedFeatures - Set of already-processed feature names
@@ -10297,11 +10327,11 @@ class CharacterSheetState {
 	_aggregateCalculationBasedEffects (calculations, effects, processedFeatures) {
 		// Helper to check if a feature was already processed
 		const alreadyProcessed = (name) => processedFeatures.has(name.toLowerCase());
-		
+
 		// =========================================================
 		// MONK FEATURES
 		// =========================================================
-		
+
 		// Purity of Body (PHB Monk 10): immune to disease and poison
 		if (calculations.hasPurityOfBody && !alreadyProcessed("Purity of Body")) {
 			effects.push({ type: "immunity", damageType: "poison", source: "Purity of Body" });
@@ -10310,8 +10340,8 @@ class CharacterSheetState {
 		}
 
 		// Diamond Soul / Disciplined Survivor (Monk 14): proficient in all saves
-		if ((calculations.hasDiamondSoul && !alreadyProcessed("Diamond Soul")) ||
-			(calculations.hasDisciplinedSurvivor && !alreadyProcessed("Disciplined Survivor"))) {
+		if ((calculations.hasDiamondSoul && !alreadyProcessed("Diamond Soul"))
+			|| (calculations.hasDisciplinedSurvivor && !alreadyProcessed("Disciplined Survivor"))) {
 			const source = calculations.hasDiamondSoul ? "Diamond Soul" : "Disciplined Survivor";
 			["str", "dex", "con", "int", "wis", "cha"].forEach(ability => {
 				effects.push({ type: "saveProficiency", ability, source });
@@ -10325,23 +10355,23 @@ class CharacterSheetState {
 
 		// Unarmored Movement (Monk 2+)
 		if (calculations.unarmoredMovement) {
-			effects.push({ 
-				type: "speed", 
-				speedType: "walk", 
-				value: calculations.unarmoredMovement, 
+			effects.push({
+				type: "speed",
+				speedType: "walk",
+				value: calculations.unarmoredMovement,
 				source: "Unarmored Movement",
-				conditional: "while unarmored"
+				conditional: "while unarmored",
 			});
 		}
 
 		// Ki-Empowered Strikes / Empowered Strikes (Monk 6)
-		if ((calculations.hasKiEmpoweredStrikes || calculations.hasEmpoweredStrikes) && 
-			!alreadyProcessed("Ki-Empowered Strikes") && !alreadyProcessed("Empowered Strikes")) {
-			effects.push({ 
-				type: "weaponProperty", 
-				property: "magical", 
-				weaponType: "unarmed", 
-				source: "Ki-Empowered Strikes" 
+		if ((calculations.hasKiEmpoweredStrikes || calculations.hasEmpoweredStrikes)
+			&& !alreadyProcessed("Ki-Empowered Strikes") && !alreadyProcessed("Empowered Strikes")) {
+			effects.push({
+				type: "weaponProperty",
+				property: "magical",
+				weaponType: "unarmed",
+				source: "Ki-Empowered Strikes",
 			});
 		}
 
@@ -10353,23 +10383,23 @@ class CharacterSheetState {
 		if (calculations.hasRage && !alreadyProcessed("Rage")) {
 			if (calculations.hasBearTotemResistance) {
 				// Bear Totem: resistance to all except psychic
-				effects.push({ 
-					type: "modifier", 
-					modType: "resistance:all-except-psychic", 
-					value: 1, 
+				effects.push({
+					type: "modifier",
+					modType: "resistance:all-except-psychic",
+					value: 1,
 					source: "Bear Totem Spirit",
 					conditional: "while raging",
-					enabled: false
+					enabled: false,
 				});
 			} else {
 				// Standard rage: B/P/S resistance
 				["bludgeoning", "piercing", "slashing"].forEach(dmgType => {
-					effects.push({ 
-						type: "resistance", 
-						damageType: dmgType, 
+					effects.push({
+						type: "resistance",
+						damageType: dmgType,
 						source: "Rage",
 						conditional: "while raging",
-						enabled: false
+						enabled: false,
 					});
 				});
 			}
@@ -10377,42 +10407,42 @@ class CharacterSheetState {
 
 		// Fast Movement (Barbarian 5): +10 speed
 		if (calculations.hasFastMovement && !alreadyProcessed("Fast Movement")) {
-			effects.push({ 
-				type: "speed", 
-				speedType: "walk", 
-				value: 10, 
+			effects.push({
+				type: "speed",
+				speedType: "walk",
+				value: 10,
 				source: "Fast Movement",
-				conditional: "while not wearing heavy armor"
+				conditional: "while not wearing heavy armor",
 			});
 		}
 
 		// Feral Instinct (Barbarian 7): advantage on initiative, can act first if surprised
 		if (calculations.hasFeralInstinct && !alreadyProcessed("Feral Instinct")) {
-			effects.push({ 
-				type: "modifier", 
-				modType: "initiative:advantage", 
-				value: 1, 
-				source: "Feral Instinct" 
+			effects.push({
+				type: "modifier",
+				modType: "initiative:advantage",
+				value: 1,
+				source: "Feral Instinct",
 			});
 		}
 
 		// Storm Soul resistances (Storm Herald)
 		if (calculations.stormSoulResistance) {
-			effects.push({ 
-				type: "resistance", 
-				damageType: calculations.stormSoulResistance, 
-				source: "Storm Soul" 
+			effects.push({
+				type: "resistance",
+				damageType: calculations.stormSoulResistance,
+				source: "Storm Soul",
 			});
 		}
 
 		// Danger Sense (Barbarian 2): advantage on DEX saves vs effects you can see
 		if (calculations.hasDangerSense && !alreadyProcessed("Danger Sense")) {
-			effects.push({ 
-				type: "modifier", 
-				modType: "save:dex:advantage", 
-				value: 1, 
+			effects.push({
+				type: "modifier",
+				modType: "save:dex:advantage",
+				value: 1,
 				source: "Danger Sense",
-				conditional: "against effects you can see"
+				conditional: "against effects you can see",
 			});
 		}
 
@@ -10432,30 +10462,30 @@ class CharacterSheetState {
 
 		// Reliable Talent (Rogue 11): minimum 10 on proficient skills
 		if (calculations.hasReliableTalent && !alreadyProcessed("Reliable Talent")) {
-			effects.push({ 
-				type: "skillMinimum", 
-				minimum: calculations.reliableTalentMinimum || 10, 
-				requiresProficiency: true, 
-				source: "Reliable Talent" 
+			effects.push({
+				type: "skillMinimum",
+				minimum: calculations.reliableTalentMinimum || 10,
+				requiresProficiency: true,
+				source: "Reliable Talent",
 			});
 		}
 
 		// Swashbuckler - Rakish Audacity: CHA to initiative
 		if (calculations.hasRakishAudacity && calculations.initiativeBonus && !alreadyProcessed("Rakish Audacity")) {
-			effects.push({ 
-				type: "initiativeBonus", 
-				value: calculations.initiativeBonus, 
-				source: "Rakish Audacity" 
+			effects.push({
+				type: "initiativeBonus",
+				value: calculations.initiativeBonus,
+				source: "Rakish Audacity",
 			});
 		}
 
 		// Scout - Superior Mobility: +10 speed
 		if (calculations.hasSuperiorMobility && calculations.movementBonus && !alreadyProcessed("Superior Mobility")) {
-			effects.push({ 
-				type: "speed", 
-				speedType: "walk", 
-				value: calculations.movementBonus, 
-				source: "Superior Mobility" 
+			effects.push({
+				type: "speed",
+				speedType: "walk",
+				value: calculations.movementBonus,
+				source: "Superior Mobility",
 			});
 		}
 
@@ -10469,11 +10499,11 @@ class CharacterSheetState {
 
 		// Inquisitive - Ear for Deceit: minimum 8 on Insight
 		if (calculations.hasEarForDeceit && calculations.insightMinimum && !alreadyProcessed("Ear for Deceit")) {
-			effects.push({ 
-				type: "skillMinimum", 
+			effects.push({
+				type: "skillMinimum",
 				skill: "insight",
-				minimum: calculations.insightMinimum, 
-				source: "Ear for Deceit" 
+				minimum: calculations.insightMinimum,
+				source: "Ear for Deceit",
 			});
 		}
 
@@ -10505,11 +10535,11 @@ class CharacterSheetState {
 
 		// Land's Stride (Ranger 8): ignore nonmagical difficult terrain
 		if (calculations.hasLandsStride && !alreadyProcessed("Land's Stride")) {
-			effects.push({ 
-				type: "movement", 
-				property: "ignoreDifficultTerrain", 
+			effects.push({
+				type: "movement",
+				property: "ignoreDifficultTerrain",
 				source: "Land's Stride",
-				conditional: "nonmagical"
+				conditional: "nonmagical",
 			});
 		}
 
@@ -10524,11 +10554,11 @@ class CharacterSheetState {
 
 		// Defense Fighting Style: +1 AC while wearing armor
 		if (calculations.hasDefenseFightingStyle && !alreadyProcessed("Defense")) {
-			effects.push({ 
-				type: "acBonus", 
-				value: 1, 
+			effects.push({
+				type: "acBonus",
+				value: 1,
 				source: "Defense Fighting Style",
-				conditional: "while wearing armor"
+				conditional: "while wearing armor",
 			});
 		}
 
@@ -10543,22 +10573,22 @@ class CharacterSheetState {
 
 		// Devil's Sight invocation: 120ft darkvision in magical darkness
 		if (calculations.hasDevilsSight && !alreadyProcessed("Devil's Sight")) {
-			effects.push({ 
-				type: "sense", 
-				sense: "darkvision", 
-				range: 120, 
+			effects.push({
+				type: "sense",
+				sense: "darkvision",
+				range: 120,
 				source: "Devil's Sight",
-				special: "seesInMagicalDarkness"
+				special: "seesInMagicalDarkness",
 			});
 		}
 
 		// Fiendish Resilience (Fiend 10): choose resistance after rest
 		if (calculations.hasFiendishResilience && !alreadyProcessed("Fiendish Resilience")) {
-			effects.push({ 
-				type: "resistance", 
-				damageType: "choice", 
+			effects.push({
+				type: "resistance",
+				damageType: "choice",
 				source: "Fiendish Resilience",
-				userSelectable: true
+				userSelectable: true,
 			});
 		}
 
@@ -10571,22 +10601,22 @@ class CharacterSheetState {
 
 		// Twilight Domain - Eyes of Night: 300ft darkvision
 		if (calculations.hasEyesOfNight && calculations.eyesOfNightRange && !alreadyProcessed("Eyes of Night")) {
-			effects.push({ 
-				type: "sense", 
-				sense: "darkvision", 
-				range: calculations.eyesOfNightRange, 
-				source: "Eyes of Night" 
+			effects.push({
+				type: "sense",
+				sense: "darkvision",
+				range: calculations.eyesOfNightRange,
+				source: "Eyes of Night",
 			});
 		}
 
 		// Forge Domain - Soul of the Forge: +1 AC in heavy armor, fire resistance
 		if (calculations.hasSoulOfTheForge && !alreadyProcessed("Soul of the Forge")) {
 			if (calculations.soulOfTheForgeAcBonus) {
-				effects.push({ 
-					type: "acBonus", 
-					value: calculations.soulOfTheForgeAcBonus, 
+				effects.push({
+					type: "acBonus",
+					value: calculations.soulOfTheForgeAcBonus,
 					source: "Soul of the Forge",
-					conditional: "while wearing heavy armor"
+					conditional: "while wearing heavy armor",
 				});
 			}
 			effects.push({ type: "resistance", damageType: "fire", source: "Soul of the Forge" });
@@ -10599,11 +10629,11 @@ class CharacterSheetState {
 
 		// Death Domain - Inescapable Destruction: ignore necrotic resistance
 		if (calculations.hasInescapableDestruction && !alreadyProcessed("Inescapable Destruction")) {
-			effects.push({ 
-				type: "damageProperty", 
-				property: "ignoreResistance", 
-				damageType: "necrotic", 
-				source: "Inescapable Destruction" 
+			effects.push({
+				type: "damageProperty",
+				property: "ignoreResistance",
+				damageType: "necrotic",
+				source: "Inescapable Destruction",
 			});
 		}
 
@@ -10621,30 +10651,30 @@ class CharacterSheetState {
 
 		// Beast Spells (Druid 18): cast spells while in Wild Shape
 		if (calculations.hasBeastSpells && !alreadyProcessed("Beast Spells")) {
-			effects.push({ 
-				type: "spellcastingProperty", 
-				property: "castWhileWildShaped", 
-				source: "Beast Spells" 
+			effects.push({
+				type: "spellcastingProperty",
+				property: "castWhileWildShaped",
+				source: "Beast Spells",
 			});
 		}
 
 		// Archdruid (Druid 20): unlimited Wild Shapes
 		if (calculations.hasArchdruid && !alreadyProcessed("Archdruid")) {
-			effects.push({ 
-				type: "resourceProperty", 
-				resource: "wildShape", 
-				property: "unlimited", 
-				source: "Archdruid" 
+			effects.push({
+				type: "resourceProperty",
+				resource: "wildShape",
+				property: "unlimited",
+				source: "Archdruid",
 			});
 		}
 
 		// Land's Stride from Land circle
 		if (calculations.hasDruidLandsStride && !alreadyProcessed("Land's Stride")) {
-			effects.push({ 
-				type: "movement", 
-				property: "ignoreDifficultTerrain", 
+			effects.push({
+				type: "movement",
+				property: "ignoreDifficultTerrain",
 				source: "Land's Stride",
-				conditional: "nonmagical plants"
+				conditional: "nonmagical plants",
 			});
 		}
 
@@ -10654,20 +10684,20 @@ class CharacterSheetState {
 
 		// Bladesong AC/Concentration bonus (INT)
 		if (calculations.hasBladesong && calculations.bladesongAcBonus && !alreadyProcessed("Bladesong")) {
-			effects.push({ 
-				type: "acBonus", 
-				value: calculations.bladesongAcBonus, 
+			effects.push({
+				type: "acBonus",
+				value: calculations.bladesongAcBonus,
 				source: "Bladesong",
 				conditional: "while Bladesong is active",
-				enabled: false
+				enabled: false,
 			});
-			effects.push({ 
-				type: "modifier", 
-				modType: "concentration", 
-				value: calculations.bladesongAcBonus, 
+			effects.push({
+				type: "modifier",
+				modType: "concentration",
+				value: calculations.bladesongAcBonus,
 				source: "Bladesong",
 				conditional: "while Bladesong is active",
-				enabled: false
+				enabled: false,
 			});
 		}
 
@@ -10680,39 +10710,39 @@ class CharacterSheetState {
 
 		// Draconic Resilience: +1 HP per level, unarmored AC = 13 + DEX
 		if (calculations.hasDraconicResilience && !alreadyProcessed("Draconic Resilience")) {
-			effects.push({ 
-				type: "hpBonus", 
-				value: 1, 
-				perLevel: true, 
-				source: "Draconic Resilience" 
-			});
-			effects.push({ 
-				type: "acFormula", 
-				base: 13, 
-				addDex: true, 
+			effects.push({
+				type: "hpBonus",
+				value: 1,
+				perLevel: true,
 				source: "Draconic Resilience",
-				conditional: "while unarmored"
+			});
+			effects.push({
+				type: "acFormula",
+				base: 13,
+				addDex: true,
+				source: "Draconic Resilience",
+				conditional: "while unarmored",
 			});
 		}
 
 		// Elemental Affinity (Draconic 6): add CHA to damage of ancestry element
 		if (calculations.hasElementalAffinity && calculations.draconicAncestryDamageType && !alreadyProcessed("Elemental Affinity")) {
-			effects.push({ 
-				type: "damageBonus", 
-				damageType: calculations.draconicAncestryDamageType, 
-				value: "cha", 
-				source: "Elemental Affinity" 
+			effects.push({
+				type: "damageBonus",
+				damageType: calculations.draconicAncestryDamageType,
+				value: "cha",
+				source: "Elemental Affinity",
 			});
 		}
 
 		// Dragon Wings (Draconic 14): fly speed
 		if (calculations.hasDragonWings && !alreadyProcessed("Dragon Wings")) {
-			effects.push({ 
-				type: "speed", 
-				speedType: "fly", 
-				value: "walk", 
+			effects.push({
+				type: "speed",
+				speedType: "fly",
+				value: "walk",
 				source: "Dragon Wings",
-				conditional: "while not wearing armor"
+				conditional: "while not wearing armor",
 			});
 		}
 
@@ -10728,11 +10758,11 @@ class CharacterSheetState {
 
 		// Jack of All Trades (Bard 2): +half prof to unproficient checks
 		if (calculations.hasJackOfAllTrades && !alreadyProcessed("Jack of All Trades")) {
-			effects.push({ 
-				type: "skillBonus", 
-				bonus: "halfProficiency", 
-				requiresProficiency: false, 
-				source: "Jack of All Trades" 
+			effects.push({
+				type: "skillBonus",
+				bonus: "halfProficiency",
+				requiresProficiency: false,
+				source: "Jack of All Trades",
 			});
 		}
 
@@ -10741,29 +10771,29 @@ class CharacterSheetState {
 
 		// Countercharm (Bard 6): advantage on saves vs frightened/charmed
 		if (calculations.hasCountercharm && !alreadyProcessed("Countercharm")) {
-			effects.push({ 
-				type: "modifier", 
-				modType: "save:advantage:frightened", 
-				value: 1, 
+			effects.push({
+				type: "modifier",
+				modType: "save:advantage:frightened",
+				value: 1,
 				source: "Countercharm",
-				conditional: "while you can hear the bard"
+				conditional: "while you can hear the bard",
 			});
-			effects.push({ 
-				type: "modifier", 
-				modType: "save:advantage:charmed", 
-				value: 1, 
+			effects.push({
+				type: "modifier",
+				modType: "save:advantage:charmed",
+				value: 1,
 				source: "Countercharm",
-				conditional: "while you can hear the bard"
+				conditional: "while you can hear the bard",
 			});
 		}
 
 		// Superior Inspiration (Bard 20): regain 1 inspiration if have none on initiative
 		if (calculations.hasSuperiorInspiration && !alreadyProcessed("Superior Inspiration")) {
-			effects.push({ 
-				type: "resourceProperty", 
-				resource: "bardicInspiration", 
-				property: "regainOnInitiative", 
-				source: "Superior Inspiration" 
+			effects.push({
+				type: "resourceProperty",
+				resource: "bardicInspiration",
+				property: "regainOnInitiative",
+				source: "Superior Inspiration",
 			});
 		}
 
@@ -10776,10 +10806,10 @@ class CharacterSheetState {
 
 		// Tool Expertise (Artificer 6): double proficiency with tools
 		if (calculations.hasToolExpertise && !alreadyProcessed("Tool Expertise")) {
-			effects.push({ 
-				type: "toolBonus", 
-				bonus: "expertise", 
-				source: "Tool Expertise" 
+			effects.push({
+				type: "toolBonus",
+				bonus: "expertise",
+				source: "Tool Expertise",
 			});
 		}
 
@@ -10788,31 +10818,31 @@ class CharacterSheetState {
 
 		// Magic Item Savant (Artificer 14): attune to 5 items, ignore requirements
 		if (calculations.hasMagicItemSavant && !alreadyProcessed("Magic Item Savant")) {
-			effects.push({ 
-				type: "attunement", 
-				maxSlots: 5, 
-				ignoreRequirements: true, 
-				source: "Magic Item Savant" 
+			effects.push({
+				type: "attunement",
+				maxSlots: 5,
+				ignoreRequirements: true,
+				source: "Magic Item Savant",
 			});
 		}
 
 		// Soul of Artifice (Artificer 20): +1 to saves per attuned item
 		if (calculations.hasSoulOfArtifice && !alreadyProcessed("Soul of Artifice")) {
-			effects.push({ 
-				type: "modifier", 
-				modType: "save:all", 
-				value: "attunedItems", 
-				source: "Soul of Artifice" 
+			effects.push({
+				type: "modifier",
+				modType: "save:all",
+				value: "attunedItems",
+				source: "Soul of Artifice",
 			});
 		}
 
 		// Battle Smith - Battle Ready: INT for attacks with magic weapons
 		if (calculations.hasBattleReady && !alreadyProcessed("Battle Ready")) {
-			effects.push({ 
-				type: "attackAbility", 
-				ability: "int", 
-				weaponType: "magic", 
-				source: "Battle Ready" 
+			effects.push({
+				type: "attackAbility",
+				ability: "int",
+				weaponType: "magic",
+				source: "Battle Ready",
 			});
 		}
 
@@ -10822,20 +10852,20 @@ class CharacterSheetState {
 
 		// Evasion (Monk 7, Rogue 7, Ranger fightingStyle): DEX saves for half → no damage
 		if (calculations.hasEvasion && !alreadyProcessed("Evasion")) {
-			effects.push({ 
-				type: "savingThrowProperty", 
-				save: "dex", 
-				property: "halfToNone", 
-				source: "Evasion" 
+			effects.push({
+				type: "savingThrowProperty",
+				save: "dex",
+				property: "halfToNone",
+				source: "Evasion",
 			});
 		}
 
 		// Extra Attack
 		if (calculations.hasExtraAttack && !alreadyProcessed("Extra Attack")) {
-			effects.push({ 
-				type: "attackCount", 
-				count: calculations.extraAttackCount || 2, 
-				source: "Extra Attack" 
+			effects.push({
+				type: "attackCount",
+				count: calculations.extraAttackCount || 2,
+				source: "Extra Attack",
 			});
 		}
 	}
@@ -11491,7 +11521,7 @@ class CharacterSheetState {
 
 		// Infer from AC value (rough heuristic based on D&D 5e armor table)
 		const ac = item.ac || 10;
-		if (ac <= 12) return "light";  // Leather (11), Padded (11), Studded (12)
+		if (ac <= 12) return "light"; // Leather (11), Padded (11), Studded (12)
 		if (ac <= 15) return "medium"; // Hide (12), Chain Shirt (13), Scale (14), Breastplate (14), Half-plate (15)
 		return "heavy"; // Ring mail (14), Chain (16), Splint (17), Plate (18)
 	}
@@ -11525,7 +11555,7 @@ class CharacterSheetState {
 		const invItem = this._data.inventory.find(i => i.id === itemId);
 		if (invItem) {
 			invItem.equipped = true;
-			
+
 			// Also set AC slot if armor
 			const item = invItem.item;
 			if (item?.type === "armor" || item?.type === "M" || item?.type === "R" || item?.ac !== undefined || item?.acBonus !== undefined) {
@@ -11538,7 +11568,7 @@ class CharacterSheetState {
 					this.setArmor({ac: item.ac, type: armorType, name: item.name});
 				}
 			}
-			
+
 			return true;
 		}
 		return false;
@@ -11606,12 +11636,12 @@ class CharacterSheetState {
 	useItemCharge (itemId, charges = 1) {
 		const item = this._data.inventory.find(i => i.id === itemId);
 		if (!item?.item) return false;
-		
+
 		const current = item.item.chargesCurrent ?? item.item.charges ?? 0;
 		// Use as many charges as available, up to requested amount
 		const actualChargesUsed = Math.min(charges, current);
 		if (actualChargesUsed === 0) return false;
-		
+
 		item.item.chargesCurrent = Math.max(0, current - actualChargesUsed);
 		return true;
 	}
@@ -11643,11 +11673,11 @@ class CharacterSheetState {
 	getEquippedWeapons () {
 		return this._data.inventory.filter(i =>
 			i.equipped && (
-				i.item?.type === "M" || // Melee weapon
-				i.item?.type === "R" || // Ranged weapon
-				i.item?.type === "weapon" || // Simple type from tests
-				i.item?.weaponCategory // Has weapon category
-			)
+				i.item?.type === "M" // Melee weapon
+				|| i.item?.type === "R" // Ranged weapon
+				|| i.item?.type === "weapon" // Simple type from tests
+				|| i.item?.weaponCategory // Has weapon category
+			),
 		).map(i => ({
 			id: i.id,
 			name: i.item?.name || i.name,
@@ -11703,7 +11733,7 @@ class CharacterSheetState {
 
 	getCarryingCapacity () {
 		let baseCapacity;
-		
+
 		// Thelemar rules: 50 + 25 * Might modifier (minimum 50)
 		// Might is a custom TGTT homebrew skill based on STR
 		if (this._data.settings?.thelemar_carryWeight) {
@@ -11713,7 +11743,7 @@ class CharacterSheetState {
 			// Standard rules: STR score * 15
 			baseCapacity = this.getAbilityScore("str") * 15;
 		}
-		
+
 		const flatBonus = this._data.customModifiers.carryCapacity || 0;
 		const multiplier = this._data.customModifiers.carryCapacityMultiplier || 1;
 		return (baseCapacity + flatBonus) * multiplier;
@@ -11746,11 +11776,11 @@ class CharacterSheetState {
 
 	getTotalGold () {
 		return (
-			this._data.currency.pp * 10 +
-			this._data.currency.gp +
-			this._data.currency.ep * 0.5 +
-			this._data.currency.sp * 0.1 +
-			this._data.currency.cp * 0.01
+			this._data.currency.pp * 10
+			+ this._data.currency.gp
+			+ this._data.currency.ep * 0.5
+			+ this._data.currency.sp * 0.1
+			+ this._data.currency.cp * 0.01
 		);
 	}
 	// #endregion
@@ -11765,14 +11795,14 @@ class CharacterSheetState {
 	 */
 	ensureUnarmedStrike () {
 		// Check if unarmed strike already exists
-		const existingUnarmed = this._data.attacks.find(a => 
+		const existingUnarmed = this._data.attacks.find(a =>
 			a.name === "Unarmed Strike" || a.isUnarmedStrike,
 		);
-		
+
 		// Get monk level (if any)
 		const monkClass = this._data.classes.find(c => c.name === "Monk");
 		const monkLevel = monkClass?.level || 0;
-		
+
 		// Determine damage die - monks get martial arts progression
 		let damageDie;
 		let canUseDex = false;
@@ -11782,7 +11812,7 @@ class CharacterSheetState {
 		} else {
 			damageDie = "1"; // Non-monks deal 1 + STR
 		}
-		
+
 		if (existingUnarmed) {
 			// Update existing unarmed strike if monk level changed
 			existingUnarmed.damage = damageDie;
@@ -11901,8 +11931,8 @@ class CharacterSheetState {
 	 * Get all conditions as normalized {name, source} objects
 	 * @returns {Array} Array of {name, source} objects
 	 */
-	getConditions () { 
-		return this._data.conditions.map(c => this._normalizeCondition(c)); 
+	getConditions () {
+		return this._data.conditions.map(c => this._normalizeCondition(c));
 	}
 
 	/**
@@ -11920,7 +11950,7 @@ class CharacterSheetState {
 	 */
 	addCondition (condition) {
 		const condObj = this._normalizeCondition(condition);
-		
+
 		// Check if this exact condition (name + source) already exists
 		if (!this.hasConditionExact(condObj.name, condObj.source)) {
 			this._data.conditions.push(condObj);
@@ -11952,8 +11982,8 @@ class CharacterSheetState {
 		const condObj = this._normalizeCondition(condition);
 		this._data.conditions = this._data.conditions.filter(c => {
 			const cObj = this._normalizeCondition(c);
-			return !(cObj.name.toLowerCase() === condObj.name.toLowerCase() && 
-			         cObj.source === condObj.source);
+			return !(cObj.name.toLowerCase() === condObj.name.toLowerCase()
+			         && cObj.source === condObj.source);
 		});
 		this._removeConditionEffects(condObj.name, condObj.source);
 	}
@@ -11969,12 +11999,12 @@ class CharacterSheetState {
 
 	setConditions (conditions) {
 		const newConditions = conditions.map(c => this._normalizeCondition(c));
-		
+
 		// Remove old condition effects
 		for (const condition of this._data.conditions) {
 			const oldObj = this._normalizeCondition(condition);
-			const stillExists = newConditions.some(nc => 
-				nc.name.toLowerCase() === oldObj.name.toLowerCase() && nc.source === oldObj.source
+			const stillExists = newConditions.some(nc =>
+				nc.name.toLowerCase() === oldObj.name.toLowerCase() && nc.source === oldObj.source,
 			);
 			if (!stillExists) {
 				this._removeConditionEffects(oldObj.name, oldObj.source);
@@ -12034,7 +12064,7 @@ class CharacterSheetState {
 
 		// Create an active state for this condition (include source in key for uniqueness)
 		const condKey = `condition_${conditionName.toLowerCase().replace(/\s+/g, "_")}_${source.toLowerCase()}`;
-		
+
 		// Add to active states with the condition's effects
 		const state = {
 			id: `${condKey}_${Date.now()}`,
@@ -12063,9 +12093,9 @@ class CharacterSheetState {
 		const condKey = conditionName.toLowerCase().replace(/\s+/g, "_");
 		const sourceKey = source?.toLowerCase() || "";
 		const stateIndex = this._data.activeStates.findIndex(
-			s => s.isCondition && 
-			     s.conditionName?.toLowerCase().replace(/\s+/g, "_") === condKey &&
-			     (s.conditionSource?.toLowerCase() === sourceKey || (!s.conditionSource && !sourceKey))
+			s => s.isCondition
+			     && s.conditionName?.toLowerCase().replace(/\s+/g, "_") === condKey
+			     && (s.conditionSource?.toLowerCase() === sourceKey || (!s.conditionSource && !sourceKey)),
 		);
 		if (stateIndex !== -1) {
 			this._data.activeStates.splice(stateIndex, 1);
@@ -12105,17 +12135,17 @@ class CharacterSheetState {
 	 */
 	getSpeedMultiplierFromConditions () {
 		const effects = this.getActiveStateEffects();
-		
+
 		// Check if speed is set to 0 by any condition
 		const speedZero = effects.some(e => e.type === "setSpeed" && e.value === 0);
 		if (speedZero) return 0;
-		
+
 		// Check for speed multiplier effects (like Slowed)
 		let multiplier = 1;
 		effects.filter(e => e.type === "speedMultiplier").forEach(e => {
 			multiplier *= e.value;
 		});
-		
+
 		return multiplier;
 	}
 
@@ -12167,12 +12197,14 @@ class CharacterSheetState {
 	}
 
 	setSetting (key, value) {
-		if (!this._data.settings) this._data.settings = {
-			exhaustionRules: "2024", 
-			allowedSources: null, 
-			includeCoreSpellsForHomebrew: true,
-			allowExoticLanguages: true,
-		};
+		if (!this._data.settings) {
+			this._data.settings = {
+				exhaustionRules: "2024",
+				allowedSources: null,
+				includeCoreSpellsForHomebrew: true,
+				allowExoticLanguages: true,
+			};
+		}
 		this._data.settings[key] = value;
 	}
 
@@ -12244,14 +12276,16 @@ class CharacterSheetState {
 	}
 
 	setSectionLayout (layout) {
-		if (!this._data.settings) this._data.settings = {
-			exhaustionRules: "2024", 
-			allowedSources: null, 
-			includeCoreSpellsForHomebrew: true, 
-			allowExoticLanguages: true, 
-			prioritySources: null,
-			sectionLayout: null,
-		};
+		if (!this._data.settings) {
+			this._data.settings = {
+				exhaustionRules: "2024",
+				allowedSources: null,
+				includeCoreSpellsForHomebrew: true,
+				allowExoticLanguages: true,
+				prioritySources: null,
+				sectionLayout: null,
+			};
+		}
 		this._data.settings.sectionLayout = layout && Object.keys(layout).length ? layout : null;
 	}
 
@@ -12262,15 +12296,17 @@ class CharacterSheetState {
 	}
 
 	setBackgroundTheme (theme) {
-		if (!this._data.settings) this._data.settings = {
-			exhaustionRules: "2024", 
-			allowedSources: null, 
-			includeCoreSpellsForHomebrew: true, 
-			allowExoticLanguages: true, 
-			prioritySources: null,
-			sectionLayout: null,
-			backgroundTheme: "default",
-		};
+		if (!this._data.settings) {
+			this._data.settings = {
+				exhaustionRules: "2024",
+				allowedSources: null,
+				includeCoreSpellsForHomebrew: true,
+				allowExoticLanguages: true,
+				prioritySources: null,
+				sectionLayout: null,
+				backgroundTheme: "default",
+			};
+		}
 		this._data.settings.backgroundTheme = theme || "default";
 	}
 	// #endregion
@@ -12359,7 +12395,7 @@ class CharacterSheetState {
 
 			if (newUses) {
 				// Update feature/feat uses
-				const dataItem = item.featureType 
+				const dataItem = item.featureType
 					? this._data.features.find(f => f.id === item.id)
 					: this._data.feats.find(f => f.id === item.id);
 
@@ -12473,7 +12509,7 @@ class CharacterSheetState {
 			const naturalWeapon = NaturalWeaponParser.parseNaturalWeapon(feature.description, feature.name);
 			if (naturalWeapon) {
 				// Check if attack already exists
-				const existingAttack = this._data.attacks.find(a => 
+				const existingAttack = this._data.attacks.find(a =>
 					a.name === naturalWeapon.name || a.sourceFeature === feature.name,
 				);
 				if (!existingAttack) {
@@ -12503,17 +12539,17 @@ class CharacterSheetState {
 	 */
 	_isResourceSystemFeature (feature) {
 		const name = feature.name?.toLowerCase() || "";
-		
+
 		// Features that describe resource systems (exertion, ki, etc.)
 		// These mention "short rest" or "long rest" but the rest is for the resource, not the feature itself
 		const resourceSystemFeatures = [
-			"combat methods",      // Thelemar homebrew - describes exertion system
-			"ki",                  // Monk - describes ki points
-			"focus points",        // Some homebrew - describes focus point system
-			"exertion",            // Thelemar homebrew - the exertion pool itself
-			"sorcery points",      // Sorcerer - describes sorcery point system
-			"superiority dice",    // Battle Master - describes superiority dice
-			"psionic power",       // Psi features - describes psionic power dice
+			"combat methods", // Thelemar homebrew - describes exertion system
+			"ki", // Monk - describes ki points
+			"focus points", // Some homebrew - describes focus point system
+			"exertion", // Thelemar homebrew - the exertion pool itself
+			"sorcery points", // Sorcerer - describes sorcery point system
+			"superiority dice", // Battle Master - describes superiority dice
+			"psionic power", // Psi features - describes psionic power dice
 		];
 
 		// Check if the feature name matches any resource system feature
@@ -12525,38 +12561,38 @@ class CharacterSheetState {
 		// Examples: "Elven Lineage" (choose lineage, get spells), "Infernal Legacy", etc.
 		// These are NOT the same as features like "Healing Hands" which IS an action you take
 		const spellGrantingFeatureNames = [
-			"lineage",             // Elven Lineage, Drow Lineage, etc. - grants spells at levels
-			"legacy",              // Infernal Legacy, Abyssal Legacy, etc. - grants spells
+			"lineage", // Elven Lineage, Drow Lineage, etc. - grants spells at levels
+			"legacy", // Infernal Legacy, Abyssal Legacy, etc. - grants spells
 			"innate spellcasting", // General innate spellcasting trait
 		];
-		
+
 		if (spellGrantingFeatureNames.some(sgf => name.includes(sgf))) {
 			return true;
 		}
 
 		if (feature.description) {
 			const desc = feature.description.toLowerCase();
-			
+
 			// If it talks about spending exertion, it's using the exertion system, not its own uses
-			if (/spend(?:ing)?\s+(?:\d+\s+)?exertion/i.test(desc) && 
-				/(?:recover|regain|refresh).*exertion.*(?:short|long)\s*rest/i.test(desc)) {
+			if (/spend(?:ing)?\s+(?:\d+\s+)?exertion/i.test(desc)
+				&& /(?:recover|regain|refresh).*exertion.*(?:short|long)\s*rest/i.test(desc)) {
 				return true;
 			}
 
 			// Features that grant spells at multiple character levels (like Elven Lineage, Infernal Legacy)
 			// Pattern: "When you reach character level X" or "at Xth level, you learn/gain"
 			// These grant spells at progression, not abilities you activate
-			if (/when you reach (?:character )?level|at \d+(?:st|nd|rd|th) level/i.test(desc) && 
-				/learn|gain|know.*(?:spell|cantrip)/i.test(desc) &&
-				/cast.*(?:once|without a spell slot)/i.test(desc)) {
+			if (/when you reach (?:character )?level|at \d+(?:st|nd|rd|th) level/i.test(desc)
+				&& /learn|gain|know.*(?:spell|cantrip)/i.test(desc)
+				&& /cast.*(?:once|without a spell slot)/i.test(desc)) {
 				return true;
 			}
 
 			// Features where the primary purpose is granting a spell list (not an action)
 			// Pattern: "Starting at X level, you can cast the [spell] spell"
 			// Combined with "you can also cast the spell using any spell slots" (indicates it's a spell grant)
-			if (/starting at \d+(?:st|nd|rd|th) level.*you can cast/i.test(desc) &&
-				/cast.*using any spell slots/i.test(desc)) {
+			if (/starting at \d+(?:st|nd|rd|th) level.*you can cast/i.test(desc)
+				&& /cast.*using any spell slots/i.test(desc)) {
 				return true;
 			}
 		}
@@ -12581,8 +12617,8 @@ class CharacterSheetState {
 		if (!modifiers.length) return;
 
 		// Determine feature type for special handling
-		const isRacialFeature = feature.featureType === "Species" || feature.featureType === "Subrace" || 
-			feature.featureType === "Race" || feature.featureType === "Racial";
+		const isRacialFeature = feature.featureType === "Species" || feature.featureType === "Subrace"
+			|| feature.featureType === "Race" || feature.featureType === "Racial";
 
 		modifiers.forEach(mod => {
 			// ===================
@@ -12763,7 +12799,7 @@ class CharacterSheetState {
 		// First try structured additionalSpells data (from official content)
 		if (feature.additionalSpells) {
 			spells = SpellGrantParser.parseAdditionalSpells(feature.additionalSpells, feature.name);
-		} 
+		}
 		// Fall back to parsing from description (for homebrew or missing data)
 		else if (feature.description && SpellGrantParser.grantsSpells(feature.description)) {
 			spells = SpellGrantParser.parseSpellsFromText(feature.description, feature.name);
@@ -12800,7 +12836,7 @@ class CharacterSheetState {
 					recharge: spell.recharge || "long",
 					sourceFeature: feature.name,
 				});
-			} 
+			}
 			// Otherwise add as known spell
 			else {
 				this.addSpell({
@@ -12819,7 +12855,7 @@ class CharacterSheetState {
 
 	removeFeature (featureIdOrName, source) {
 		// Find the feature first to get its id
-		const feature = this._data.features.find(f => 
+		const feature = this._data.features.find(f =>
 			f.id === featureIdOrName || (f.name === featureIdOrName && f.source === source),
 		);
 
@@ -12978,7 +13014,7 @@ class CharacterSheetState {
 
 	removeFeat (featIdOrName, source) {
 		// Find the feat first to get its id
-		const feat = this._data.feats.find(f => 
+		const feat = this._data.feats.find(f =>
 			f.id === featIdOrName || (f.name === featIdOrName && f.source === source),
 		);
 
@@ -13159,7 +13195,7 @@ class CharacterSheetState {
 			console.log("[CharSheet State] usesCombatSystem: true (has traditions:", this._data.combatTraditions, ")");
 			return true;
 		}
-		
+
 		// Check for combat method features - look for any CTM: feature type
 		const hasMethods = this._data.features?.some(f => {
 			if (f.featureType !== "Optional Feature") return false;
@@ -13170,7 +13206,7 @@ class CharacterSheetState {
 			}
 			return result;
 		}) ?? false;
-		
+
 		console.log("[CharSheet State] usesCombatSystem:", hasMethods, "(checked", this._data.features?.length || 0, "features)");
 		return hasMethods;
 	}
@@ -13184,12 +13220,12 @@ class CharacterSheetState {
 			console.log("[CharSheet State] ensureExertionInitialized: not using combat system, skipping");
 			return;
 		}
-		
+
 		const profBonus = this.getProficiencyBonus();
 		const calculatedMax = profBonus * 2;
-		
+
 		console.log("[CharSheet State] ensureExertionInitialized: profBonus=", profBonus, "calculatedMax=", calculatedMax, "currentMax=", this._data.exertionMax);
-		
+
 		if (this._data.exertionMax !== calculatedMax) {
 			this._data.exertionMax = calculatedMax;
 			// If current exceeds new max, adjust it
@@ -13203,7 +13239,7 @@ class CharacterSheetState {
 			console.log("[CharSheet State] Exertion initialized: current=", this._data.exertionCurrent, "max=", this._data.exertionMax);
 		}
 	}
-	
+
 	/**
 	 * @deprecated Use ensureExertionInitialized instead
 	 */
@@ -13331,7 +13367,7 @@ class CharacterSheetState {
 			note: modifier.note || "",
 			enabled: modifier.enabled !== false,
 		};
-		
+
 		// Copy special properties that affect how the modifier is calculated
 		if (modifier.sourceFeatureId) newModifier.sourceFeatureId = modifier.sourceFeatureId;
 		if (modifier.sourceType) newModifier.sourceType = modifier.sourceType; // e.g., "classFeature", "race", "feat"
@@ -13346,7 +13382,7 @@ class CharacterSheetState {
 		if (modifier.ignore) newModifier.ignore = true;
 		if (modifier.equalToWalk) newModifier.equalToWalk = true;
 		if (modifier.conditional) newModifier.conditional = modifier.conditional;
-		
+
 		this._data.namedModifiers.push(newModifier);
 		this._recalculateCustomModifiers();
 		return id;
@@ -13430,9 +13466,9 @@ class CharacterSheetState {
 		// Sum up enabled modifiers
 		this._data.namedModifiers.forEach(mod => {
 			if (!mod.enabled) return;
-			
+
 			let value = mod.value || 0;
-			
+
 			// Handle per-level modifiers
 			if (mod.perLevel) {
 				const totalLevel = this.getTotalLevel() || 1;
@@ -13446,7 +13482,7 @@ class CharacterSheetState {
 				case "damage": cm.damageBonus += value; break;
 				case "spellDc": cm.spellDc += value; break;
 				case "spellAttack": cm.spellAttack += value; break;
-				case "hp": 
+				case "hp":
 					if (mod.perLevel) {
 						cm.hpPerLevel += mod.value || 0;
 					} else {
@@ -13759,7 +13795,7 @@ class CharacterSheetState {
 		},
 		// ===== TGTT/HOMEBREW ACTIVATABLE STATE TYPES =====
 		// These support homebrew toggle abilities from sources like Level Up A5E, Grim Hollow, TGTT
-		
+
 		// Combat Tradition Methods (Level Up A5E / TGTT)
 		heavyStance: {
 			id: "heavyStance",
@@ -13985,7 +14021,7 @@ class CharacterSheetState {
 	 */
 	static analyzeToggleability (text) {
 		if (!text) return {isToggle: false, confidence: 0};
-		
+
 		const result = {
 			isToggle: false,
 			isInstant: false,
@@ -13996,7 +14032,7 @@ class CharacterSheetState {
 			resourceType: null,
 			resourceCost: null,
 		};
-		
+
 		// ===== STRONG TOGGLE INDICATORS =====
 		// These strongly suggest the ability is a toggle state
 		const toggleIndicators = [
@@ -14005,7 +14041,7 @@ class CharacterSheetState {
 			{pattern: /(?:enter|adopt|take|assume) (?:this|a|an? \w+) stance/i, weight: 8, duration: "Until stance ends"},
 			{pattern: /stance lasts? (?:until|for)/i, weight: 10, duration: "Variable"},
 			{pattern: /(?:you )?enter (?:a|the|this) (?:\w+ )?(?:stance|state|mode|form)/i, weight: 8},
-			
+
 			// Duration patterns
 			{pattern: /for (?:the next )?(\d+|one|ten) minutes?/i, weight: 9, extractDuration: true},
 			{pattern: /lasts? (?:for )?(\d+) (?:minutes?|hours?|rounds?)/i, weight: 9, extractDuration: true},
@@ -14014,23 +14050,23 @@ class CharacterSheetState {
 			{pattern: /until you (?:end it|choose to end|use.*to end)/i, weight: 10, duration: "Until ended"},
 			{pattern: /this effect (?:lasts|continues) until/i, weight: 8},
 			{pattern: /while (?:this )?(?:effect|ability|feature) is active/i, weight: 9},
-			
+
 			// Explicit toggle language
 			{pattern: /you can (?:use )?(?:a )?(?:bonus )?action to (?:end|deactivate|stop)/i, weight: 10},
 			{pattern: /(?:activate|invoke|start|begin) (?:this|the) (?:ability|effect|feature)/i, weight: 7},
 			{pattern: /you (?:can )?(?:activate|invoke) (?:it|this)/i, weight: 6},
-			
+
 			// State-based language
 			{pattern: /while you are (?:in|under|affected by)/i, weight: 7},
 			{pattern: /while (?:this|the) (?:effect|ability) (?:is )?(?:active|in effect)/i, weight: 9},
 			{pattern: /(?:you gain|grants? you) the following benefits?.*until/i, weight: 8},
 			{pattern: /for (?:the )?duration,? you/i, weight: 8},
-			
+
 			// Resource-based toggles
 			{pattern: /(?:costs?|requires?|spend|expend) (\d+) exertion/i, weight: 5, extractExertion: true},
 			{pattern: /(?:costs?|requires?|spend) (\d+) ki/i, weight: 5, extractKi: true},
 		];
-		
+
 		// ===== INSTANT EFFECT INDICATORS =====
 		// These suggest the ability is a one-time use, not a toggle
 		const instantIndicators = [
@@ -14043,7 +14079,7 @@ class CharacterSheetState {
 			{pattern: /once (?:per|on) (?:your|each) turn/i, weight: -2},
 			{pattern: /if (?:you|the) (?:hit|miss|succeed|fail)/i, weight: -3},
 		];
-		
+
 		// ===== ACTIVATION ACTION DETECTION =====
 		if (/as a bonus action|bonus action[,:]/i.test(text)) {
 			result.activationAction = "bonus";
@@ -14054,15 +14090,15 @@ class CharacterSheetState {
 		} else if (/no action required|at the start of (?:each of )?your turns?/i.test(text)) {
 			result.activationAction = "free";
 		}
-		
+
 		// Calculate confidence score
 		let score = 0;
-		
+
 		for (const indicator of toggleIndicators) {
 			const match = text.match(indicator.pattern);
 			if (match) {
 				score += indicator.weight;
-				
+
 				if (indicator.duration) {
 					result.duration = indicator.duration;
 				}
@@ -14080,13 +14116,13 @@ class CharacterSheetState {
 				}
 			}
 		}
-		
+
 		for (const indicator of instantIndicators) {
 			if (indicator.pattern.test(text)) {
 				score += indicator.weight;
 			}
 		}
-		
+
 		// Extract end conditions
 		const endConditionPatterns = [
 			{pattern: /(?:ends?|terminated?|stops?|lasts?) (?:when|if|until) you (?:are |become )?(?:incapacitated|unconscious)/i, condition: "Incapacitated"},
@@ -14098,96 +14134,96 @@ class CharacterSheetState {
 			{pattern: /(?:ends?|expires?) at the (?:end|start) of your (?:next )?turn/i, condition: "End of turn"},
 			{pattern: /concentration/i, condition: "Lose concentration"},
 		];
-		
+
 		for (const ec of endConditionPatterns) {
 			if (ec.pattern.test(text)) {
 				result.endConditions.push(ec.condition);
 			}
 		}
-		
+
 		// Deduplicate end conditions
 		result.endConditions = [...new Set(result.endConditions)];
-		
+
 		// Make final determination
 		result.confidence = Math.abs(score);
 		result.isToggle = score >= 5;
 		result.isInstant = score <= -5;
-		
+
 		// If neither clear toggle nor instant, check for state-granting language
 		if (!result.isToggle && !result.isInstant) {
 			// Check for "you gain" followed by benefits - suggests a state
-			if (/you gain (?:the following|these) benefits?/i.test(text) ||
-				/grants? you (?:the following|these)/i.test(text) ||
-				/while (?:you (?:are|have)|this|in)/i.test(text)) {
+			if (/you gain (?:the following|these) benefits?/i.test(text)
+				|| /grants? you (?:the following|these)/i.test(text)
+				|| /while (?:you (?:are|have)|this|in)/i.test(text)) {
 				result.isToggle = true;
 				result.confidence = 4;
 			}
 		}
-		
+
 		return result;
 	}
 
 	static parseEffectsFromDescription (description) {
 		if (!description) return [];
-		
+
 		const effects = [];
 		// Strip HTML tags and normalize whitespace for better pattern matching
 		const text = description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
-		
+
 		// Speed increases
 		const speedMatch = text.match(/(?:your )?speed increases? by (\d+) feet/i);
 		if (speedMatch) {
 			effects.push({type: "bonus", target: "speed", value: parseInt(speedMatch[1])});
 		}
-		
+
 		// Speed decreases
 		const speedDecMatch = text.match(/(?:your )?speed (?:decreases?|is reduced) by (\d+) feet/i);
 		if (speedDecMatch) {
 			effects.push({type: "bonus", target: "speed", value: -parseInt(speedDecMatch[1])});
 		}
-		
+
 		// AC bonuses - fixed value
 		const acMatch = text.match(/(?:gain|get|have) (?:a )?(?:\+)?(\d+) (?:bonus )?to (?:your )?(?:ac|armor class)/i);
 		if (acMatch) {
 			effects.push({type: "bonus", target: "ac", value: parseInt(acMatch[1])});
 		}
-		
+
 		// AC from ability mod
 		if (/add (?:your )?(?:constitution|con) modifier to (?:your )?(?:ac|armor class)/i.test(text)) {
 			effects.push({type: "bonus", target: "ac", abilityMod: "con"});
 		}
-		
+
 		// Attack bonuses
 		const attackBonusMatch = text.match(/(?:\+)?(\d+) (?:bonus )?to (?:attack|weapon attack|melee attack|ranged attack) rolls?/i);
 		if (attackBonusMatch) {
 			effects.push({type: "bonus", target: "attack", value: parseInt(attackBonusMatch[1])});
 		}
-		
+
 		// Damage bonuses - fixed value
 		const dmgBonusMatch = text.match(/(?:\+)?(\d+) (?:bonus |extra )?(?:damage|to damage rolls?)/i);
 		if (dmgBonusMatch) {
 			effects.push({type: "bonus", target: "damage", value: parseInt(dmgBonusMatch[1])});
 		}
-		
+
 		// Proficiency bonus to Strength (Athletics) checks
 		// Matches: "bonus to Strength (Athletics) checks equal to your proficiency bonus"
 		// Matches: "gain a bonus to Strength (Athletics) checks equal to your proficiency"
 		if (/(?:gain )?(?:a )?bonus to strength\s*\(?\s*athletics\s*\)?\s*checks?\s*equal to (?:your )?proficiency/i.test(text)) {
 			effects.push({type: "bonus", target: "check:str:athletics", useProficiency: true});
 		}
-		
+
 		// Proficiency bonus to saving throws against being moved/knocked prone
 		// Matches: "bonus equal to your proficiency bonus on saving throws made to resist being moved or knocked prone"
 		if (/bonus\s*(?:equal to (?:your )?proficiency(?: bonus)?)?.*saving throws?\s*(?:made )?to resist\s*(?:being )?(?:moved|knocked|pushed)/i.test(text)) {
 			effects.push({type: "bonus", target: "save:resist-movement", useProficiency: true, note: "Resist being moved/knocked prone"});
 		}
-		
+
 		// General proficiency bonus to saving throws
-		if (/bonus (?:equal to (?:your )?proficiency(?: bonus)?|to (?:your )?proficiency) on saving throws/i.test(text) ||
-			/bonus.*on saving throws.*equal to (?:your )?proficiency/i.test(text)) {
+		if (/bonus (?:equal to (?:your )?proficiency(?: bonus)?|to (?:your )?proficiency) on saving throws/i.test(text)
+			|| /bonus.*on saving throws.*equal to (?:your )?proficiency/i.test(text)) {
 			effects.push({type: "bonus", target: "save", useProficiency: true});
 		}
-		
+
 		// Advantage on attacks - general
 		if (/advantage on (?:all )?(?:melee )?(?:attack|weapon attack) rolls?/i.test(text)) {
 			effects.push({type: "advantage", target: "attack"});
@@ -14200,7 +14236,7 @@ class CharacterSheetState {
 		if (/advantage on ranged (?:attack|weapon attack) rolls?/i.test(text)) {
 			effects.push({type: "advantage", target: "attack:ranged"});
 		}
-		
+
 		// Advantage on saving throws
 		if (/advantage on (?:all )?(?:saving throws?|saves)/i.test(text)) {
 			effects.push({type: "advantage", target: "save"});
@@ -14223,7 +14259,7 @@ class CharacterSheetState {
 		if (/advantage on charisma (?:saving throws?|saves)/i.test(text)) {
 			effects.push({type: "advantage", target: "save:cha"});
 		}
-		
+
 		// Advantage on ability checks
 		if (/advantage on (?:strength|str) (?:\()?(?:athletics)?(?:\))? checks?/i.test(text)) {
 			effects.push({type: "advantage", target: "check:str"});
@@ -14243,7 +14279,7 @@ class CharacterSheetState {
 		if (/advantage on (?:charisma|cha) checks?/i.test(text)) {
 			effects.push({type: "advantage", target: "check:cha"});
 		}
-		
+
 		// Damage resistance
 		const resistMatch = text.match(/resistance to (bludgeoning|piercing|slashing|fire|cold|lightning|thunder|poison|acid|necrotic|radiant|force|psychic)/i);
 		if (resistMatch) {
@@ -14254,166 +14290,166 @@ class CharacterSheetState {
 			effects.push({type: "resistance", target: "piercing"});
 			effects.push({type: "resistance", target: "slashing"});
 		}
-		
+
 		// Attacks against have advantage (a penalty)
 		if (/(?:attacks?|attack rolls?) against you (?:have|has|gain) advantage/i.test(text)) {
 			effects.push({type: "advantage", target: "attacksAgainst"});
 		}
-		
+
 		// Attacks against have disadvantage (a benefit)
 		if (/(?:attacks?|attack rolls?) against you (?:have|has|gain) disadvantage/i.test(text)) {
 			effects.push({type: "disadvantage", target: "attacksAgainst"});
 		}
-		
+
 		// Ignore difficult terrain (note-based effect)
 		if (/ignore.{0,30}difficult terrain/i.test(text)) {
 			effects.push({type: "note", value: "Ignores difficult terrain"});
 		}
-		
+
 		// Can't be moved or knocked prone (note-based)
 		if (/resist.{0,30}(?:moved|knocked|pushed)/i.test(text) || /can't be (?:moved|knocked|pushed)/i.test(text)) {
 			effects.push({type: "note", value: "Resistant to forced movement"});
 		}
-		
+
 		// ===== TGTT/HOMEBREW SPECIFIC PATTERNS =====
-		
+
 		// Size increases (e.g., "count as one size larger")
 		if (/count as (?:one size larger|larger|a larger creature)/i.test(text)) {
 			effects.push({type: "sizeIncrease", value: 1});
 			effects.push({type: "note", value: "Counts as one size larger"});
 		}
-		
+
 		// Reach bonuses (e.g., "+5 feet reach", "increase your reach by 5 feet")
-		const reachMatch = text.match(/(?:reach (?:increases?|is extended) by |gain (?:an? )?(?:extra |additional )?|(?:\+))(\d+) (?:feet |ft\.? )?(?:of )?(?:extra )?reach/i) ||
-			text.match(/(?:\+)?(\d+) (?:feet |ft\.? )?(?:extra |additional )?reach/i);
+		const reachMatch = text.match(/(?:reach (?:increases?|is extended) by |gain (?:an? )?(?:extra |additional )?|(?:\+))(\d+) (?:feet |ft\.? )?(?:of )?(?:extra )?reach/i)
+			|| text.match(/(?:\+)?(\d+) (?:feet |ft\.? )?(?:extra |additional )?reach/i);
 		if (reachMatch) {
 			effects.push({type: "bonus", target: "reach", value: parseInt(reachMatch[1])});
 		}
-		
+
 		// Initiative bonuses
 		const initMatch = text.match(/(?:\+)?(\d+) (?:bonus )?to (?:your )?initiative/i);
 		if (initMatch) {
 			effects.push({type: "bonus", target: "initiative", value: parseInt(initMatch[1])});
 		}
-		
+
 		// Advantage on initiative
 		if (/advantage on initiative/i.test(text)) {
 			effects.push({type: "advantage", target: "initiative"});
 		}
-		
+
 		// Can't be surprised
 		if (/(?:can't|cannot) be surprised/i.test(text)) {
 			effects.push({type: "note", value: "Cannot be surprised"});
 		}
-		
+
 		// ===== SKILL ADVANTAGES =====
 		// Advantage on Acrobatics specifically
 		if (/advantage on (?:dexterity \()?acrobatics(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:acrobatics"});
 		}
-		
+
 		// Advantage on Stealth
 		if (/advantage on (?:dexterity \()?stealth(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:stealth"});
 		}
-		
+
 		// Advantage on Perception
 		if (/advantage on (?:wisdom \()?perception(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:perception"});
 		}
-		
+
 		// Advantage on Athletics
 		if (/advantage on (?:strength \()?athletics(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:athletics"});
 		}
-		
+
 		// Advantage on Intimidation
 		if (/advantage on (?:charisma \()?intimidation(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:intimidation"});
 		}
-		
+
 		// Advantage on Insight
 		if (/advantage on (?:wisdom \()?insight(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:insight"});
 		}
-		
+
 		// Advantage on Deception
 		if (/advantage on (?:charisma \()?deception(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:deception"});
 		}
-		
+
 		// Advantage on Performance
 		if (/advantage on (?:charisma \()?performance(?:\))?/i.test(text)) {
 			effects.push({type: "advantage", target: "skill:performance"});
 		}
-		
+
 		// ===== MOVEMENT EFFECTS =====
 		// Can move through hostile creature spaces
 		if (/move through (?:hostile |enemy )?creature(?:'s)? spaces?/i.test(text)) {
 			effects.push({type: "note", value: "Can move through hostile creature spaces"});
 		}
-		
+
 		// No opportunity attacks against you
 		if (/(?:doesn't|don't|does not|do not) provoke (?:opportunity )?attacks/i.test(text)) {
 			effects.push({type: "note", value: "Does not provoke opportunity attacks"});
 		}
-		
+
 		// Flying speed
 		const flyMatch = text.match(/(?:gain|have) (?:a )?flying speed (?:of |equal to )?(?:(\d+) feet|your (?:walking )?speed)/i);
 		if (flyMatch) {
 			effects.push({type: "bonus", target: "speed:fly", value: flyMatch[1] ? parseInt(flyMatch[1]) : "walking"});
 		}
-		
+
 		// Swimming speed
 		const swimMatch = text.match(/(?:gain|have) (?:a )?swimming speed (?:of |equal to )?(?:(\d+) feet|your (?:walking )?speed)/i);
 		if (swimMatch) {
 			effects.push({type: "bonus", target: "speed:swim", value: swimMatch[1] ? parseInt(swimMatch[1]) : "walking"});
 		}
-		
+
 		// Climbing speed
 		const climbMatch = text.match(/(?:gain|have) (?:a )?climbing speed (?:of |equal to )?(?:(\d+) feet|your (?:walking )?speed)/i);
 		if (climbMatch) {
 			effects.push({type: "bonus", target: "speed:climb", value: climbMatch[1] ? parseInt(climbMatch[1]) : "walking"});
 		}
-		
+
 		// ===== COMBAT EFFECTS =====
 		// Push/knockback effects (reaction)
 		if (/push (?:the )?(?:creature|target|attacker) (?:up to )?(\d+)? ?(?:feet|ft)/i.test(text)) {
 			const pushMatch = text.match(/push (?:the )?(?:creature|target|attacker) (?:up to )?(\d+)?/i);
 			effects.push({type: "note", value: `Can push creatures${pushMatch?.[1] ? ` ${pushMatch[1]} ft` : ""}`});
 		}
-		
+
 		// Pull effects
 		if (/pull (?:the )?(?:creature|target) (?:up to )?(\d+)? ?(?:feet|ft)/i.test(text)) {
 			effects.push({type: "note", value: "Can pull creatures"});
 		}
-		
+
 		// Grapple improvements
 		if (/advantage on (?:checks? )?(?:to )?(?:grapple|maintain.*grapple)/i.test(text)) {
 			effects.push({type: "advantage", target: "grapple"});
 		}
-		
+
 		// Improved critical (crit on 19-20, 18-20, etc.)
 		const critMatch = text.match(/(?:critical hit|score a critical) on (?:a )?(?:roll of )?(\d+)(?:-20| or higher)/i);
 		if (critMatch) {
 			effects.push({type: "critRange", value: parseInt(critMatch[1])});
 		}
-		
+
 		// Extra attack
 		if (/(?:make|can make) (?:one |an? )?(?:additional|extra) (?:melee )?attack/i.test(text)) {
 			effects.push({type: "note", value: "Extra attack"});
 		}
-		
+
 		// Bonus action attack
 		if (/(?:as a )?bonus action.*(?:make|attack)/i.test(text)) {
 			effects.push({type: "note", value: "Bonus action attack available"});
 		}
-		
+
 		// Reaction attack
 		if (/(?:as a )?reaction.*(?:make|attack)/i.test(text) || /(?:make|attack).*(?:as a )?reaction/i.test(text)) {
 			effects.push({type: "note", value: "Reaction attack available"});
 		}
-		
+
 		// ===== DEFENSIVE EFFECTS =====
 		// Concentration bonus
 		const concMatch = text.match(/(?:\+)?(\d+|your \w+ modifier) (?:bonus )?to (?:concentration|maintain concentration)/i);
@@ -14427,7 +14463,7 @@ class CharacterSheetState {
 				effects.push({type: "bonus", target: "concentration", value: parseInt(concMatch[1])});
 			}
 		}
-		
+
 		// Immunity to conditions
 		const immunityMatch = text.match(/(?:immune|immunity) to (?:the )?(?:being )?(charmed|frightened|poisoned|paralyzed|stunned|blinded|deafened|exhaustion)/gi);
 		if (immunityMatch) {
@@ -14438,7 +14474,7 @@ class CharacterSheetState {
 				}
 			});
 		}
-		
+
 		// Can't be charmed/frightened
 		if (/(?:can't|cannot) be (?:charmed|frightened)/i.test(text)) {
 			const cantBeMatch = text.match(/(?:can't|cannot) be (charmed|frightened)/i);
@@ -14446,68 +14482,68 @@ class CharacterSheetState {
 				effects.push({type: "immunity", target: `condition:${cantBeMatch[1].toLowerCase()}`});
 			}
 		}
-		
+
 		// ===== CONDITION APPLICATION EFFECTS =====
 		// Charm/domination effects
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?charmed/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes charmed"});
 		}
-		
+
 		// Speed reduced to 0
 		if (/(?:its |their |the )?speed (?:is )?(?:becomes? |reduced to )?0/i.test(text)) {
 			effects.push({type: "note", value: "Target's speed becomes 0"});
 		}
-		
+
 		// Incapacitated
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?incapacitated/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes incapacitated"});
 		}
-		
+
 		// Deafened
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?deafened/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes deafened"});
 		}
-		
+
 		// Blinded
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?blinded/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes blinded"});
 		}
-		
+
 		// Stunned
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?stunned/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes stunned"});
 		}
-		
+
 		// Frightened
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?frightened/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes frightened"});
 		}
-		
+
 		// Paralyzed
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?paralyzed/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes paralyzed"});
 		}
-		
+
 		// Restrained
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?restrained/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes restrained"});
 		}
-		
+
 		// Grappled
 		if (/(?:the )?(?:creature|target) (?:is |becomes? )?grappled/i.test(text)) {
 			effects.push({type: "note", value: "Target becomes grappled"});
 		}
-		
+
 		// Disarm
 		if (/(?:disarm|drop.{0,10}weapon|force.*to drop)/i.test(text)) {
 			effects.push({type: "note", value: "Can disarm target"});
 		}
-		
+
 		// Knock prone
 		if (/(?:knock|fall|is).{0,10}prone/i.test(text)) {
 			effects.push({type: "note", value: "Can knock target prone"});
 		}
-		
+
 		// ===== DAMAGE EFFECTS =====
 		// Extra damage dice
 		const extraDmgDiceMatch = text.match(/(?:deal|deals?|add|adds?)\s*(?:an? )?(?:additional|extra)\s*(\d+d\d+)\s*(\w+)?\s*damage/i);
@@ -14515,14 +14551,14 @@ class CharacterSheetState {
 			const dmgType = extraDmgDiceMatch[2] || "";
 			effects.push({type: "extraDamage", value: extraDmgDiceMatch[1], damageType: dmgType});
 		}
-		
+
 		// Fixed extra damage
 		const extraDmgFixedMatch = text.match(/(?:deal|deals?)\s*(?:an? )?(?:additional|extra)\s*(\d+)\s*(\w+)?\s*damage/i);
 		if (extraDmgFixedMatch && !extraDmgFixedMatch[1].includes("d")) {
 			const dmgType = extraDmgFixedMatch[2] || "";
 			effects.push({type: "extraDamage", value: parseInt(extraDmgFixedMatch[1]), damageType: dmgType});
 		}
-		
+
 		// Damage dice upgrade (martial arts die, etc.)
 		if (/damage die (?:becomes?|increases? to|is) (?:a )?(\d+d\d+)/i.test(text)) {
 			const dieMatch = text.match(/damage die (?:becomes?|increases? to|is) (?:a )?(\d+d\d+)/i);
@@ -14530,51 +14566,51 @@ class CharacterSheetState {
 				effects.push({type: "damageDieUpgrade", value: dieMatch[1]});
 			}
 		}
-		
+
 		// ===== HEALING EFFECTS =====
 		// Temporary HP
 		const tempHpMatch = text.match(/gain (\d+|(?:your )?\w+ modifier|\d+d\d+(?:\s*\+\s*\d+)?)[^\d]{0,30}temporary hit points/i);
 		if (tempHpMatch) {
 			effects.push({type: "tempHp", value: tempHpMatch[1]});
 		}
-		
+
 		// Regain hit points
 		const healMatch = text.match(/(?:regain|restore|heal) (\d+d\d+|\d+)[^\d]{0,20}hit points/i);
 		if (healMatch) {
 			effects.push({type: "heal", value: healMatch[1]});
 		}
-		
+
 		// ===== SENSES =====
 		// Darkvision
 		const darkvisionMatch = text.match(/(?:gain|have) darkvision (?:out to |with a range of )?(\d+) feet/i);
 		if (darkvisionMatch) {
 			effects.push({type: "sense", target: "darkvision", value: parseInt(darkvisionMatch[1])});
 		}
-		
+
 		// Blindsight
 		const blindsightMatch = text.match(/(?:gain|have) blindsight (?:out to |with a range of )?(\d+) feet/i);
 		if (blindsightMatch) {
 			effects.push({type: "sense", target: "blindsight", value: parseInt(blindsightMatch[1])});
 		}
-		
+
 		// Tremorsense
 		const tremorsenseMatch = text.match(/(?:gain|have) tremorsense (?:out to |with a range of )?(\d+) feet/i);
 		if (tremorsenseMatch) {
 			effects.push({type: "sense", target: "tremorsense", value: parseInt(tremorsenseMatch[1])});
 		}
-		
+
 		// ===== SPECIAL EFFECTS =====
 		// Creatures have disadvantage on saves against your effects
-		if (/(?:creatures?|targets?) (?:have|has|makes?) (?:its |their )?(?:saving throws?|saves?) (?:against|vs) (?:you|this|your)/i.test(text) &&
-			/disadvantage/i.test(text)) {
+		if (/(?:creatures?|targets?) (?:have|has|makes?) (?:its |their )?(?:saving throws?|saves?) (?:against|vs) (?:you|this|your)/i.test(text)
+			&& /disadvantage/i.test(text)) {
 			effects.push({type: "note", value: "Targets have disadvantage on saves vs your effects"});
 		}
-		
+
 		// Impose disadvantage on enemy attacks
 		if (/(?:imposes?|(?:creature|target) has) disadvantage on (?:its |their )?(?:next )?attack/i.test(text)) {
 			effects.push({type: "note", value: "Target has disadvantage on attacks"});
 		}
-		
+
 		// Reroll effects
 		if (/can reroll (?:the |a |one )?(?:damage|attack|saving throw|ability check)/i.test(text)) {
 			const rerollMatch = text.match(/can reroll (?:the |a |one )?(damage|attack|saving throw|ability check)/i);
@@ -14582,18 +14618,18 @@ class CharacterSheetState {
 				effects.push({type: "note", value: `Can reroll ${rerollMatch[1]}`});
 			}
 		}
-		
+
 		// Auto-succeed on saves/checks
 		if (/(?:automatically |auto-)?(?:succeed|success) on (?:the |a |your )?(?:saving throw|save|check)/i.test(text)) {
 			effects.push({type: "note", value: "Auto-succeed on saves/checks"});
 		}
-		
+
 		// Minimum roll (Reliable Talent style)
 		const minRollMatch = text.match(/treat (?:a |any )?(?:roll|d20) (?:of )?(\d+) or lower as (?:a )?(\d+)/i);
 		if (minRollMatch) {
 			effects.push({type: "minimumRoll", value: parseInt(minRollMatch[2])});
 		}
-		
+
 		return effects;
 	}
 
@@ -14605,19 +14641,19 @@ class CharacterSheetState {
 	 */
 	static detectActivatableFeature (feature) {
 		if (!feature?.description && !feature?.activatable) return null;
-		
+
 		const rawText = feature.description || "";
 		const text = rawText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
 		const name = feature.name?.toLowerCase() || "";
-		
+
 		// ===== DATA-DRIVEN ACTIVATABLE SUPPORT =====
 		// If the feature has explicit activatable data, use that directly
 		if (feature.activatable) {
 			const act = feature.activatable;
 			return {
 				stateTypeId: act.stateTypeId || "homebrewToggle",
-				stateType: act.stateTypeId && this.ACTIVE_STATE_TYPES[act.stateTypeId] 
-					? this.ACTIVE_STATE_TYPES[act.stateTypeId] 
+				stateType: act.stateTypeId && this.ACTIVE_STATE_TYPES[act.stateTypeId]
+					? this.ACTIVE_STATE_TYPES[act.stateTypeId]
 					: this.ACTIVE_STATE_TYPES.homebrewToggle,
 				matchedBy: "data",
 				activationAction: act.activationAction || act.action || "bonus",
@@ -14634,12 +14670,12 @@ class CharacterSheetState {
 				isToggle: true,
 			};
 		}
-		
+
 		// Exclude non-activatable features that might match patterns
 		const excludedNames = [
 			"suggested characteristics",
 			"personality trait",
-			"personality traits", 
+			"personality traits",
 			"ideal",
 			"bond",
 			"flaw",
@@ -14653,10 +14689,10 @@ class CharacterSheetState {
 			"proficiencies", // Passive
 		];
 		if (excludedNames.includes(name)) return null;
-		
+
 		// ===== USE INTELLIGENT TOGGLE ANALYSIS =====
 		const toggleAnalysis = this.analyzeToggleability(text);
-		
+
 		// ===== EXTRACT RESOURCE COSTS =====
 		let exertionCost = null;
 		let kiCost = null;
@@ -14666,53 +14702,53 @@ class CharacterSheetState {
 		let channelDivinityCost = null;
 		let superiorityDiceCost = null;
 		let rageCost = null;
-		
+
 		// Check for various resource costs
 		// Matches: "1 Exertion Point", "(1 Exertion Point)", "spend 1 exertion", "costs 2 exertion points"
 		const exertionMatch = text.match(/(?:spend|expend|use|costs?)?\s*\(?(\d+)\s*exertion\s*(?:points?)?\)?/i);
 		if (exertionMatch) {
 			exertionCost = parseInt(exertionMatch[1]);
 		}
-		
+
 		// Matches: "spend 1 ki", "1 ki points", "(2 Ki Points)", "for 1 ki"
-		const kiMatch = text.match(/(?:spend|use|costs?|expend)?\s*\(?(\d+)\s*ki\s*(?:points?)?\)?/i) ||
-			text.match(/for (\d+) ki/i);
+		const kiMatch = text.match(/(?:spend|use|costs?|expend)?\s*\(?(\d+)\s*ki\s*(?:points?)?\)?/i)
+			|| text.match(/for (\d+) ki/i);
 		if (kiMatch) {
 			kiCost = parseInt(kiMatch[1]);
 		}
-		
+
 		// Focus points (2024 PHB monk) - matches: "(1 Focus Point)", "spend 2 focus points"
 		const focusMatch = text.match(/(?:spend|use|expend)?\s*\(?(\d+)\s*focus\s*(?:points?)?\)?/i);
 		if (focusMatch) {
 			focusPointCost = parseInt(focusMatch[1]);
 		}
-		
+
 		// Sorcery points - matches: "(2 Sorcery Points)", "spend 3 sorcery points"
 		const spMatch = text.match(/(?:spend|use|expend)?\s*\(?(\d+)\s*sorcery\s*(?:points?)?\)?/i);
 		if (spMatch) {
 			sorceryPointCost = parseInt(spMatch[1]);
 		}
-		
+
 		const biMatch = text.match(/(?:expend|spend|use)\s*(?:one|a|1|\d+)\s*(?:use of\s*)?(?:your\s*)?bardic\s*inspiration/i);
 		if (biMatch) {
 			bardicInspirationCost = 1;
 		}
-		
+
 		const cdMatch = text.match(/(?:use|expend)\s*(?:a |one |your )?(?:use of\s*)?channel\s*divinity/i);
 		if (cdMatch) {
 			channelDivinityCost = 1;
 		}
-		
+
 		const sdMatch = text.match(/(?:expend|spend|use)\s*(?:one|a|1)\s*(?:of your )?superiority\s*(?:dice|die)/i);
 		if (sdMatch) {
 			superiorityDiceCost = 1;
 		}
-		
+
 		const rageMatch = text.match(/(?:while|when|if).*(?:raging|in.*rage)|(?:requires?|costs?|uses?).*rage/i);
 		if (rageMatch && /rage/i.test(name)) {
 			rageCost = 1;
 		}
-		
+
 		// Detect activation action
 		let activationAction = toggleAnalysis.activationAction;
 		if (!activationAction) {
@@ -14726,19 +14762,19 @@ class CharacterSheetState {
 				activationAction = "free";
 			}
 		}
-		
+
 		// ===== CHECK AGAINST KNOWN STATE TYPES =====
 		for (const [stateTypeId, stateType] of Object.entries(this.ACTIVE_STATE_TYPES)) {
 			// Skip generic types that shouldn't match by name
 			if (stateType.isGeneric && !stateType.detectPatterns?.length) continue;
-			
+
 			// Check name match
 			if (name === stateType.name.toLowerCase()) {
 				const parsedEffects = this.parseEffectsFromDescription(rawText);
 				return {
-					stateTypeId, 
-					stateType, 
-					matchedBy: "name", 
+					stateTypeId,
+					stateType,
+					matchedBy: "name",
 					activationAction: activationAction || stateType.activationAction,
 					effects: parsedEffects.length > 0 ? parsedEffects : stateType.effects,
 					duration: toggleAnalysis.duration || stateType.duration,
@@ -14753,16 +14789,16 @@ class CharacterSheetState {
 					isToggle: true,
 				};
 			}
-			
+
 			// Check detect patterns
 			if (stateType.detectPatterns) {
 				for (const pattern of stateType.detectPatterns) {
 					if (new RegExp(pattern, "i").test(name) || new RegExp(pattern, "i").test(text)) {
 						const parsedEffects = this.parseEffectsFromDescription(rawText);
 						return {
-							stateTypeId, 
-							stateType, 
-							matchedBy: "pattern", 
+							stateTypeId,
+							stateType,
+							matchedBy: "pattern",
 							activationAction: activationAction || stateType.activationAction,
 							effects: parsedEffects.length > 0 ? parsedEffects : stateType.effects,
 							duration: toggleAnalysis.duration || stateType.duration,
@@ -14780,14 +14816,14 @@ class CharacterSheetState {
 				}
 			}
 		}
-		
+
 		// ===== PATTERN-BASED DETECTION FOR SPECIFIC ABILITY TYPES =====
 		const activationPatterns = [
 			// Rage patterns
 			{pattern: /(?:enter|start|activate|begin) (?:a |your )?rage/i, stateTypeId: "rage"},
 			{pattern: /invoke.*bladesong/i, stateTypeId: "bladesong"},
 			{pattern: /start (?:your |a )?bladesong/i, stateTypeId: "bladesong"},
-			
+
 			// Combat stance patterns (Level Up A5E, TGTT, Grim Hollow, etc.)
 			{pattern: /this stance lasts until/i, stateTypeId: "combatStance"},
 			{pattern: /while (?:you are )?in this stance/i, stateTypeId: "combatStance"},
@@ -14795,51 +14831,51 @@ class CharacterSheetState {
 			{pattern: /enter (?:this|the|a) (?:\w+ )?stance/i, stateTypeId: "combatStance"},
 			{pattern: /at the start of each of your turns.*choose.*stance/i, stateTypeId: "fighterStance"},
 			{pattern: /(?:heavy|defensive|aggressive|balanced) stance/i, stateTypeId: "combatStance"},
-			
+
 			// Wild Shape
 			{pattern: /wild shape/i, stateTypeId: "wildShape"},
 			{pattern: /transform(?:ed)? into (?:a |an? )?beast/i, stateTypeId: "wildShape"},
-			
+
 			// Monk abilities
 			{pattern: /patient defense/i, stateTypeId: "patientDefense"},
 			{pattern: /flurry of blows/i, stateTypeId: "custom", isInstant: true},
 			{pattern: /step of the wind/i, stateTypeId: "custom", isInstant: true},
-			
+
 			// Fighter abilities
 			{pattern: /action surge/i, stateTypeId: "custom", isInstant: true},
 			{pattern: /second wind/i, stateTypeId: "custom", isInstant: true},
-			
+
 			// Barbarian abilities
 			{pattern: /reckless attack/i, stateTypeId: "recklessAttack"},
-			
+
 			// Jester's Act patterns (TGTT)
 			{pattern: /jester(?:'s)? act/i, stateTypeId: "jestersAct"},
 			{pattern: /as part of.*performance.*you can/i, stateTypeId: "jestersAct"},
-			
+
 			// Trickster Trick patterns (TGTT)
 			{pattern: /trick die|trick dice/i, stateTypeId: "tricksterTrick"},
-			
+
 			// Metamagic patterns that are toggleable
 			{pattern: /warding spell.*\+\d+ (?:to your )?ac/i, stateTypeId: "wardingSpell"},
-			
+
 			// Paladin abilities
 			{pattern: /divine smite/i, stateTypeId: "custom", isInstant: true},
 			{pattern: /lay on hands/i, stateTypeId: "custom", isInstant: true},
 			{pattern: /channel divinity/i, stateTypeId: "custom"},
-			
+
 			// Warlock abilities
 			{pattern: /eldritch invocation/i, stateTypeId: "custom"},
 			{pattern: /hex(?:blade)?.*curse/i, stateTypeId: "custom"},
 		];
-		
+
 		for (const {pattern, stateTypeId, isInstant: patternIsInstant} of activationPatterns) {
 			if (pattern.test(text) || pattern.test(name)) {
 				const parsedEffects = this.parseEffectsFromDescription(rawText);
 				if (stateTypeId !== "custom" && this.ACTIVE_STATE_TYPES[stateTypeId]) {
 					return {
-						stateTypeId, 
-						stateType: this.ACTIVE_STATE_TYPES[stateTypeId], 
-						matchedBy: "description", 
+						stateTypeId,
+						stateType: this.ACTIVE_STATE_TYPES[stateTypeId],
+						matchedBy: "description",
 						activationAction: activationAction || this.ACTIVE_STATE_TYPES[stateTypeId].activationAction,
 						effects: parsedEffects.length > 0 ? parsedEffects : this.ACTIVE_STATE_TYPES[stateTypeId].effects,
 						duration: toggleAnalysis.duration || this.ACTIVE_STATE_TYPES[stateTypeId].duration,
@@ -14855,7 +14891,7 @@ class CharacterSheetState {
 						isInstant: patternIsInstant || false,
 					};
 				}
-				
+
 				// Generic activatable feature
 				return {
 					stateTypeId: "custom",
@@ -14877,12 +14913,12 @@ class CharacterSheetState {
 				};
 			}
 		}
-		
+
 		// ===== USE TOGGLE ANALYSIS FOR GENERIC DETECTION =====
 		// If the analysis indicates this is likely a toggle ability with high confidence
 		if (toggleAnalysis.isToggle && toggleAnalysis.confidence >= 5) {
 			const parsedEffects = this.parseEffectsFromDescription(rawText);
-			
+
 			// Only consider it activatable if it actually provides some effects
 			if (parsedEffects.length > 0 || /you gain|grants? you|you (?:have|get)/i.test(text)) {
 				return {
@@ -14905,12 +14941,12 @@ class CharacterSheetState {
 				};
 			}
 		}
-		
+
 		// ===== RESOURCE-COSTING ABILITIES =====
 		// Detect features that cost resources - these are activatable even if not toggle states
-		const hasResourceCost = kiCost || focusPointCost || sorceryPointCost || bardicInspirationCost || 
-			exertionCost || channelDivinityCost || superiorityDiceCost;
-		
+		const hasResourceCost = kiCost || focusPointCost || sorceryPointCost || bardicInspirationCost
+			|| exertionCost || channelDivinityCost || superiorityDiceCost;
+
 		if (hasResourceCost) {
 			// Must have some indication of being an active choice
 			const isActiveAbility = /you can|when you|as (?:a |an )?\w+ action|expend|spend|use/i.test(text);
@@ -14936,7 +14972,7 @@ class CharacterSheetState {
 				};
 			}
 		}
-		
+
 		return null;
 	}
 
@@ -14947,9 +14983,9 @@ class CharacterSheetState {
 	 */
 	static summarizeEffects (effects) {
 		if (!effects || effects.length === 0) return "No mechanical effects detected";
-		
+
 		const summaries = [];
-		
+
 		for (const effect of effects) {
 			switch (effect.type) {
 				case "bonus":
@@ -15011,7 +15047,7 @@ class CharacterSheetState {
 					break;
 			}
 		}
-		
+
 		return summaries.length > 0 ? summaries.join("; ") : "Effects detected but not summarized";
 	}
 
@@ -15067,12 +15103,12 @@ class CharacterSheetState {
 	 */
 	static analyzeFeature (feature) {
 		if (!feature?.description) return null;
-		
+
 		const activationInfo = this.detectActivatableFeature(feature);
 		const effects = this.parseEffectsFromDescription(feature.description);
 		const rawText = feature.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
 		const toggleAnalysis = this.analyzeToggleability(rawText);
-		
+
 		return {
 			name: feature.name,
 			isActivatable: !!activationInfo,
@@ -15094,13 +15130,13 @@ class CharacterSheetState {
 				superiorityDice: activationInfo?.superiorityDiceCost || null,
 			},
 			hasResourceCost: !!(
-				activationInfo?.exertionCost || 
-				activationInfo?.kiCost || 
-				activationInfo?.focusPointCost ||
-				activationInfo?.sorceryPointCost || 
-				activationInfo?.bardicInspirationCost ||
-				activationInfo?.channelDivinityCost ||
-				activationInfo?.superiorityDiceCost
+				activationInfo?.exertionCost
+				|| activationInfo?.kiCost
+				|| activationInfo?.focusPointCost
+				|| activationInfo?.sorceryPointCost
+				|| activationInfo?.bardicInspirationCost
+				|| activationInfo?.channelDivinityCost
+				|| activationInfo?.superiorityDiceCost
 			),
 		};
 	}
@@ -15319,13 +15355,13 @@ class CharacterSheetState {
 	static parseConditionFromEntries (condition) {
 		const effects = [];
 		const notes = [];
-		
+
 		// Flatten entries to get all text
 		const allText = CharacterSheetState._flattenEntriesToText(condition.entries || []);
 		const textLower = allText.toLowerCase();
-		
+
 		// Pattern matching for common mechanical effects
-		
+
 		// Speed 0
 		if (/speed\s*(?:is\s*)?0|your speed is 0/i.test(allText)) {
 			effects.push({type: "setSpeed", target: "all", value: 0});
@@ -15334,7 +15370,7 @@ class CharacterSheetState {
 		if (/speed\s*(?:is\s*)?halved|half(?:ed)?\s*speed|spend\s*1\s*extra\s*foot/i.test(allText)) {
 			effects.push({type: "speedMultiplier", target: "all", value: 0.5});
 		}
-		
+
 		// Advantage on attacks (for the creature with the condition, e.g., hidden)
 		if (/you\s*(?:gain|have)\s*advantage\s*on\s*(?:attack|attack\s*roll)/i.test(allText)) {
 			effects.push({type: "advantage", target: "attack"});
@@ -15343,12 +15379,12 @@ class CharacterSheetState {
 		if (/(?:your\s*)?attack\s*rolls?\s*have\s*disadvantage|disadvantage\s*on\s*(?:your\s*)?attack\s*rolls?|have\s*disadvantage\s*on\s*attack\s*rolls/i.test(allText)) {
 			effects.push({type: "disadvantage", target: "attack"});
 		}
-		
+
 		// Disadvantage on ability checks
 		if (/disadvantage\s*on\s*(?:all\s*)?ability\s*checks|ability\s*checks[^.]*have\s*disadvantage/i.test(allText)) {
 			effects.push({type: "disadvantage", target: "check"});
 		}
-		
+
 		// Combined: Disadvantage on attack rolls AND ability checks (Poisoned, Frightened)
 		if (/disadvantage\s*on\s*attack\s*rolls?\s*and\s*ability\s*checks/i.test(allText)) {
 			// Already added attack disadvantage above, just ensure we have check disadvantage
@@ -15356,7 +15392,7 @@ class CharacterSheetState {
 				effects.push({type: "disadvantage", target: "check"});
 			}
 		}
-		
+
 		// Attack rolls against you have advantage
 		if (/attack\s*rolls?\s*against\s*(?:you|the\s*creature)\s*have\s*advantage/i.test(allText)) {
 			effects.push({type: "advantage", target: "attacksAgainst"});
@@ -15365,7 +15401,7 @@ class CharacterSheetState {
 		if (/attack\s*rolls?\s*against\s*(?:you|the\s*creature)\s*have\s*disadvantage/i.test(allText)) {
 			effects.push({type: "disadvantage", target: "attacksAgainst"});
 		}
-		
+
 		// Saving throw disadvantage
 		const savingThrowDisadvPatterns = [
 			{pattern: /disadvantage\s*on\s*(?:all\s*)?(?:ability\s*)?saving\s*throws?/i, target: "save"},
@@ -15383,7 +15419,7 @@ class CharacterSheetState {
 				effects.push({type: "disadvantage", target});
 			}
 		}
-		
+
 		// Auto-fail saving throws
 		if (/automatically\s*fails?\s*strength\s*(?:and\s*dexterity\s*)?saving\s*throws?/i.test(allText)) {
 			effects.push({type: "autoFail", target: "save:str"});
@@ -15401,51 +15437,51 @@ class CharacterSheetState {
 			effects.push({type: "autoFail", target: "save:str"});
 			effects.push({type: "autoFail", target: "save:dex"});
 		}
-		
+
 		// Ability check failures
 		if (/automatically\s*fails?\s*(?:any\s*)?ability\s*checks?\s*that\s*require/i.test(allText)) {
 			if (/sight/i.test(allText)) {
 				effects.push({type: "autoFail", target: "check:sight"});
 			}
 		}
-		
+
 		// Incapacitated (includes note)
 		if (/incapacitated|can'?t\s*take\s*(?:any\s*)?actions?\s*or\s*reactions/i.test(allText)) {
 			effects.push({type: "incapacitated", value: true});
 		}
-		
+
 		// Resistance to all damage
 		if (/resistance\s*to\s*all\s*damage/i.test(allText)) {
 			effects.push({type: "resistance", target: "all"});
 		}
-		
+
 		// Immunity to conditions (like Poisoned)
 		const conditionImmunityMatch = allText.match(/immunity\s*to\s*(?:the\s*)?(?:@condition\s*)?(\w+)\s*condition/i);
 		if (conditionImmunityMatch) {
 			effects.push({type: "conditionImmunity", target: conditionImmunityMatch[1].toLowerCase()});
 			notes.push(`Immune to ${conditionImmunityMatch[1]} condition`);
 		}
-		
+
 		// Immunity to damage types
 		if (/immunity\s*to\s*poison(?:ed)?\s*damage|poison\s*immunity/i.test(allText)) {
 			effects.push({type: "immunity", target: "poison"});
 		}
-		
+
 		// Can't move
 		if (/can'?t\s*move|you\s*can'?t\s*move|unable\s*to\s*move/i.test(allText)) {
 			notes.push("Cannot move");
 		}
-		
+
 		// Concentration broken
 		if (/concentration\s*(?:is\s*)?broken|your\s*concentration\s*is\s*broken/i.test(allText)) {
 			notes.push("Concentration is broken");
 		}
-		
+
 		// Limited activity (Dazed-like)
 		if (/can\s*(?:move|take)\s*(?:or|one)\s*(?:action|move)[^.]*not\s*both/i.test(allText)) {
 			notes.push("Move or Action, not both");
 		}
-		
+
 		// Can't take bonus action or reaction (often with Dazed)
 		if (/can'?t\s*take\s*a\s*bonus\s*action/i.test(allText)) {
 			notes.push("No Bonus Actions");
@@ -15453,53 +15489,53 @@ class CharacterSheetState {
 		if (/can'?t\s*take\s*(?:a\s*)?reaction/i.test(allText) && !/actions?\s*or\s*reactions/i.test(allText)) {
 			notes.push("No Reactions");
 		}
-		
+
 		// Can't speak or speechless
 		if (/can'?t\s*speak|speechless/i.test(allText)) {
 			notes.push("Cannot speak");
 		}
-		
+
 		// Speech limited/faltering (Choked, Stunned)
 		if (/speak\s*only\s*falteringly|faltering\s*speech/i.test(allText)) {
 			notes.push("Speech is faltering");
 		}
-		
+
 		// TGTT Somatic Constraint - concentration check for somatic spells
 		if (/somatic\s*constraint|spell\s*with\s*(?:a\s*)?somatic\s*component[^.]*concentration\s*check/i.test(allText)) {
 			effects.push({type: "somaticConstraint", value: "check"});
 			notes.push("Somatic spells require concentration check");
 		}
-		
+
 		// TGTT Somatic Ban - can't cast somatic spells
 		if (/somatic\s*ban|spell\s*with\s*(?:a\s*)?somatic\s*component[^.]*automatically\s*disrupted/i.test(allText)) {
 			effects.push({type: "somaticConstraint", value: "banned"});
 			notes.push("Somatic spells automatically fail");
 		}
-		
+
 		// TGTT Verbal component restriction (Choked - Cough)
 		if (/verbal\s*component[^.]*concentration\s*check|cough[^.]*verbal/i.test(allText)) {
 			effects.push({type: "verbalConstraint", value: "check"});
 			notes.push("Verbal spells require concentration check");
 		}
-		
+
 		// Breath/suffocation effects (Choked - Short Breath)
 		if (/hold\s*(?:your\s*)?breath\s*(?:for\s*)?half|short\s*breath/i.test(allText)) {
 			notes.push("Breath holding halved");
 		}
-		
+
 		// Can't use reactions (separate from incapacitated)
 		if (/can'?t\s*use\s*reactions/i.test(allText)) {
 			notes.push("Cannot use reactions");
 		}
-		
+
 		// Add any notes as effect entries
 		for (const note of notes) {
 			effects.push({type: "note", value: note});
 		}
-		
+
 		// Generate an icon based on condition name patterns
 		const icon = CharacterSheetState._getConditionIcon(condition.name);
-		
+
 		return {
 			name: condition.name,
 			icon,
@@ -15517,27 +15553,43 @@ class CharacterSheetState {
 	static _getConditionIcon (name) {
 		const nameLower = name.toLowerCase();
 		const iconMap = {
-			"exhaustion": "😩", "exhausted": "😩",
-			"slowed": "🐢", "slow": "🐢",
-			"hidden": "👁️", "invisible": "👻",
+			"exhaustion": "😩",
+			"exhausted": "😩",
+			"slowed": "🐢",
+			"slow": "🐢",
+			"hidden": "👁️",
+			"invisible": "👻",
 			"undetected": "❓",
-			"stunned": "💫", "stun": "💫",
-			"dazed": "😵", "confused": "😵",
-			"choked": "😤", "suffocating": "😤",
-			"grappled": "🤼", "grabbed": "🤼",
-			"restrained": "⛓️", "bound": "⛓️",
-			"petrified": "🗿", "stone": "🗿",
-			"poisoned": "🤢", "poison": "🤢",
-			"frightened": "😨", "fear": "😨",
-			"charmed": "💕", "charm": "💕",
-			"paralyzed": "⚡", "paralysis": "⚡",
-			"blinded": "🙈", "blind": "🙈",
-			"deafened": "🙉", "deaf": "🙉",
-			"unconscious": "💤", "unconsciousness": "💤",
+			"stunned": "💫",
+			"stun": "💫",
+			"dazed": "😵",
+			"confused": "😵",
+			"choked": "😤",
+			"suffocating": "😤",
+			"grappled": "🤼",
+			"grabbed": "🤼",
+			"restrained": "⛓️",
+			"bound": "⛓️",
+			"petrified": "🗿",
+			"stone": "🗿",
+			"poisoned": "🤢",
+			"poison": "🤢",
+			"frightened": "😨",
+			"fear": "😨",
+			"charmed": "💕",
+			"charm": "💕",
+			"paralyzed": "⚡",
+			"paralysis": "⚡",
+			"blinded": "🙈",
+			"blind": "🙈",
+			"deafened": "🙉",
+			"deaf": "🙉",
+			"unconscious": "💤",
+			"unconsciousness": "💤",
 			"prone": "⬇️",
 			"incapacitated": "🚫",
 		};
-		
+
 		for (const [key, emoji] of Object.entries(iconMap)) {
 			if (nameLower.includes(key)) return emoji;
 		}
@@ -15553,7 +15605,7 @@ class CharacterSheetState {
 		// Get first sentence or first 100 chars
 		const firstSentence = text.split(/[.!?]/)[0];
 		if (firstSentence.length <= 100) return firstSentence.trim();
-		return firstSentence.substring(0, 97).trim() + "...";
+		return `${firstSentence.substring(0, 97).trim()}...`;
 	}
 
 	/**
@@ -15571,7 +15623,7 @@ class CharacterSheetState {
 			if (obj.items) return CharacterSheetState._flattenEntriesToText(obj.items);
 			return "";
 		}
-		
+
 		return entries.map(entry => {
 			if (typeof entry === "string") {
 				// Strip 5etools formatting tags like {@b text}, {@condition name}, etc.
@@ -15591,7 +15643,7 @@ class CharacterSheetState {
 	 */
 	static registerHomebrewConditions (conditions) {
 		if (!conditions || !Array.isArray(conditions)) return;
-		
+
 		for (const condition of conditions) {
 			// Skip conditions that are already in the standard list
 			const key = condition.name.toLowerCase().replace(/\s+/g, "_");
@@ -15599,7 +15651,7 @@ class CharacterSheetState {
 				// Could potentially merge/override, but for now skip
 				continue;
 			}
-			
+
 			// Parse the condition entries to extract effects
 			const parsed = CharacterSheetState.parseConditionFromEntries(condition);
 			CharacterSheetState.registerCustomCondition(condition.name, parsed);
@@ -15613,8 +15665,8 @@ class CharacterSheetState {
 	 */
 	static getConditionEffects (conditionName) {
 		const key = conditionName.toLowerCase().replace(/\s+/g, "_");
-		return CharacterSheetState.CONDITION_EFFECTS[key] 
-			|| CharacterSheetState._customConditions[key] 
+		return CharacterSheetState.CONDITION_EFFECTS[key]
+			|| CharacterSheetState._customConditions[key]
 			|| null;
 	}
 
@@ -15626,15 +15678,15 @@ class CharacterSheetState {
 	getActivatableFeatures () {
 		const activatables = [];
 		const resources = this.getResources();
-		
+
 		for (const feature of this._data.features) {
 			const activationInfo = CharacterSheetState.detectActivatableFeature(feature);
 			if (!activationInfo) continue;
-			
+
 			// Find associated resource if any
 			let resource = null;
 			const stateType = activationInfo.stateType;
-			
+
 			// ===== RESOURCE DETECTION =====
 			// Check for explicit resource info from data-driven detection
 			if (activationInfo.isDataDriven && activationInfo.resourceName) {
@@ -15653,8 +15705,8 @@ class CharacterSheetState {
 			}
 			// Check for Ki cost
 			else if (activationInfo.kiCost) {
-				const kiResource = resources.find(r => 
-					r.name.toLowerCase().includes("ki") || r.name.toLowerCase().includes("focus points")
+				const kiResource = resources.find(r =>
+					r.name.toLowerCase().includes("ki") || r.name.toLowerCase().includes("focus points"),
 				);
 				if (kiResource) {
 					resource = {...kiResource, cost: activationInfo.kiCost};
@@ -15662,8 +15714,8 @@ class CharacterSheetState {
 			}
 			// Check for Sorcery Point cost
 			else if (activationInfo.sorceryPointCost) {
-				const spResource = resources.find(r => 
-					r.name.toLowerCase().includes("sorcery") || r.name.toLowerCase().includes("sorcerer points")
+				const spResource = resources.find(r =>
+					r.name.toLowerCase().includes("sorcery") || r.name.toLowerCase().includes("sorcerer points"),
 				);
 				if (spResource) {
 					resource = {...spResource, cost: activationInfo.sorceryPointCost};
@@ -15671,8 +15723,8 @@ class CharacterSheetState {
 			}
 			// Check for Bardic Inspiration cost
 			else if (activationInfo.bardicInspirationCost) {
-				const biResource = resources.find(r => 
-					r.name.toLowerCase().includes("bardic inspiration")
+				const biResource = resources.find(r =>
+					r.name.toLowerCase().includes("bardic inspiration"),
 				);
 				if (biResource) {
 					resource = {...biResource, cost: activationInfo.bardicInspirationCost};
@@ -15698,12 +15750,12 @@ class CharacterSheetState {
 			if (!resource && feature.uses) {
 				resource = resources.find(r => r.featureId === feature.id || r.name === feature.name);
 			}
-			
+
 			// Determine if this feature is currently active
-			const isActive = activationInfo.stateTypeId !== "custom" 
+			const isActive = activationInfo.stateTypeId !== "custom"
 				? this.isStateTypeActive(activationInfo.stateTypeId)
 				: this._data.activeStates.some(s => s.sourceFeatureId === feature.id && s.active);
-			
+
 			activatables.push({
 				feature,
 				activationInfo,
@@ -15714,7 +15766,7 @@ class CharacterSheetState {
 				effects: activationInfo.effects || null,
 			});
 		}
-		
+
 		// Also add class-specific activatables that may not be feature-based
 		// Check for Rage if barbarian
 		const hasBarbarian = this._data.classes?.some(c => c.name?.toLowerCase() === "barbarian");
@@ -15730,7 +15782,7 @@ class CharacterSheetState {
 				});
 			}
 		}
-		
+
 		return activatables;
 	}
 
@@ -15743,10 +15795,10 @@ class CharacterSheetState {
 	 */
 	_findResource (resources, resourceName, cost = null) {
 		const nameLower = resourceName.toLowerCase();
-		const resource = resources.find(r => 
-			r.name.toLowerCase() === nameLower ||
-			r.name.toLowerCase().includes(nameLower) ||
-			nameLower.includes(r.name.toLowerCase())
+		const resource = resources.find(r =>
+			r.name.toLowerCase() === nameLower
+			|| r.name.toLowerCase().includes(nameLower)
+			|| nameLower.includes(r.name.toLowerCase()),
 		);
 		if (resource && cost) {
 			return {...resource, cost};
@@ -15797,7 +15849,7 @@ class CharacterSheetState {
 	 */
 	addActiveState (stateTypeId, options = {}) {
 		const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
-		
+
 		// Handle custom states that aren't in ACTIVE_STATE_TYPES
 		if (!stateType && stateTypeId !== "custom") {
 			console.warn(`Unknown active state type: ${stateTypeId}`);
@@ -15936,7 +15988,7 @@ class CharacterSheetState {
 
 			// For regular states, look up the state type
 			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
-			
+
 			// Use custom effects if provided, otherwise use state type's default effects
 			// For "custom" states without a stateType, only customEffects apply
 			const stateEffects = state.customEffects || stateType?.effects || [];
@@ -15998,7 +16050,7 @@ class CharacterSheetState {
 			if (e.target === rollType) return true;
 			// Generic "check" applies to all ability checks
 			if (e.target === "check" && rollType.startsWith("check:")) return true;
-			// Generic "save" applies to all saving throws  
+			// Generic "save" applies to all saving throws
 			if (e.target === "save" && rollType.startsWith("save:")) return true;
 			// Hierarchical attack matching (same logic as advantage)
 			if (e.target.startsWith("attack") && rollType.startsWith("attack")) {
@@ -16042,7 +16094,7 @@ class CharacterSheetState {
 	getSkillBonusFromStates (skill, ability) {
 		const effects = this.getActiveStateEffects();
 		let bonus = 0;
-		
+
 		effects.filter(e => e.type === "bonus").forEach(e => {
 			// Check for exact skill match: "check:str:athletics"
 			const exactTarget = `check:${ability}:${skill}`;
@@ -16050,7 +16102,7 @@ class CharacterSheetState {
 			const abilityTarget = `check:${ability}`;
 			// Check for generic check match: "check" applies to all ability checks
 			const genericTarget = "check";
-			
+
 			if (e.target === exactTarget || e.target === abilityTarget || e.target === genericTarget) {
 				if (e.useProficiency) {
 					bonus += this.getProficiencyBonus();
@@ -16059,7 +16111,7 @@ class CharacterSheetState {
 				}
 			}
 		});
-		
+
 		return bonus;
 	}
 
@@ -16071,13 +16123,13 @@ class CharacterSheetState {
 	getSaveBonusFromStates (ability) {
 		const effects = this.getActiveStateEffects();
 		let bonus = 0;
-		
+
 		effects.filter(e => e.type === "bonus").forEach(e => {
 			// Check for exact save match: "save:str"
 			const exactTarget = `save:${ability}`;
 			// Check for generic save match: "save" applies to all saves
 			const genericTarget = "save";
-			
+
 			if (e.target === exactTarget || e.target === genericTarget) {
 				if (e.abilityMod) {
 					// Add ability modifier (e.g., Bladesong adds INT to concentration saves)
@@ -16089,7 +16141,7 @@ class CharacterSheetState {
 				}
 			}
 		});
-		
+
 		return bonus;
 	}
 
@@ -16144,13 +16196,13 @@ class CharacterSheetState {
 	 */
 	setConcentration (spellNameOrObj, spellLevel = 0) {
 		// Handle object input
-		const spellName = typeof spellNameOrObj === "string" 
-			? spellNameOrObj 
+		const spellName = typeof spellNameOrObj === "string"
+			? spellNameOrObj
 			: (spellNameOrObj?.name || spellNameOrObj?.spellName);
-		const level = typeof spellNameOrObj === "string" 
-			? spellLevel 
+		const level = typeof spellNameOrObj === "string"
+			? spellLevel
 			: (spellNameOrObj?.level || spellNameOrObj?.spellLevel || 0);
-		
+
 		// End any existing concentration
 		if (this._data.concentrating) {
 			this.breakConcentration();
@@ -16382,7 +16434,7 @@ class CharacterSheetState {
 	getItem (itemId) {
 		const entry = this._data.inventory.find(e => e.id === itemId || e.item?.id === itemId);
 		if (!entry) return null;
-		
+
 		// Return a combined object with both wrapper props and item props
 		return {
 			id: entry.id,
@@ -16764,12 +16816,12 @@ class CharacterSheetState {
 	static _entriesContainModifier (entries) {
 		if (!entries) return false;
 		const text = JSON.stringify(entries).toLowerCase();
-		return text.includes("spellcasting ability modifier") ||
-			text.includes("spellcasting modifier") ||
-			text.includes("ability modifier") ||
-			text.includes("your spellcasting") ||
-			text.includes("plus your") ||
-			/\+\s*your/.test(text);
+		return text.includes("spellcasting ability modifier")
+			|| text.includes("spellcasting modifier")
+			|| text.includes("ability modifier")
+			|| text.includes("your spellcasting")
+			|| text.includes("plus your")
+			|| /\+\s*your/.test(text);
 	}
 
 	/**
@@ -16839,7 +16891,7 @@ class CharacterSheetState {
 		// Check area tags
 		if (spell.areaTags) {
 			const text = JSON.stringify(spell.entries || []).toLowerCase();
-			
+
 			if (spell.areaTags.includes("S")) {
 				target.type = "area";
 				target.shape = "sphere";
@@ -17014,9 +17066,9 @@ class CharacterSheetState {
 		}
 
 		// Check for modifier addition
-		if (text.includes("spellcasting ability modifier") ||
-			text.includes("spellcasting modifier") ||
-			text.includes("ability modifier")) {
+		if (text.includes("spellcasting ability modifier")
+			|| text.includes("spellcasting modifier")
+			|| text.includes("ability modifier")) {
 			healing.addModifier = true;
 		}
 

@@ -193,8 +193,8 @@ class CharacterSheetCombat {
 						<label class="charsheet__attack-label">Damage Type</label>
 						<select class="charsheet__attack-select charsheet__attack-select--dmgtype">
 							${["bludgeoning", "piercing", "slashing", "fire", "cold", "lightning", "thunder", "poison", "acid", "necrotic", "radiant", "force", "psychic"].map(t =>
-								`<option value="${t}" ${attack.damageType === t ? "selected" : ""}>${this._getDamageTypeEmoji(t)} ${t.toTitleCase()}</option>`
-							).join("")}
+		`<option value="${t}" ${attack.damageType === t ? "selected" : ""}>${this._getDamageTypeEmoji(t)} ${t.toTitleCase()}</option>`,
+	).join("")}
 						</select>
 					</div>
 					<div class="charsheet__attack-field">
@@ -227,7 +227,7 @@ class CharacterSheetCombat {
 		// Quick Add Section
 		const inventoryItems = this._state.getItems();
 		const inventoryWeapons = inventoryItems.filter(i => i.weapon);
-		
+
 		const $quickSection = $(`
 			<div class="charsheet__attack-section charsheet__attack-section--quick">
 				<div class="charsheet__attack-section-header">
@@ -241,10 +241,10 @@ class CharacterSheetCombat {
 							<select class="charsheet__attack-select charsheet__attack-select--inventory">
 								<option value="">— Select weapon —</option>
 								${inventoryWeapons.map(weapon => {
-									const bonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
-									const label = bonus > 0 ? `${weapon.name} (+${bonus})` : weapon.name;
-									return `<option value="inv:${weapon.name}">${label}</option>`;
-								}).join("")}
+		const bonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
+		const label = bonus > 0 ? `${weapon.name} (+${bonus})` : weapon.name;
+		return `<option value="inv:${weapon.name}">${label}</option>`;
+	}).join("")}
 							</select>
 						</div>
 					` : ""}
@@ -253,13 +253,13 @@ class CharacterSheetCombat {
 						<select class="charsheet__attack-select charsheet__attack-select--catalog">
 							<option value="">— Select from all weapons —</option>
 							${this._allItems
-								.filter(i => i.weapon)
-								.sort((a, b) => a.name.localeCompare(b.name))
-								.map(weapon => {
-									const bonus = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponAttack);
-									const label = bonus > 0 ? `${weapon.name} (+${bonus})` : weapon.name;
-									return `<option value="${weapon.name}|${weapon.source}">${label}</option>`;
-								}).join("")}
+		.filter(i => i.weapon)
+		.sort((a, b) => a.name.localeCompare(b.name))
+		.map(weapon => {
+			const bonus = this._parseBonus(weapon.bonusWeapon) + this._parseBonus(weapon.bonusWeaponAttack);
+			const label = bonus > 0 ? `${weapon.name} (+${bonus})` : weapon.name;
+			return `<option value="${weapon.name}|${weapon.source}">${label}</option>`;
+		}).join("")}
 						</select>
 					</div>
 				</div>
@@ -401,14 +401,13 @@ class CharacterSheetCombat {
 		return emojis[type] || "⚔️";
 	}
 
-
 	async _editAttack (attackId) {
 		// Check if it's an auto-generated attack from equipped weapon
 		if (attackId?.startsWith?.("auto_")) {
 			// Extract the weapon ID from the attack ID (format: auto_weaponId)
 			const weaponId = attackId.substring(5); // Remove "auto_" prefix
 			const weapon = this._state.getInventory().find(item => item.id === weaponId);
-			
+
 			if (!weapon) {
 				JqueryUtil.doToast({type: "warning", content: "Weapon not found in inventory."});
 				return;
@@ -437,12 +436,12 @@ class CharacterSheetCombat {
 		// Build the current attack stats from weapon data + any existing overrides
 		const isRanged = weapon.property?.some(p => p.includes?.("A") || String(p).toLowerCase().includes("ammunition")) || weapon.range;
 		const hasFinesse = weapon.property?.some(p => p.includes?.("F") || String(p).toLowerCase().includes("finesse"));
-		
+
 		// Get weapon's base stats with overrides
 		const overrides = weapon.attackOverrides || {};
 		const magicBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
 		const magicDmgBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
-		
+
 		const attack = {
 			name: overrides.name ?? weapon.name,
 			attackBonus: overrides.attackBonus ?? (weapon.customAttackBonus || 0),
@@ -537,8 +536,8 @@ class CharacterSheetCombat {
 						<label class="charsheet__attack-label">Damage Type</label>
 						<select class="charsheet__attack-select charsheet__attack-select--dmgtype">
 							${["bludgeoning", "piercing", "slashing", "fire", "cold", "lightning", "thunder", "poison", "acid", "necrotic", "radiant", "force", "psychic"].map(t =>
-								`<option value="${t}" ${attack.damageType === t ? "selected" : ""}>${this._getDamageTypeEmoji(t)} ${t.toTitleCase()}</option>`
-							).join("")}
+		`<option value="${t}" ${attack.damageType === t ? "selected" : ""}>${this._getDamageTypeEmoji(t)} ${t.toTitleCase()}</option>`,
+	).join("")}
 						</select>
 					</div>
 					<div class="charsheet__attack-field">
@@ -628,7 +627,7 @@ class CharacterSheetCombat {
 			this.renderAttacks();
 			this._page._inventory?.render?.();
 			this._page._saveCurrentCharacter?.();
-			
+
 			JqueryUtil.doToast({type: "success", content: `Updated ${weapon.name}.`});
 			doClose(true);
 		});
@@ -707,7 +706,7 @@ class CharacterSheetCombat {
 			const $btn = $(e.currentTarget);
 			const field = $btn.data("field");
 			const isMinus = $btn.hasClass("charsheet__attack-number-btn--minus");
-			const $input = field === "attack" 
+			const $input = field === "attack"
 				? $content.find(".charsheet__weapon-bonus-attack")
 				: $content.find(".charsheet__weapon-bonus-damage");
 			const current = parseInt($input.val()) || 0;
@@ -732,7 +731,7 @@ class CharacterSheetCombat {
 			this.renderAttacks();
 			this._page._inventory?.render?.();
 			this._page._saveCurrentCharacter?.();
-			
+
 			JqueryUtil.doToast({type: "success", content: `Updated bonuses for ${weapon.name}.`});
 			doClose(true);
 		});
@@ -768,31 +767,31 @@ class CharacterSheetCombat {
 		if (!attack) return;
 
 		// Determine attack type for advantage/disadvantage matching
-		const isMelee = attack.isMelee || attack.type === "melee" || attack.range === "melee" || 
-			(attack.range && !attack.range.includes("/"));
+		const isMelee = attack.isMelee || attack.type === "melee" || attack.range === "melee"
+			|| (attack.range && !attack.range.includes("/"));
 		const abilityUsed = attack.abilityMod || (isMelee ? "str" : "dex");
 		const attackType = `attack:${isMelee ? "melee" : "ranged"}:${abilityUsed}`;
 
 		// Check for advantage/disadvantage from active states and conditions
 		let stateMode;
-		const hasAdvantage = this._state.hasAdvantageFromStates?.(attackType) || 
-			this._state.hasAdvantageFromStates?.("attack");
-		const hasDisadvantage = this._state.hasDisadvantageFromStates?.(attackType) || 
-			this._state.hasDisadvantageFromStates?.("attack");
+		const hasAdvantage = this._state.hasAdvantageFromStates?.(attackType)
+			|| this._state.hasAdvantageFromStates?.("attack");
+		const hasDisadvantage = this._state.hasDisadvantageFromStates?.(attackType)
+			|| this._state.hasDisadvantageFromStates?.("attack");
 		if (hasAdvantage && !hasDisadvantage) stateMode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) stateMode = "disadvantage";
 
 		// Calculate total attack bonus
 		const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
 		const profBonus = this._state.getProficiencyBonus();
-		
+
 		// Get attack modifiers from named modifiers (from features like Battle Tactics, magic items, etc.)
 		const attackModifiers = this._state.getNamedModifiersByType("attack");
 		const featureAttackBonus = attackModifiers.reduce((sum, mod) => sum + (mod.value || 0), 0);
-		
+
 		// Get bonus from active states (activated abilities like combat stances)
 		const stateAttackBonus = this._state.getBonusFromStates?.("attack") || 0;
-		
+
 		const totalBonus = abilityMod + profBonus + (attack.attackBonus || 0) + featureAttackBonus + stateAttackBonus;
 
 		// Roll d20 with advantage/disadvantage support (state mode can be overridden by shift/ctrl keys)
@@ -847,25 +846,25 @@ class CharacterSheetCombat {
 		// Parse damage dice
 		const damageRoll = this._parseDamage(attack.damage, isCrit);
 		const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
-		
+
 		// Get damage modifiers from named modifiers (from features, magic items, etc.)
 		const damageModifiers = this._state.getNamedModifiersByType("damage");
 		const featureDamageBonus = damageModifiers.reduce((sum, mod) => sum + (mod.value || 0), 0);
-		
+
 		// Get bonus from active states (activated abilities)
 		const stateDamageBonus = this._state.getBonusFromStates?.("damage") || 0;
-		
+
 		// Check if attack uses strength and if rage is active (for rage damage)
 		let rageBonus = 0;
-		const isMeleeStrengthAttack = (attack.abilityMod === "str" || !attack.abilityMod) && 
-			!attack.isRanged && !attack.isSpell;
+		const isMeleeStrengthAttack = (attack.abilityMod === "str" || !attack.abilityMod)
+			&& !attack.isRanged && !attack.isSpell;
 		if (this._state.isStateTypeActive?.("rage")) {
 			rageBonus = this._state.getRageDamageBonus?.(
 				!attack.isRanged && !attack.isSpell, // isMelee
 				attack.abilityMod || "str",
 			) || 0;
 		}
-		
+
 		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus + stateDamageBonus;
 
 		const total = damageRoll.total + totalBonus;
@@ -1039,19 +1038,19 @@ class CharacterSheetCombat {
 			if (!existingAttack) {
 				// Get any user overrides for this weapon's attack
 				const overrides = weapon.attackOverrides || {};
-				
+
 				// Auto-generate attack from weapon
 				const isRanged = weapon.properties?.some(p => p === "A" || p === "T" || p.startsWith("A|") || p.startsWith("T|"));
 				const hasFinesse = weapon.properties?.some(p => p === "F" || p.startsWith("F|"));
 				const isMonkWeapon = this._state.isMonkWeapon?.(weapon);
 				const defaultAbility = isRanged ? "dex" : ((hasFinesse || isMonkWeapon) ? (this._state.getAbilityMod("dex") >= this._state.getAbilityMod("str") ? "dex" : "str") : "str");
-				
+
 				// Calculate total bonuses including magic item bonuses and custom bonuses
 				const magicAttackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
 				const magicDamageBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
 				const customAttackBonus = weapon.customAttackBonus || 0;
 				const customDamageBonus = weapon.customDamageBonus || 0;
-				
+
 				const autoAttack = {
 					id: `auto_${weapon.id}`,
 					// Use overrides if present, otherwise use weapon defaults
@@ -1124,8 +1123,8 @@ class CharacterSheetCombat {
 		const propertyNames = (attack.properties || [])
 			.map(p => this._formatProperty(p))
 			.filter(Boolean);
-		const propertiesHtml = propertyNames.length 
-			? `<span class="ve-small ve-muted">(${propertyNames.join(", ")})</span>` 
+		const propertiesHtml = propertyNames.length
+			? `<span class="ve-small ve-muted">(${propertyNames.join(", ")})</span>`
 			: "";
 
 		// Format mastery
@@ -1153,13 +1152,13 @@ class CharacterSheetCombat {
 		let badgeHtml = "";
 		if (attack.isUnarmedStrike) {
 			if (attack.isMonkWeapon) {
-				badgeHtml = ' <span class="badge badge-warning" title="Monk Unarmed Strike with Martial Arts">Monk</span>';
+				badgeHtml = " <span class=\"badge badge-warning\" title=\"Monk Unarmed Strike with Martial Arts\">Monk</span>";
 			}
 			// No badge for regular unarmed strike - it's just normal
 		} else if (isNaturalWeapon) {
-			badgeHtml = ' <span class="badge badge-info" title="Natural Weapon from feature">Natural</span>';
+			badgeHtml = " <span class=\"badge badge-info\" title=\"Natural Weapon from feature\">Natural</span>";
 		} else if (isAutoGenerated) {
-			badgeHtml = ' <span class="badge badge-secondary">Auto</span>';
+			badgeHtml = " <span class=\"badge badge-secondary\">Auto</span>";
 		}
 
 		return $(`
@@ -1206,7 +1205,7 @@ class CharacterSheetCombat {
 				// Fall back to basic formatting
 			}
 		}
-		
+
 		// Basic property code mapping
 		const propMap = {
 			"A": "Ammunition",
@@ -1222,7 +1221,7 @@ class CharacterSheetCombat {
 			"2H": "Two-Handed",
 			"V": "Versatile",
 		};
-		
+
 		// Extract property code (before |)
 		const code = prop.split("|")[0].toUpperCase();
 		return propMap[code] || code;
@@ -1380,7 +1379,7 @@ class CharacterSheetCombat {
 	render () {
 		// Always refresh state reference from page at start of render
 		this._state = this._page.getState();
-		
+
 		this.renderAttacks();
 		this.renderDeathSaves();
 		this.renderCombatSpells();
@@ -1407,16 +1406,16 @@ class CharacterSheetCombat {
 		if (!$container.length) return;
 
 		const features = this._state.getFeatures();
-		
+
 		// Filter for combat-relevant features that have action economy
 		const combatActions = features.filter(f => {
 			if (!f.description) return false;
 			const desc = f.description.toLowerCase();
 			const nameLower = f.name?.toLowerCase() || "";
-			
+
 			// Skip combat methods (they have their own section)
 			if (f.optionalFeatureTypes?.some(ft => /^CTM:\d?[A-Z]{2}$/.test(ft))) return false;
-			
+
 			// Exclude non-combat features explicitly
 			const excludePatterns = [
 				"suggested characteristics",
@@ -1449,11 +1448,11 @@ class CharacterSheetCombat {
 					return false;
 				}
 			}
-			
+
 			// Must have actual action economy to be considered a combat action
 			// More strict: require specific action phrasing, not just "you can use"
 			const hasActionEconomy = /\b(as a bonus action|bonus action to|as an action|use your action|take the \w+ action|as a reaction|use your reaction)\b/i.test(desc);
-			
+
 			// Check for combat-specific keywords in NAME (not description, too broad)
 			const combatKeywords = [
 				"aggressive", "charge", "ram", "breath weapon", "relentless",
@@ -1469,16 +1468,16 @@ class CharacterSheetCombat {
 				"metamagic",
 				"arcane recovery",
 			];
-			
+
 			const hasCombatKeyword = combatKeywords.some(kw => nameLower.includes(kw));
-			
+
 			// Include if:
 			// 1. Has explicit action economy AND (has uses OR combat keyword in name), OR
 			// 2. Has combat keyword in name AND has uses
 			const hasLimitedUses = f.uses && f.uses.max > 0;
-			
-			return (hasActionEconomy && (hasLimitedUses || hasCombatKeyword)) || 
-				   (hasCombatKeyword && hasLimitedUses);
+
+			return (hasActionEconomy && (hasLimitedUses || hasCombatKeyword))
+				   || (hasCombatKeyword && hasLimitedUses);
 		});
 
 		// Sort: features with uses first, then by feature type, then by name
@@ -1487,12 +1486,12 @@ class CharacterSheetCombat {
 			const bHasUses = b.uses && b.uses.max > 0;
 			if (aHasUses && !bHasUses) return -1;
 			if (!aHasUses && bHasUses) return 1;
-			
+
 			const typeOrder = ["Species", "Subrace", "Class", "Background", "Other"];
 			const aType = typeOrder.indexOf(a.featureType) !== -1 ? typeOrder.indexOf(a.featureType) : 999;
 			const bType = typeOrder.indexOf(b.featureType) !== -1 ? typeOrder.indexOf(b.featureType) : 999;
 			if (aType !== bType) return aType - bType;
-			
+
 			return (a.name || "").localeCompare(b.name || "");
 		});
 
@@ -1517,7 +1516,7 @@ class CharacterSheetCombat {
 	_createCombatActionElement (feature) {
 		const featureId = `${feature.name}-${feature.source || ""}`.replace(/\s+/g, "-").toLowerCase();
 		const hasUses = feature.uses && feature.uses.max > 0;
-		
+
 		// Determine action type icon
 		const desc = feature.description?.toLowerCase() || "";
 		let actionIcon = "⚔️";
@@ -1532,16 +1531,16 @@ class CharacterSheetCombat {
 			actionIcon = "✨";
 			actionType = "Free";
 		}
-		
+
 		// Get feature type badge
-		const typeBadge = feature.featureType ? 
-			`<span class="badge badge-${this._getFeatureTypeBadgeClass(feature.featureType)} mr-1 ve-small">${feature.featureType}</span>` : "";
-		
+		const typeBadge = feature.featureType
+			? `<span class="badge badge-${this._getFeatureTypeBadgeClass(feature.featureType)} mr-1 ve-small">${feature.featureType}</span>` : "";
+
 		// Build uses display if applicable
 		let usesHtml = "";
 		if (hasUses) {
-			const rechargeIcon = feature.uses.recharge === "short" ? "☀️" : 
-				(feature.uses.recharge === "long" ? "🌙" : "");
+			const rechargeIcon = feature.uses.recharge === "short" ? "☀️"
+				: (feature.uses.recharge === "long" ? "🌙" : "");
 			usesHtml = `
 				<div class="charsheet__combat-action-uses">
 					<span class="charsheet__combat-action-uses-label">${feature.uses.current}/${feature.uses.max}</span>
@@ -1549,11 +1548,11 @@ class CharacterSheetCombat {
 				</div>
 			`;
 		}
-		
+
 		// Get hover link if possible - try multiple approaches
 		let nameHtml = feature.name;
 		let hasHoverLink = false;
-		
+
 		if (this._page?.getHoverLink && feature.source) {
 			try {
 				// Try to get hover link based on feature type
@@ -1564,7 +1563,7 @@ class CharacterSheetCombat {
 					// Class features - use proper page and hash
 					const storedClass = this._state.getClasses()?.find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
 					const classSource = feature.classSource || feature.source || storedClass?.source || Parser.SRC_XPHB;
-					
+
 					const hashInput = {
 						name: feature.name,
 						className: feature.className,
@@ -1584,10 +1583,10 @@ class CharacterSheetCombat {
 				// Fallback to plain name
 			}
 		}
-		
+
 		// If no hover link, show description in a tooltip on click
 		const tooltipDesc = this._cleanDescriptionForTooltip(feature.description);
-		
+
 		const $action = $(`
 			<div class="charsheet__combat-action-item ${hasHoverLink ? "" : "charsheet__combat-action-clickable"}" 
 				data-action-id="${featureId}" 
@@ -1642,7 +1641,7 @@ class CharacterSheetCombat {
 
 		// Spend a use
 		feature.uses.current--;
-		
+
 		// Update state
 		const features = this._state.getFeatures();
 		const idx = features.findIndex(f => f.name === feature.name && f.source === feature.source);
@@ -1698,11 +1697,11 @@ class CharacterSheetCombat {
 			const conditionName = condObj.name;
 			const conditionSource = condObj.source;
 			const conditionDef = CharacterSheetState.getConditionEffects(conditionName);
-			
+
 			const icon = conditionDef?.icon || "⚠️";
 			const description = conditionDef?.description || conditionName;
 			const sourceAbbr = Parser.sourceJsonToAbv(conditionSource);
-			
+
 			// Build tooltip with effects
 			let tooltip = `${conditionName} (${sourceAbbr}): ${description}`;
 			if (conditionDef?.effects?.length) {
@@ -1717,10 +1716,10 @@ class CharacterSheetCombat {
 					return null;
 				}).filter(Boolean);
 				if (effectList.length) {
-					tooltip += "\n" + effectList.join("\n");
+					tooltip += `\n${effectList.join("\n")}`;
 				}
 			}
-			
+
 			const $condition = $(`
 				<div class="charsheet__combat-condition badge badge-warning mr-1 mb-1" 
 					title="${tooltip}" data-condition-name="${conditionName}" data-condition-source="${conditionSource}">
@@ -1804,8 +1803,8 @@ class CharacterSheetCombat {
 		const $vulnerabilities = $("#charsheet-vulnerabilities");
 		if ($vulnerabilities.length) {
 			if (allVulnerabilities.length) {
-				$vulnerabilities.html(allVulnerabilities.map(v => 
-					`<span class="badge badge-danger mr-1">${this._formatDamageType(v)}</span>`
+				$vulnerabilities.html(allVulnerabilities.map(v =>
+					`<span class="badge badge-danger mr-1">${this._formatDamageType(v)}</span>`,
 				).join(""));
 			} else {
 				$vulnerabilities.html(`<span class="ve-muted">—</span>`);
@@ -1860,7 +1859,7 @@ class CharacterSheetCombat {
 
 		// Get all active state effects
 		const stateEffects = this._state.getActiveStateEffects?.() || [];
-		
+
 		// Get conditions
 		const conditions = this._state.getConditions?.() || [];
 
@@ -1877,7 +1876,7 @@ class CharacterSheetCombat {
 
 		for (const effect of stateEffects) {
 			const source = effect.stateName || "Active State";
-			
+
 			switch (effect.type) {
 				case "advantage":
 					// Check if this is "attacks against" (enemy's advantage) vs your own advantage
@@ -1989,7 +1988,7 @@ class CharacterSheetCombat {
 			$container.append($advSection);
 		}
 
-		// Disadvantage section  
+		// Disadvantage section
 		if (disadvantageTypes.size > 0) {
 			const $disadvSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
 			$disadvSection.append(`<div class="ve-small ve-bold text-danger mb-1">⬇️ Disadvantage On:</div>`);
@@ -2072,7 +2071,7 @@ class CharacterSheetCombat {
 	 */
 	_formatEffectTarget (target) {
 		if (!target) return "Unknown";
-		
+
 		const targetLabels = {
 			"attack": "Attack Rolls",
 			"attackRoll": "Attack Rolls",
@@ -2142,22 +2141,22 @@ class CharacterSheetCombat {
 		const combatResources = resources.filter(r => {
 			const name = r.name.toLowerCase();
 			// Include combat-relevant resources
-			return name.includes("rage") ||
-				name.includes("ki") ||
-				name.includes("focus") ||
-				name.includes("sorcery") ||
-				name.includes("superiority") ||
-				name.includes("exertion") ||
-				name.includes("channel") ||
-				name.includes("wild shape") ||
-				name.includes("bardic") ||
-				name.includes("action surge") ||
-				name.includes("second wind") ||
-				name.includes("smite") ||
-				name.includes("lay on hands") ||
-				name.includes("arcane recovery") ||
-				name.includes("sneak attack") || // Not a resource but might be tracked
-				r.recharge; // Any resource with recharge is likely combat-relevant
+			return name.includes("rage")
+				|| name.includes("ki")
+				|| name.includes("focus")
+				|| name.includes("sorcery")
+				|| name.includes("superiority")
+				|| name.includes("exertion")
+				|| name.includes("channel")
+				|| name.includes("wild shape")
+				|| name.includes("bardic")
+				|| name.includes("action surge")
+				|| name.includes("second wind")
+				|| name.includes("smite")
+				|| name.includes("lay on hands")
+				|| name.includes("arcane recovery")
+				|| name.includes("sneak attack") // Not a resource but might be tracked
+				|| r.recharge; // Any resource with recharge is likely combat-relevant
 		});
 
 		if (!combatResources.length) {
@@ -2210,28 +2209,28 @@ class CharacterSheetCombat {
 
 		// Refresh state reference in case called independently (not via render())
 		this._state = this._page.getState();
-		
+
 		$container.empty();
-		
+
 		const allStates = this._state?.getActiveStates?.() || [];
 		// Filter for only currently active, non-condition states
 		const activeStates = allStates.filter(s => s.active && !s.isCondition);
-		
+
 		// Also check for concentration
 		const concentration = this._state.getConcentration?.();
-		
+
 		// Get activatable features (same as Overview tab)
 		const activatableFeatures = this._state.getActivatableFeatures?.() || [];
 		const availableFeatures = activatableFeatures.filter(af => !af.isActive);
-		
+
 		// === Section 1: Currently Active States ===
 		const hasActiveStates = activeStates.length > 0 || concentration;
-		
+
 		if (hasActiveStates) {
 			const $activeSection = $(`<div class="charsheet__combat-active-section mb-2">
 				<div class="ve-small ve-bold text-success mb-1">● Currently Active</div>
 			</div>`);
-			
+
 			// Render concentration first if active
 			if (concentration) {
 				const $conc = $(`
@@ -2250,7 +2249,7 @@ class CharacterSheetCombat {
 				});
 				$activeSection.append($conc);
 			}
-			
+
 			for (const state of activeStates) {
 				const stateType = CharacterSheetState.ACTIVE_STATE_TYPES?.[state.stateTypeId];
 				const tooltipParts = [];
@@ -2260,7 +2259,7 @@ class CharacterSheetCombat {
 					if (effectsStr) tooltipParts.push(`Effects: ${effectsStr}`);
 				}
 				const tooltip = tooltipParts.join("\n");
-				
+
 				// Try to create hoverable name from source feature
 				let stateNameHtml = state.name || stateType?.name || state.stateTypeId;
 				if (state.sourceFeatureId) {
@@ -2269,10 +2268,10 @@ class CharacterSheetCombat {
 						stateNameHtml = this._page._getFeatureHoverLink?.(feature) || stateNameHtml;
 					}
 				}
-				
+
 				// Check if this state can be manually ended
 				const isEndable = this._isStateEndable(state, stateType);
-				
+
 				const $state = $(`
 					<div class="charsheet__combat-state-item badge ${this._getStateBadgeClass(state.stateTypeId)} mr-1 mb-1" data-state-id="${state.id}" title="${tooltip}">
 						${state.icon || stateType?.icon || "⚡"} <span class="charsheet__state-name-link">${stateNameHtml}</span>
@@ -2295,29 +2294,29 @@ class CharacterSheetCombat {
 
 				$activeSection.append($state);
 			}
-			
+
 			$container.append($activeSection);
 		}
-		
+
 		// === Section 2: Available to Activate ===
 		if (availableFeatures.length > 0) {
 			const $availableSection = $(`<div class="charsheet__combat-available-section">
 				<div class="ve-small ve-muted mb-1">Available to Activate</div>
 			</div>`);
-			
+
 			availableFeatures.forEach(({feature, activationInfo, resource, stateTypeId}) => {
 				const stateType = activationInfo.stateType || CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
 				const icon = stateType?.icon || "⚡";
 				const resourceCost = resource?.cost || activationInfo.exertionCost || stateType?.resourceCost || 1;
 				const hasResourceAvailable = !resource || resource.current >= resourceCost;
-				
+
 				// Get activation action type
 				const activationAction = activationInfo.activationAction || stateType?.activationAction;
 				const actionLabel = this._getActionLabel(activationAction);
-				
+
 				// Create hoverable feature name link
 				const featureNameHtml = this._page._getFeatureHoverLink?.(feature) || feature.name;
-				
+
 				// Build resource info string
 				let resourceInfo = "";
 				let resourceTooltip = "";
@@ -2329,7 +2328,7 @@ class CharacterSheetCombat {
 					resourceInfo = `${resourceCost} Exertion`;
 					resourceTooltip = `Costs ${resourceCost} Exertion`;
 				}
-				
+
 				const $row = $(`
 					<div class="charsheet__activatable-row ve-flex-v-center py-1 px-2 mb-1 rounded" 
 						style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b)); font-size: 0.85em;">
@@ -2339,26 +2338,26 @@ class CharacterSheetCombat {
 							${actionLabel ? `<span class="ve-small ve-muted mr-1">${actionLabel}</span>` : ""}
 							${resourceInfo ? `<span class="ve-small ve-muted mr-1" title="${resourceTooltip}">${resourceInfo}</span>` : ""}
 							<button class="ve-btn ve-btn-xs ve-btn-success charsheet__activate-btn" 
-								${!hasResourceAvailable ? `disabled title="Not enough ${resource?.name || 'uses'} remaining"` : ''}>
+								${!hasResourceAvailable ? `disabled title="Not enough ${resource?.name || "uses"} remaining"` : ""}>
 								Activate
 							</button>
 						</div>
 					</div>
 				`);
-				
+
 				$row.find(".charsheet__activate-btn").on("click", () => {
 					this._page._activateFeatureState?.(feature, stateTypeId, stateType, resource, resourceCost);
 					// Sync both tabs
 					this.renderCombatStates();
 					this._page._renderActiveStates?.();
 				});
-				
+
 				$availableSection.append($row);
 			});
-			
+
 			$container.append($availableSection);
 		}
-		
+
 		// Show message if nothing to display
 		if (!hasActiveStates && availableFeatures.length === 0) {
 			$container.html(`<div class="ve-muted ve-text-center py-2">No activatable features</div>`);
@@ -2398,15 +2397,15 @@ class CharacterSheetCombat {
 			"Rage": "Rage",
 			"Bladesong": "BS",
 		};
-		
+
 		// Check for exact or partial match
 		for (const [full, short] of Object.entries(shortenings)) {
 			if (name.toLowerCase().includes(full.toLowerCase())) return short;
 		}
-		
+
 		// Default: take first word or abbreviate
 		const words = name.split(/\s+/);
-		if (words.length === 1) return name.length > 8 ? name.slice(0, 6) + "…" : name;
+		if (words.length === 1) return name.length > 8 ? `${name.slice(0, 6)}…` : name;
 		// Take initials for multi-word names
 		return words.map(w => w[0]).join("").toUpperCase();
 	}
@@ -2431,16 +2430,16 @@ class CharacterSheetCombat {
 	_isStateEndable (state, stateType) {
 		// If stateType explicitly says not endable
 		if (stateType?.isPassive || stateType?.notEndable) return false;
-		
+
 		// If it has a resource cost, it's definitely endable (activated abilities)
 		if (stateType?.resourceCost || stateType?.resourceName) return true;
-		
+
 		// Check source feature to see if it's a passive ability
 		if (state.sourceFeatureId) {
 			const feature = this._state.getFeatures?.().find(f => f.id === state.sourceFeatureId);
 			if (feature) {
 				const name = feature.name?.toLowerCase() || "";
-				
+
 				// Passive abilities that shouldn't be endable (truly passive, always-on effects)
 				const passivePatterns = [
 					/^unarmored defense$/i,
@@ -2449,11 +2448,11 @@ class CharacterSheetCombat {
 					/^observant$/i,
 					/^alert$/i,
 				];
-				
+
 				if (passivePatterns.some(p => p.test(name))) return false;
 			}
 		}
-		
+
 		return true;
 	}
 
@@ -2461,7 +2460,7 @@ class CharacterSheetCombat {
 		// Only show Rage button if rage resource exists in parsed data
 		const hasRageResource = this._state.getResources?.()?.some(r => r.name.toLowerCase().includes("rage"));
 		$("#charsheet-combat-rage").toggle(!!hasRageResource);
-		
+
 		// Show Concentration button if character has spellcasting
 		// getSpellSlots returns an object keyed by level, not an array
 		const spellSlots = this._state.getSpellSlots?.() || {};
@@ -2622,20 +2621,20 @@ class CharacterSheetCombat {
 			// Roll CON save
 			const conMod = this._state.getAbilityMod?.("con") || 0;
 			const profBonus = this._state.getProficiencyBonus?.() || 0;
-			
+
 			// Check if character has proficiency in CON saves
 			const saves = this._state.getSavingThrowProficiencies?.() || [];
 			const hasConProf = saves.includes("con") || saves.includes("constitution");
-			
+
 			// Check for War Caster feat (advantage on concentration saves)
 			const features = this._state.getFeatures?.() || [];
-			const hasWarCaster = features.some(f => 
-				f.name?.toLowerCase().includes("war caster") || 
-				f.name?.toLowerCase().includes("warcaster")
+			const hasWarCaster = features.some(f =>
+				f.name?.toLowerCase().includes("war caster")
+				|| f.name?.toLowerCase().includes("warcaster"),
 			);
 
 			const totalBonus = conMod + (hasConProf ? profBonus : 0);
-			
+
 			// Roll the d20
 			const roll1 = this._page.rollDice(1, 20);
 			const roll2 = hasWarCaster ? this._page.rollDice(1, 20) : null;
@@ -2679,13 +2678,13 @@ class CharacterSheetCombat {
 		$rageBtn.toggleClass("active", rageActive);
 		$rageBtn.toggleClass("ve-btn-warning", rageActive).toggleClass("ve-btn-danger", !rageActive);
 		$rageBtn.text(rageActive ? "End Rage" : "Rage");
-		
+
 		const dodgeActive = this._state.isStateTypeActive?.("dodge") || false;
 		const $dodgeBtn = $("#charsheet-combat-dodge");
 		$dodgeBtn.toggleClass("active", dodgeActive);
 		$dodgeBtn.toggleClass("ve-btn-warning", dodgeActive).toggleClass("ve-btn-primary", !dodgeActive);
 		$dodgeBtn.text(dodgeActive ? "End Dodge" : "Dodge");
-		
+
 		const concentrating = this._state.isConcentrating?.() || false;
 		const $concBtn = $("#charsheet-combat-concentrate");
 		$concBtn.toggleClass("active", concentrating);
@@ -2872,12 +2871,12 @@ class CharacterSheetCombat {
 		if (method) {
 			// Check if this is a stance (typically has duration) vs instant effect
 			const isStance = this._isMethodStance(method);
-			
+
 			if (isStance) {
 				// Parse effects from description
 				const description = method.entries ? JSON.stringify(method.entries) : "";
 				const parsedEffects = CharacterSheetState.parseEffectsFromDescription?.(description) || [];
-				
+
 				// Activate as a combat stance state
 				this._state.activateState("combatStance", {
 					name: method.name,
@@ -2886,13 +2885,13 @@ class CharacterSheetCombat {
 					description: description,
 					customEffects: parsedEffects.length > 0 ? parsedEffects : null,
 				});
-				
+
 				this.renderCombatStates();
 				this.renderCombatEffects(); // Show stance effects
 				this._page._renderActiveStates?.();
 				this._page._saveCurrentCharacter?.();
 				this._page._renderCharacter?.(); // Re-render character to apply effects
-				
+
 				JqueryUtil.doToast({type: "success", content: `Activated ${method.name}! (−${cost} exertion)`});
 			} else {
 				// Instant effect - just show feedback
@@ -2915,10 +2914,10 @@ class CharacterSheetCombat {
 	_isMethodStance (method) {
 		// Quick check: if "Stance" is in the name
 		if (method.name?.toLowerCase().includes("stance")) return true;
-		
+
 		if (!method.entries) return false;
 		const entriesStr = JSON.stringify(method.entries).toLowerCase();
-		
+
 		// Check for duration indicators
 		const stanceIndicators = [
 			"until the start of your next turn",
@@ -2932,7 +2931,7 @@ class CharacterSheetCombat {
 			"you maintain",
 			"concentration",
 		];
-		
+
 		return stanceIndicators.some(indicator => entriesStr.includes(indicator));
 	}
 
@@ -2968,7 +2967,7 @@ class CharacterSheetCombat {
 
 		// Update resource pips in the resources section
 		// Filled = available, empty = used
-		const $resourcePips = $('[data-resource-id="exertion"] .charsheet__resource-pip--exertion');
+		const $resourcePips = $("[data-resource-id=\"exertion\"] .charsheet__resource-pip--exertion");
 		if ($resourcePips.length) {
 			$resourcePips.each((i, pip) => {
 				$(pip).toggleClass("used", i >= current); // Empty (used) if index >= current available
@@ -2982,10 +2981,10 @@ class CharacterSheetCombat {
 	 */
 	async _showMethodPicker () {
 		const allOptFeatures = this._page.getOptionalFeatures() || [];
-		
+
 		// Get all combat method optional features
-		const allMethods = allOptFeatures.filter(opt => 
-			opt.featureType?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft))
+		const allMethods = allOptFeatures.filter(opt =>
+			opt.featureType?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft)),
 		);
 
 		if (allMethods.length === 0) {
@@ -2995,11 +2994,11 @@ class CharacterSheetCombat {
 
 		// Get character's selected traditions
 		let selectedTraditions = this._getCharacterTraditions();
-		
+
 		// Get currently known methods
-		const knownMethods = this._state.getFeatures().filter(f => 
-			f.featureType === "Optional Feature" &&
-			f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft))
+		const knownMethods = this._state.getFeatures().filter(f =>
+			f.featureType === "Optional Feature"
+			&& f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft)),
 		);
 		const knownMethodNames = new Set(knownMethods.map(m => `${m.name}|${m.source || ""}`));
 
@@ -3090,9 +3089,9 @@ class CharacterSheetCombat {
 			editMode = !editMode;
 			$tradsDisplay.toggle(!editMode);
 			$tradsEdit.toggle(editMode);
-			$toggleBtn.html(editMode 
-				? '<span class="glyphicon glyphicon-ok"></span> Done' 
-				: '<span class="glyphicon glyphicon-pencil"></span> Edit'
+			$toggleBtn.html(editMode
+				? "<span class=\"glyphicon glyphicon-ok\"></span> Done"
+				: "<span class=\"glyphicon glyphicon-pencil\"></span> Edit",
 			);
 			if (!editMode) {
 				renderTradsDisplay();
@@ -3122,9 +3121,9 @@ class CharacterSheetCombat {
 				</select>
 				<select class="form-control form-control-sm charsheet__method-picker-filter-select" id="method-picker-degree" style="min-width: 100px;">
 					<option value="all">All Degrees</option>
-					${[1, 2, 3, 4, 5].filter(d => d <= maxDegree).map(d => 
-						`<option value="${d}">${d}${this._getOrdinalSuffix(d)} Degree</option>`
-					).join("")}
+					${[1, 2, 3, 4, 5].filter(d => d <= maxDegree).map(d =>
+		`<option value="${d}">${d}${this._getOrdinalSuffix(d)} Degree</option>`,
+	).join("")}
 				</select>
 				<select class="form-control form-control-sm charsheet__method-picker-filter-select" id="method-picker-filter" style="min-width: 90px;">
 					<option value="all">All</option>
@@ -3194,10 +3193,23 @@ class CharacterSheetCombat {
 	 */
 	_getTraditionIcons () {
 		return {
-			"AM": "🏔️", "AK": "✨", "BU": "🐺", "BZ": "💨", "CJ": "🎭",
-			"EB": "🌑", "GH": "💖", "MG": "🪞", "MS": "🌫️", "RC": "🌊",
-			"RE": "🗡️", "SK": "🩸", "SS": "🐎", "TI": "⚔️", "TC": "🦷",
-			"UW": "☯️", "UH": "🦅",
+			"AM": "🏔️",
+			"AK": "✨",
+			"BU": "🐺",
+			"BZ": "💨",
+			"CJ": "🎭",
+			"EB": "🌑",
+			"GH": "💖",
+			"MG": "🪞",
+			"MS": "🌫️",
+			"RC": "🌊",
+			"RE": "🗡️",
+			"SK": "🩸",
+			"SS": "🐎",
+			"TI": "⚔️",
+			"TC": "🦷",
+			"UW": "☯️",
+			"UH": "🦅",
 		};
 	}
 
@@ -3213,8 +3225,8 @@ class CharacterSheetCombat {
 			const classData = this._page.getClasses?.().find(c => c.name === cls.name && c.source === cls.source);
 			if (!classData?.optionalfeatureProgression) continue;
 
-			const cmProg = classData.optionalfeatureProgression.find(prog => 
-				prog.featureType?.some(ft => ft.startsWith("CTM:"))
+			const cmProg = classData.optionalfeatureProgression.find(prog =>
+				prog.featureType?.some(ft => ft.startsWith("CTM:")),
 			);
 			if (!cmProg?.progression) continue;
 
@@ -3285,7 +3297,7 @@ class CharacterSheetCombat {
 			$chip.find("input").on("change", function () {
 				const code = $chip.data("trad");
 				const checked = $(this).is(":checked");
-				
+
 				if (checked && !selectedTraditions.includes(code)) {
 					selectedTraditions.push(code);
 				} else if (!checked) {
@@ -3326,8 +3338,8 @@ class CharacterSheetCombat {
 			const tradCode = this._getMethodTraditionFromOptFeature(method);
 			const key = `${method.name}|${method.source || ""}`;
 			const isKnown = knownMethodNames.has(key);
-			
-			// Known methods should always appear (so they can be removed), 
+
+			// Known methods should always appear (so they can be removed),
 			// even if their tradition is no longer selected
 			if (!isKnown && !selectedTraditions.includes(tradCode)) return false;
 
@@ -3383,10 +3395,23 @@ class CharacterSheetCombat {
 
 		// Tradition icons mapping
 		const tradIcons = {
-			"AM": "🏔️", "AK": "✨", "BU": "🐺", "BZ": "💨", "CJ": "🎭",
-			"EB": "🌑", "GH": "💖", "MG": "🪞", "MS": "🌫️", "RC": "🌊",
-			"RE": "🗡️", "SK": "🩸", "SS": "🐎", "TI": "⚔️", "TC": "🦷",
-			"UW": "☯️", "UH": "🦅",
+			"AM": "🏔️",
+			"AK": "✨",
+			"BU": "🐺",
+			"BZ": "💨",
+			"CJ": "🎭",
+			"EB": "🌑",
+			"GH": "💖",
+			"MG": "🪞",
+			"MS": "🌫️",
+			"RC": "🌊",
+			"RE": "🗡️",
+			"SK": "🩸",
+			"SS": "🐎",
+			"TI": "⚔️",
+			"TC": "🦷",
+			"UW": "☯️",
+			"UH": "🦅",
 		};
 
 		// Get all tradition codes that have methods to show (selected + those with known methods)
@@ -3409,10 +3434,10 @@ class CharacterSheetCombat {
 
 			const isSelectedTradition = selectedTraditions.includes(tradCode);
 			const $tradGroup = $(`
-				<div class="charsheet__method-picker-trad-group ${!isSelectedTradition ? 'charsheet__method-picker-trad-group--unselected' : ''}">
+				<div class="charsheet__method-picker-trad-group ${!isSelectedTradition ? "charsheet__method-picker-trad-group--unselected" : ""}">
 					<div class="charsheet__method-picker-trad-group-header">
 						<span class="charsheet__method-picker-trad-group-icon">${tradIcons[tradCode] || "⚔️"}</span>
-						<span class="charsheet__method-picker-trad-group-name">${this._getTraditionName(tradCode)}${!isSelectedTradition ? ' (not selected)' : ''}</span>
+						<span class="charsheet__method-picker-trad-group-name">${this._getTraditionName(tradCode)}${!isSelectedTradition ? " (not selected)" : ""}</span>
 						<span class="charsheet__method-picker-trad-group-count">${methods.length}</span>
 					</div>
 				</div>
@@ -3455,7 +3480,7 @@ class CharacterSheetCombat {
 				const $method = $(`
 					<div class="charsheet__method-picker-item ${isKnown ? "charsheet__method-picker-item--known" : ""}">
 						<div class="charsheet__method-picker-item-content">
-							${isKnown ? '<span class="glyphicon glyphicon-ok charsheet__method-picker-item-known-icon"></span>' : ""}
+							${isKnown ? "<span class=\"glyphicon glyphicon-ok charsheet__method-picker-item-known-icon\"></span>" : ""}
 							<span class="charsheet__method-picker-item-name">${methodNameHtml}</span>
 							<span class="charsheet__method-badge charsheet__method-badge--degree">${degree}${this._getOrdinalSuffix(degree)}</span>
 							${actClass ? `<span class="charsheet__method-badge ${actClass}">${activationLabels[activation]}</span>` : ""}
@@ -3463,14 +3488,14 @@ class CharacterSheetCombat {
 							${isStance ? `<span class="charsheet__method-badge charsheet__method-badge--stance">Stance</span>` : ""}
 						</div>
 						<div class="charsheet__method-picker-item-actions">
-							${isKnown 
-								? `<button class="charsheet__method-picker-btn charsheet__method-picker-btn--remove charsheet__method-remove" data-method-key="${key}">
+							${isKnown
+		? `<button class="charsheet__method-picker-btn charsheet__method-picker-btn--remove charsheet__method-remove" data-method-key="${key}">
 									<span class="glyphicon glyphicon-minus"></span>
 								</button>`
-								: `<button class="charsheet__method-picker-btn charsheet__method-picker-btn--add charsheet__method-add" data-method-key="${key}">
+		: `<button class="charsheet__method-picker-btn charsheet__method-picker-btn--add charsheet__method-add" data-method-key="${key}">
 									<span class="glyphicon glyphicon-plus"></span>
 								</button>`
-							}
+}
 						</div>
 					</div>
 				`);
@@ -3515,9 +3540,9 @@ class CharacterSheetCombat {
 		}
 
 		// Infer from known combat methods
-		const knownMethods = this._state.getFeatures().filter(f => 
-			f.featureType === "Optional Feature" &&
-			f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft))
+		const knownMethods = this._state.getFeatures().filter(f =>
+			f.featureType === "Optional Feature"
+			&& f.optionalFeatureTypes?.some(ft => /^CTM:\d[A-Z]{2}$/.test(ft)),
 		);
 
 		const traditions = new Set();
@@ -3527,7 +3552,6 @@ class CharacterSheetCombat {
 				if (match) traditions.add(match[1]);
 			}
 		}
-
 
 		return Array.from(traditions);
 	}
@@ -3554,8 +3578,8 @@ class CharacterSheetCombat {
 			const classData = this._page.getClasses?.().find(c => c.name === cls.name && c.source === cls.source);
 			if (!classData?.optionalfeatureProgression) continue;
 
-			const cmProg = classData.optionalfeatureProgression.find(prog => 
-				prog.featureType?.some(ft => ft.startsWith("CTM:"))
+			const cmProg = classData.optionalfeatureProgression.find(prog =>
+				prog.featureType?.some(ft => ft.startsWith("CTM:")),
 			);
 			if (!cmProg) continue;
 
@@ -3567,7 +3591,7 @@ class CharacterSheetCombat {
 			else if (level >= 13) degree = 4;
 			else if (level >= 9) degree = 3;
 			else if (level >= 5) degree = 2;
-			
+
 			maxDegree = Math.max(maxDegree, degree);
 		}
 
@@ -3628,14 +3652,14 @@ class CharacterSheetCombat {
 	_getMethodExertionCostFromOptFeature (method) {
 		// First check consumes.amount
 		if (method.consumes?.amount) return method.consumes.amount;
-		
+
 		if (!method.entries) return 0;
 		const entriesStr = JSON.stringify(method.entries);
-		
+
 		// Parse from entries like "{@b Action (2 Exertion Points)}"
 		const costMatch = entriesStr.match(/\((\d+)\s+exertion\s+points?\)/i);
 		if (costMatch) return parseInt(costMatch[1]);
-		
+
 		return 0;
 	}
 
@@ -3645,12 +3669,12 @@ class CharacterSheetCombat {
 	_getMethodActivationTime (method) {
 		if (!method.entries) return null;
 		const entriesStr = JSON.stringify(method.entries);
-		
+
 		// Look for patterns like "{@b Action", "{@b Bonus Action", "{@b Reaction"
 		if (entriesStr.includes("{@b Reaction")) return "R";
 		if (entriesStr.includes("{@b Bonus Action")) return "BA";
 		if (entriesStr.includes("{@b Action")) return "A";
-		
+
 		return null;
 	}
 

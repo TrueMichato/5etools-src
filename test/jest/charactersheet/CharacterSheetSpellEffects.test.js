@@ -1,7 +1,7 @@
 /**
  * Character Sheet Spell Effects - Unit Tests
  * Tests for spell effect parsing, application, and verification against official spells
- * 
+ *
  * This test suite verifies the spell effect system:
  * 1. Spell effect parsing from spell data
  * 2. Target selection logic
@@ -287,7 +287,7 @@ describe("CharacterSheetSpellEffects", () => {
 		describe("Damage Spells", () => {
 			it("should parse damage dice from spell entries", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.fireball);
-				
+
 				expect(parsed.damage).toBeDefined();
 				expect(parsed.damage.dice).toBe("8d6");
 				expect(parsed.damage.type).toBe("fire");
@@ -295,7 +295,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should parse upcast damage scaling", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.fireball);
-				
+
 				expect(parsed.upcast).toBeDefined();
 				expect(parsed.upcast.perLevel).toBe("1d6");
 				expect(parsed.upcast.type).toBe("damage");
@@ -303,7 +303,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should parse saving throw information", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.fireball);
-				
+
 				expect(parsed.savingThrow).toBeDefined();
 				expect(parsed.savingThrow.ability).toBe("dexterity");
 				expect(parsed.savingThrow.onSuccess).toBe("half");
@@ -311,7 +311,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should parse cantrip scaling", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.firebolt);
-				
+
 				expect(parsed.scaling).toBeDefined();
 				expect(parsed.scaling.type).toBe("cantrip");
 				expect(parsed.scaling.levels).toBeDefined();
@@ -321,7 +321,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should parse spell attack type", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.firebolt);
-				
+
 				expect(parsed.attack).toBeDefined();
 				expect(parsed.attack.type).toBe("ranged");
 			});
@@ -330,7 +330,7 @@ describe("CharacterSheetSpellEffects", () => {
 		describe("Healing Spells", () => {
 			it("should parse healing dice from spell entries", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.cureWounds);
-				
+
 				expect(parsed.healing).toBeDefined();
 				expect(parsed.healing.dice).toBe("2d8");
 				expect(parsed.healing.addModifier).toBe(true);
@@ -338,7 +338,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should parse upcast healing scaling", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.cureWounds);
-				
+
 				expect(parsed.upcast).toBeDefined();
 				expect(parsed.upcast.perLevel).toBe("2d8");
 				expect(parsed.upcast.type).toBe("healing");
@@ -346,7 +346,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should identify multi-target healing", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.massCureWounds);
-				
+
 				expect(parsed.healing).toBeDefined();
 				expect(parsed.target).toBeDefined();
 				expect(parsed.target.count).toBe(6);
@@ -356,20 +356,20 @@ describe("CharacterSheetSpellEffects", () => {
 		describe("Condition Spells", () => {
 			it("should parse condition infliction", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.holdPerson);
-				
+
 				expect(parsed.conditions).toBeDefined();
 				expect(parsed.conditions).toContain("paralyzed");
 			});
 
 			it("should parse concentration requirement", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.holdPerson);
-				
+
 				expect(parsed.concentration).toBe(true);
 			});
 
 			it("should parse spell duration", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.holdPerson);
-				
+
 				expect(parsed.duration).toBeDefined();
 				expect(parsed.duration.amount).toBe(1);
 				expect(parsed.duration.unit).toBe("minute");
@@ -379,7 +379,7 @@ describe("CharacterSheetSpellEffects", () => {
 		describe("Buff Spells", () => {
 			it("should parse AC bonus effects", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.shield);
-				
+
 				expect(parsed.buffs).toBeDefined();
 				const acBuff = parsed.buffs.find(b => b.target === "ac");
 				expect(acBuff).toBeDefined();
@@ -388,14 +388,14 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should parse temporary hit points", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.armorOfAgathys);
-				
+
 				expect(parsed.tempHp).toBeDefined();
 				expect(parsed.tempHp.amount).toBe(5);
 			});
 
 			it("should parse bonus dice effects", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.bless);
-				
+
 				expect(parsed.buffs).toBeDefined();
 				const rollBuff = parsed.buffs.find(b => b.type === "rollBonus");
 				expect(rollBuff).toBeDefined();
@@ -406,21 +406,21 @@ describe("CharacterSheetSpellEffects", () => {
 		describe("Target Parsing", () => {
 			it("should identify self-targeting spells", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.shield);
-				
+
 				expect(parsed.target).toBeDefined();
 				expect(parsed.target.type).toBe("self");
 			});
 
 			it("should identify touch spells", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.cureWounds);
-				
+
 				expect(parsed.target).toBeDefined();
 				expect(parsed.target.type).toBe("touch");
 			});
 
 			it("should identify area effect spells", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.fireball);
-				
+
 				expect(parsed.target).toBeDefined();
 				expect(parsed.target.type).toBe("area");
 				expect(parsed.target.shape).toBe("sphere");
@@ -429,7 +429,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 			it("should identify single-target spells", () => {
 				const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.holdPerson);
-				
+
 				expect(parsed.target).toBeDefined();
 				expect(parsed.target.type).toBe("single");
 			});
@@ -446,7 +446,7 @@ describe("CharacterSheetSpellEffects", () => {
 				3, // cast at level 3
 				state,
 			);
-			
+
 			expect(result).toBeDefined();
 			expect(result.dice).toBe("8d6");
 			expect(result.total).toBeGreaterThanOrEqual(8);
@@ -460,7 +460,7 @@ describe("CharacterSheetSpellEffects", () => {
 				5, // upcast to level 5 (2 levels higher)
 				state,
 			);
-			
+
 			expect(result.dice).toBe("10d6"); // 8d6 + 2d6
 			expect(result.total).toBeGreaterThanOrEqual(10);
 			expect(result.total).toBeLessThanOrEqual(60);
@@ -468,13 +468,13 @@ describe("CharacterSheetSpellEffects", () => {
 
 		it("should calculate cantrip damage at level 5", () => {
 			state.addClass({name: "Wizard", source: "XPHB", level: 5});
-			
+
 			const result = CharacterSheetState.calculateSpellDamage(
 				SAMPLE_SPELLS.firebolt,
 				0,
 				state,
 			);
-			
+
 			expect(result.dice).toBe("2d10"); // 2d10 at level 5
 		});
 
@@ -482,26 +482,26 @@ describe("CharacterSheetSpellEffects", () => {
 			// Set character to level 11
 			state.removeClass("Wizard");
 			state.addClass({name: "Wizard", source: "XPHB", level: 11});
-			
+
 			const result = CharacterSheetState.calculateSpellDamage(
 				SAMPLE_SPELLS.firebolt,
 				0,
 				state,
 			);
-			
+
 			expect(result.dice).toBe("3d10"); // 3d10 at level 11
 		});
 
 		it("should return half damage on successful save when applicable", () => {
 			const parsed = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.fireball);
-			
+
 			// Simulate a successful save
 			const fullDamage = 24;
 			const halfDamage = CharacterSheetState.calculateSaveDamage(
 				fullDamage,
 				parsed.savingThrow.onSuccess,
 			);
-			
+
 			expect(halfDamage).toBe(12);
 		});
 	});
@@ -516,7 +516,7 @@ describe("CharacterSheetSpellEffects", () => {
 				1, // cast at level 1
 				state,
 			);
-			
+
 			expect(result).toBeDefined();
 			expect(result.dice).toBe("2d8");
 			expect(result.modifier).toBe(3); // INT mod for Wizard
@@ -530,7 +530,7 @@ describe("CharacterSheetSpellEffects", () => {
 				3, // upcast to level 3 (2 levels higher)
 				state,
 			);
-			
+
 			expect(result.dice).toBe("6d8"); // 2d8 + 4d8
 		});
 
@@ -540,7 +540,7 @@ describe("CharacterSheetSpellEffects", () => {
 				5,
 				state,
 			);
-			
+
 			// Mass Cure Wounds adds spellcasting modifier
 			expect(result.modifier).toBe(3);
 		});
@@ -553,39 +553,39 @@ describe("CharacterSheetSpellEffects", () => {
 		it("should apply condition on failed save", () => {
 			const target = new CharacterSheetState();
 			target.setName("Target");
-			
+
 			CharacterSheetState.applySpellCondition(
 				SAMPLE_SPELLS.holdPerson,
 				target,
 				{saveResult: "failed"},
 			);
-			
+
 			expect(target.hasCondition("Paralyzed")).toBe(true);
 		});
 
 		it("should not apply condition on successful save", () => {
 			const target = new CharacterSheetState();
 			target.setName("Target");
-			
+
 			CharacterSheetState.applySpellCondition(
 				SAMPLE_SPELLS.holdPerson,
 				target,
 				{saveResult: "success"},
 			);
-			
+
 			expect(target.hasCondition("Paralyzed")).toBe(false);
 		});
 
 		it("should track spell source for condition", () => {
 			const target = new CharacterSheetState();
 			target.setName("Target");
-			
+
 			CharacterSheetState.applySpellCondition(
 				SAMPLE_SPELLS.holdPerson,
 				target,
 				{saveResult: "failed", casterName: "Test Caster"},
 			);
-			
+
 			const conditions = target.getConditions();
 			const paralyzed = conditions.find(c => c.name === "Paralyzed");
 			expect(paralyzed).toBeDefined();
@@ -601,7 +601,7 @@ describe("CharacterSheetSpellEffects", () => {
 			// Hold Person inflicts paralyzed (hostile condition on enemy)
 			const holdPersonEffects = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.holdPerson);
 			expect(holdPersonEffects.conditions).toContain("paralyzed");
-			
+
 			// Invisibility inflicts invisible (beneficial condition on ally/self)
 			const invisibilityEffects = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.invisibility);
 			expect(invisibilityEffects.conditions).toContain("invisible");
@@ -614,9 +614,9 @@ describe("CharacterSheetSpellEffects", () => {
 	describe("Buff Application", () => {
 		it("should apply AC bonus to self", () => {
 			const initialAC = state.getAc();
-			
+
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.shield, state);
-			
+
 			// Check that there's an AC buff effect
 			const effects = state.getActiveStateEffects();
 			const acBuff = effects.find(e => e.type === "bonus" && e.target === "ac");
@@ -626,21 +626,21 @@ describe("CharacterSheetSpellEffects", () => {
 
 		it("should apply temporary hit points", () => {
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.armorOfAgathys, state);
-			
+
 			const hp = state.getHp();
 			expect(hp.temp).toBe(5);
 		});
 
 		it("should apply upcast temporary hit points", () => {
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.armorOfAgathys, state, {slotLevel: 3});
-			
+
 			const hp = state.getHp();
 			expect(hp.temp).toBe(15); // 5 + (2 * 5) = 15
 		});
 
 		it("should track buff duration", () => {
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.shield, state);
-			
+
 			const activeStates = state.getActiveStates();
 			const shieldState = activeStates.find(s => s.name === "Shield");
 			expect(shieldState).toBeDefined();
@@ -663,7 +663,7 @@ describe("CharacterSheetSpellEffects", () => {
 		it("should include exhaustion penalty in Thelemar rules", () => {
 			state.setExhaustionRules("thelemar");
 			state.setExhaustion(2);
-			
+
 			// DC should be reduced by 2
 			const dc = state.getSpellSaveDC();
 			expect(dc).toBe(12); // 14 - 2
@@ -714,42 +714,42 @@ describe("CharacterSheetSpellEffects", () => {
 	describe("Spell Effect Application Integration", () => {
 		it("should apply healing to self", () => {
 			state.setHp(20, 10); // max 20, current 10
-			
+
 			const result = CharacterSheetState.applySpellEffect(
 				SAMPLE_SPELLS.cureWounds,
 				state, // caster
 				state, // target (self)
 				{slotLevel: 1, healingRoll: 10}, // Use pre-rolled value
 			);
-			
+
 			expect(result.type).toBe("healing");
 			expect(result.amount).toBe(13); // 10 (dice) + 3 (INT mod)
 		});
 
 		it("should actually update HP when healing self", () => {
 			state.setHp(30, 50); // current 30, max 50
-			
+
 			CharacterSheetState.applySpellEffect(
 				SAMPLE_SPELLS.cureWounds,
 				state,
 				state,
 				{slotLevel: 1, healingRoll: 10},
 			);
-			
+
 			const hp = state.getHp();
 			expect(hp.current).toBe(43); // 30 + 10 + 3 = 43
 		});
 
 		it("should not exceed max HP when healing", () => {
 			state.setHp(48, 50); // current 48, max 50
-			
+
 			CharacterSheetState.applySpellEffect(
 				SAMPLE_SPELLS.cureWounds,
 				state,
 				state,
 				{slotLevel: 1, healingRoll: 10}, // Would heal 13, but cap at max
 			);
-			
+
 			const hp = state.getHp();
 			expect(hp.current).toBe(50); // Capped at max
 		});
@@ -758,19 +758,19 @@ describe("CharacterSheetSpellEffects", () => {
 			const target = new CharacterSheetState();
 			target.setName("Goblin");
 			target.setHp(10, 10);
-			
+
 			// Mock dice roll
 			globalThis.Renderer = globalThis.Renderer || {};
 			globalThis.Renderer.dice = globalThis.Renderer.dice || {};
 			globalThis.Renderer.dice.parseRandomise2 = () => 28;
-			
+
 			const result = CharacterSheetState.applySpellEffect(
 				SAMPLE_SPELLS.fireball,
 				state, // caster
 				target, // target
 				{slotLevel: 3, saveResult: "failed"},
 			);
-			
+
 			expect(result.type).toBe("damage");
 			expect(result.amount).toBe(28);
 			expect(result.damageType).toBe("fire");
@@ -780,18 +780,18 @@ describe("CharacterSheetSpellEffects", () => {
 			const target = new CharacterSheetState();
 			target.setName("Rogue");
 			target.setHp(30, 30);
-			
+
 			globalThis.Renderer = globalThis.Renderer || {};
 			globalThis.Renderer.dice = globalThis.Renderer.dice || {};
 			globalThis.Renderer.dice.parseRandomise2 = () => 28;
-			
+
 			const result = CharacterSheetState.applySpellEffect(
 				SAMPLE_SPELLS.fireball,
 				state,
 				target,
 				{slotLevel: 3, saveResult: "success"},
 			);
-			
+
 			expect(result.amount).toBe(14); // Half of 28
 		});
 	});
@@ -809,7 +809,7 @@ describe("CharacterSheetSpellEffects", () => {
 					attackRoll: 18, // Mock attack roll
 				},
 			);
-			
+
 			expect(castResult.success).toBe(true);
 			expect(castResult.attackResult).toBeDefined();
 			expect(castResult.damage).toBeDefined();
@@ -817,7 +817,7 @@ describe("CharacterSheetSpellEffects", () => {
 
 		it("should execute full healing spell flow", () => {
 			state.setHp(50, 30); // max 50, current 30
-			
+
 			const castResult = CharacterSheetState.executeSpellCast(
 				SAMPLE_SPELLS.cureWounds,
 				state,
@@ -826,7 +826,7 @@ describe("CharacterSheetSpellEffects", () => {
 					slotLevel: 1,
 				},
 			);
-			
+
 			expect(castResult.success).toBe(true);
 			expect(castResult.healing).toBeDefined();
 			expect(castResult.healing.total).toBeGreaterThan(0);
@@ -835,7 +835,7 @@ describe("CharacterSheetSpellEffects", () => {
 		it("should execute full condition spell flow", () => {
 			const target = new CharacterSheetState();
 			target.setName("Enemy");
-			
+
 			const castResult = CharacterSheetState.executeSpellCast(
 				SAMPLE_SPELLS.holdPerson,
 				state,
@@ -845,7 +845,7 @@ describe("CharacterSheetSpellEffects", () => {
 					targetSaveRoll: 8, // Failed save (assuming DC 14)
 				},
 			);
-			
+
 			expect(castResult.success).toBe(true);
 			expect(castResult.conditionApplied).toBe(true);
 		});
@@ -853,7 +853,7 @@ describe("CharacterSheetSpellEffects", () => {
 		it("should set concentration for concentration spells", () => {
 			// Clear any existing concentration
 			state.breakConcentration?.();
-			
+
 			CharacterSheetState.executeSpellCast(
 				SAMPLE_SPELLS.holdPerson,
 				state,
@@ -863,7 +863,7 @@ describe("CharacterSheetSpellEffects", () => {
 					targetSaveRoll: 5, // Failed save
 				},
 			);
-			
+
 			expect(state.isConcentrating?.()).toBe(true);
 			expect(state.getConcentration?.()?.spellName).toBe("Hold Person");
 		});
@@ -875,20 +875,20 @@ describe("CharacterSheetSpellEffects", () => {
 	describe("Effect Duration Tracking", () => {
 		it("should track spell effect with duration", () => {
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.bless, state);
-			
+
 			const activeStates = state.getActiveStates();
 			const blessState = activeStates.find(s => s.name === "Bless");
-			
+
 			expect(blessState).toBeDefined();
 			expect(blessState.isSpellEffect).toBe(true);
 		});
 
 		it("should store duration info on spell effects", () => {
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.bless, state);
-			
+
 			const activeStates = state.getActiveStates();
 			const blessState = activeStates.find(s => s.name === "Bless");
-			
+
 			expect(blessState.duration).toBeDefined();
 			expect(blessState.duration.amount).toBe(1);
 			expect(blessState.duration.unit).toBe("minute");
@@ -896,14 +896,14 @@ describe("CharacterSheetSpellEffects", () => {
 
 		it("should be able to remove spell effects", () => {
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.bless, state);
-			
+
 			let activeStates = state.getActiveStates();
 			const blessState = activeStates.find(s => s.name === "Bless");
 			expect(blessState).toBeDefined();
-			
+
 			// Remove the state
 			state.removeActiveState(blessState.id);
-			
+
 			activeStates = state.getActiveStates();
 			const removedState = activeStates.find(s => s.name === "Bless");
 			expect(removedState).toBeUndefined();
@@ -911,10 +911,10 @@ describe("CharacterSheetSpellEffects", () => {
 
 		it("should mark concentration spells appropriately", () => {
 			CharacterSheetState.applySpellBuff(SAMPLE_SPELLS.bless, state);
-			
+
 			const activeStates = state.getActiveStates();
 			const blessState = activeStates.find(s => s.name === "Bless");
-			
+
 			expect(blessState.concentration).toBe(true);
 		});
 	});
@@ -931,7 +931,7 @@ describe("CharacterSheetSpellEffects", () => {
 				level: 0,
 				entries: ["You touch one object. For the duration, the object sheds bright light."],
 			};
-			
+
 			const parsed = CharacterSheetState.parseSpellEffects(lightSpell);
 			expect(parsed.damage).toBeUndefined();
 			expect(parsed.healing).toBeUndefined();
@@ -939,14 +939,14 @@ describe("CharacterSheetSpellEffects", () => {
 
 		it("should handle healing that exceeds max HP", () => {
 			state.setHp(20, 18); // max 20, current 18
-			
+
 			const result = CharacterSheetState.applySpellEffect(
 				SAMPLE_SPELLS.cureWounds,
 				state,
 				state,
 				{slotLevel: 1, healingRoll: 10},
 			);
-			
+
 			// Should cap at max HP
 			const hp = state.getHp();
 			expect(hp.current).toBeLessThanOrEqual(hp.max);
@@ -955,14 +955,14 @@ describe("CharacterSheetSpellEffects", () => {
 		it("should handle damage that reduces to 0 HP", () => {
 			const target = new CharacterSheetState();
 			target.setHp(5, 5);
-			
+
 			const result = CharacterSheetState.applySpellEffect(
 				SAMPLE_SPELLS.fireball,
 				state,
 				target,
 				{slotLevel: 3, damageRoll: 30, saveResult: "failed"},
 			);
-			
+
 			const hp = target.getHp();
 			expect(hp.current).toBe(0);
 		});
@@ -974,7 +974,7 @@ describe("CharacterSheetSpellEffects", () => {
 	describe("Condition-Granting Buff Spells", () => {
 		it("should identify Invisibility as a condition-granting spell", () => {
 			const effects = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.invisibility);
-			
+
 			expect(effects.conditions).toBeDefined();
 			expect(effects.conditions).toContain("invisible");
 			expect(effects.concentration).toBe(true);
@@ -986,34 +986,34 @@ describe("CharacterSheetSpellEffects", () => {
 		it("should apply Invisible condition when spell grants it", () => {
 			// Directly apply the condition (simulating what happens when casting on self)
 			const effects = CharacterSheetState.parseSpellEffects(SAMPLE_SPELLS.invisibility);
-			
+
 			// Apply condition
 			if (effects.conditions?.includes("invisible")) {
 				state.addCondition("Invisible");
 			}
-			
+
 			expect(state.hasCondition("Invisible")).toBe(true);
 		});
 
 		it("should get mechanical effects from the condition, not spell text", () => {
 			// Add the Invisible condition
 			state.addCondition("Invisible");
-			
+
 			// The condition definition should have its effects defined
 			const conditionDef = CharacterSheetState.getConditionEffects("Invisible");
-			
+
 			expect(conditionDef).toBeDefined();
 			expect(conditionDef.effects).toBeDefined();
-			
+
 			// The Invisible condition should provide advantage on attacks
-			const hasAttackAdvantage = conditionDef.effects.some(e => 
-				e.type === "advantage" && e.target === "attack"
+			const hasAttackAdvantage = conditionDef.effects.some(e =>
+				e.type === "advantage" && e.target === "attack",
 			);
 			expect(hasAttackAdvantage).toBe(true);
-			
+
 			// And disadvantage on attacks against
-			const hasDefenseDisadvantage = conditionDef.effects.some(e => 
-				e.type === "disadvantage" && e.target === "attacksAgainst"
+			const hasDefenseDisadvantage = conditionDef.effects.some(e =>
+				e.type === "disadvantage" && e.target === "attacksAgainst",
 			);
 			expect(hasDefenseDisadvantage).toBe(true);
 		});
@@ -1027,13 +1027,13 @@ describe("CharacterSheetSpellEffects", () => {
 				duration: {amount: 1, unit: "hour"},
 				grantsConditions: ["Invisible"],
 			});
-			
+
 			// Also add the actual condition
 			state.addCondition("Invisible");
-			
+
 			const activeStates = state.getActiveStates();
 			const invisState = activeStates.find(s => s.name === "Invisibility");
-			
+
 			expect(invisState).toBeDefined();
 			expect(invisState.grantsConditions).toContain("Invisible");
 		});
@@ -1048,10 +1048,10 @@ describe("CharacterSheetSpellEffects", () => {
 				grantsConditions: ["Invisible"],
 				customEffects: [], // Empty! Condition provides the effects
 			});
-			
+
 			const activeStates = state.getActiveStates();
 			const invisState = activeStates.find(s => s.name === "Invisibility");
-			
+
 			expect(invisState.customEffects).toEqual([]);
 		});
 	});
@@ -1062,7 +1062,7 @@ describe("CharacterSheetSpellEffects", () => {
 // =============================================================================
 describe("Spell Effect Verification Against Official Spells", () => {
 	// These tests verify the parser works correctly with various official spell patterns
-	
+
 	describe("Damage Spell Patterns", () => {
 		it("should parse {@damage XdY} pattern", () => {
 			const entry = "The target takes {@damage 3d8} force damage.";

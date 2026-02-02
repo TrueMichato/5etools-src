@@ -28,9 +28,9 @@ class CharacterSheetFeatures {
 		if (!classFeatures?.length) return null;
 
 		const match = classFeatures.find(f =>
-			f.name === feature.name &&
-			f.className === feature.className &&
-			f.level === feature.level,
+			f.name === feature.name
+			&& f.className === feature.className
+			&& f.level === feature.level,
 		);
 
 		if (match?.entries) {
@@ -47,10 +47,10 @@ class CharacterSheetFeatures {
 		if (!subclassFeatures?.length) return null;
 
 		const match = subclassFeatures.find(f =>
-			f.name === feature.name &&
-			f.className === feature.className &&
-			f.subclassShortName === (feature.subclassShortName || feature.subclassName) &&
-			f.level === feature.level,
+			f.name === feature.name
+			&& f.className === feature.className
+			&& f.subclassShortName === (feature.subclassShortName || feature.subclassName)
+			&& f.level === feature.level,
 		);
 
 		if (match?.entries) {
@@ -67,8 +67,8 @@ class CharacterSheetFeatures {
 		if (!allFeats?.length) return null;
 
 		const match = allFeats.find(f =>
-			f.name === feat.name &&
-			f.source === feat.source,
+			f.name === feat.name
+			&& f.source === feat.source,
 		);
 
 		if (match?.entries) {
@@ -193,21 +193,21 @@ class CharacterSheetFeatures {
 
 		// Build enhanced filter UI (matching spell picker)
 		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
-		
+
 		// Helper function to position dropdown towards center of modal
 		const positionDropdown = ($dropdown, $btn) => {
 			const btnRect = $btn[0].getBoundingClientRect();
 			const modalRect = $modalInner[0].getBoundingClientRect();
 			const btnCenterX = btnRect.left + btnRect.width / 2;
 			const modalCenterX = modalRect.left + modalRect.width / 2;
-			
+
 			if (btnCenterX < modalCenterX) {
 				$dropdown.addClass("open-right").removeClass("open-left");
 			} else {
 				$dropdown.removeClass("open-right").addClass("open-left");
 			}
 		};
-		
+
 		// Search input with icon
 		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
 		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search feats by name...">`).appendTo($searchWrapper);
@@ -431,9 +431,9 @@ class CharacterSheetFeatures {
 								<div class="charsheet__modal-list-item-subtitle">${prereqStr ? `Prereq: ${prereqStr} • ` : ""}${Parser.sourceJsonToAbv(feat.source)}</div>
 							</div>
 							${isKnown
-								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
-								: `<button class="ve-btn ve-btn-primary ve-btn-xs feat-picker-add">+ Add</button>`
-							}
+		? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
+		: `<button class="ve-btn ve-btn-primary ve-btn-xs feat-picker-add">+ Add</button>`
+}
 						</div>
 					`);
 
@@ -473,9 +473,9 @@ class CharacterSheetFeatures {
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => {
-			$(document).off("click.featSourceFilter");
-			doClose(false);
-		});
+				$(document).off("click.featSourceFilter");
+				doClose(false);
+			});
 	}
 
 	_formatPrerequisite (prereq) {
@@ -715,12 +715,12 @@ class CharacterSheetFeatures {
 					</div>
 				`);
 				const $groupBody = $groupContainer.find(".charsheet__feature-group-body");
-				
+
 				group.features.forEach(feature => {
 					const $feature = this._renderFeature(feature);
 					$groupBody.append($feature);
 				});
-				
+
 				$container.append($groupContainer);
 			});
 		}
@@ -751,12 +751,12 @@ class CharacterSheetFeatures {
 					</div>
 				`);
 				const $groupBody = $groupContainer.find(".charsheet__feature-group-body");
-				
+
 				group.features.forEach(feature => {
 					const $feature = this._renderFeature(feature);
 					$groupBody.append($feature);
 				});
-				
+
 				$container.append($groupContainer);
 			});
 		}
@@ -770,9 +770,9 @@ class CharacterSheetFeatures {
 
 		// Include Species, Subrace, and legacy "Race" features
 		const features = this._state.getFeatures().filter(f =>
-			f.featureType === "Species" ||
-			f.featureType === "Subrace" ||
-			f.featureType === "Race",
+			f.featureType === "Species"
+			|| f.featureType === "Subrace"
+			|| f.featureType === "Race",
 		);
 		const race = this._state.getRace();
 
@@ -859,12 +859,12 @@ class CharacterSheetFeatures {
 						// Determine the actual classSource for hover links
 						// Priority: 1. feature.classSource (if valid), 2. feature.source if it's a class source, 3. storedClass.source, 4. fallback
 						const storedClass = this._state.getClasses().find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
-						
+
 						// Check if feature.source looks like a class source (official sources like PHB, XPHB)
 						// This handles existing characters where classSource wasn't stored correctly
 						const officialClassSources = [Parser.SRC_PHB, Parser.SRC_XPHB, "PHB", "XPHB", "TCE", "XGE"];
 						const isOfficialSource = (src) => officialClassSources.includes(src?.toUpperCase?.() || src);
-						
+
 						let actualClassSource = feature.classSource;
 						// If classSource is not set or is a homebrew source but feature.source is official, use feature.source
 						if (!actualClassSource || (!isOfficialSource(actualClassSource) && isOfficialSource(feature.source))) {
@@ -874,7 +874,7 @@ class CharacterSheetFeatures {
 						if (!actualClassSource) {
 							actualClassSource = storedClass?.source || Parser.SRC_XPHB;
 						}
-						
+
 						const hashInput = {
 							name: feature.name,
 							className: feature.className,
@@ -944,15 +944,15 @@ class CharacterSheetFeatures {
 			// Key features by name OR description
 			const nameLower = feature.name?.toLowerCase() || "";
 			const descLower = feature.description?.toLowerCase() || "";
-			
+
 			// Check keyword matches
-			if (importantKeywords.some(keyword => 
+			if (importantKeywords.some(keyword =>
 				nameLower.includes(keyword) || descLower.includes(keyword),
 			)) return true;
-			
+
 			// Check activatable patterns (features that require actions/reactions)
 			if (activatablePatterns.some(pattern => pattern.test(descLower))) return true;
-			
+
 			return false;
 		};
 
@@ -1259,12 +1259,12 @@ class CharacterSheetFeatures {
 					// Determine the actual classSource for hover links
 					// Priority: 1. feature.classSource (if valid), 2. feature.source if it's a class source, 3. storedClass.source, 4. fallback
 					const storedClass = this._state.getClasses().find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
-					
+
 					// Check if feature.source looks like a class source (official sources like PHB, XPHB)
 					// This handles existing characters where classSource wasn't stored correctly
 					const officialClassSources = [Parser.SRC_PHB, Parser.SRC_XPHB, "PHB", "XPHB", "TCE", "XGE"];
 					const isOfficialSource = (src) => officialClassSources.includes(src?.toUpperCase?.() || src);
-					
+
 					let actualClassSource = feature.classSource;
 					// If classSource is not set or is a homebrew source but feature.source is official, use feature.source
 					if (!actualClassSource || (!isOfficialSource(actualClassSource) && isOfficialSource(feature.source))) {
@@ -1274,7 +1274,7 @@ class CharacterSheetFeatures {
 					if (!actualClassSource) {
 						actualClassSource = storedClass?.source || Parser.SRC_XPHB;
 					}
-					
+
 					const hashInput = {
 						name: feature.name,
 						className: feature.className,
@@ -1429,16 +1429,16 @@ class CharacterSheetFeatures {
 		// Check if character uses the combat methods system (has traditions or methods)
 		const usesCombatSystem = this._state.usesCombatSystem?.() || false;
 		console.log("[CharSheet Features] _renderResources: usesCombatSystem=", usesCombatSystem);
-		
+
 		if (usesCombatSystem) {
 			// Ensure exertion is initialized (use public method)
 			if (typeof this._state.ensureExertionInitialized === "function") {
 				this._state.ensureExertionInitialized();
 			}
-			
+
 			const exertionMax = this._state.getExertionMax() || 0;
 			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
-			
+
 			console.log("[CharSheet Features] Exertion display: max=", exertionMax, "current=", exertionCurrent);
 
 			if (exertionMax > 0) {

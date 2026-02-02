@@ -1,7 +1,7 @@
 /**
  * Character Sheet Inventory - Unit Tests
  * Tests for item management, encumbrance, AC calculation, and attunement
- * 
+ *
  * NOTE: The inventory uses a wrapper structure:
  *   { id, item: {...itemData}, quantity, equipped, attuned }
  * Methods use setItemEquipped/setItemAttuned/setItemQuantity for updates.
@@ -101,11 +101,11 @@ describe("Inventory Management", () => {
 			state.addItem({name: "Leather Armor", source: "PHB", equipped: false});
 			const items = state.getInventory();
 			const itemId = items[0].id;
-			
+
 			// Equip
 			state.setItemEquipped(itemId, true);
 			expect(state.getInventory()[0].equipped).toBe(true);
-			
+
 			// Unequip
 			state.setItemEquipped(itemId, false);
 			expect(state.getInventory()[0].equipped).toBe(false);
@@ -286,9 +286,9 @@ describe("Inventory Management", () => {
 		});
 
 		it("should calculate total wealth in GP", () => {
-			state.setCurrency("pp", 1);  // 1 pp = 10 gp
+			state.setCurrency("pp", 1); // 1 pp = 10 gp
 			state.setCurrency("gp", 10); // 10 gp
-			state.setCurrency("ep", 2);  // 2 ep = 1 gp
+			state.setCurrency("ep", 2); // 2 ep = 1 gp
 			state.setCurrency("sp", 10); // 10 sp = 1 gp
 			state.setCurrency("cp", 100); // 100 cp = 1 gp
 			// Total = 10 + 10 + 1 + 1 + 1 = 23 gp
@@ -391,7 +391,7 @@ describe("Inventory Management", () => {
 		});
 
 		it("should search inventory by name (case-insensitive)", () => {
-			const results = state.getInventory().filter(i => 
+			const results = state.getInventory().filter(i =>
 				i.item.name.toLowerCase().includes("sword"),
 			);
 			expect(results).toHaveLength(1);
@@ -399,7 +399,7 @@ describe("Inventory Management", () => {
 		});
 
 		it("should use getItems() helper for flattened search", () => {
-			const results = state.getItems().filter(i => 
+			const results = state.getItems().filter(i =>
 				i.name.toLowerCase().includes("chain"),
 			);
 			expect(results).toHaveLength(1);
