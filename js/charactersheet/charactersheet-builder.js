@@ -68,18 +68,18 @@ class CharacterSheetBuilder {
 	 */
 	_findFeatureOptions (feature, characterLevel = 1) {
 		if (!feature?.entries) return [];
-		
+
 		const results = [];
-		
+
 		const searchEntries = (entries) => {
 			if (!Array.isArray(entries)) return;
-			
+
 			for (const entry of entries) {
 				if (typeof entry === "object" && entry.type === "options") {
 					// Found an options entry
 					const count = entry.count || 1;
 					const options = [];
-					
+
 					// Process the option entries
 					if (entry.entries) {
 						for (const opt of entry.entries) {
@@ -87,7 +87,7 @@ class CharacterSheetBuilder {
 								// Parse "FeatureName|ClassName|Source|Level" format
 								const parts = opt.classFeature.split("|");
 								const optLevel = parseInt(parts[3]) || 1;
-								
+
 								// Only include options available at current level
 								if (optLevel <= characterLevel) {
 									options.push({
@@ -102,7 +102,7 @@ class CharacterSheetBuilder {
 							} else if (opt.type === "refSubclassFeature" && opt.subclassFeature) {
 								const parts = opt.subclassFeature.split("|");
 								const optLevel = parseInt(parts[5]) || 1;
-								
+
 								if (optLevel <= characterLevel) {
 									options.push({
 										name: parts[0],
@@ -130,17 +130,17 @@ class CharacterSheetBuilder {
 							}
 						}
 					}
-					
+
 					if (options.length > 0) {
 						results.push({count, options, featureName: feature.name});
 					}
 				}
-				
+
 				// Recursively search nested entries
 				if (entry.entries) {
 					searchEntries(entry.entries);
 				}
-				
+
 				// Check for features that reference another feature's options via {@classFeature ...}
 				if (typeof entry === "string") {
 					const refMatch = entry.match(/\{@classFeature\s+([^}]+)\}/);
@@ -150,7 +150,7 @@ class CharacterSheetBuilder {
 						const refClassName = refParts[1];
 						const refSource = refParts[2];
 						const refLevel = parseInt(refParts[3]) || 1;
-						
+
 						const referencedFeature = this._getClassFeatureData(refFeatureName, refClassName, refSource, refLevel);
 						if (referencedFeature) {
 							const refResults = this._findFeatureOptions(referencedFeature, characterLevel);
@@ -167,7 +167,7 @@ class CharacterSheetBuilder {
 				}
 			}
 		};
-		
+
 		searchEntries(feature.entries);
 		return results;
 	}
@@ -181,7 +181,7 @@ class CharacterSheetBuilder {
 		const parts = featureRef.split("|");
 		const [name, className, source, level] = parts;
 		const parsedLevel = parseInt(level) || 1;
-		
+
 		return this._getClassFeatureData(name, className, source, parsedLevel);
 	}
 
@@ -389,7 +389,7 @@ class CharacterSheetBuilder {
 				// Determine caster progression - check subclass first (for Eldritch Knight, etc.)
 				const casterProgressionBuilder = this._selectedSubclass?.casterProgression || this._selectedClass.casterProgression || null;
 				const spellcastingAbilityBuilder = this._selectedSubclass?.spellcastingAbility || this._selectedClass.spellcastingAbility || null;
-				
+
 				this._state.addClass({
 					name: this._selectedClass.name,
 					source: this._selectedClass.source,
@@ -440,8 +440,8 @@ class CharacterSheetBuilder {
 		const defaultData = startingEquip.defaultData || [];
 
 		// Check if this is 2024 format (uppercase keys like A, B, C)
-		const is2024Format = defaultData.length > 0 && defaultData[0] && 
-			Object.keys(defaultData[0]).some(k => /^[A-Z]$/.test(k));
+		const is2024Format = defaultData.length > 0 && defaultData[0]
+			&& Object.keys(defaultData[0]).some(k => /^[A-Z]$/.test(k));
 
 		if (is2024Format) {
 			this._apply2024EquipmentChoices(startingEquip);
@@ -465,8 +465,8 @@ class CharacterSheetBuilder {
 				// Item with optional quantity
 				const [name, source] = itemEntry.item.split("|");
 				const item = allItems.find(i =>
-					i.name.toLowerCase() === name.toLowerCase() &&
-					(!source || i.source?.toLowerCase() === source.toLowerCase()),
+					i.name.toLowerCase() === name.toLowerCase()
+					&& (!source || i.source?.toLowerCase() === source.toLowerCase()),
 				);
 				if (item) {
 					this._state.addItem(item, itemEntry.quantity || 1);
@@ -522,8 +522,8 @@ class CharacterSheetBuilder {
 				// Direct item reference like "chain mail|phb"
 				const [name, source] = itemEntry.split("|");
 				const item = allItems.find(i =>
-					i.name.toLowerCase() === name.toLowerCase() &&
-					(!source || i.source?.toLowerCase() === source.toLowerCase()),
+					i.name.toLowerCase() === name.toLowerCase()
+					&& (!source || i.source?.toLowerCase() === source.toLowerCase()),
 				);
 				if (item) {
 					this._state.addItem(item, 1);
@@ -532,8 +532,8 @@ class CharacterSheetBuilder {
 				// Item with quantity
 				const [name, source] = itemEntry.item.split("|");
 				const item = allItems.find(i =>
-					i.name.toLowerCase() === name.toLowerCase() &&
-					(!source || i.source?.toLowerCase() === source.toLowerCase()),
+					i.name.toLowerCase() === name.toLowerCase()
+					&& (!source || i.source?.toLowerCase() === source.toLowerCase()),
 				);
 				if (item) {
 					this._state.addItem(item, itemEntry.quantity || 1);
@@ -1118,7 +1118,7 @@ class CharacterSheetBuilder {
 		if (this._selectedClass.classFeatures && this._selectedClass.classFeatures.length > 0) {
 			// Get features at index 0 (level 1)
 			let level1Features = this._selectedClass.classFeatures[0];
-			
+
 			// If the first element is not an array, the classFeatures array itself contains the features
 			// (happens with some class formats where classFeatures is flat)
 			if (level1Features && !Array.isArray(level1Features)) {
@@ -1137,7 +1137,7 @@ class CharacterSheetBuilder {
 					return true; // Include if we can't determine level
 				});
 			}
-			
+
 			level1Features = level1Features || [];
 			console.log("[CharSheet Builder] Level 1 features (from index 0):", level1Features);
 
@@ -1380,16 +1380,16 @@ class CharacterSheetBuilder {
 				} else if (opt.type === "optionalfeature" && opt.ref) {
 					// Handle optional feature options (like specialties from TGTT)
 					const allOptFeatures = this._page.getOptionalFeatures();
-					
+
 					// Debug: Check what sources are available
 					const sourceSet = new Set(allOptFeatures.map(f => f.source));
 					console.log(`[CharSheet Builder] Looking for "${opt.name}" source "${opt.source}" in ${allOptFeatures.length} optionalfeatures. Available sources:`, [...sourceSet]);
-					
-					const fullOpt = allOptFeatures.find(f => 
-						f.name === opt.name && 
-						(f.source === opt.source || !opt.source),
+
+					const fullOpt = allOptFeatures.find(f =>
+						f.name === opt.name
+						&& (f.source === opt.source || !opt.source),
 					);
-					
+
 					// Debug logging
 					if (!fullOpt) {
 						// Try to find similar names to help debug
@@ -1398,9 +1398,9 @@ class CharacterSheetBuilder {
 					} else {
 						console.log(`[CharSheet Builder] Found optional feature "${opt.name}" with ${fullOpt.entries?.length || 0} entries`);
 					}
-					
+
 					const description = fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "";
-					
+
 					this._state.addFeature({
 						name: opt.name,
 						source: opt.source || fullOpt?.source,
@@ -1536,8 +1536,8 @@ class CharacterSheetBuilder {
 			// Be more flexible with source matching
 			if (source && f.source && f.source !== source) {
 				// Allow XPHB/PHB/SRD flexibility
-				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source) &&
-					[Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
+				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source)
+					&& [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
 				if (!sourcesMatch) return false;
 			}
 			return true;
@@ -1574,8 +1574,8 @@ class CharacterSheetBuilder {
 			if (f.level !== level) return false;
 			// Be more flexible with source matching
 			if (source && f.source && f.source !== source) {
-				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source) &&
-					[Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
+				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source)
+					&& [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
 				if (!sourcesMatch) return false;
 			}
 			return true;
@@ -1625,7 +1625,7 @@ class CharacterSheetBuilder {
 					const is2024 = cls.source === "XPHB" || this._selectedClass?.source === "XPHB";
 					resourceName = is2024 ? "Focus Points" : "Ki Points";
 				}
-				
+
 				// Skip if resource was already auto-added (check both Ki and Focus for monks)
 				const isMonkResource = resourceName === "Ki Points" || resourceName === "Focus Points";
 				if (isMonkResource) {
@@ -1732,7 +1732,7 @@ class CharacterSheetBuilder {
 		// Group races by base name - races with _baseName are subraces
 		// Group key is "baseName|baseSource" for subraces, or "name|source" for standalone races
 		const raceGroups = new Map();
-		
+
 		races.forEach(race => {
 			if (race._baseName && race._baseSource) {
 				// This is a subrace - group under the base race
@@ -1815,11 +1815,11 @@ class CharacterSheetBuilder {
 			sortedGroups.forEach(([groupKey, group]) => {
 				const hasSubraces = group.subraces.length > 0;
 				const displayName = group.baseName;
-				
+
 				// Check if this group is selected
 				const isSelected = this._selectedRace && (
-					(this._selectedRace._baseName === group.baseName && this._selectedRace._baseSource === group.baseSource) ||
-					(this._selectedRace.name === group.baseName && this._selectedRace.source === group.baseSource && !this._selectedRace._baseName)
+					(this._selectedRace._baseName === group.baseName && this._selectedRace._baseSource === group.baseSource)
+					|| (this._selectedRace.name === group.baseName && this._selectedRace.source === group.baseSource && !this._selectedRace._baseName)
 				);
 
 				const subraceCount = hasSubraces ? ` (${group.subraces.length} subraces)` : "";
@@ -1833,11 +1833,11 @@ class CharacterSheetBuilder {
 				$item.on("click", () => {
 					$list.find(".charsheet__builder-list-item").removeClass("active");
 					$item.addClass("active");
-					
+
 					// Reset racial proficiency selections when race group changes
 					this._selectedRacialSkills = [];
 					this._selectedRacialTools = [];
-					
+
 					if (hasSubraces) {
 						// Show subrace selection in preview
 						this._selectedRace = null;
@@ -1861,11 +1861,11 @@ class CharacterSheetBuilder {
 		// If race already selected, show preview
 		if (this._selectedRace) {
 			// Find the group this race belongs to
-			const groupKey = this._selectedRace._baseName 
+			const groupKey = this._selectedRace._baseName
 				? `${this._selectedRace._baseName}|${this._selectedRace._baseSource}`
 				: `${this._selectedRace.name}|${this._selectedRace.source}`;
 			const group = raceGroups.get(groupKey);
-			
+
 			if (group && group.subraces.length > 0) {
 				this._renderRaceGroupPreview($preview, group);
 			} else {
@@ -1898,10 +1898,10 @@ class CharacterSheetBuilder {
 		`);
 
 		const $select = $subraceSection.find("select");
-		
+
 		// Sort subraces alphabetically
 		const sortedSubraces = [...group.subraces].sort((a, b) => a.name.localeCompare(b.name));
-		
+
 		sortedSubraces.forEach((subrace, idx) => {
 			// Extract just the subrace name part from "BaseName (SubraceName)"
 			const subraceName = this._extractSubraceName(subrace.name, group.baseName);
@@ -1935,8 +1935,8 @@ class CharacterSheetBuilder {
 
 		// Pre-select if already chosen
 		if (this._selectedRace) {
-			const idx = sortedSubraces.findIndex(sr => 
-				sr.name === this._selectedRace.name && sr.source === this._selectedRace.source
+			const idx = sortedSubraces.findIndex(sr =>
+				sr.name === this._selectedRace.name && sr.source === this._selectedRace.source,
 			);
 			if (idx >= 0) {
 				$select.val(idx);
@@ -1970,9 +1970,9 @@ class CharacterSheetBuilder {
 		$container.empty();
 
 		const subraceName = this._extractSubraceName(race.name, baseName);
-		
+
 		const $details = $(`<div class="charsheet__builder-subrace-details"></div>`);
-		
+
 		$details.append(`<h5>${subraceName}</h5>`);
 
 		// Ability scores
@@ -2586,10 +2586,10 @@ class CharacterSheetBuilder {
 	_updateExpertiseSection (cls) {
 		const expertiseInfo = this._getClassExpertiseInfoEarlyLevels(cls);
 		if (!expertiseInfo || expertiseInfo.count === 0) return;
-		
+
 		const $container = $(".charsheet__builder-expertise-selection");
 		if (!$container.length) return;
-		
+
 		// Replace with new section
 		const $newSection = this._renderExpertiseSelection(cls, expertiseInfo);
 		$container.replaceWith($newSection);
@@ -2608,7 +2608,7 @@ class CharacterSheetBuilder {
 			const expertiseInfo = this._getClassExpertiseInfo(cls, level);
 			if (expertiseInfo) return expertiseInfo;
 		}
-		
+
 		// Fallback: For homebrew classes, check feature entries directly for expertise text
 		// This handles cases where feature reference matching fails
 		return this._getClassExpertiseInfoFromEntries(cls);
@@ -2634,11 +2634,11 @@ class CharacterSheetBuilder {
 		// Check each feature's entries for expertise-granting text
 		for (const feature of earlyFeatures) {
 			if (!feature.entries?.length) continue;
-			
+
 			// Check if this feature or any of its sub-entries grant expertise
 			const expertiseInfo = this._findExpertiseInEntries(feature.entries);
 			if (expertiseInfo) return expertiseInfo;
-			
+
 			// Also check the top-level entries directly
 			if (this._entryGrantsExpertise(feature.entries)) {
 				return this._parseExpertiseEntries(feature.entries);
@@ -2681,7 +2681,7 @@ class CharacterSheetBuilder {
 	 */
 	_getClassFeatureRefsAtLevel (cls, level) {
 		const features = [];
-		
+
 		for (const f of cls.classFeatures) {
 			let featureStr;
 			if (typeof f === "string") {
@@ -2833,7 +2833,7 @@ class CharacterSheetBuilder {
 	 */
 	_renderExpertiseSelection (cls, expertiseInfo) {
 		const {count, allowTools, toolName} = expertiseInfo;
-		
+
 		const $section = $(`
 			<div class="charsheet__builder-expertise-selection mt-3">
 				<p><strong>Expertise:</strong> Choose ${count} skills you're proficient in to gain expertise (double proficiency bonus):</p>
@@ -2847,7 +2847,7 @@ class CharacterSheetBuilder {
 
 		// Get available skills - must be skills the player selected for proficiency
 		const availableSkills = [...this._selectedSkills];
-		
+
 		// Optionally add thieves' tools for Rogue
 		if (allowTools && toolName) {
 			availableSkills.push(toolName);
@@ -2992,7 +2992,7 @@ class CharacterSheetBuilder {
 				else if (numWord === "three" || numWord === "3") count = 3;
 				else if (numWord === "four" || numWord === "4") count = 4;
 				else if (/^\d+$/.test(numWord)) count = parseInt(numWord);
-				
+
 				// Special case for "two additional languages of your choice" without capture group
 				if (count === 0 && entriesText.includes("two additional languages")) count = 2;
 				if (count === 0 && entriesText.includes("two languages of your choice")) count = 2;
@@ -3129,7 +3129,7 @@ class CharacterSheetBuilder {
 	_validateFeatureOptionSelections (cls, level) {
 		// Get features at this level that have options
 		const featureOptionsRequired = this._getFeatureOptionsAtLevel(cls, level);
-		
+
 		for (const {featureKey, count, name} of featureOptionsRequired) {
 			const selected = this._selectedFeatureOptions[featureKey] || [];
 			if (selected.length < count) {
@@ -3143,13 +3143,13 @@ class CharacterSheetBuilder {
 	/**
 	 * Get feature options required at a specific level
 	 * Uses same key format as _renderClassFeatureOptions: ${featureName}_${featureSource}
-	 * @param {Object} cls - Class data  
+	 * @param {Object} cls - Class data
 	 * @param {number} level - Character level
 	 * @returns {Array<{featureKey: string, count: number, name: string}>}
 	 */
 	_getFeatureOptionsAtLevel (cls, level) {
 		const result = [];
-		
+
 		// Get level features
 		let levelFeatures = [];
 		if (cls.classFeatures && cls.classFeatures.length > 0) {
@@ -3221,7 +3221,7 @@ class CharacterSheetBuilder {
 		for (const featureRef of levelFeatures) {
 			const parts = featureRef.split("|");
 			const featureName = parts[0];
-			
+
 			if (featureName !== "Weapon Mastery") continue;
 
 			const className = parts[1] || cls.name;
@@ -3240,7 +3240,7 @@ class CharacterSheetBuilder {
 			if (!featureData) continue;
 
 			// Try to get count from classTableGroups first (more accurate)
-			const count = this._getWeaponMasteryCountFromTable(cls, level) 
+			const count = this._getWeaponMasteryCountFromTable(cls, level)
 				|| this._parseWeaponMasteryCount(featureData.entries || []);
 
 			return {count};
@@ -3260,9 +3260,9 @@ class CharacterSheetBuilder {
 
 		for (const tableGroup of cls.classTableGroups) {
 			const masteryColIndex = tableGroup.colLabels?.findIndex(
-				col => col === "Weapon Mastery" || col.toLowerCase().includes("mastery")
+				col => col === "Weapon Mastery" || col.toLowerCase().includes("mastery"),
 			);
-			
+
 			if (masteryColIndex === -1) continue;
 
 			// Rows are 0-indexed for level 1, 1-indexed for level 2, etc.
@@ -3300,7 +3300,7 @@ class CharacterSheetBuilder {
 	 */
 	_renderWeaponMasterySelection (cls, masteryInfo) {
 		const {count} = masteryInfo;
-		
+
 		const $section = $(`
 			<div class="charsheet__builder-mastery-selection mt-3">
 				<p><strong>Weapon Mastery:</strong> Choose ${count} weapon${count > 1 ? "s" : ""} to master:</p>
@@ -3327,12 +3327,12 @@ class CharacterSheetBuilder {
 		});
 
 		// Group weapons by type for easier selection
-		const simpleWeapons = weaponsWithMastery.filter(w => 
-			w.weaponCategory === "simple" || w.type === "S"
+		const simpleWeapons = weaponsWithMastery.filter(w =>
+			w.weaponCategory === "simple" || w.type === "S",
 		).sort((a, b) => a.name.localeCompare(b.name));
-		
-		const martialWeapons = weaponsWithMastery.filter(w => 
-			w.weaponCategory === "martial" || w.type === "M"
+
+		const martialWeapons = weaponsWithMastery.filter(w =>
+			w.weaponCategory === "martial" || w.type === "M",
 		).sort((a, b) => a.name.localeCompare(b.name));
 
 		// Helper function to extract mastery name from string or object format
@@ -3358,7 +3358,7 @@ class CharacterSheetBuilder {
 				const masteryName = getMasteryName(weapon.mastery?.[0]);
 				const weaponKey = `${weapon.name}|${weapon.source}`;
 				const isSelected = this._selectedWeaponMasteries.includes(weaponKey);
-				
+
 				const $label = $(`
 					<label class="charsheet__builder-skill-checkbox mr-3 mb-1" title="${masteryName ? `Mastery: ${masteryName}` : ""}">
 						<input type="checkbox" value="${weaponKey}" ${isSelected ? "checked" : ""}>
@@ -3403,13 +3403,13 @@ class CharacterSheetBuilder {
 	 */
 	_getMaxMethodDegree (cls, level) {
 		if (!cls.classTableGroups) return 0;
-		
+
 		for (const group of cls.classTableGroups) {
 			// Look for a group with "Method Degree" column
-			const degreeColIdx = group.colLabels?.findIndex(label => 
-				label.toLowerCase().includes("method degree")
+			const degreeColIdx = group.colLabels?.findIndex(label =>
+				label.toLowerCase().includes("method degree"),
 			);
-			
+
 			if (degreeColIdx >= 0 && group.rows) {
 				const row = group.rows[level - 1]; // 0-indexed
 				if (row) {
@@ -3433,11 +3433,11 @@ class CharacterSheetBuilder {
 	 */
 	_getAvailableTraditions (allOptFeatures) {
 		const traditions = new Map();
-		
+
 		// Find all unique traditions from optional features
 		for (const opt of allOptFeatures) {
 			if (!opt.featureType) continue;
-			
+
 			for (const ft of opt.featureType) {
 				// Match tradition codes like "CTM:AM", "CTM:1AM", etc.
 				const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
@@ -3455,7 +3455,7 @@ class CharacterSheetBuilder {
 				}
 			}
 		}
-		
+
 		return Array.from(traditions.values()).sort((a, b) => a.name.localeCompare(b.name));
 	}
 
@@ -3468,30 +3468,30 @@ class CharacterSheetBuilder {
 	 */
 	_extractTraditionsFromClassFeature (className, level = 2) {
 		const traditions = new Set();
-		
+
 		// Look up "Combat Methods" feature for this class
 		const classFeatures = this._page.getClassFeatures();
 		if (!classFeatures?.length) {
 			console.log("[CharSheet Builder] No class features available for tradition extraction");
 			return traditions;
 		}
-		
+
 		// Find the Combat Methods feature (prioritize "Combat Methods" over "Specialties")
 		// "Combat Methods" is the feature that contains the tradition list
-		let combatMethodsFeature = classFeatures.find(f => 
-			f.className === className && 
-			f.name === "Combat Methods" &&
-			f.level <= 5
+		let combatMethodsFeature = classFeatures.find(f =>
+			f.className === className
+			&& f.name === "Combat Methods"
+			&& f.level <= 5,
 		);
-		
+
 		// If no "Combat Methods" feature found, this class might not have combat traditions
 		if (!combatMethodsFeature) {
 			console.log(`[CharSheet Builder] No Combat Methods feature found for ${className}`);
 			return traditions;
 		}
-		
+
 		console.log(`[CharSheet Builder] Found Combat Methods feature:`, combatMethodsFeature.name, "at level", combatMethodsFeature.level, "with", combatMethodsFeature.entries?.length, "entries");
-		
+
 		// Recursively extract text from entries and look for tradition codes
 		const extractFromEntries = (entries) => {
 			if (!entries) return;
@@ -3515,9 +3515,9 @@ class CharacterSheetBuilder {
 				if (entries.entry) extractFromEntries(entries.entry);
 			}
 		};
-		
+
 		extractFromEntries(combatMethodsFeature.entries);
-		
+
 		console.log(`[CharSheet Builder] Extracted traditions from feature text:`, [...traditions]);
 		return traditions;
 	}
@@ -3530,7 +3530,7 @@ class CharacterSheetBuilder {
 	 */
 	_getAvailableTraditionsForClass (allOptFeatures, classAllowedTypes, className) {
 		console.log("[CharSheet Builder] _getAvailableTraditionsForClass called with classAllowedTypes:", classAllowedTypes, "className:", className);
-		
+
 		// First try to extract tradition codes from class-allowed types (e.g., "CTM:AM" -> "AM", "CTM:1AM" -> "AM")
 		const allowedTraditionCodes = new Set();
 		for (const ft of classAllowedTypes) {
@@ -3539,7 +3539,7 @@ class CharacterSheetBuilder {
 				allowedTraditionCodes.add(match[2]);
 			}
 		}
-		
+
 		console.log("[CharSheet Builder] Extracted tradition codes from types:", [...allowedTraditionCodes]);
 
 		// If no tradition codes found in types, try to extract from class feature description
@@ -3549,7 +3549,7 @@ class CharacterSheetBuilder {
 				allowedTraditionCodes.add(trad);
 			}
 		}
-		
+
 		// If still no traditions found, fall back to all traditions
 		if (allowedTraditionCodes.size === 0) {
 			console.log("[CharSheet Builder] No tradition codes found, falling back to all traditions");
@@ -3557,7 +3557,7 @@ class CharacterSheetBuilder {
 		}
 
 		console.log("[CharSheet Builder] Filtering to allowed traditions:", [...allowedTraditionCodes]);
-		
+
 		// Filter to only allowed traditions
 		const traditions = new Map();
 		for (const tradCode of allowedTraditionCodes) {
@@ -3602,14 +3602,14 @@ class CharacterSheetBuilder {
 	 */
 	_methodMatchesTraditionsAndDegree (opt, selectedTraditions, maxDegree) {
 		if (!opt.featureType) return false;
-		
+
 		for (const ft of opt.featureType) {
 			// Parse feature type like "CTM:1AM", "CTM:2RC"
 			const match = ft.match(/^CTM:(\d)([A-Z]{2})$/);
 			if (match) {
 				const degree = parseInt(match[1]);
 				const tradCode = match[2];
-				
+
 				// Check if within max degree and matches selected tradition
 				if (degree <= maxDegree && selectedTraditions.includes(tradCode)) {
 					return true;
@@ -3661,7 +3661,7 @@ class CharacterSheetBuilder {
 		const classAllowedTypes = optFeatProg.featureType || [];
 		const availableTraditions = this._getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, cls?.name);
 		const maxDegree = this._getMaxMethodDegree(cls, 1);
-		
+
 		// Determine how many traditions to select (usually 2)
 		// This info comes from the class feature text, but we'll default to 2
 		const traditionCount = 2;
@@ -3753,8 +3753,8 @@ class CharacterSheetBuilder {
 		}
 
 		// Filter methods by selected traditions and max degree
-		const availableMethods = allOptFeatures.filter(opt => 
-			this._methodMatchesTraditionsAndDegree(opt, this._selectedCombatTraditions, maxDegree)
+		const availableMethods = allOptFeatures.filter(opt =>
+			this._methodMatchesTraditionsAndDegree(opt, this._selectedCombatTraditions, maxDegree),
 		);
 
 		if (availableMethods.length === 0) {
@@ -3849,10 +3849,10 @@ class CharacterSheetBuilder {
 	_renderStandardOptionalFeatures ($container, optFeatProg, count, name, featureKey, allOptFeatures, featureTypes) {
 		// Helper to check if a feature type matches the progression requirements
 		const matchesFeatureType = (optFeatTypes) => {
-			return optFeatTypes?.some(ft => 
-				featureTypes.some(progType => 
-					ft === progType || ft.startsWith(progType)
-				)
+			return optFeatTypes?.some(ft =>
+				featureTypes.some(progType =>
+					ft === progType || ft.startsWith(progType),
+				),
 			);
 		};
 
@@ -3954,7 +3954,7 @@ class CharacterSheetBuilder {
 
 		// Find all feature option choices
 		const allOptions = [];
-		
+
 		for (const featureRef of levelFeatures) {
 			let featureName, featureSource;
 			if (typeof featureRef === "string") {
@@ -4011,7 +4011,7 @@ class CharacterSheetBuilder {
 
 		for (const optGroup of allOptions) {
 			const featureKey = `${optGroup.featureName}_${optGroup.featureSource}`;
-			
+
 			// Initialize storage if needed
 			if (!this._selectedFeatureOptions[featureKey]) {
 				this._selectedFeatureOptions[featureKey] = [];
@@ -4118,7 +4118,7 @@ class CharacterSheetBuilder {
 		$content.append($container);
 
 		// Method selection
-		$('input[name="ability-method"]').on("change", (e) => {
+		$("input[name=\"ability-method\"]").on("change", (e) => {
 			this._abilityMethod = e.target.value;
 			this._resetAbilityScores();
 			this._renderAbilityInputs();
@@ -4349,8 +4349,8 @@ class CharacterSheetBuilder {
 			`);
 
 			if (this._abilityMethod === "pointbuy") {
-				$row.find('[data-action="decrease"]').on("click", () => this._adjustPointBuy(abl, -1));
-				$row.find('[data-action="increase"]').on("click", () => this._adjustPointBuy(abl, 1));
+				$row.find("[data-action=\"decrease\"]").on("click", () => this._adjustPointBuy(abl, -1));
+				$row.find("[data-action=\"increase\"]").on("click", () => this._adjustPointBuy(abl, 1));
 			}
 
 			if (this._abilityMethod === "manual") {
@@ -4533,7 +4533,7 @@ class CharacterSheetBuilder {
 		Parser.ABIL_ABVS.forEach(abl => {
 			const base = this._abilityScores[abl];
 			const racial = this._getRacialBonus(abl);
-			
+
 			// Handle unassigned scores (null in standard array mode)
 			if (base == null) {
 				allAssigned = false;
@@ -4545,7 +4545,7 @@ class CharacterSheetBuilder {
 				`);
 				return;
 			}
-			
+
 			const total = base + racial;
 			const mod = Math.floor((total - 10) / 2);
 
@@ -4556,7 +4556,7 @@ class CharacterSheetBuilder {
 				</div>
 			`);
 		});
-		
+
 		// Show warning if using standard array and not all scores assigned
 		if (this._abilityMethod === "standard" && !allAssigned) {
 			$summary.append(`<p class="ve-muted mt-2 ve-small">Assign all scores from the standard array above.</p>`);
@@ -4677,13 +4677,13 @@ class CharacterSheetBuilder {
 
 		const allSkills = this._page.getSkillsList().map(s => s.name);
 		const allTools = [
-			"Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies", 
+			"Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies",
 			"Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools",
 			"Cook's Utensils", "Disguise Kit", "Forgery Kit", "Gaming Set",
 			"Glassblower's Tools", "Herbalism Kit", "Jeweler's Tools",
 			"Leatherworker's Tools", "Mason's Tools", "Musical Instrument",
 			"Navigator's Tools", "Painter's Supplies", "Poisoner's Kit",
-			"Potter's Tools", "Smith's Tools", "Thieves' Tools", 
+			"Potter's Tools", "Smith's Tools", "Thieves' Tools",
 			"Tinker's Tools", "Weaver's Tools", "Woodcarver's Tools",
 		];
 		const allLanguages = this._page.getLanguagesList().map(l => l.name);
@@ -4881,7 +4881,7 @@ class CharacterSheetBuilder {
 		$("#custom-bg-skills input:checked").each((i, el) => {
 			selected.push($(el).data("skill"));
 		});
-		
+
 		// Limit to 2 skills
 		if (selected.length > 2) {
 			// Uncheck the last one
@@ -4948,7 +4948,7 @@ class CharacterSheetBuilder {
 	 */
 	_buildCustomBackground () {
 		const data = this._customBackgroundData;
-		
+
 		// Build skill proficiencies array
 		const skillProfs = data.skills.map(s => s.toLowerCase().replace(/\s+/g, " "));
 
@@ -4968,7 +4968,7 @@ class CharacterSheetBuilder {
 			entries: [
 				data.feature ? {
 					type: "entries",
-					name: "Feature: " + data.feature,
+					name: `Feature: ${data.feature}`,
 					entries: ["Custom background feature."],
 				} : null,
 				data.equipment ? {
@@ -5044,7 +5044,7 @@ class CharacterSheetBuilder {
 		// Skills - use the built-in summary renderer
 		if (bg.skillProficiencies) {
 			const {summary: skillSummary} = Renderer.generic.getSkillSummary({
-				skillProfs: bg.skillProficiencies, 
+				skillProfs: bg.skillProficiencies,
 				skillToolLanguageProfs: bg.skillToolLanguageProficiencies,
 				isShort: false,
 			});
@@ -5056,7 +5056,7 @@ class CharacterSheetBuilder {
 		// Tools - show fixed tools and render choice UI if needed
 		this._renderBackgroundToolProficiencies($content, bg);
 
-		// Languages - show fixed languages and render choice UI if needed  
+		// Languages - show fixed languages and render choice UI if needed
 		this._renderBackgroundLanguages($content, bg);
 
 		// Equipment
@@ -5085,7 +5085,7 @@ class CharacterSheetBuilder {
 		if (!bg.toolProficiencies?.length) return;
 
 		const $toolSection = $(`<div class="charsheet__builder-tool-profs mb-2"></div>`);
-		
+
 		// Collect fixed tools and choice options
 		const fixedTools = [];
 		const choiceOptions = [];
@@ -5118,7 +5118,7 @@ class CharacterSheetBuilder {
 		choiceOptions.forEach((choice, choiceIdx) => {
 			const $choiceSection = $(`<div class="charsheet__builder-tool-choice mt-1"></div>`);
 			$choiceSection.append(`<p class="mb-1"><strong>Choose ${choice.count} tool${choice.count > 1 ? "s" : ""}:</strong></p>`);
-			
+
 			for (let i = 0; i < choice.count; i++) {
 				const selectId = `bg-tool-choice-${choiceIdx}-${i}`;
 				const $select = $(`
@@ -5126,7 +5126,7 @@ class CharacterSheetBuilder {
 						<option value="">-- Select Tool --</option>
 					</select>
 				`);
-				
+
 				choice.from.forEach(tool => {
 					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
 				});
@@ -5140,7 +5140,7 @@ class CharacterSheetBuilder {
 				$select.on("change", (e) => {
 					// Remove old choice for this select
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
-						t => !(t.choiceIdx === choiceIdx && t.selectIdx === i)
+						t => !(t.choiceIdx === choiceIdx && t.selectIdx === i),
 					);
 					// Add new choice
 					if (e.target.value) {
@@ -5161,7 +5161,7 @@ class CharacterSheetBuilder {
 		if (anyToolCount > 0) {
 			const $anySection = $(`<div class="charsheet__builder-tool-any mt-1"></div>`);
 			$anySection.append(`<p class="mb-1"><strong>Choose ${anyToolCount} tool${anyToolCount > 1 ? "s" : ""} (any):</strong></p>`);
-			
+
 			const allTools = Renderer.generic.FEATURE__TOOLS_ALL;
 			for (let i = 0; i < anyToolCount; i++) {
 				const selectId = `bg-tool-any-${i}`;
@@ -5170,7 +5170,7 @@ class CharacterSheetBuilder {
 						<option value="">-- Select Tool --</option>
 					</select>
 				`);
-				
+
 				allTools.forEach(tool => {
 					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
 				});
@@ -5182,7 +5182,7 @@ class CharacterSheetBuilder {
 
 				$select.on("change", (e) => {
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
-						t => !(t.anyIdx === i && !t.isArtisan)
+						t => !(t.anyIdx === i && !t.isArtisan),
 					);
 					if (e.target.value) {
 						this._selectedToolProficiencies.push({
@@ -5202,7 +5202,7 @@ class CharacterSheetBuilder {
 		if (anyArtisanCount > 0) {
 			const $artisanSection = $(`<div class="charsheet__builder-tool-artisan mt-1"></div>`);
 			$artisanSection.append(`<p class="mb-1"><strong>Choose ${anyArtisanCount} artisan's tool${anyArtisanCount > 1 ? "s" : ""}:</strong></p>`);
-			
+
 			const artisanTools = Renderer.generic.FEATURE__TOOLS_ARTISANS;
 			for (let i = 0; i < anyArtisanCount; i++) {
 				const selectId = `bg-tool-artisan-${i}`;
@@ -5211,7 +5211,7 @@ class CharacterSheetBuilder {
 						<option value="">-- Select Artisan's Tool --</option>
 					</select>
 				`);
-				
+
 				artisanTools.forEach(tool => {
 					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
 				});
@@ -5223,7 +5223,7 @@ class CharacterSheetBuilder {
 
 				$select.on("change", (e) => {
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
-						t => !(t.anyIdx === i && t.isArtisan)
+						t => !(t.anyIdx === i && t.isArtisan),
 					);
 					if (e.target.value) {
 						this._selectedToolProficiencies.push({
@@ -5251,7 +5251,7 @@ class CharacterSheetBuilder {
 		if (!bg.languageProficiencies?.length) return;
 
 		const $langSection = $(`<div class="charsheet__builder-lang-profs mb-2"></div>`);
-		
+
 		// Collect fixed languages and choice options
 		const fixedLangs = [];
 		let anyStandardCount = 0;
@@ -5278,17 +5278,17 @@ class CharacterSheetBuilder {
 		const totalLangChoices = anyStandardCount + anyCount;
 		if (totalLangChoices > 0) {
 			const $choiceSection = $(`<div class="charsheet__builder-lang-choice mt-1"></div>`);
-			
+
 			// Check setting for allowing exotic languages by default
 			const settings = this._state?.getSettings?.() || {};
 			const allowExoticByDefault = settings.allowExoticLanguages !== false; // Default true
-			
+
 			// If anyCount > 0, always allow all languages
 			// If only anyStandardCount, check setting - if allowExoticByDefault, still allow all
 			const allowAllLanguages = anyCount > 0 || allowExoticByDefault;
 			const choiceLabel = anyCount > 0 ? "any language" : (allowExoticByDefault ? "any language" : "standard language");
 			$choiceSection.append(`<p class="mb-1"><strong>Choose ${totalLangChoices} ${choiceLabel}${totalLangChoices > 1 ? "s" : ""}:</strong></p>`);
-			
+
 			for (let i = 0; i < totalLangChoices; i++) {
 				const selectId = `bg-lang-choice-${i}`;
 				const $select = $(`
@@ -5296,7 +5296,7 @@ class CharacterSheetBuilder {
 						<option value="">-- Select Language --</option>
 					</select>
 				`);
-				
+
 				// Add language options grouped by type
 				$select.append(`<optgroup label="──── Standard Languages ────">`);
 				Parser.LANGUAGES_STANDARD.forEach(lang => {
@@ -5514,8 +5514,8 @@ class CharacterSheetBuilder {
 
 		// Check if this is 2024 format (has uppercase keys like A, B, C in defaultData)
 		const defaultData = startingEquip.defaultData || [];
-		const is2024Format = defaultData.length > 0 && defaultData[0] && 
-			Object.keys(defaultData[0]).some(k => /^[A-Z]$/.test(k));
+		const is2024Format = defaultData.length > 0 && defaultData[0]
+			&& Object.keys(defaultData[0]).some(k => /^[A-Z]$/.test(k));
 
 		if (is2024Format) {
 			// 2024 XPHB format - package choices (A, B, C)

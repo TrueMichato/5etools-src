@@ -135,11 +135,11 @@ class CharacterSheetInventory {
 
 		// Build enhanced filter UI
 		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
-		
+
 		// Search input with icon
 		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
 		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search items by name...">`).appendTo($searchWrapper);
-		
+
 		// Type filter - Multi-select dropdown
 		const itemTypes = [
 			{value: "weapon", label: "Weapons", emoji: "⚔️"},
@@ -154,7 +154,7 @@ class CharacterSheetInventory {
 			{value: "tool", label: "Tools", emoji: "🔧"},
 		];
 		let selectedTypes = new Set(); // Empty = all types
-		
+
 		const $typeDropdown = $(`
 			<div class="charsheet__source-multiselect">
 				<button class="charsheet__source-multiselect-btn">
@@ -184,7 +184,7 @@ class CharacterSheetInventory {
 		const $typeBtn = $typeDropdown.find(".charsheet__source-multiselect-btn");
 		const $typeDropdownMenu = $typeDropdown.find(".charsheet__source-multiselect-dropdown");
 		const $typeText = $typeDropdown.find(".charsheet__source-multiselect-text");
-		
+
 		$typeBtn.on("click", (e) => {
 			e.stopPropagation();
 			$typeDropdownMenu.toggleClass("open");
@@ -232,7 +232,7 @@ class CharacterSheetInventory {
 			{value: "artifact", label: "Artifact", emoji: "🔴"},
 		];
 		let selectedRarities = new Set(); // Empty = all rarities
-		
+
 		const $rarityDropdown = $(`
 			<div class="charsheet__source-multiselect">
 				<button class="charsheet__source-multiselect-btn">
@@ -262,7 +262,7 @@ class CharacterSheetInventory {
 		const $rarityBtn = $rarityDropdown.find(".charsheet__source-multiselect-btn");
 		const $rarityDropdownMenu = $rarityDropdown.find(".charsheet__source-multiselect-dropdown");
 		const $rarityText = $rarityDropdown.find(".charsheet__source-multiselect-text");
-		
+
 		$rarityBtn.on("click", (e) => {
 			e.stopPropagation();
 			$rarityDropdownMenu.toggleClass("open");
@@ -311,7 +311,7 @@ class CharacterSheetInventory {
 			if (bIdx !== -1) return 1;
 			return a.localeCompare(b);
 		});
-		
+
 		// Multi-select source filter
 		let selectedSources = new Set(); // Empty = all sources
 		const $sourceDropdown = $(`
@@ -345,7 +345,7 @@ class CharacterSheetInventory {
 		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
 		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
 		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
-		
+
 		$sourceBtn.on("click", (e) => {
 			e.stopPropagation();
 			$sourceDropdownMenu.toggleClass("open");
@@ -405,7 +405,7 @@ class CharacterSheetInventory {
 
 		// Quick filter buttons row
 		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
-		
+
 		let filterAttunement = false;
 		let filterMagic = false;
 		let filterMundane = false;
@@ -497,11 +497,11 @@ class CharacterSheetInventory {
 				$(`<div class="charsheet__modal-section-title">${typeEmojis[type] || "📦"} ${type} <span style="opacity: 0.6;">(${typeItems.length})</span></div>`).appendTo($section);
 
 				typeItems.forEach(item => {
-					const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) 
-						? item.rarity.toTitleCase() 
+					const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase())
+						? item.rarity.toTitleCase()
 						: "";
 					const isMagic = this._isMagicItem(item);
-					
+
 					// Build tags string
 					const tagParts = [];
 					if (item.reqAttune) tagParts.push("🔗");
@@ -588,13 +588,13 @@ class CharacterSheetInventory {
 		const $customSection = $(`<div class="charsheet__modal-custom-section"></div>`).appendTo($modalInner);
 		$(`<div class="charsheet__modal-section-title" style="margin-bottom: 0.75rem;">✏️ Create Custom Item</div>`).appendTo($customSection);
 		$(`<p class="ve-small ve-muted mb-2">Can't find what you're looking for? Add a custom item:</p>`).appendTo($customSection);
-		
+
 		const $customInputs = $(`<div class="charsheet__modal-custom-inputs"></div>`).appendTo($customSection);
 		const $customName = $(`<input type="text" class="form-control" placeholder="Item name..." style="flex: 1;">`).appendTo($customInputs);
 		const $customQty = $(`<input type="number" class="form-control" placeholder="Qty" style="width: 70px;" value="1" min="1">`).appendTo($customInputs);
 		const $customWeight = $(`<input type="number" class="form-control" placeholder="Weight" style="width: 90px;" step="0.1" min="0">`).appendTo($customInputs);
 		const $customAddBtn = $(`<button class="ve-btn ve-btn-primary">+ Add Custom</button>`).appendTo($customInputs);
-		
+
 		$customAddBtn.on("click", () => {
 			const name = $customName.val().trim();
 			if (name) {
@@ -660,7 +660,7 @@ class CharacterSheetInventory {
 		const gp = Math.floor(value / 100);
 		const sp = Math.floor((value % 100) / 10);
 		const cp = value % 10;
-		
+
 		if (gp > 0) return `${gp} gp`;
 		if (sp > 0) return `${sp} sp`;
 		return `${cp} cp`;
@@ -673,8 +673,8 @@ class CharacterSheetInventory {
 		});
 
 		const typeTag = this._getItemTypeTag(item);
-		const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) 
-			? item.rarity.toTitleCase() 
+		const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase())
+			? item.rarity.toTitleCase()
 			: "";
 
 		const $content = $(`
@@ -687,7 +687,7 @@ class CharacterSheetInventory {
 				<div class="ve-small mb-3">
 					${item.value ? `<div><strong>Value:</strong> ${this._formatValue(item.value)}</div>` : ""}
 					${item.weight ? `<div><strong>Weight:</strong> ${item.weight} lb.</div>` : ""}
-					${item.ac ? `<div><strong>AC:</strong> ${item.ac}${item.dexterityMax ? ` (max Dex ${item.dexterityMax > 0 ? "+" + item.dexterityMax : item.dexterityMax})` : ""}</div>` : ""}
+					${item.ac ? `<div><strong>AC:</strong> ${item.ac}${item.dexterityMax ? ` (max Dex ${item.dexterityMax > 0 ? `+${item.dexterityMax}` : item.dexterityMax})` : ""}</div>` : ""}
 					${item.dmg1 ? `<div><strong>Damage:</strong> ${item.dmg1} ${item.dmgType ? Parser.dmgTypeToFull(item.dmgType) : ""}</div>` : ""}
 					${item.property?.length ? `<div><strong>Properties:</strong> ${item.property.map(p => this._formatProperty(p)).join(", ")}</div>` : ""}
 				</div>
@@ -944,7 +944,7 @@ class CharacterSheetInventory {
 		</div>`);
 
 		// Rebind events after appending
-		$form.find(".charsheet__custom-item-type-btn").on("click", function() {
+		$form.find(".charsheet__custom-item-type-btn").on("click", function () {
 			$form.find(".charsheet__custom-item-type-btn").removeClass("selected");
 			$(this).addClass("selected");
 			selectedType = $(this).data("type");
@@ -1175,7 +1175,7 @@ class CharacterSheetInventory {
 					if (bonus > 0) options.bonusWeapon = `+${bonus}`;
 					// Gather properties
 					const props = [];
-					$form.find(".weapon-prop-check:checked").each(function() {
+					$form.find(".weapon-prop-check:checked").each(function () {
 						props.push($(this).val());
 					});
 					if (props.length) options.property = props;
@@ -1422,7 +1422,7 @@ class CharacterSheetInventory {
 
 		// Calculate carrying capacity using state method (respects Thelemar homebrew rules)
 		const carryingCapacity = this._state.getCarryingCapacity();
-		
+
 		// For encumbrance thresholds, use standard STR-based calculation
 		const strScore = this._state.getAbilityTotal("str");
 		const encumberedThreshold = strScore * 5;
@@ -1591,7 +1591,7 @@ class CharacterSheetInventory {
 		// Calculate pagination
 		const totalItems = filtered.length;
 		const totalPages = Math.ceil(totalItems / this._itemsPerPage);
-		
+
 		// Ensure current page is valid
 		if (this._currentPage >= totalPages) {
 			this._currentPage = Math.max(0, totalPages - 1);
@@ -1654,12 +1654,12 @@ class CharacterSheetInventory {
 
 	_renderItemRow (item) {
 		const typeTag = this._getItemTypeTagFromStoredType(item.type);
-		// Items that can be equipped: weapons, armor, gear, wondrous items, 
+		// Items that can be equipped: weapons, armor, gear, wondrous items,
 		// items requiring attunement, and items with any bonus properties
-		const hasBonus = item.bonusAc || item.bonusSavingThrow || item.bonusSpellAttack || 
-			item.bonusSpellSaveDc || item.bonusAbilityCheck || item.bonusWeapon;
-		const canEquip = item.weapon || item.armor || item.shield || item.type === "gear" || 
-			item.type === "wondrous" || item.requiresAttunement || hasBonus;
+		const hasBonus = item.bonusAc || item.bonusSavingThrow || item.bonusSpellAttack
+			|| item.bonusSpellSaveDc || item.bonusAbilityCheck || item.bonusWeapon;
+		const canEquip = item.weapon || item.armor || item.shield || item.type === "gear"
+			|| item.type === "wondrous" || item.requiresAttunement || hasBonus;
 		const canAttune = item.requiresAttunement;
 		const hasCharges = item.charges && item.charges > 0;
 
@@ -1692,18 +1692,18 @@ class CharacterSheetInventory {
 
 		// Format properties and mastery for display (check both 'properties' and 'property' for backwards compatibility)
 		const itemProperties = item.properties || item.property || [];
-		const propertiesStr = itemProperties.length 
-			? itemProperties.map(p => this._formatProperty(p)).join(", ") 
+		const propertiesStr = itemProperties.length
+			? itemProperties.map(p => this._formatProperty(p)).join(", ")
 			: "";
-		const masteryStr = item.mastery?.length 
-			? item.mastery.map(m => this._formatMastery(m)).join(", ") 
+		const masteryStr = item.mastery?.length
+			? item.mastery.map(m => this._formatMastery(m)).join(", ")
 			: "";
 
 		return $(`
 			<div class="charsheet__item ${item.equipped ? "equipped" : ""}" data-item-id="${item.id}">
 				<div class="charsheet__item-main">
 					<span class="charsheet__item-name">
-						${item.attuned ? '<span class="glyphicon glyphicon-star text-warning mr-1"></span>' : ""}
+						${item.attuned ? "<span class=\"glyphicon glyphicon-star text-warning mr-1\"></span>" : ""}
 						${itemNameHtml}
 						${item.quantity > 1 ? `<span class="ve-muted">(×${item.quantity})</span>` : ""}
 					</span>
@@ -1767,7 +1767,7 @@ class CharacterSheetInventory {
 				// Fall back to basic formatting
 			}
 		}
-		
+
 		// Basic property code mapping
 		const propMap = {
 			"A": "Ammunition",
@@ -1783,7 +1783,7 @@ class CharacterSheetInventory {
 			"2H": "Two-Handed",
 			"V": "Versatile",
 		};
-		
+
 		// Extract property code (before |)
 		const code = prop.split("|")[0].toUpperCase();
 		return propMap[code] || prop;
@@ -1821,11 +1821,11 @@ class CharacterSheetInventory {
 
 		// Calculate total value in GP
 		const totalGP =
-			(currency.cp || 0) / 100 +
-			(currency.sp || 0) / 10 +
-			(currency.ep || 0) / 2 +
-			(currency.gp || 0) +
-			(currency.pp || 0) * 10;
+			(currency.cp || 0) / 100
+			+ (currency.sp || 0) / 10
+			+ (currency.ep || 0) / 2
+			+ (currency.gp || 0)
+			+ (currency.pp || 0) * 10;
 
 		const $total = $("#charsheet-inv-currency-total");
 		if (totalGP > 0) {
@@ -1942,11 +1942,11 @@ class CharacterSheetInventory {
 
 		// Format properties and mastery (check both fields for backwards compatibility)
 		const itemProperties = item.properties || item.property || [];
-		const propertiesStr = itemProperties.length 
-			? itemProperties.map(p => this._formatProperty(p)).join(", ") 
+		const propertiesStr = itemProperties.length
+			? itemProperties.map(p => this._formatProperty(p)).join(", ")
 			: "";
-		const masteryStr = item.mastery?.length 
-			? item.mastery.map(m => this._formatMastery(m)).join(", ") 
+		const masteryStr = item.mastery?.length
+			? item.mastery.map(m => this._formatMastery(m)).join(", ")
 			: "";
 
 		// Build row with item type icon

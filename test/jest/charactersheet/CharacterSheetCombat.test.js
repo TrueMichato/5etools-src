@@ -1,7 +1,7 @@
 /**
  * Character Sheet Combat - Unit Tests
  * Tests for attack calculations, damage rolls, initiative, death saves, and combat mechanics
- * 
+ *
  * NOTE: This test file uses the actual API methods:
  * - setDeathSaves({successes, failures}) instead of addDeathSaveSuccess/Failure
  * - getAc() not getAC()

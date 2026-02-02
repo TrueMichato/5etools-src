@@ -17,18 +17,18 @@ class CharacterSheetLevelUp {
 	 */
 	_findFeatureOptions (feature, characterLevel = 1) {
 		if (!feature?.entries) return [];
-		
+
 		const results = [];
-		
+
 		const searchEntries = (entries) => {
 			if (!Array.isArray(entries)) return;
-			
+
 			for (const entry of entries) {
 				if (typeof entry === "object" && entry.type === "options") {
 					// Found an options entry
 					const count = entry.count || 1;
 					const options = [];
-					
+
 					// Process the option entries
 					if (entry.entries) {
 						for (const opt of entry.entries) {
@@ -36,7 +36,7 @@ class CharacterSheetLevelUp {
 								// Parse "FeatureName|ClassName|Source|Level" format
 								const parts = opt.classFeature.split("|");
 								const optLevel = parseInt(parts[3]) || 1;
-								
+
 								// Only include options available at current level
 								if (optLevel <= characterLevel) {
 									options.push({
@@ -51,7 +51,7 @@ class CharacterSheetLevelUp {
 							} else if (opt.type === "refSubclassFeature" && opt.subclassFeature) {
 								const parts = opt.subclassFeature.split("|");
 								const optLevel = parseInt(parts[5]) || 1;
-								
+
 								if (optLevel <= characterLevel) {
 									options.push({
 										name: parts[0],
@@ -79,7 +79,7 @@ class CharacterSheetLevelUp {
 							}
 						}
 					}
-					
+
 					if (options.length > 0) {
 						results.push({count, options, featureName: feature.name});
 					}
@@ -94,7 +94,7 @@ class CharacterSheetLevelUp {
 						const refClassName = refParts[1];
 						const refSource = refParts[2];
 						const refLevel = parseInt(refParts[3]) || 1;
-						
+
 						// Look up the referenced feature
 						const referencedFeature = this._getClassFeatureByRef(refFeatureName, refClassName, refSource, refLevel);
 						if (referencedFeature) {
@@ -112,14 +112,14 @@ class CharacterSheetLevelUp {
 						}
 					}
 				}
-				
+
 				// Recursively search nested entries
 				if (entry.entries) {
 					searchEntries(entry.entries);
 				}
 			}
 		};
-		
+
 		searchEntries(feature.entries);
 		return results;
 	}
@@ -130,7 +130,7 @@ class CharacterSheetLevelUp {
 	_getClassFeatureByRef (featureName, className, source, level) {
 		const classFeatures = this._page.getClassFeatures();
 		if (!classFeatures?.length) return null;
-		
+
 		return classFeatures.find(f => {
 			if (f.name !== featureName) return false;
 			if (f.className !== className) return false;
@@ -151,7 +151,7 @@ class CharacterSheetLevelUp {
 	 */
 	_getFeatureOptionsForLevel (features, level) {
 		const allOptions = [];
-		
+
 		for (const feature of features) {
 			const featureOptions = this._findFeatureOptions(feature, level);
 			for (const optionGroup of featureOptions) {
@@ -163,7 +163,7 @@ class CharacterSheetLevelUp {
 				});
 			}
 		}
-		
+
 		return allOptions;
 	}
 
@@ -256,7 +256,7 @@ class CharacterSheetLevelUp {
 		// We need to be careful: "two languages" shouldn't affect expertise count
 		// Look for patterns like "one of your skill proficiencies" or "two skill proficiencies"
 		let count = 1; // Default to 1 for safety
-		
+
 		// Check for specific expertise-granting patterns
 		// "choose two skills" or "two of your skill proficiencies"
 		if (entriesText.match(/(?:choose|pick|select|gain|get)\s+(?:two|2)\s+(?:skills?|proficienc)/i)
@@ -350,7 +350,7 @@ class CharacterSheetLevelUp {
 				else if (numWord === "three" || numWord === "3") count = 3;
 				else if (numWord === "four" || numWord === "4") count = 4;
 				else if (/^\d+$/.test(numWord)) count = parseInt(numWord);
-				
+
 				// Special cases for patterns without capture groups
 				if (count === 0 && entriesText.includes("two additional languages")) count = 2;
 				if (count === 0 && entriesText.includes("two languages of your choice")) count = 2;
@@ -380,7 +380,7 @@ class CharacterSheetLevelUp {
 	 */
 	async showLevelUp (className = null) {
 		const classes = this._state.getClasses();
-		
+
 		if (!classes.length) {
 			JqueryUtil.doToast({type: "warning", content: "Create a character first before leveling up."});
 			return;
@@ -438,8 +438,8 @@ class CharacterSheetLevelUp {
 		let fullSubclassData = null;
 		if (classEntry.subclass && classData.subclasses) {
 			fullSubclassData = classData.subclasses.find(sc =>
-				sc.name === classEntry.subclass.name &&
-				(sc.source === classEntry.subclass.source || !classEntry.subclass.source),
+				sc.name === classEntry.subclass.name
+				&& (sc.source === classEntry.subclass.source || !classEntry.subclass.source),
 			);
 		}
 
@@ -518,7 +518,7 @@ class CharacterSheetLevelUp {
 		let selectedFeatureOptions = {};
 		let featureOptionGroups = [];
 		let $featOptSection = null;
-		
+
 		const updateFeatureOptionsDisplay = () => {
 			if ($featOptSection) {
 				$featOptSection.remove();
@@ -560,7 +560,7 @@ class CharacterSheetLevelUp {
 			// Check if Thelemar ASI+Feat rule is enabled and this is level 4
 			const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
 			const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
-			
+
 			const $asiSection = this._renderAsiSelection(
 				(ability, delta) => {
 					asiChoices[ability] = (asiChoices[ability] || 0) + delta;
@@ -596,7 +596,7 @@ class CharacterSheetLevelUp {
 		let selectedExpertise = {};
 		let expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
 		let $expertiseSection = null;
-		
+
 		const updateExpertiseDisplay = () => {
 			if ($expertiseSection) {
 				$expertiseSection.remove();
@@ -617,7 +617,7 @@ class CharacterSheetLevelUp {
 				}
 			}
 		};
-		
+
 		if (expertiseGrants.length) {
 			$expertiseSection = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
 				selectedExpertise[featureKey] = skills;
@@ -629,7 +629,7 @@ class CharacterSheetLevelUp {
 		let selectedLanguages = {};
 		let languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
 		let $languageSection = null;
-		
+
 		const updateLanguageDisplay = () => {
 			if ($languageSection) {
 				$languageSection.remove();
@@ -650,7 +650,7 @@ class CharacterSheetLevelUp {
 				}
 			}
 		};
-		
+
 		if (languageGrants.length) {
 			$languageSection = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
 				selectedLanguages[featureKey] = languages;
@@ -684,9 +684,9 @@ class CharacterSheetLevelUp {
 				if (hasAsi) {
 					const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
 					const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
-					
+
 					const totalAsi = Object.values(asiChoices).reduce((sum, v) => sum + v, 0);
-					
+
 					if (isBothAsiAndFeat) {
 						// Need both ASI points spent AND a feat selected
 						if (totalAsi !== 2) {
@@ -813,10 +813,10 @@ class CharacterSheetLevelUp {
 
 	_renderAsiSelection (onAsiChange, onFeatSelect, isBothAsiAndFeat = false) {
 		// When Thelemar rules give both ASI and Feat at level 4
-		const sectionTitle = isBothAsiAndFeat 
-			? "📈 Ability Score Improvement + Feat (Thelemar)" 
+		const sectionTitle = isBothAsiAndFeat
+			? "📈 Ability Score Improvement + Feat (Thelemar)"
 			: "📈 Ability Score Improvement";
-		
+
 		const $section = $(`
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
@@ -839,7 +839,7 @@ class CharacterSheetLevelUp {
 					</div>
 				`}
 				<div id="asi-abilities-container"></div>
-				<div id="asi-feats-container" style="${isBothAsiAndFeat ? '' : 'display: none;'}"></div>
+				<div id="asi-feats-container" style="${isBothAsiAndFeat ? "" : "display: none;"}"></div>
 			</div>
 		`);
 
@@ -848,7 +848,7 @@ class CharacterSheetLevelUp {
 
 		// Toggle between ASI and Feat (only if not both)
 		if (!isBothAsiAndFeat) {
-			$section.find('input[name="asi-type"]').on("change", (e) => {
+			$section.find("input[name=\"asi-type\"]").on("change", (e) => {
 				if (e.target.value === "asi") {
 					$abilitiesContainer.show();
 					$featsContainer.hide();
@@ -882,7 +882,7 @@ class CharacterSheetLevelUp {
 
 		Parser.ABIL_ABVS.forEach(abl => {
 			const currentScore = this._state.getAbilityScore(abl);
-			
+
 			const $row = $(`
 				<div class="charsheet__levelup-asi-row">
 					<span class="charsheet__levelup-asi-name">${Parser.attAbvToFull(abl)}</span>
@@ -928,8 +928,8 @@ class CharacterSheetLevelUp {
 
 		const renderFeats = (filter = "") => {
 			$featList.empty();
-			const filteredFeats = feats.filter(f => 
-				f.name.toLowerCase().includes(filter.toLowerCase())
+			const filteredFeats = feats.filter(f =>
+				f.name.toLowerCase().includes(filter.toLowerCase()),
 			).slice(0, 50);
 
 			filteredFeats.forEach(feat => {
@@ -1034,7 +1034,7 @@ class CharacterSheetLevelUp {
 			// Check if it's array-of-arrays format (new format) or flat array (old format)
 			const isArrayOfArrays = Array.isArray(classData.classFeatures[0]);
 			console.log(`[LevelUp] classFeatures format: ${isArrayOfArrays ? "array-of-arrays" : "flat array"}`);
-			
+
 			const levelFeatures = isArrayOfArrays
 				? classData.classFeatures[level - 1] || [] // Array of arrays: index = level - 1
 				: classData.classFeatures; // Flat array: filter by level
@@ -1064,10 +1064,10 @@ class CharacterSheetLevelUp {
 					const className = parts[1] || classData.name;
 					const classSource = parts[2] || classData.source;
 					const featureSource = parts[4] || classSource; // Feature source defaults to class source
-					
+
 					// Look up full feature data to get entries
 					const fullFeature = this._getClassFeatureData(featureName, className, classSource, level);
-					
+
 					features.push({
 						name: featureName,
 						className: className,
@@ -1083,10 +1083,10 @@ class CharacterSheetLevelUp {
 					const className = parts[1] || classData.name;
 					const classSource = parts[2] || classData.source;
 					const featureSource = parts[4] || classSource; // Feature source defaults to class source
-					
+
 					// Look up full feature data to get entries
 					const fullFeature = this._getClassFeatureData(featureName, className, classSource, level);
-					
+
 					features.push({
 						name: featureName,
 						className: className,
@@ -1100,15 +1100,15 @@ class CharacterSheetLevelUp {
 					// Feature object - may have classSource and source properties
 					const classSource = featureRef.classSource || classData.source;
 					const featureSource = featureRef.source || classSource;
-					
+
 					// Look up full feature data to get entries
 					const fullFeature = this._getClassFeatureData(
-						featureRef.name, 
-						classData.name, 
-						classSource, 
-						level
+						featureRef.name,
+						classData.name,
+						classSource,
+						level,
 					);
-					
+
 					features.push({
 						name: featureRef.name,
 						className: classData.name,
@@ -1208,12 +1208,12 @@ class CharacterSheetLevelUp {
 	_levelGrantsAsi (classData, level) {
 		// Standard ASI levels for most classes
 		const standardAsiLevels = [4, 8, 12, 16, 19];
-		
+
 		// Fighter gets extra at 6 and 14
 		if (classData.name === "Fighter") {
 			return [...standardAsiLevels, 6, 14].includes(level);
 		}
-		
+
 		// Rogue gets extra at 10
 		if (classData.name === "Rogue") {
 			return [...standardAsiLevels, 10].includes(level);
@@ -1224,11 +1224,11 @@ class CharacterSheetLevelUp {
 
 	_levelGrantsSubclass (classData, level) {
 		// Most classes get subclass at level 3
-		const subclassLevel = classData.subclassTitle === "Sorcerous Origin" ? 1 
+		const subclassLevel = classData.subclassTitle === "Sorcerous Origin" ? 1
 			: classData.subclassTitle === "Otherworldly Patron" ? 1
-			: classData.subclassTitle === "Divine Domain" ? 1
-			: 3;
-		
+				: classData.subclassTitle === "Divine Domain" ? 1
+					: 3;
+
 		return level === subclassLevel;
 	}
 
@@ -1241,7 +1241,7 @@ class CharacterSheetLevelUp {
 	 */
 	_getOptionalFeatureGains (classData, currentLevel, newLevel) {
 		const gains = [];
-		
+
 		if (!classData.optionalfeatureProgression?.length) return gains;
 
 		classData.optionalfeatureProgression.forEach(optFeatProg => {
@@ -1264,16 +1264,16 @@ class CharacterSheetLevelUp {
 
 			// Count how many of this feature type the character already has
 			const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
-			
+
 			// Helper to check if a feature type matches (exact or prefix match)
 			const matchesFeatureType = (optFeatTypes) => {
-				return optFeatTypes?.some(ft => 
-					featureTypes.some(progType => ft === progType || ft.startsWith(progType))
+				return optFeatTypes?.some(ft =>
+					featureTypes.some(progType => ft === progType || ft.startsWith(progType)),
 				);
 			};
-			
-			const existingOfType = existingOptFeatures.filter(f => 
-				matchesFeatureType(f.optionalFeatureTypes)
+
+			const existingOfType = existingOptFeatures.filter(f =>
+				matchesFeatureType(f.optionalFeatureTypes),
 			).length;
 
 			// Calculate how many new options to pick
@@ -1320,7 +1320,7 @@ class CharacterSheetLevelUp {
 		gains.forEach(gain => {
 			const featureKey = gain.featureTypes.join("_");
 			const isCombatMethods = gain.featureTypes.some(ft => ft.startsWith("CTM:"));
-			
+
 			if (isCombatMethods) {
 				// Use special Combat Methods rendering with tradition filtering
 				this._renderCombatMethodsLevelUp($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey);
@@ -1338,23 +1338,23 @@ class CharacterSheetLevelUp {
 	 */
 	_renderCombatMethodsLevelUp ($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
 		const selectedForType = [];
-		
+
 		// Get character's known traditions from existing Combat Methods or state
 		let knownTraditions = this._getKnownCombatTraditions(existingOptFeatures);
-		
+
 		// Get max degree for the new level
 		const maxDegree = this._getMaxMethodDegree(classData, newLevel);
 
 		// Track selected traditions during this level-up (for characters without traditions)
 		let tempSelectedTraditions = [...knownTraditions];
-		
+
 		// If no traditions set, allow selecting them now (retroactive fix)
 		if (knownTraditions.length === 0) {
 			// Filter traditions to only those the class has access to
 			const classAllowedTypes = gain.featureTypes || [];
 			const availableTraditions = this._getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, classData?.name);
 			const traditionCount = 2; // Default tradition count
-			
+
 			const $section = $(`
 				<div class="charsheet__levelup-opt-gain mb-3">
 					<p><strong>${gain.name}:</strong></p>
@@ -1424,14 +1424,14 @@ class CharacterSheetLevelUp {
 		// Filter methods by known traditions and max degree
 		const availableMethods = allOptFeatures.filter(opt => {
 			if (!opt.featureType) return false;
-			
+
 			return opt.featureType.some(ft => {
 				const match = ft.match(/^CTM:(\d)([A-Z]{2})$/);
 				if (!match) return false;
-				
+
 				const degree = parseInt(match[1]);
 				const tradCode = match[2];
-				
+
 				return degree <= maxDegree && knownTraditions.includes(tradCode);
 			});
 		});
@@ -1555,8 +1555,8 @@ class CharacterSheetLevelUp {
 
 		// Filter options by feature type
 		const allMatchingOptions = allOptFeatures.filter(opt => {
-			const matchesType = opt.featureType?.some(ft => 
-				gain.featureTypes.some(progType => ft === progType || ft.startsWith(progType))
+			const matchesType = opt.featureType?.some(ft =>
+				gain.featureTypes.some(progType => ft === progType || ft.startsWith(progType)),
 			);
 			if (!matchesType) return false;
 
@@ -1567,8 +1567,8 @@ class CharacterSheetLevelUp {
 						const totalLevel = this._state.getTotalLevel();
 						if (prereq.level.class) {
 							const classes = this._state.getClasses();
-							const classMatch = classes.find(c => 
-								c.name.toLowerCase() === prereq.level.class.name.toLowerCase()
+							const classMatch = classes.find(c =>
+								c.name.toLowerCase() === prereq.level.class.name.toLowerCase(),
 							);
 							if (!classMatch || classMatch.level < reqLevel) return false;
 						} else if (totalLevel < reqLevel) {
@@ -1620,7 +1620,7 @@ class CharacterSheetLevelUp {
 					</div>
 				`);
 			}
-			
+
 			availableOptions.sort((a, b) => {
 				// Selectable options first, then by name
 				if (a._selectable !== b._selectable) return a._selectable ? -1 : 1;
@@ -1631,13 +1631,13 @@ class CharacterSheetLevelUp {
 				const isDisabled = !opt._selectable;
 				// Show count if taken multiple times
 				const knownText = opt._timesKnown > 1 ? `Known ×${opt._timesKnown}` : "Known";
-				const knownBadge = opt._alreadyKnown 
-					? `<span class="badge badge-success ml-1" title="Already selected${opt._timesKnown > 1 ? ` (${opt._timesKnown} times)` : ""}">✓ ${knownText}</span>` 
+				const knownBadge = opt._alreadyKnown
+					? `<span class="badge badge-success ml-1" title="Already selected${opt._timesKnown > 1 ? ` (${opt._timesKnown} times)` : ""}">✓ ${knownText}</span>`
 					: "";
-				const repeatableBadge = opt._repeatable 
-					? `<span class="badge badge-info ml-1" title="Can be taken multiple times">↺ Repeatable</span>` 
+				const repeatableBadge = opt._repeatable
+					? `<span class="badge badge-info ml-1" title="Can be taken multiple times">↺ Repeatable</span>`
 					: "";
-				
+
 				const $item = $(`
 					<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}${opt._alreadyKnown ? " charsheet__levelup-opt-item--known" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.5rem; border-radius: 4px;${isDisabled ? " opacity: 0.5;" : ""}${opt._alreadyKnown && opt._selectable ? " background: rgba(var(--rgb-success-rgb), 0.1); border-left: 3px solid var(--rgb-success);" : ""}${opt._alreadyKnown && !opt._selectable ? " background: rgba(128, 128, 128, 0.1);" : ""}">
 						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
@@ -1691,10 +1691,10 @@ class CharacterSheetLevelUp {
 
 		// Fall back to inferring from existing combat method features
 		const traditions = new Set();
-		
+
 		for (const feature of existingOptFeatures) {
 			if (!feature.optionalFeatureTypes) continue;
-			
+
 			for (const ft of feature.optionalFeatureTypes) {
 				// Match CTM:XYY where X is degree and YY is tradition code
 				const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
@@ -1703,7 +1703,7 @@ class CharacterSheetLevelUp {
 				}
 			}
 		}
-		
+
 		return Array.from(traditions);
 	}
 
@@ -1712,12 +1712,12 @@ class CharacterSheetLevelUp {
 	 */
 	_getMaxMethodDegree (cls, level) {
 		if (!cls.classTableGroups) return 0;
-		
+
 		for (const group of cls.classTableGroups) {
-			const degreeColIdx = group.colLabels?.findIndex(label => 
-				label.toLowerCase().includes("method degree")
+			const degreeColIdx = group.colLabels?.findIndex(label =>
+				label.toLowerCase().includes("method degree"),
 			);
-			
+
 			if (degreeColIdx >= 0 && group.rows) {
 				const row = group.rows[level - 1];
 				if (row) {
@@ -1797,30 +1797,30 @@ class CharacterSheetLevelUp {
 	 */
 	_extractTraditionsFromClassFeature (className, level = 2) {
 		const traditions = new Set();
-		
+
 		// Look up "Combat Methods" feature for this class
 		const classFeatures = this._page.getClassFeatures?.();
 		if (!classFeatures?.length) {
 			console.log("[LevelUp] No class features available for tradition extraction");
 			return traditions;
 		}
-		
+
 		// Find the Combat Methods feature (prioritize "Combat Methods" over "Specialties")
 		// "Combat Methods" is the feature that contains the tradition list
-		let combatMethodsFeature = classFeatures.find(f => 
-			f.className === className && 
-			f.name === "Combat Methods" &&
-			f.level <= 5
+		let combatMethodsFeature = classFeatures.find(f =>
+			f.className === className
+			&& f.name === "Combat Methods"
+			&& f.level <= 5,
 		);
-		
+
 		// If no "Combat Methods" feature found, this class might not have combat traditions
 		if (!combatMethodsFeature) {
 			console.log(`[LevelUp] No Combat Methods feature found for ${className}`);
 			return traditions;
 		}
-		
+
 		console.log(`[LevelUp] Found Combat Methods feature:`, combatMethodsFeature.name, "at level", combatMethodsFeature.level, "with", combatMethodsFeature.entries?.length, "entries");
-		
+
 		// Recursively extract text from entries and look for tradition codes
 		const extractFromEntries = (entries) => {
 			if (!entries) return;
@@ -1844,9 +1844,9 @@ class CharacterSheetLevelUp {
 				if (entries.entry) extractFromEntries(entries.entry);
 			}
 		};
-		
+
 		extractFromEntries(combatMethodsFeature.entries);
-		
+
 		console.log(`[LevelUp] Extracted traditions from feature text:`, [...traditions]);
 		return traditions;
 	}
@@ -1859,7 +1859,7 @@ class CharacterSheetLevelUp {
 	 */
 	_getAvailableTraditionsForClass (allOptFeatures, classAllowedTypes, className) {
 		console.log("[LevelUp] _getAvailableTraditionsForClass called with classAllowedTypes:", classAllowedTypes, "className:", className);
-		
+
 		// First try to extract tradition codes from class-allowed types (e.g., "CTM:AM" -> "AM", "CTM:1AM" -> "AM")
 		const allowedTraditionCodes = new Set();
 		for (const ft of classAllowedTypes) {
@@ -1868,7 +1868,7 @@ class CharacterSheetLevelUp {
 				allowedTraditionCodes.add(match[2]);
 			}
 		}
-		
+
 		console.log("[LevelUp] Extracted tradition codes from types:", [...allowedTraditionCodes]);
 
 		// If no tradition codes found in types, try to extract from class feature description
@@ -1878,7 +1878,7 @@ class CharacterSheetLevelUp {
 				allowedTraditionCodes.add(trad);
 			}
 		}
-		
+
 		// If still no traditions found, fall back to all traditions
 		if (allowedTraditionCodes.size === 0) {
 			console.log("[LevelUp] No tradition codes found, falling back to all traditions");
@@ -1945,8 +1945,8 @@ class CharacterSheetLevelUp {
 			if (f.level !== level) return false;
 			// Be more flexible with source matching
 			if (source && f.source && f.source !== source) {
-				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source) &&
-					[Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
+				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source)
+					&& [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
 				if (!sourcesMatch) return false;
 			}
 			return true;
@@ -1967,7 +1967,7 @@ class CharacterSheetLevelUp {
 		const parts = featureRef.split("|");
 		const [name, className, source, level] = parts;
 		const parsedLevel = parseInt(level) || 1;
-		
+
 		return this._getClassFeatureData(name, className, source, parsedLevel);
 	}
 
@@ -2022,9 +2022,9 @@ class CharacterSheetLevelUp {
 							const parts = opt.ref.split("|");
 							const classFeatures = this._page.getClassFeatures();
 							const fullOpt = classFeatures.find(f =>
-								f.name === parts[0] &&
-								f.className === parts[1] &&
-								f.source === parts[2]
+								f.name === parts[0]
+								&& f.className === parts[1]
+								&& f.source === parts[2],
 							);
 							if (fullOpt) {
 								const desc = Renderer.get().render({entries: fullOpt.entries || []});
@@ -2213,7 +2213,7 @@ class CharacterSheetLevelUp {
 					}
 				});
 				$select.append(`</optgroup>`);
-				
+
 				$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
 				exoticLanguages.forEach(lang => {
 					if (!currentLanguages.includes(lang.toLowerCase())) {
@@ -2223,10 +2223,10 @@ class CharacterSheetLevelUp {
 				$select.append(`</optgroup>`);
 
 				// Add any other languages from data
-				const otherLangs = languageNames.filter(l => 
-					!standardLanguages.includes(l) && 
-					!exoticLanguages.includes(l) &&
-					!currentLanguages.includes(l.toLowerCase())
+				const otherLangs = languageNames.filter(l =>
+					!standardLanguages.includes(l)
+					&& !exoticLanguages.includes(l)
+					&& !currentLanguages.includes(l.toLowerCase()),
 				);
 				if (otherLangs.length) {
 					$select.append(`<optgroup label="──── Other Languages ────">`);
@@ -2307,7 +2307,7 @@ class CharacterSheetLevelUp {
 				}
 			}
 		}
-		
+
 		// Update unarmed strike (monk martial arts die progression)
 		this._state.ensureUnarmedStrike();
 
@@ -2392,7 +2392,7 @@ class CharacterSheetLevelUp {
 					// Use the original feature's featureType if available (e.g., ["CTM:1AM", "CTM:2AM"])
 					// This preserves the full type info including tradition codes
 					const originalTypes = opt.featureType || featureTypes;
-					
+
 					const featureData = {
 						name: opt.name,
 						source: opt.source,
@@ -2419,11 +2419,11 @@ class CharacterSheetLevelUp {
 						// Look up full feature data
 						const parts = opt.ref.split("|");
 						const fullOpt = classFeatures.find(f =>
-							f.name === parts[0] &&
-							f.className === parts[1] &&
-							f.source === parts[2]
+							f.name === parts[0]
+							&& f.className === parts[1]
+							&& f.source === parts[2],
 						);
-						
+
 						this._state.addFeature({
 							name: opt.name,
 							source: opt.source || fullOpt?.source || classEntry.source,
@@ -2441,8 +2441,8 @@ class CharacterSheetLevelUp {
 						// Look up full subclass feature data for description
 						const subclassFeatures = this._page.getSubclassFeatures() || [];
 						const fullSubFeature = subclassFeatures.find(f =>
-							f.name === opt.name &&
-							(f.subclassShortName === currentSubclass?.shortName || f.subclassShortName === opt.subclassShortName)
+							f.name === opt.name
+							&& (f.subclassShortName === currentSubclass?.shortName || f.subclassShortName === opt.subclassShortName),
 						);
 						this._state.addFeature({
 							name: opt.name,
@@ -2463,8 +2463,8 @@ class CharacterSheetLevelUp {
 					} else if (opt.type === "optionalfeature" && opt.ref) {
 						const allOptFeatures = this._page.getOptionalFeatures();
 						const fullOpt = allOptFeatures.find(f =>
-							f.name === opt.name &&
-							(f.source === opt.source || !opt.source)
+							f.name === opt.name
+							&& (f.source === opt.source || !opt.source),
 						);
 						this._state.addFeature({
 							name: opt.name,
@@ -2632,14 +2632,14 @@ class CharacterSheetLevelUp {
 	_updateHitDice (classData) {
 		const hitDie = `d${this._getClassHitDie(classData)}`;
 		const hitDice = this._state.getHitDiceByType();
-		
+
 		if (!hitDice[hitDie]) {
 			hitDice[hitDie] = {current: 1, max: 1};
 		} else {
 			hitDice[hitDie].max += 1;
 			hitDice[hitDie].current += 1;
 		}
-		
+
 		this._state.setHitDice(hitDice);
 	}
 
@@ -2682,7 +2682,7 @@ class CharacterSheetLevelUp {
 				const is2024 = classEntry.source === "XPHB" || classData.source === "XPHB";
 				resourceName = is2024 ? "Focus Points" : "Ki Points";
 			}
-			
+
 			let newMax;
 			if (typeof resourceDef.maxByLevel === "function") {
 				newMax = resourceDef.maxByLevel(newLevel);
@@ -2732,7 +2732,7 @@ class CharacterSheetLevelUp {
 		// This correctly handles full/half/third casters according to 2024 rules
 		const classes = this._state.getClasses();
 		const isMulticlass = classes.length > 1;
-		
+
 		if (isMulticlass) {
 			// Use the state's multiclass spell slot calculator which handles:
 			// - Full casters: all levels count
@@ -2743,11 +2743,11 @@ class CharacterSheetLevelUp {
 		} else {
 			// Single class: use class-specific progression tables
 			const slots = this._getSpellSlotsForLevel(classData, newLevel);
-			
+
 			// Update spellcasting
 			const spellcasting = this._state.getSpellcasting();
 			spellcasting.ability = spellcastingAbility;
-			
+
 			Object.entries(slots).forEach(([level, count]) => {
 				if (!spellcasting.spellSlots[level]) {
 					spellcasting.spellSlots[level] = {current: count, max: count};
@@ -2920,8 +2920,8 @@ class CharacterSheetLevelUp {
 			const spellData = this._resolveSpellReference(spellRef, allSpells);
 			if (spellData) {
 				// Check if spell already known
-				const existing = this._state.getSpells().find(s => 
-					s.name === spellData.name && s.source === spellData.source
+				const existing = this._state.getSpells().find(s =>
+					s.name === spellData.name && s.source === spellData.source,
 				);
 				if (existing) return;
 
@@ -2953,8 +2953,8 @@ class CharacterSheetLevelUp {
 			const spellData = this._resolveSpellReference(spellRef, allSpells);
 			if (spellData) {
 				// Check if innate spell already exists
-				const existing = this._state.getInnateSpells().find(s => 
-					s.name === spellData.name && s.source === spellData.source
+				const existing = this._state.getInnateSpells().find(s =>
+					s.name === spellData.name && s.source === spellData.source,
 				);
 				if (existing) return;
 
@@ -3073,7 +3073,7 @@ class CharacterSheetLevelUp {
 		// Must have 13+ in new class's primary ability AND current class(es) primary abilities
 		const checkPrerequisites = (newClassData) => {
 			const result = {met: true, failedAbilities: [], warnings: []};
-			
+
 			// Check new class requirements
 			const newClassAbilities = getPrimaryAbility(newClassData);
 			if (newClassAbilities) {
@@ -3087,7 +3087,7 @@ class CharacterSheetLevelUp {
 					}
 				}
 			}
-			
+
 			// Check current class(es) requirements
 			for (const currentCls of currentClasses) {
 				const currentClassData = classes.find(c => c.name === currentCls.name);
@@ -3105,7 +3105,7 @@ class CharacterSheetLevelUp {
 					}
 				}
 			}
-			
+
 			return result;
 		};
 
@@ -3113,14 +3113,14 @@ class CharacterSheetLevelUp {
 		const formatPrerequisiteDisplay = (classData) => {
 			const abilities = getPrimaryAbility(classData);
 			if (!abilities?.length) return null;
-			
+
 			return abilities.map(abilityOptions => {
 				const abilityChecks = abilityOptions.map(abl => {
 					const score = this._state.getAbilityScore(abl);
 					const met = score >= 13;
 					return {abl, score, met, name: Parser.attAbvToFull(abl)};
 				});
-				
+
 				// For "or" choices, at least one needs to be met
 				const groupMet = abilityChecks.some(c => c.met);
 				return {abilityChecks, groupMet};
@@ -3138,7 +3138,7 @@ class CharacterSheetLevelUp {
 
 		const $search = $(`<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search classes...">`);
 		const $list = $(`<div class="charsheet__levelup-subclasses" style="max-height: 350px;"></div>`);
-		
+
 		// Selection display showing which class is chosen
 		const $selectionDisplay = $(`
 			<div class="charsheet__multiclass-selection" style="display: none;">
@@ -3151,8 +3151,8 @@ class CharacterSheetLevelUp {
 		const renderList = (filter = "") => {
 			$list.empty();
 
-			const filtered = availableClasses.filter(c => 
-				c.name.toLowerCase().includes(filter.toLowerCase())
+			const filtered = availableClasses.filter(c =>
+				c.name.toLowerCase().includes(filter.toLowerCase()),
 			);
 
 			if (filtered.length === 0) {
@@ -3164,10 +3164,10 @@ class CharacterSheetLevelUp {
 				// Get hit die info
 				const hitDie = cls.hd?.faces ? `d${cls.hd.faces}` : "—";
 				// Get primary ability if available
-				const spellcaster = cls.spellcastingAbility 
-					? `✨ Spellcaster (${Parser.attAbvToFull(cls.spellcastingAbility)})` 
+				const spellcaster = cls.spellcastingAbility
+					? `✨ Spellcaster (${Parser.attAbvToFull(cls.spellcastingAbility)})`
 					: "";
-				
+
 				// Get prerequisite info
 				const prereqInfo = formatPrerequisiteDisplay(cls);
 				let prereqHtml = "";
@@ -3181,7 +3181,7 @@ class CharacterSheetLevelUp {
 					});
 					prereqHtml = `<div class="charsheet__multiclass-prereq ve-small ve-muted">📋 Prerequisite: ${prereqParts.join(", ")}</div>`;
 				}
-				
+
 				const $item = $$`
 					<div class="charsheet__levelup-option" data-class-name="${cls.name}">
 						<div class="charsheet__levelup-option-header">
@@ -3203,10 +3203,10 @@ class CharacterSheetLevelUp {
 					$item.addClass("selected");
 					$item.find("input[type='radio']").prop("checked", true);
 					selectedClass = cls;
-					
+
 					// Update selection display
 					$selectionDisplay.find(".charsheet__multiclass-selection-name").text(cls.name);
-					
+
 					// Check and display prerequisite status
 					const prereqCheck = checkPrerequisites(cls);
 					const $prereqStatus = $selectionDisplay.find(".charsheet__multiclass-prereq-status");
@@ -3216,7 +3216,7 @@ class CharacterSheetLevelUp {
 						$prereqStatus.html(`<span class="text-danger">❌ ${prereqCheck.failedAbilities.join("; ")}</span>`);
 					}
 					$selectionDisplay.show();
-					
+
 					// Update confirm button (will be set after button is created)
 					if (typeof updateConfirmButton === "function") updateConfirmButton(cls, prereqCheck);
 				});
@@ -3249,9 +3249,9 @@ class CharacterSheetLevelUp {
 		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
 			.on("click", () => doClose(false));
 		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select a Class</span></button>`);
-		
+
 		let currentPrereqCheck = null;
-		
+
 		// Assign update function now that button exists
 		updateConfirmButton = (cls, prereqCheck) => {
 			currentPrereqCheck = prereqCheck;
@@ -3271,40 +3271,39 @@ class CharacterSheetLevelUp {
 				$btnConfirm.prop("disabled", true);
 			}
 		};
-		
-		$btnConfirm.on("click", async () => {
-				if (!selectedClass) return;
-				
-				// Warn if prerequisites not met
-				if (currentPrereqCheck && !currentPrereqCheck.met) {
-					const confirmAnyway = confirm(
-						`Warning: Your character does not meet the multiclass prerequisites:\n\n` +
-						`${currentPrereqCheck.failedAbilities.join("\n")}\n\n` +
-						`The rules require 13+ in the primary ability of both your current class(es) and the new class. ` +
-						`Add this class anyway?`
-					);
-					if (!confirmAnyway) return;
-				}
 
-				// Close class selection modal
-				doClose(true);
-				
-				// Check for level 1 choices (optional features, feature options)
-				const hasLevel1Choices = await this._showMulticlassChoices(selectedClass);
-				
-				// If choices modal was cancelled, don't add the class
-				if (hasLevel1Choices === false) {
-					JqueryUtil.doToast({type: "info", content: "Multiclass cancelled."});
-					return;
-				}
-			});
+		$btnConfirm.on("click", async () => {
+			if (!selectedClass) return;
+
+			// Warn if prerequisites not met
+			if (currentPrereqCheck && !currentPrereqCheck.met) {
+				const confirmAnyway = confirm(
+					`Warning: Your character does not meet the multiclass prerequisites:\n\n`
+						+ `${currentPrereqCheck.failedAbilities.join("\n")}\n\n`
+						+ `The rules require 13+ in the primary ability of both your current class(es) and the new class. `
+						+ `Add this class anyway?`,
+				);
+				if (!confirmAnyway) return;
+			}
+
+			// Close class selection modal
+			doClose(true);
+
+			// Check for level 1 choices (optional features, feature options)
+			const hasLevel1Choices = await this._showMulticlassChoices(selectedClass);
+
+			// If choices modal was cancelled, don't add the class
+			if (hasLevel1Choices === false) {
+				JqueryUtil.doToast({type: "info", content: "Multiclass cancelled."});
+			}
+		});
 
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			${$btnCancel}
 			${$btnConfirm}
 		</div>`.appendTo($modalInner);
 	}
-	
+
 	/**
 	 * Show level 1 choices for multiclassing (Fighting Style, etc.)
 	 * Returns true if class was added, false if cancelled
@@ -3312,13 +3311,13 @@ class CharacterSheetLevelUp {
 	async _showMulticlassChoices (selectedClass) {
 		// Get level 1 features
 		const features = this._getLevelFeatures(selectedClass, 1);
-		
+
 		// Get optional feature gains (Fighting Style, etc.)
 		const optionalFeatureGains = this._getOptionalFeatureGains(selectedClass, 0, 1);
-		
+
 		// Get feature options (choices within features)
 		const featureOptionGroups = this._getFeatureOptionsForLevel(features, 1);
-		
+
 		// Get multiclass skill grant info
 		const multiclassSkillGrants = {
 			"Bard": {count: 1, from: Object.keys(Parser.SKILL_TO_ATB_ABV)}, // Any skill
@@ -3326,26 +3325,26 @@ class CharacterSheetLevelUp {
 			"Rogue": {count: 1, from: ["acrobatics", "athletics", "deception", "insight", "intimidation", "investigation", "perception", "performance", "persuasion", "sleight of hand", "stealth"]},
 		};
 		const skillGrant = multiclassSkillGrants[selectedClass.name];
-		
+
 		// If no choices needed, add the class directly
 		if (!optionalFeatureGains.length && !featureOptionGroups.length && !skillGrant) {
 			await this._applyMulticlass(selectedClass, features, {}, {}, []);
 			return true;
 		}
-		
+
 		// Show choices modal
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `${selectedClass.name} - Level 1 Choices`,
 			isMinHeight0: true,
 			isWidth100: true,
 		});
-		
+
 		let selectedOptionalFeatures = {};
 		let selectedFeatureOptions = {};
 		let selectedSkills = [];
-		
+
 		const $content = $(`<div></div>`);
-		
+
 		// Info about what choices need to be made
 		const choicesList = [];
 		if (optionalFeatureGains.length) {
@@ -3357,25 +3356,25 @@ class CharacterSheetLevelUp {
 		if (skillGrant) {
 			choicesList.push(`${skillGrant.count} skill proficiency`);
 		}
-		
+
 		$content.append(`
 			<div class="alert alert-info mb-3">
 				<strong>🎯 Make Your Choices</strong><br>
 				<span class="ve-small">As a level 1 ${selectedClass.name}, you need to select: ${choicesList.join(", ")}</span>
 			</div>
 		`);
-		
+
 		// Render skill selection for multiclass (if applicable)
 		if (skillGrant) {
 			const currentSkills = this._state.getSkillProficiencies();
 			const availableSkills = skillGrant.from.filter(s => !currentSkills.includes(s));
-			
+
 			const $skillSection = $(`<div class="charsheet__levelup-section mb-3">
 				<h5>🎓 Skill Proficiency</h5>
 				<p class="ve-small ve-muted">Select ${skillGrant.count} skill${skillGrant.count > 1 ? "s" : ""} to gain proficiency in:</p>
 				<div class="charsheet__skill-choice-list"></div>
 			</div>`);
-			
+
 			const $skillList = $skillSection.find(".charsheet__skill-choice-list");
 			availableSkills.forEach(skill => {
 				const skillName = skill.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -3383,11 +3382,11 @@ class CharacterSheetLevelUp {
 					<input type="checkbox" value="${skill}">
 					<span>${skillName}</span>
 				</label>`);
-				
+
 				$checkbox.find("input").on("change", function () {
 					const isChecked = $(this).is(":checked");
 					const value = $(this).val();
-					
+
 					if (isChecked) {
 						if (selectedSkills.length < skillGrant.count) {
 							selectedSkills.push(value);
@@ -3399,13 +3398,13 @@ class CharacterSheetLevelUp {
 						selectedSkills = selectedSkills.filter(s => s !== value);
 					}
 				});
-				
+
 				$skillList.append($checkbox);
 			});
-			
+
 			$content.append($skillSection);
 		}
-		
+
 		// Render optional features selection (Fighting Style, etc.)
 		if (optionalFeatureGains.length) {
 			const $optSection = this._renderOptionalFeaturesSelection(selectedClass, optionalFeatureGains, (featureType, featuresList) => {
@@ -3413,7 +3412,7 @@ class CharacterSheetLevelUp {
 			}, 1);
 			$content.append($optSection);
 		}
-		
+
 		// Render feature options selection
 		if (featureOptionGroups.length) {
 			const $featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
@@ -3421,9 +3420,9 @@ class CharacterSheetLevelUp {
 			});
 			$content.append($featOptSection);
 		}
-		
+
 		$content.appendTo($modalInner);
-		
+
 		// Footer buttons
 		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
 			.on("click", () => doClose(false));
@@ -3438,7 +3437,7 @@ class CharacterSheetLevelUp {
 						return;
 					}
 				}
-				
+
 				// Validate feature options
 				for (const optGroup of featureOptionGroups) {
 					const featureKey = `${optGroup.featureName}_${optGroup.featureSource || ""}`;
@@ -3448,24 +3447,24 @@ class CharacterSheetLevelUp {
 						return;
 					}
 				}
-				
+
 				// Validate skill selections
 				if (skillGrant && selectedSkills.length < skillGrant.count) {
 					JqueryUtil.doToast({type: "warning", content: `Please select ${skillGrant.count} skill proficiency.`});
 					return;
 				}
-				
+
 				// Apply multiclass with selections
 				await this._applyMulticlass(selectedClass, features, selectedOptionalFeatures, selectedFeatureOptions, selectedSkills);
-				
+
 				doClose(true);
 			});
-		
+
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			${$btnCancel}
 			${$btnConfirm}
 		</div>`.appendTo($modalInner);
-		
+
 		// Wait for modal to close and return result
 		return new Promise(resolve => {
 			const checkClosed = setInterval(() => {
@@ -3478,7 +3477,7 @@ class CharacterSheetLevelUp {
 			}, 100);
 		});
 	}
-	
+
 	/**
 	 * Apply multiclass - add class, features, proficiencies, and selected optional features
 	 */
@@ -3499,7 +3498,7 @@ class CharacterSheetLevelUp {
 			if (!description && f.entries) {
 				description = Renderer.get().render({entries: f.entries});
 			}
-			
+
 			this._state.addFeature({
 				name: f.name,
 				source: f.source || selectedClass.source,
@@ -3513,14 +3512,14 @@ class CharacterSheetLevelUp {
 				description: description || "",
 			});
 		});
-		
+
 		// Add selected optional features (Fighting Style, etc.)
 		for (const [featureKey, optFeatures] of Object.entries(selectedOptionalFeatures)) {
 			for (const optFeat of optFeatures) {
-				const description = optFeat.entries 
+				const description = optFeat.entries
 					? Renderer.get().render({entries: optFeat.entries})
 					: "";
-				
+
 				this._state.addFeature({
 					name: optFeat.name,
 					source: optFeat.source,
@@ -3533,15 +3532,15 @@ class CharacterSheetLevelUp {
 				});
 			}
 		}
-		
+
 		// Add selected feature options
 		for (const [featureKey, options] of Object.entries(selectedFeatureOptions)) {
 			const [featureName] = featureKey.split("_");
 			for (const option of options) {
-				const description = option.entries 
+				const description = option.entries
 					? Renderer.get().render({entries: option.entries})
 					: option.description || "";
-				
+
 				this._state.addFeature({
 					name: option.name || `${featureName} Option`,
 					source: option.source || selectedClass.source,
@@ -3560,7 +3559,7 @@ class CharacterSheetLevelUp {
 
 		// Add proficiencies from multiclass (armor/weapons)
 		this._applyMulticlassProficiencies(selectedClass);
-		
+
 		// Add selected skill proficiencies
 		if (selectedSkills && selectedSkills.length) {
 			selectedSkills.forEach(skill => {

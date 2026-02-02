@@ -494,15 +494,15 @@ describe("Multiclass Progression Scenarios", () => {
 			expect(state.getClassLevel("Ranger")).toBe(6);
 		});
 
-it("should have d8 and d10 hit dice from both classes", () => {
-					state.addClass({name: "Monk", source: "PHB", level: 14});
-					state.addClass({name: "Ranger", source: "PHB", level: 6});
+		it("should have d8 and d10 hit dice from both classes", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 14});
+			state.addClass({name: "Ranger", source: "PHB", level: 6});
 
-					const hitDice = state.getHitDice();
-					const d8 = hitDice.find(h => h.type === "d8");
-					const d10 = hitDice.find(h => h.type === "d10");
-					expect(d8?.max).toBe(14); // Monk
-					expect(d10?.max).toBe(6); // Ranger
+			const hitDice = state.getHitDice();
+			const d8 = hitDice.find(h => h.type === "d8");
+			const d10 = hitDice.find(h => h.type === "d10");
+			expect(d8?.max).toBe(14); // Monk
+			expect(d10?.max).toBe(6); // Ranger
 		});
 
 		it("should calculate half-caster slots from Ranger only", () => {
