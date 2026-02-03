@@ -4545,7 +4545,6 @@ class CharacterSheetPage {
 		</div>`;
 
 		// Thelemar jumping rules (Athletics-based)
-		const currentThelemar_jumping = this._state.getSettings()?.thelemar_jumping || false;
 		const $thelemar_jumping = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-jumping" ${currentThelemar_jumping ? "checked" : ""}>
@@ -4557,7 +4556,6 @@ class CharacterSheetPage {
 		</div>`;
 
 		// Thelemar item utilization (healing potions as action = max healing)
-		const currentThelemar_itemUtilization = this._state.getSettings()?.thelemar_itemUtilization || false;
 		const $thelemar_itemUtilization = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-item-util" ${currentThelemar_itemUtilization ? "checked" : ""}>
