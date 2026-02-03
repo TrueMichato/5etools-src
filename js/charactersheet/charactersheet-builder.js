@@ -1689,6 +1689,12 @@ class CharacterSheetBuilder {
 	}
 
 	async _finishCharacter () {
+		// Set HP to full (max HP) for new characters
+		const maxHp = this._state.getMaxHp();
+		if (maxHp > 0) {
+			this._state.setHp(maxHp, maxHp);
+		}
+
 		// Save the character
 		await this._page.saveCharacter();
 
@@ -5331,6 +5337,8 @@ class CharacterSheetBuilder {
 							language: e.target.value,
 						});
 					}
+					// Update all dropdowns to disable already-selected languages
+					this._updateLanguageDropdownOptions($choiceSection);
 				});
 
 				$choiceSection.append($select);
@@ -5341,6 +5349,43 @@ class CharacterSheetBuilder {
 		if (fixedLangs.length || totalLangChoices > 0) {
 			$content.append($langSection);
 		}
+
+		// Initial update of dropdown options
+		if (totalLangChoices > 0) {
+			this._updateLanguageDropdownOptions($langSection.find(".charsheet__builder-lang-choice"));
+		}
+	}
+
+	/**
+	 * Update language dropdown options to disable already-selected languages
+	 * @param {jQuery} $container - The container with language select elements
+	 */
+	_updateLanguageDropdownOptions ($container) {
+		// Get all currently selected languages (from this background section and elsewhere)
+		const selectedBgLangs = this._selectedLanguages.map(l => l.language);
+		const selectedClassLangs = this._selectedClassFeatureLanguages || [];
+		const existingLangs = this._state?.getLanguages?.() || [];
+		
+		// Combine all selected/known languages
+		const allSelectedLangs = [...selectedBgLangs, ...selectedClassLangs, ...existingLangs]
+			.filter(l => l)
+			.map(l => l.toLowerCase());
+
+		// Update each select element
+		$container.find("select").each((idx, select) => {
+			const $select = $(select);
+			const currentVal = $select.val();
+
+			$select.find("option").each((_, opt) => {
+				const $opt = $(opt);
+				const val = $opt.val();
+				if (!val) return; // Skip placeholder option
+
+				// Disable if selected elsewhere, but not if it's the current selection
+				const isSelectedElsewhere = allSelectedLangs.includes(val.toLowerCase()) && val !== currentVal;
+				$opt.prop("disabled", isSelectedElsewhere);
+			});
+		});
 	}
 
 	_renderBackgroundASIChoices ($container, abilityChoice) {
