@@ -9,8 +9,12 @@ class CharacterSheetInventory {
 		this._allItems = [];
 		this._itemFilter = "";
 		this._itemTypeFilter = "all";
+		this._starredFilter = false;
 		this._currentPage = 0;
-		this._itemsPerPage = 10;
+		this._itemsPerPage = 50; // Increased since we now group by category
+		this._sortBy = "name"; // name, weight, rarity, value
+		this._sortAsc = true;
+		this._collapsedCategories = new Set(); // Track collapsed category sections
 
 		this._init();
 	}
@@ -89,6 +93,20 @@ class CharacterSheetInventory {
 			this._restoreCharge(itemId);
 		});
 
+		// Star/favorite button
+		$(document).on("click", ".charsheet__item-star", (e) => {
+			e.stopPropagation();
+			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
+			this._toggleStarred(itemId);
+		});
+
+		// Category header collapse toggle
+		$(document).on("click", ".charsheet__category-header", (e) => {
+			const $header = $(e.currentTarget);
+			const category = $header.data("category");
+			this._toggleCategoryCollapse(category);
+		});
+
 		// Currency inputs
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
 			$(document).on("change", `#charsheet-currency-${currency}`, (e) => {
@@ -99,7 +117,7 @@ class CharacterSheetInventory {
 		});
 
 		// Filter inputs
-		$(document).on("input", "#charsheet-item-search", (e) => {
+		$(document).on("input", "#charsheet-item-search, #charsheet-ipt-inventory-search", (e) => {
 			this._itemFilter = e.target.value.toLowerCase();
 			this._currentPage = 0; // Reset to first page when filtering
 			this._renderItemList();
@@ -110,6 +128,57 @@ class CharacterSheetInventory {
 			this._currentPage = 0; // Reset to first page when filtering
 			this._renderItemList();
 		});
+
+		// Starred filter toggle
+		$(document).on("click", "#charsheet-btn-starred-filter", (e) => {
+			this._starredFilter = !this._starredFilter;
+			$(e.currentTarget).toggleClass("active", this._starredFilter);
+			this._currentPage = 0;
+			this._renderItemList();
+		});
+
+		// Sort controls
+		$(document).on("change", "#charsheet-inventory-sort", (e) => {
+			this._sortBy = e.target.value;
+			this._renderItemList();
+		});
+
+		$(document).on("click", "#charsheet-btn-sort-direction", (e) => {
+			this._sortAsc = !this._sortAsc;
+			const $btn = $(e.currentTarget);
+			$btn.find(".glyphicon").toggleClass("glyphicon-sort-by-attributes", this._sortAsc)
+				.toggleClass("glyphicon-sort-by-attributes-alt", !this._sortAsc);
+			$btn.attr("title", this._sortAsc ? "Sort ascending" : "Sort descending");
+			this._renderItemList();
+		});
+	}
+
+	/**
+	 * Toggle starred status for an item
+	 * @param {string} itemId - The item ID
+	 */
+	_toggleStarred (itemId) {
+		const newStatus = this._state.toggleItemStarred(itemId);
+		this._renderItemList();
+		this._page?.saveCharacter?.();
+
+		JqueryUtil.doToast({
+			type: newStatus ? "info" : "default",
+			content: newStatus ? "Item starred!" : "Star removed",
+		});
+	}
+
+	/**
+	 * Toggle category collapse state
+	 * @param {string} category - Category name
+	 */
+	_toggleCategoryCollapse (category) {
+		if (this._collapsedCategories.has(category)) {
+			this._collapsedCategories.delete(category);
+		} else {
+			this._collapsedCategories.add(category);
+		}
+		this._renderItemList();
 	}
 
 	async _showItemPicker () {
@@ -1573,6 +1642,81 @@ class CharacterSheetInventory {
 	}
 
 	// #region Rendering
+
+	/**
+	 * Get display category for an item
+	 * @param {object} item - The item
+	 * @returns {string} Category name
+	 */
+	_getItemCategory (item) {
+		if (item.weapon) return "Weapons";
+		const typeBase = item.type?.split("|")[0];
+		if (item.armor || ["LA", "MA", "HA"].includes(typeBase)) return "Armor";
+		if (typeBase === "S" || item.shield) return "Armor";
+		if (item.type === "P") return "Consumables";
+		if (item.type === "SC") return "Consumables";
+		if (item.type === "WD") return "Wondrous Items";
+		if (item.type === "ST") return "Wondrous Items";
+		if (item.type === "RG") return "Wondrous Items";
+		if (item.wondrous) return "Wondrous Items";
+		if (item.type === "AT" || item.type === "T") return "Tools";
+		if (item.type === "G" || item.type === "SCF") return "Adventuring Gear";
+		return "Other";
+	}
+
+	/**
+	 * Get icon for a category
+	 * @param {string} category - Category name
+	 * @returns {string} Emoji icon
+	 */
+	_getCategoryIcon (category) {
+		const icons = {
+			"Starred": "⭐",
+			"Weapons": "⚔️",
+			"Armor": "🛡️",
+			"Consumables": "🧪",
+			"Wondrous Items": "✨",
+			"Tools": "🔧",
+			"Adventuring Gear": "🎒",
+			"Other": "📦",
+		};
+		return icons[category] || "📦";
+	}
+
+	/**
+	 * Sort items based on current sort settings
+	 * @param {Array} items - Items to sort
+	 * @returns {Array} Sorted items
+	 */
+	_sortItems (items) {
+		const sortFns = {
+			name: (a, b) => a.name.localeCompare(b.name),
+			weight: (a, b) => ((a.weight || 0) * a.quantity) - ((b.weight || 0) * b.quantity),
+			rarity: (a, b) => {
+				const rarityOrder = {none: 0, common: 1, uncommon: 2, rare: 3, "very rare": 4, legendary: 5, artifact: 6};
+				const ra = rarityOrder[(a.rarity || "none").toLowerCase()] || 0;
+				const rb = rarityOrder[(b.rarity || "none").toLowerCase()] || 0;
+				return ra - rb;
+			},
+			value: (a, b) => ((a.value || 0) * a.quantity) - ((b.value || 0) * b.quantity),
+		};
+
+		const sorted = [...items];
+		const sortFn = sortFns[this._sortBy] || sortFns.name;
+
+		sorted.sort((a, b) => {
+			// Always keep starred items at top within their groups
+			if (a.starred !== b.starred) return b.starred - a.starred;
+			// Then equipped items
+			if (a.equipped !== b.equipped) return b.equipped - a.equipped;
+			// Then apply chosen sort
+			const result = sortFn(a, b);
+			return this._sortAsc ? result : -result;
+		});
+
+		return sorted;
+	}
+
 	_renderItemList () {
 		const $container = $("#charsheet-inventory-list");
 		if (!$container.length) return;
@@ -1589,40 +1733,120 @@ class CharacterSheetInventory {
 		if (this._itemTypeFilter !== "all") {
 			filtered = filtered.filter(i => i.type === this._itemTypeFilter);
 		}
-
-		// Sort: equipped first, then by name
-		filtered.sort((a, b) => {
-			if (a.equipped !== b.equipped) return b.equipped - a.equipped;
-			return a.name.localeCompare(b.name);
-		});
+		if (this._starredFilter) {
+			filtered = filtered.filter(i => i.starred);
+		}
 
 		if (!filtered.length) {
-			$container.append(`<p class="ve-muted text-center">No items</p>`);
-			this._renderPagination($container, 0, 0);
+			$container.append(`<div class="charsheet__inventory-empty">
+				<span class="ve-muted">${this._starredFilter ? "No starred items" : "No items in inventory"}</span>
+			</div>`);
 			return;
 		}
 
-		// Calculate pagination
-		const totalItems = filtered.length;
-		const totalPages = Math.ceil(totalItems / this._itemsPerPage);
+		// Group items by category
+		const categoryOrder = ["Starred", "Weapons", "Armor", "Consumables", "Wondrous Items", "Tools", "Adventuring Gear", "Other"];
+		const categories = {};
 
-		// Ensure current page is valid
-		if (this._currentPage >= totalPages) {
-			this._currentPage = Math.max(0, totalPages - 1);
+		// Separate starred items for the Starred category (if not filtering by starred)
+		if (!this._starredFilter) {
+			const starredItems = filtered.filter(i => i.starred);
+			if (starredItems.length > 0) {
+				categories["Starred"] = this._sortItems(starredItems);
+			}
 		}
 
-		// Get items for current page
-		const startIdx = this._currentPage * this._itemsPerPage;
-		const endIdx = Math.min(startIdx + this._itemsPerPage, totalItems);
-		const pageItems = filtered.slice(startIdx, endIdx);
-
-		pageItems.forEach(item => {
-			const $item = this._renderItemRow(item);
-			$container.append($item);
+		// Group remaining items by category
+		filtered.forEach(item => {
+			const category = this._getItemCategory(item);
+			if (!categories[category]) categories[category] = [];
+			// Don't add to category if already in Starred section (unless filtering by starred)
+			if (this._starredFilter || !item.starred || category === "Starred") {
+				// Only add non-starred items to regular categories when we have a Starred section
+				if (!this._starredFilter && categories["Starred"] && item.starred) return;
+				categories[category].push(item);
+			}
 		});
 
-		// Render pagination controls if there are multiple pages
-		this._renderPagination($container, totalItems, totalPages);
+		// Sort items within each category
+		Object.keys(categories).forEach(cat => {
+			if (cat !== "Starred") { // Starred already sorted
+				categories[cat] = this._sortItems(categories[cat]);
+			}
+		});
+
+		// Render toolbar
+		this._renderInventoryToolbar($container);
+
+		// Render each category
+		categoryOrder.forEach(category => {
+			if (!categories[category] || !categories[category].length) return;
+
+			const items = categories[category];
+			const isCollapsed = this._collapsedCategories.has(category);
+			const icon = this._getCategoryIcon(category);
+
+			const $categorySection = $(`
+				<div class="charsheet__inventory-category ${isCollapsed ? "collapsed" : ""}" data-category="${category}">
+					<div class="charsheet__category-header" data-category="${category}">
+						<span class="charsheet__category-collapse-icon">
+							<span class="glyphicon ${isCollapsed ? "glyphicon-chevron-right" : "glyphicon-chevron-down"}"></span>
+						</span>
+						<span class="charsheet__category-icon">${icon}</span>
+						<span class="charsheet__category-title">${category}</span>
+						<span class="charsheet__category-count">${items.length}</span>
+					</div>
+					<div class="charsheet__category-items ${isCollapsed ? "hidden" : ""}"></div>
+				</div>
+			`);
+
+			const $itemsContainer = $categorySection.find(".charsheet__category-items");
+			items.forEach(item => {
+				const $item = this._renderItemRow(item);
+				$itemsContainer.append($item);
+			});
+
+			$container.append($categorySection);
+		});
+	}
+
+	/**
+	 * Render the inventory toolbar with filters and sort controls
+	 * @param {jQuery} $container - The container to prepend to
+	 */
+	_renderInventoryToolbar ($container) {
+		// Check if toolbar already exists in parent
+		const $existingToolbar = $container.siblings(".charsheet__inventory-toolbar");
+		if ($existingToolbar.length) {
+			// Update the active state of starred filter
+			$existingToolbar.find("#charsheet-btn-starred-filter").toggleClass("active", this._starredFilter);
+			// Update sort dropdown
+			$existingToolbar.find("#charsheet-inventory-sort").val(this._sortBy);
+			return;
+		}
+
+		const $toolbar = $(`
+			<div class="charsheet__inventory-toolbar">
+				<div class="charsheet__inventory-toolbar-left">
+					<button type="button" class="ve-btn ve-btn-xs ${this._starredFilter ? "ve-btn-warning" : "ve-btn-default"} charsheet__btn-starred-filter" id="charsheet-btn-starred-filter" title="Show only starred items">
+						<span class="glyphicon glyphicon-star"></span> Starred
+					</button>
+				</div>
+				<div class="charsheet__inventory-toolbar-right">
+					<select class="form-control form-control--minimal charsheet__inventory-sort-select" id="charsheet-inventory-sort" title="Sort by">
+						<option value="name" ${this._sortBy === "name" ? "selected" : ""}>Name</option>
+						<option value="weight" ${this._sortBy === "weight" ? "selected" : ""}>Weight</option>
+						<option value="rarity" ${this._sortBy === "rarity" ? "selected" : ""}>Rarity</option>
+						<option value="value" ${this._sortBy === "value" ? "selected" : ""}>Value</option>
+					</select>
+					<button type="button" class="ve-btn ve-btn-xs ve-btn-default" id="charsheet-btn-sort-direction" title="${this._sortAsc ? "Sort ascending" : "Sort descending"}">
+						<span class="glyphicon ${this._sortAsc ? "glyphicon-sort-by-attributes" : "glyphicon-sort-by-attributes-alt"}"></span>
+					</button>
+				</div>
+			</div>
+		`);
+
+		$container.before($toolbar);
 	}
 
 	_renderPagination ($container, totalItems, totalPages) {
@@ -1714,54 +1938,61 @@ class CharacterSheetInventory {
 			: "";
 
 		return $(`
-			<div class="charsheet__item ${item.equipped ? "equipped" : ""}" data-item-id="${item.id}">
-				<div class="charsheet__item-main">
-					<span class="charsheet__item-name">
-						${item.attuned ? "<span class=\"glyphicon glyphicon-star text-warning mr-1\"></span>" : ""}
-						${itemNameHtml}
-						${item.quantity > 1 ? `<span class="ve-muted">(×${item.quantity})</span>` : ""}
-					</span>
-					<span class="charsheet__item-meta">
-						${typeTag ? `<span class="badge badge-secondary ve-small">${typeTag}</span>` : ""}
-						${item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) ? `<span class="badge badge-info ve-small">${item.rarity.toTitleCase()}</span>` : ""}
-						${item.weight ? `<span class="ve-muted ve-small">${(item.weight * item.quantity).toFixed(1)} lb.</span>` : ""}
-					</span>
-				</div>
-				<div class="charsheet__item-details">
-					${item.damage ? `<span class="ve-small">Dmg: ${item.damage}</span>` : ""}
-					${item.ac ? `<span class="ve-small">AC: ${item.ac}</span>` : ""}
-					${propertiesStr ? `<span class="ve-small ve-muted" title="Properties">${propertiesStr}</span>` : ""}
-					${masteryStr ? `<span class="ve-small text-info" title="Mastery">⚔ ${masteryStr}</span>` : ""}
-					${hasCharges ? `<span class="ve-small charsheet__item-charges" title="${rechargeTooltip}">Charges: <strong>${item.chargesCurrent ?? item.charges}</strong>/${item.charges}</span>` : ""}
-				</div>
-				<div class="charsheet__item-actions">
-					<button class="ve-btn ve-btn-xs ve-btn-default charsheet__item-qty-decrease" title="Decrease quantity">−</button>
-					<span class="charsheet__item-qty">${item.quantity}</span>
-					<button class="ve-btn ve-btn-xs ve-btn-default charsheet__item-qty-increase" title="Increase quantity">+</button>
-					${hasCharges ? `
-						<button class="ve-btn ve-btn-xs ve-btn-default charsheet__item-use-charge" title="Use 1 charge" ${(item.chargesCurrent ?? item.charges) <= 0 ? "disabled" : ""}>
-							<span class="glyphicon glyphicon-flash"></span> Use
-						</button>
-						<button class="ve-btn ve-btn-xs ve-btn-default charsheet__item-restore-charge" title="Restore 1 charge" ${(item.chargesCurrent ?? item.charges) >= item.charges ? "disabled" : ""}>
-							<span class="glyphicon glyphicon-plus"></span>
-						</button>
-					` : ""}
-					${canEquip ? `
-						<button class="ve-btn ve-btn-xs ${item.equipped ? "ve-btn-success" : "ve-btn-default"} charsheet__item-equip" title="${item.equipped ? "Unequip" : "Equip"}">
-							<span class="glyphicon glyphicon-hand-right"></span> ${item.equipped ? "Equipped" : "Equip"}
-						</button>
-					` : ""}
-					${canAttune ? `
-						<button class="ve-btn ve-btn-xs ${item.attuned ? "ve-btn-warning" : "ve-btn-default"} charsheet__item-attune" title="${item.attuned ? "End attunement" : "Attune"}">
-							<span class="glyphicon glyphicon-star"></span> ${item.attuned ? "Attuned" : "Attune"}
-						</button>
-					` : ""}
-					<button class="ve-btn ve-btn-xs ve-btn-default charsheet__item-info" title="Item details">
-						<span class="glyphicon glyphicon-info-sign"></span>
+			<div class="charsheet__item ${item.equipped ? "equipped" : ""} ${item.starred ? "starred" : ""}" data-item-id="${item.id}">
+				<div class="charsheet__item-star-wrapper">
+					<button type="button" class="charsheet__item-star ${item.starred ? "active" : ""}" title="${item.starred ? "Remove star" : "Star item"}">
+						<span class="glyphicon glyphicon-star"></span>
 					</button>
-					<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__item-remove" title="Remove item">
-						<span class="glyphicon glyphicon-trash"></span>
-					</button>
+				</div>
+				<div class="charsheet__item-content">
+					<div class="charsheet__item-main">
+						<span class="charsheet__item-name">
+							${item.attuned ? "<span class=\"charsheet__item-attuned-badge\" title=\"Attuned\">◈</span>" : ""}
+							${itemNameHtml}
+							${item.quantity > 1 ? `<span class="ve-muted">(×${item.quantity})</span>` : ""}
+						</span>
+						<span class="charsheet__item-meta">
+							${typeTag ? `<span class="badge badge-secondary ve-small">${typeTag}</span>` : ""}
+							${item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) ? `<span class="badge badge-info ve-small">${item.rarity.toTitleCase()}</span>` : ""}
+							${item.weight ? `<span class="ve-muted ve-small">${(item.weight * item.quantity).toFixed(1)} lb.</span>` : ""}
+						</span>
+					</div>
+					<div class="charsheet__item-details">
+						${item.damage ? `<span class="ve-small">Dmg: ${item.damage}</span>` : ""}
+						${item.ac ? `<span class="ve-small">AC: ${item.ac}</span>` : ""}
+						${propertiesStr ? `<span class="ve-small ve-muted" title="Properties">${propertiesStr}</span>` : ""}
+						${masteryStr ? `<span class="ve-small text-info" title="Mastery">⚔ ${masteryStr}</span>` : ""}
+						${hasCharges ? `<span class="ve-small charsheet__item-charges" title="${rechargeTooltip}">Charges: <strong>${item.chargesCurrent ?? item.charges}</strong>/${item.charges}</span>` : ""}
+					</div>
+					<div class="charsheet__item-actions">
+						<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__item-qty-decrease" title="Decrease quantity">−</button>
+						<span class="charsheet__item-qty">${item.quantity}</span>
+						<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__item-qty-increase" title="Increase quantity">+</button>
+						${hasCharges ? `
+							<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__item-use-charge" title="Use 1 charge" ${(item.chargesCurrent ?? item.charges) <= 0 ? "disabled" : ""}>
+								<span class="glyphicon glyphicon-flash"></span> Use
+							</button>
+							<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__item-restore-charge" title="Restore 1 charge" ${(item.chargesCurrent ?? item.charges) >= item.charges ? "disabled" : ""}>
+								<span class="glyphicon glyphicon-plus"></span>
+							</button>
+						` : ""}
+						${canEquip ? `
+							<button type="button" class="ve-btn ve-btn-xs ${item.equipped ? "ve-btn-success" : "ve-btn-default"} charsheet__item-equip" title="${item.equipped ? "Unequip" : "Equip"}">
+								<span class="glyphicon glyphicon-hand-right"></span> ${item.equipped ? "Equipped" : "Equip"}
+							</button>
+						` : ""}
+						${canAttune ? `
+							<button type="button" class="ve-btn ve-btn-xs ${item.attuned ? "ve-btn-warning" : "ve-btn-default"} charsheet__item-attune" title="${item.attuned ? "End attunement" : "Attune"}">
+								<span class="glyphicon glyphicon-star-empty"></span> ${item.attuned ? "Attuned" : "Attune"}
+							</button>
+						` : ""}
+						<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__item-info" title="Item details">
+							<span class="glyphicon glyphicon-info-sign"></span>
+						</button>
+						<button type="button" class="ve-btn ve-btn-xs ve-btn-danger charsheet__item-remove" title="Remove item">
+							<span class="glyphicon glyphicon-trash"></span>
+						</button>
+					</div>
 				</div>
 			</div>
 		`);
