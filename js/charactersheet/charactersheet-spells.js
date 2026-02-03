@@ -952,11 +952,11 @@ class CharacterSheetSpells {
 		let filterSomatic = false;
 		let filterMaterial = false;
 
-		const $ritualBtn = $(`<button class="charsheet__modal-filter-btn">🔮 Ritual</button>`).appendTo($quickFilters);
-		const $concBtn = $(`<button class="charsheet__modal-filter-btn">⏳ Concentration</button>`).appendTo($quickFilters);
-		const $verbalBtn = $(`<button class="charsheet__modal-filter-btn">🗣️ Verbal</button>`).appendTo($quickFilters);
-		const $somaticBtn = $(`<button class="charsheet__modal-filter-btn">✋ Somatic</button>`).appendTo($quickFilters);
-		const $materialBtn = $(`<button class="charsheet__modal-filter-btn">💎 Material</button>`).appendTo($quickFilters);
+		const $ritualBtn = $(`<button class="charsheet__modal-filter-btn" type="button">🔮 Ritual</button>`).appendTo($quickFilters);
+		const $concBtn = $(`<button class="charsheet__modal-filter-btn" type="button">⏳ Concentration</button>`).appendTo($quickFilters);
+		const $verbalBtn = $(`<button class="charsheet__modal-filter-btn" type="button">🗣️ Verbal</button>`).appendTo($quickFilters);
+		const $somaticBtn = $(`<button class="charsheet__modal-filter-btn" type="button">✋ Somatic</button>`).appendTo($quickFilters);
+		const $materialBtn = $(`<button class="charsheet__modal-filter-btn" type="button">💎 Material</button>`).appendTo($quickFilters);
 
 		// Results count
 		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);

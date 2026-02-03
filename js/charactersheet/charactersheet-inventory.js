@@ -1467,7 +1467,21 @@ class CharacterSheetInventory {
 		const items = this._state.getItems();
 		const equippedArmor = items.find(i => i.armor && i.equipped);
 		// Check for shield by flag first, then fall back to name check for older saves
-		const equippedShield = items.find(i => (i.shield || i.name?.toLowerCase().includes("shield")) && i.equipped);
+		// Exclude items like "Ring of Mind Shielding" by checking it's not a ring type
+		const equippedShield = items.find(i => {
+			if (!i.equipped) return false;
+			if (i.shield) return true;
+			// Fallback name check - but exclude ring/wondrous items that happen to have "shield" in name
+			if (i.name?.toLowerCase().includes("shield")) {
+				const nameLower = i.name.toLowerCase();
+				// Exclude "Ring of X Shielding" patterns and similar non-shield items
+				if (nameLower.startsWith("ring of") || i.type === "ring" || i.type === "wondrous") {
+					return false;
+				}
+				return true;
+			}
+			return false;
+		});
 
 		if (equippedArmor) {
 			// Use stored armor type first, then look up from data
@@ -1981,7 +1995,22 @@ class CharacterSheetInventory {
 	_syncArmorState () {
 		const items = this._state.getItems();
 		const equippedArmor = items.find(i => i.armor && i.equipped);
-		const equippedShield = items.find(i => (i.shield || i.name?.toLowerCase().includes("shield")) && i.equipped);
+		// Check for shield by flag first, then fall back to name check for older saves
+		// Exclude items like "Ring of Mind Shielding" by checking it's not a ring type
+		const equippedShield = items.find(i => {
+			if (!i.equipped) return false;
+			if (i.shield) return true;
+			// Fallback name check - but exclude ring/wondrous items that happen to have "shield" in name
+			if (i.name?.toLowerCase().includes("shield")) {
+				const nameLower = i.name.toLowerCase();
+				// Exclude "Ring of X Shielding" patterns and similar non-shield items
+				if (nameLower.startsWith("ring of") || i.type === "ring" || i.type === "wondrous") {
+					return false;
+				}
+				return true;
+			}
+			return false;
+		});
 
 		if (equippedArmor) {
 			let armorType = equippedArmor.armorType || "light";
