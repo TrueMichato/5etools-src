@@ -11466,6 +11466,7 @@ class CharacterSheetState {
 			quantity: invItem.quantity,
 			equipped: invItem.equipped,
 			attuned: invItem.attuned,
+			starred: invItem.starred,
 		}));
 	}
 
@@ -11591,6 +11592,38 @@ class CharacterSheetState {
 	setItemAttuned (itemId, attuned) {
 		const item = this._data.inventory.find(i => i.id === itemId);
 		if (item) item.attuned = attuned;
+	}
+
+	/**
+	 * Set an item's starred/favorited status
+	 * @param {string} itemId - The item ID
+	 * @param {boolean} starred - Whether the item is starred
+	 */
+	setItemStarred (itemId, starred) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (item) item.starred = starred;
+	}
+
+	/**
+	 * Toggle an item's starred status
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean} The new starred status
+	 */
+	toggleItemStarred (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (item) {
+			item.starred = !item.starred;
+			return item.starred;
+		}
+		return false;
+	}
+
+	/**
+	 * Get all starred items
+	 * @returns {Array} Array of starred inventory items
+	 */
+	getStarredItems () {
+		return this._data.inventory.filter(i => i.starred);
 	}
 
 	/**
