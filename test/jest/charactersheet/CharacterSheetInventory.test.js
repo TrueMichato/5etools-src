@@ -192,7 +192,8 @@ describe("Inventory Management", () => {
 		});
 
 		it("should calculate carrying capacity (15 x STR)", () => {
-			// STR 15 = 225 lb capacity
+				// Set to 2024 rules for predictable 15 x STR capacity
+				state.setSetting("thelemar_carryWeight", false);
 			expect(state.getCarryingCapacity()).toBe(225);
 		});
 

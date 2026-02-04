@@ -722,7 +722,8 @@ describe("Edge Cases and Stress Tests", () => {
 		});
 
 		it("should not exceed exhaustion level 6", () => {
-			state.setExhaustion(10);
+				// Set to 2024 rules which cap at 6
+				state.setExhaustionRules("2024");
 			expect(state.getExhaustion()).toBeLessThanOrEqual(6);
 		});
 

@@ -23,6 +23,94 @@ class CharacterSheetSpells {
 		this._filteredSpells = spells;
 	}
 
+	// ========================================================================
+	// Thelemar Spell Rarity/Legality System
+	// ========================================================================
+	// Override map: Set homebrew sources to a specific rarity
+	// Format: { "SourceAbbrev": "uncommon" }
+	// Available rarities: common, uncommon, rare, very-rare, legendary
+	static HOMEBREW_RARITY_OVERRIDES = {
+		// Example: "MyHomebrew": "rare",
+		// Add your homebrew sources here with their desired rarity
+	};
+
+	/**
+	 * Apply Thelemar rarity/legality tags to spells if the setting is enabled
+	 * - Official sources: Legal + Common (unless spell has explicit tags)
+	 * - Homebrew sources: Legal + Uncommon (unless spell has explicit tags)
+	 * - Explicit spell tags always take precedence
+	 * @param {Array} spells - Array of spell objects
+	 * @returns {Array} Spells with rarity/legality applied
+	 */
+	_applyThelemarSpellRarity (spells) {
+		// Check if the setting is enabled (defaults to true if not explicitly set to false)
+		const settings = this._state.getSettings() || {};
+		if (settings.thelemar_spellRarity === false) {
+			return spells;
+		}
+
+		return spells.map(spell => {
+			// Check if spell already has rarity or legality tags
+			const existingSubschools = spell.subschools || [];
+			const hasRarity = existingSubschools.some(s => s.includes("rarity:"));
+			const hasLegality = existingSubschools.some(s => s.includes("legality:"));
+
+			// If spell already has both tags, don't modify
+			if (hasRarity && hasLegality) {
+				return spell;
+			}
+
+			// Determine if source is official or homebrew
+			const isOfficial = this._isOfficialSource(spell.source);
+			const newSubschools = [...existingSubschools];
+
+			// Apply legality if not already present
+			if (!hasLegality) {
+				newSubschools.push("legality:legal");
+			}
+
+			// Apply rarity if not already present
+			if (!hasRarity) {
+				if (isOfficial) {
+					newSubschools.push("rarity:common");
+				} else {
+					// Check for homebrew-specific rarity override
+					const overrideRarity = CharacterSheetSpells.HOMEBREW_RARITY_OVERRIDES[spell.source];
+					if (overrideRarity) {
+						newSubschools.push(`rarity:${overrideRarity}`);
+					} else {
+						newSubschools.push("rarity:uncommon");
+					}
+				}
+			}
+
+			// Return modified spell (don't mutate original)
+			return {
+				...spell,
+				subschools: newSubschools,
+			};
+		});
+	}
+
+	/**
+	 * Determine if a source is official (WotC published content)
+	 * @param {string} source - Source abbreviation
+	 * @returns {boolean} True if official source
+	 */
+	_isOfficialSource (source) {
+		// Use SourceUtil if available
+		if (typeof SourceUtil !== "undefined") {
+			const filterGroup = SourceUtil.getFilterGroup(source);
+			// Standard and Partnered are considered official
+			return filterGroup === SourceUtil.FILTER_GROUP_STANDARD
+				|| filterGroup === SourceUtil.FILTER_GROUP_PARTNERED;
+		}
+
+		// Fallback: check against known official sources
+		const officialPrefixes = ["PHB", "XGE", "TCE", "FTD", "XPHB", "MM", "DMG", "SCAG", "VGM", "MTF", "GGR", "AI", "EGW", "MOT", "TCE", "FTD", "SCC", "WBtW", "SJA", "DSotDQ", "BGG", "PAitM", "BMT", "MPMoM", "VEoR", "PHB2024", "DMG2024", "MM2024"];
+		return officialPrefixes.some(prefix => source === prefix || source.startsWith(prefix + "-"));
+	}
+
 	_initEventListeners () {
 		// Spell slot pip clicks
 		$(document).on("click", ".charsheet__slot-pip", (e) => {
@@ -212,6 +300,9 @@ class CharacterSheetSpells {
 	}
 
 	async _pShowSpellPickerModal (spells) {
+		// Apply Thelemar spell rarity/legality if enabled
+		spells = this._applyThelemarSpellRarity(spells);
+
 		const knownSpellIds = this._state.getSpells().map(s => `${s.name}|${s.source}`);
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
@@ -294,11 +385,25 @@ class CharacterSheetSpells {
 		// All available schools
 		const schools = [...new Set(spells.map(s => s.school).filter(Boolean))].sort();
 
-		// Unique sources from spells
+		// Get priority sources for sorting
+		const prioritySources = this._state.getPrioritySources() || [];
+
+		// Unique sources from spells - priority sources first, then official, then alphabetical
 		const uniqueSources = [...new Set(spells.map(s => s.source))].sort((a, b) => {
-			const priority = ["PHB", "XGE", "TCE", "FTD", "XPHB"];
-			const aIdx = priority.indexOf(a);
-			const bIdx = priority.indexOf(b);
+			// Priority sources come first
+			const aIsPriority = prioritySources.includes(a);
+			const bIsPriority = prioritySources.includes(b);
+			if (aIsPriority && !bIsPriority) return -1;
+			if (!aIsPriority && bIsPriority) return 1;
+			if (aIsPriority && bIsPriority) {
+				// Both priority, sort by their order in the priority array
+				return prioritySources.indexOf(a) - prioritySources.indexOf(b);
+			}
+
+			// Then official sources
+			const officialPriority = ["PHB", "XGE", "TCE", "FTD", "XPHB"];
+			const aIdx = officialPriority.indexOf(a);
+			const bIdx = officialPriority.indexOf(b);
 			if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
 			if (aIdx !== -1) return -1;
 			if (bIdx !== -1) return 1;
@@ -952,11 +1057,38 @@ class CharacterSheetSpells {
 		let filterSomatic = false;
 		let filterMaterial = false;
 
-		const $ritualBtn = $(`<button class="charsheet__modal-filter-btn" type="button">🔮 Ritual</button>`).appendTo($quickFilters);
-		const $concBtn = $(`<button class="charsheet__modal-filter-btn" type="button">⏳ Concentration</button>`).appendTo($quickFilters);
-		const $verbalBtn = $(`<button class="charsheet__modal-filter-btn" type="button">🗣️ Verbal</button>`).appendTo($quickFilters);
-		const $somaticBtn = $(`<button class="charsheet__modal-filter-btn" type="button">✋ Somatic</button>`).appendTo($quickFilters);
-		const $materialBtn = $(`<button class="charsheet__modal-filter-btn" type="button">💎 Material</button>`).appendTo($quickFilters);
+		const $ritualBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">🔮 Ritual</span>`).appendTo($quickFilters);
+		const $concBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">⏳ Concentration</span>`).appendTo($quickFilters);
+		const $verbalBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">🗣️ Verbal</span>`).appendTo($quickFilters);
+		const $somaticBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">✋ Somatic</span>`).appendTo($quickFilters);
+		const $materialBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">💎 Material</span>`).appendTo($quickFilters);
+
+		// Set up click handlers immediately after creation
+		$ritualBtn.on("click", function () {
+			filterRitual = !filterRitual;
+			$(this).toggleClass("active");
+			renderList();
+		});
+		$concBtn.on("click", function () {
+			filterConcentration = !filterConcentration;
+			$(this).toggleClass("active");
+			renderList();
+		});
+		$verbalBtn.on("click", function () {
+			filterVerbal = !filterVerbal;
+			$(this).toggleClass("active");
+			renderList();
+		});
+		$somaticBtn.on("click", function () {
+			filterSomatic = !filterSomatic;
+			$(this).toggleClass("active");
+			renderList();
+		});
+		$materialBtn.on("click", function () {
+			filterMaterial = !filterMaterial;
+			$(this).toggleClass("active");
+			renderList();
+		});
 
 		// Results count
 		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);
@@ -1108,23 +1240,6 @@ class CharacterSheetSpells {
 				});
 			});
 		};
-
-		// Toggle quick filter buttons
-		const toggleBtn = ($btn, prop) => {
-			if (prop === "ritual") filterRitual = !filterRitual;
-			if (prop === "concentration") filterConcentration = !filterConcentration;
-			if (prop === "verbal") filterVerbal = !filterVerbal;
-			if (prop === "somatic") filterSomatic = !filterSomatic;
-			if (prop === "material") filterMaterial = !filterMaterial;
-			$btn.toggleClass("active");
-			renderList();
-		};
-
-		$ritualBtn.on("click", () => toggleBtn($ritualBtn, "ritual"));
-		$concBtn.on("click", () => toggleBtn($concBtn, "concentration"));
-		$verbalBtn.on("click", () => toggleBtn($verbalBtn, "verbal"));
-		$somaticBtn.on("click", () => toggleBtn($somaticBtn, "somatic"));
-		$materialBtn.on("click", () => toggleBtn($materialBtn, "material"));
 
 		$search.on("input", renderList);
 		// Level, school, and source filters are handled by checkbox change events above
@@ -1285,6 +1400,7 @@ class CharacterSheetSpells {
 			range: this._getRange(spell),
 			components: this._getComponents(spell),
 			duration: this._getDuration(spell),
+			subschools: spell.subschools || [], // Include rarity/legality tags
 		});
 
 		console.log("[CharSheet Spells] After add, total spells:", this._state.getSpells().length);
@@ -2025,7 +2141,9 @@ class CharacterSheetSpells {
 		// Render innate spells first (from features/feats)
 		this._renderInnateSpells($container);
 
-		const spells = this._state.getSpells();
+		let spells = this._state.getSpells();
+		// Apply Thelemar rarity to stored spells (for backwards compatibility and display)
+		spells = this._applyThelemarSpellRarity(spells);
 		console.log("[CharSheet Spells] _renderSpellList: spells count", spells.length, spells);
 
 		// Check if this character has a spellbook-style caster (Wizard)
@@ -2428,6 +2546,29 @@ class CharacterSheetSpells {
 		if (spell.components) detailParts.push(spell.components);
 		const detailsLine = detailParts.join(" · ");
 
+		// Build rarity/legality inline text from subschools (if stored)
+		const rarityParts = (spell.subschools || [])
+			.map(ss => {
+				if (ss.includes("legality:")) {
+					const legality = ss.replace("legality:", "");
+					const color = legality === "legal" ? "var(--cs-success, #10b981)" : (legality === "restricted" ? "var(--cs-warning, #f59e0b)" : "var(--cs-danger, #ef4444)");
+					return `<span class="charsheet__spell-rarity-tag" style="color: ${color}; font-weight: 600;" title="Thelemar legality">[${legality}]</span>`;
+				}
+				if (ss.includes("rarity:")) {
+					const rarity = ss.replace("rarity:", "");
+					const color = rarity === "common" ? "var(--cs-text-muted, #9ca3af)" : (rarity === "uncommon" ? "var(--cs-primary, #6366f1)" : (rarity === "rare" ? "var(--cs-accent, #8b5cf6)" : "var(--cs-warning, #f59e0b)"));
+					return `<span class="charsheet__spell-rarity-tag" style="color: ${color}; font-weight: 600;" title="Thelemar rarity">[${rarity}]</span>`;
+				}
+				return null;
+			})
+			.filter(Boolean)
+			.join(" ");
+
+		// Combine details line with rarity tags
+		const fullDetailsLine = rarityParts
+			? (detailsLine ? `${detailsLine} · ${rarityParts}` : rarityParts)
+			: detailsLine;
+
 		// Determine preparation button state and text
 		let prepButtonHtml = "";
 		if (!isCantrip) {
@@ -2466,7 +2607,7 @@ class CharacterSheetSpells {
 							${sourceBadge}
 						</span>
 					</div>
-					${detailsLine ? `<div class="charsheet__spell-item-details ve-muted ve-small">${detailsLine}</div>` : ""}
+					${fullDetailsLine ? `<div class="charsheet__spell-item-details ve-muted ve-small">${fullDetailsLine}</div>` : ""}
 				</div>
 				<div class="charsheet__spell-item-actions">
 					${prepButtonHtml}
