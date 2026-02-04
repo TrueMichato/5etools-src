@@ -2623,10 +2623,19 @@ class CharacterSheetState {
 
 			// Sheet settings/options
 			settings: {
-				exhaustionRules: "2024", // "2024" or "2014"
+				exhaustionRules: "thelemar", // "2024", "2014", or "thelemar" - default to Thelemar rules
 				allowedSources: null, // null = all sources, array = only these sources
 				includeCoreSpellsForHomebrew: true, // Include PHB/XPHB spells for homebrew classes
 				allowExoticLanguages: true, // Allow exotic/rare languages in language selection by default
+				prioritySources: ["TGTT"], // Default priority to TGTT if available
+				// Thelemar homebrew rules - all enabled by default
+				thelemar_carryWeight: true,
+				thelemar_jumping: true,
+				thelemar_linguisticsBonus: true,
+				thelemar_criticalRolls: true,
+				thelemar_asiFeat: true,
+				thelemar_itemUtilization: true,
+				thelemar_spellRarity: true, // Apply Thelemar spell rarity/legality tags
 			},
 		};
 	}
@@ -5240,6 +5249,7 @@ class CharacterSheetState {
 				duration: spell.duration || "",
 				components: spell.components || "",
 				sourceFeature: spell.sourceFeature || null,
+				subschools: spell.subschools || [],
 			});
 		}
 	}
@@ -5266,6 +5276,7 @@ class CharacterSheetState {
 				concentration: spell.concentration || false,
 				components: spell.components || "",
 				sourceFeature: spell.sourceFeature || null,
+				subschools: spell.subschools || [],
 			});
 		}
 	}
@@ -5311,6 +5322,7 @@ class CharacterSheetState {
 			level: spell.level,
 			atWill: spell.atWill || false,
 			sourceFeature: spell.sourceFeature,
+			subschools: spell.subschools || [],
 		};
 
 		// Add uses tracking if not at-will
@@ -5381,6 +5393,7 @@ class CharacterSheetState {
 			recharge: choice.recharge,
 			ability: choice.ability,
 			prepared: choice.prepared,
+			subschools: choice.subschools || [],
 		};
 
 		this._data.pendingSpellChoices.push(pendingChoice);

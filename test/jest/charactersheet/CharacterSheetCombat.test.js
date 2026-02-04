@@ -242,9 +242,22 @@ describe("Combat Calculations", () => {
 			expect(state.getExhaustion()).toBe(1);
 		});
 
-		it("should cap exhaustion at 6", () => {
+		it("should cap exhaustion at maximum based on rules", () => {
+			const maxExhaustion = state.getMaxExhaustion();
+			state.setExhaustion(100); // Set way above max
+			expect(state.getExhaustion()).toBe(maxExhaustion);
+		});
+
+		it("should cap exhaustion at 6 with 2024 rules", () => {
+			state.setExhaustionRules("2024");
 			state.setExhaustion(10);
 			expect(state.getExhaustion()).toBeLessThanOrEqual(6);
+		});
+
+		it("should cap exhaustion at 10 with thelemar rules", () => {
+			state.setExhaustionRules("thelemar");
+			state.setExhaustion(15);
+			expect(state.getExhaustion()).toBeLessThanOrEqual(10);
 		});
 
 		it("should not allow negative exhaustion", () => {

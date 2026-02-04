@@ -4491,9 +4491,10 @@ class CharacterSheetPage {
 		const currentThelemar_criticalRolls = this._state.getSettings()?.thelemar_criticalRolls || false;
 		const currentThelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
 		const currentThelemar_itemUtilization = this._state.getSettings()?.thelemar_itemUtilization || false;
+		const currentThelemar_spellRarityCheck = this._state.getSettings()?.thelemar_spellRarity !== false;
 		
 		// Master toggle for all Thelemar rules (uses currentExhaustionRules from above)
-		const allThelemar = currentThelemar_carryWeight && currentThelemar_jumping && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls && currentThelemar_asiFeat && currentThelemar_itemUtilization && currentExhaustionRules === "thelemar";
+		const allThelemar = currentThelemar_carryWeight && currentThelemar_jumping && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls && currentThelemar_asiFeat && currentThelemar_itemUtilization && currentThelemar_spellRarityCheck && currentExhaustionRules === "thelemar";
 		const $thelemar_masterToggle = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--master">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-all" ${allThelemar ? "checked" : ""}>
@@ -4562,6 +4563,18 @@ class CharacterSheetPage {
 				<span class="charsheet__settings-checkbox-text">
 					<span class="charsheet__settings-checkbox-title">🧪 Item Utilization</span>
 					<span class="charsheet__settings-checkbox-desc">Bonus action items can be used as an action for maximum effect (no roll)</span>
+				</span>
+			</label>
+		</div>`;
+
+		// Thelemar spell rarity/legality
+		const currentThelemar_spellRarity = this._state.getSettings()?.thelemar_spellRarity !== false;
+		const $thelemar_spellRarity = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+			<label class="charsheet__settings-checkbox-label">
+				<input type="checkbox" id="settings-thelemar-spell-rarity" ${currentThelemar_spellRarity ? "checked" : ""}>
+				<span class="charsheet__settings-checkbox-text">
+					<span class="charsheet__settings-checkbox-title">🏷️ Spell Rarity</span>
+					<span class="charsheet__settings-checkbox-desc">Official spells: Legal + Common. Homebrew spells: Legal + Uncommon (unless already tagged)</span>
 				</span>
 			</label>
 		</div>`;
@@ -4648,6 +4661,7 @@ class CharacterSheetPage {
 					${$thelemar_criticalRolls}
 					${$thelemar_asiFeat}
 					${$thelemar_itemUtilization}
+					${$thelemar_spellRarity}
 				</div>
 			</div>
 		</div>`.appendTo($modalInner);
@@ -4719,9 +4733,10 @@ class CharacterSheetPage {
 			const critsChecked = $modalInner.find("#settings-thelemar-crits").prop("checked");
 			const asiFeatChecked = $modalInner.find("#settings-thelemar-asifeat").prop("checked");
 			const itemUtilChecked = $modalInner.find("#settings-thelemar-item-util").prop("checked");
+			const spellRarityChecked = $modalInner.find("#settings-thelemar-spell-rarity").prop("checked");
 			const exhaustionRules = $modalInner.find("#settings-exhaustion-rules").val();
 			const exhaustionIsThelemar = exhaustionRules === "thelemar";
-			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && jumpingChecked && lingChecked && critsChecked && asiFeatChecked && itemUtilChecked && exhaustionIsThelemar);
+			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && jumpingChecked && lingChecked && critsChecked && asiFeatChecked && itemUtilChecked && spellRarityChecked && exhaustionIsThelemar);
 		};
 
 		// Exhaustion rules handler
@@ -4747,6 +4762,7 @@ class CharacterSheetPage {
 			$modalInner.find("#settings-thelemar-crits").prop("checked", isChecked).trigger("change");
 			$modalInner.find("#settings-thelemar-asifeat").prop("checked", isChecked).trigger("change");
 			$modalInner.find("#settings-thelemar-item-util").prop("checked", isChecked).trigger("change");
+			$modalInner.find("#settings-thelemar-spell-rarity").prop("checked", isChecked).trigger("change");
 			// Also set exhaustion rules
 			$modalInner.find("#settings-exhaustion-rules").val(isChecked ? "thelemar" : "2024").trigger("change");
 		});
@@ -4804,6 +4820,12 @@ class CharacterSheetPage {
 		// Thelemar item utilization handler
 		$modalInner.find("#settings-thelemar-item-util").on("change", (e) => {
 			this._state.setSetting("thelemar_itemUtilization", e.target.checked);
+			updateMasterToggleState();
+		});
+
+		// Thelemar spell rarity handler
+		$modalInner.find("#settings-thelemar-spell-rarity").on("change", (e) => {
+			this._state.setSetting("thelemar_spellRarity", e.target.checked);
 			updateMasterToggleState();
 		});
 

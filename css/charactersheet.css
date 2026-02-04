@@ -9016,15 +9016,18 @@ body:has(.charactersheet) .ui-modal__inner input[type="radio"]:focus {
 	color: var(--cs-text, inherit);
 }
 
+/* High-specificity active state for filter buttons */
+body:has(.charactersheet) .ui-modal__inner .charsheet__modal-filter-btn.active,
 .charsheet__modal-filter-btn.active {
-	background: linear-gradient(135deg, var(--cs-primary, #6366f1) 0%, var(--cs-accent, #8b5cf6) 100%);
-	color: white;
-	border-color: transparent;
-	box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+	background: linear-gradient(135deg, var(--cs-primary, #6366f1) 0%, var(--cs-accent, #8b5cf6) 100%) !important;
+	color: white !important;
+	border-color: transparent !important;
+	box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
 }
 
+body:has(.charactersheet) .ui-modal__inner .charsheet__modal-filter-btn.active:hover,
 .charsheet__modal-filter-btn.active:hover {
-	box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+	box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
 }
 
 /* ========================================================================
