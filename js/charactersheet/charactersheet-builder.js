@@ -3319,6 +3319,14 @@ class CharacterSheetBuilder {
 
 		const $dropdowns = $section.find(".charsheet__builder-class-lang-dropdowns");
 
+		// Get grouped languages including homebrew
+		const langOptions = this._page.getLanguageOptionsGrouped?.() || {
+			standard: Parser.LANGUAGES_STANDARD,
+			exotic: Parser.LANGUAGES_EXOTIC,
+			secret: Parser.LANGUAGES_SECRET,
+			homebrew: [],
+		};
+
 		for (let i = 0; i < count; i++) {
 			const selectId = `class-lang-choice-${i}`;
 			const $select = $(`
@@ -3328,20 +3336,28 @@ class CharacterSheetBuilder {
 			`);
 
 			// Add language options grouped by type
+			if (langOptions.homebrew.length) {
+				$select.append(`<optgroup label="──── Homebrew Languages ────">`);
+				langOptions.homebrew.forEach(lang => {
+					$select.append(`<option value="${lang}">${lang}</option>`);
+				});
+				$select.append(`</optgroup>`);
+			}
+
 			$select.append(`<optgroup label="──── Standard Languages ────">`);
-			Parser.LANGUAGES_STANDARD.forEach(lang => {
+			langOptions.standard.forEach(lang => {
 				$select.append(`<option value="${lang}">${lang}</option>`);
 			});
 			$select.append(`</optgroup>`);
 
 			$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
-			Parser.LANGUAGES_EXOTIC.forEach(lang => {
+			langOptions.exotic.forEach(lang => {
 				$select.append(`<option value="${lang}">${lang}</option>`);
 			});
 			$select.append(`</optgroup>`);
 
 			$select.append(`<optgroup label="──── Secret Languages ────">`);
-			Parser.LANGUAGES_SECRET.forEach(lang => {
+			langOptions.secret.forEach(lang => {
 				$select.append(`<option value="${lang}">${lang}</option>`);
 			});
 			$select.append(`</optgroup>`);
@@ -5359,19 +5375,33 @@ class CharacterSheetBuilder {
 		});
 
 		// Populate language dropdown with grouped options
+		const langOptions = this._page.getLanguageOptionsGrouped?.() || {
+			standard: Parser.LANGUAGES_STANDARD,
+			exotic: Parser.LANGUAGES_EXOTIC,
+			secret: Parser.LANGUAGES_SECRET,
+			homebrew: [],
+		};
+
 		const $langSelect = $("#custom-bg-lang1");
+		if (langOptions.homebrew.length) {
+			$langSelect.append(`<optgroup label="──── Homebrew Languages ────">`);
+			langOptions.homebrew.forEach(lang => {
+				$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+			});
+			$langSelect.append(`</optgroup>`);
+		}
 		$langSelect.append(`<optgroup label="──── Standard Languages ────">`);
-		Parser.LANGUAGES_STANDARD.forEach(lang => {
+		langOptions.standard.forEach(lang => {
 			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
 		});
 		$langSelect.append(`</optgroup>`);
 		$langSelect.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
-		Parser.LANGUAGES_EXOTIC.forEach(lang => {
+		langOptions.exotic.forEach(lang => {
 			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
 		});
 		$langSelect.append(`</optgroup>`);
 		$langSelect.append(`<optgroup label="──── Secret Languages ────">`);
-		Parser.LANGUAGES_SECRET.forEach(lang => {
+		langOptions.secret.forEach(lang => {
 			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
 		});
 		$langSelect.append(`</optgroup>`);
@@ -5383,18 +5413,25 @@ class CharacterSheetBuilder {
 			$extraToolsGroup.append(`<option value="tool:${tool}">${tool}</option>`);
 		});
 		// Add grouped languages to extra dropdown
+		if (langOptions.homebrew.length) {
+			$extraLangsGroup.append(`<optgroup label="Homebrew">`);
+			langOptions.homebrew.forEach(lang => {
+				$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+			});
+			$extraLangsGroup.append(`</optgroup>`);
+		}
 		$extraLangsGroup.append(`<optgroup label="Standard">`);
-		Parser.LANGUAGES_STANDARD.forEach(lang => {
+		langOptions.standard.forEach(lang => {
 			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
 		});
 		$extraLangsGroup.append(`</optgroup>`);
 		$extraLangsGroup.append(`<optgroup label="Exotic/Rare">`);
-		Parser.LANGUAGES_EXOTIC.forEach(lang => {
+		langOptions.exotic.forEach(lang => {
 			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
 		});
 		$extraLangsGroup.append(`</optgroup>`);
 		$extraLangsGroup.append(`<optgroup label="Secret">`);
-		Parser.LANGUAGES_SECRET.forEach(lang => {
+		langOptions.secret.forEach(lang => {
 			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
 		});
 		$extraLangsGroup.append(`</optgroup>`);
@@ -5877,6 +5914,14 @@ class CharacterSheetBuilder {
 			$choiceSection.append(`<p class="mb-1"><strong>Choose ${totalLangChoices} ${choiceLabel}${totalLangChoices > 1 ? "s" : ""}:</strong></p>`);
 
 			for (let i = 0; i < totalLangChoices; i++) {
+				// Get grouped languages including homebrew
+				const langOptions = this._page.getLanguageOptionsGrouped?.() || {
+					standard: Parser.LANGUAGES_STANDARD,
+					exotic: Parser.LANGUAGES_EXOTIC,
+					secret: Parser.LANGUAGES_SECRET,
+					homebrew: [],
+				};
+
 				const selectId = `bg-lang-choice-${i}`;
 				const $select = $(`
 					<select class="form-control form-control--minimal mb-1" id="${selectId}">
@@ -5884,22 +5929,30 @@ class CharacterSheetBuilder {
 					</select>
 				`);
 
-				// Add language options grouped by type
+				// Add language options grouped by type - homebrew first if available
+				if (langOptions.homebrew.length) {
+					$select.append(`<optgroup label="──── Homebrew Languages ────">`);
+					langOptions.homebrew.forEach(lang => {
+						$select.append(`<option value="${lang}">${lang}</option>`);
+					});
+					$select.append(`</optgroup>`);
+				}
+
 				$select.append(`<optgroup label="──── Standard Languages ────">`);
-				Parser.LANGUAGES_STANDARD.forEach(lang => {
+				langOptions.standard.forEach(lang => {
 					$select.append(`<option value="${lang}">${lang}</option>`);
 				});
 				$select.append(`</optgroup>`);
 
 				if (allowAllLanguages) {
 					$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
-					Parser.LANGUAGES_EXOTIC.forEach(lang => {
+					langOptions.exotic.forEach(lang => {
 						$select.append(`<option value="${lang}">${lang}</option>`);
 					});
 					$select.append(`</optgroup>`);
 
 					$select.append(`<optgroup label="──── Secret Languages ────">`);
-					Parser.LANGUAGES_SECRET.forEach(lang => {
+					langOptions.secret.forEach(lang => {
 						$select.append(`<option value="${lang}">${lang}</option>`);
 					});
 					$select.append(`</optgroup>`);
