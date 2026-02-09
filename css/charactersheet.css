@@ -7926,6 +7926,45 @@
 	flex: 1;
 }
 
+.charsheet__modifier-form-field--advantage {
+	flex: 2;
+}
+
+.charsheet__modifier-form-field--minimum {
+	flex: 1;
+}
+
+.charsheet__modifier-form-field--bonus-dice {
+	flex: 2;
+}
+
+.charsheet__modifier-form-dice-group {
+	display: flex;
+	gap: 0.25rem;
+}
+
+.charsheet__modifier-dice-count {
+	width: 3rem;
+	flex: 0 0 3rem;
+	text-align: center;
+}
+
+.charsheet__modifier-dice-type {
+	flex: 1;
+}
+
+.charsheet__modifier-form-field--custom-skill-name {
+	flex: 2;
+}
+
+.charsheet__modifier-form-field--custom-skill-ability {
+	flex: 1;
+}
+
+.charsheet__modifier-form-field--conditional {
+	flex: 1;
+}
+
 .charsheet__modifier-form-field--note {
 	margin-bottom: var(--cs-space-md, 0.75rem);
 }

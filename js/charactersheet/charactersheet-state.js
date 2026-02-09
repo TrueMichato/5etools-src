@@ -13400,7 +13400,62 @@ class CharacterSheetState {
 
 	/**
 	 * Add a named modifier
-	 * @param {Object} modifier - {name, type, value, note, enabled, sourceType}
+	 * 
+	 * ## Enhanced Modifier Schema
+	 * 
+	 * ### Target Types (modifier.type):
+	 * - `ac` - Armor Class
+	 * - `initiative` - Initiative rolls
+	 * - `speed`, `speed:walk`, `speed:fly`, `speed:swim`, `speed:climb`, `speed:burrow` - Movement
+	 * - `hp`, `hp:max`, `hp:temp` - Hit points
+	 * - `attack`, `attack:melee`, `attack:ranged`, `attack:spell`, `attack:weapon` - Attack rolls
+	 * - `damage`, `damage:melee`, `damage:ranged`, `damage:spell`, `damage:weapon` - Damage rolls
+	 * - `save:all`, `save:str`, `save:dex`, etc. - Saving throws
+	 * - `check:all`, `check:str`, `check:dex`, etc. - Ability checks
+	 * - `skill:all`, `skill:athletics`, `skill:stealth`, etc. - Skill checks
+	 * - `passive:perception`, `passive:investigation`, `passive:insight` - Passive scores
+	 * - `ability:str`, `ability:dex`, etc. - Ability scores themselves
+	 * - `d20:all` - All d20 rolls (attacks, saves, checks, skills, initiative)
+	 * - `spellDc`, `spellAttack` - Spell casting
+	 * - `proficiencyBonus` - Proficiency bonus
+	 * - `carryCapacity` - Carry capacity
+	 * - `sense:darkvision`, `sense:blindsight`, etc. - Senses
+	 * - `deathSave` - Death saving throws
+	 * - `concentration` - Concentration saving throws
+	 * 
+	 * ### Effect Types (modifier properties):
+	 * - `value: number` - Numeric bonus/penalty (default)
+	 * - `advantage: true` - Grants advantage
+	 * - `disadvantage: true` - Imposes disadvantage
+	 * - `setMinimum: number` - Set minimum roll result (e.g., Reliable Talent)
+	 * - `setMaximum: number` - Set maximum roll result
+	 * - `setValue: number` - Set to exact value (overrides calculation)
+	 * - `equalTo: string` - Set equal to another value (e.g., "walk" for swim speed)
+	 * - `abilityMod: string` - Add ability modifier (e.g., "int" adds INT mod)
+	 * - `proficiencyBonus: true` - Add proficiency bonus
+	 * - `halfProficiency: true` - Add half proficiency (Jack of All Trades)
+	 * - `multiplier: number` - Multiply the result (e.g., 2 for doubled)
+	 * - `bonusDie: string` - Add bonus die (e.g., "d4", "d6", "martial")
+	 * - `reroll: number` - Reroll if result is <= this (e.g., 1 for Lucky)
+	 * - `autoCrit: true` - Attacks automatically crit on hit
+	 * - `autoFail: true` - Automatically fail
+	 * - `autoSuccess: true` - Automatically succeed
+	 * - `halfOnSave: true` - Take half damage on save (already handled differently, but can be noted)
+	 * - `noneOnSave: true` - Take no damage on save (Evasion-like)
+	 * - `perLevel: true` - Multiply value by character level
+	 * - `perClassLevel: string` - Multiply value by specific class level
+	 * - `ignore: true` - Ignore effects of this type (e.g., ignore difficult terrain)
+	 * - `removeDisadvantage: true` - Remove disadvantage that would normally apply
+	 * - `removeAdvantage: true` - Remove advantage that would normally apply
+	 * 
+	 * ### Other Properties:
+	 * - `sourceFeatureId: string` - ID of the feature granting this modifier
+	 * - `sourceType: string` - "classFeature", "raceFeature", "feat", "item", "spell", "condition"
+	 * - `conditional: string` - Text describing when modifier applies
+	 * - `enabled: boolean` - Whether modifier is currently active (default true)
+	 * - `duration: string` - Duration text for display
+	 * 
+	 * @param {Object} modifier - The modifier object
 	 * @returns {string} The ID of the new modifier
 	 */
 	addNamedModifier (modifier) {
@@ -13414,20 +13469,45 @@ class CharacterSheetState {
 			enabled: modifier.enabled !== false,
 		};
 
-		// Copy special properties that affect how the modifier is calculated
+		// Source tracking
 		if (modifier.sourceFeatureId) newModifier.sourceFeatureId = modifier.sourceFeatureId;
-		if (modifier.sourceType) newModifier.sourceType = modifier.sourceType; // e.g., "classFeature", "race", "feat"
-		if (modifier.setValue) newModifier.setValue = true;
-		if (modifier.perLevel) newModifier.perLevel = true;
-		if (modifier.multiplier) newModifier.multiplier = modifier.multiplier;
-		if (modifier.sizeIncrease) newModifier.sizeIncrease = true;
-		if (modifier.abilityMod) newModifier.abilityMod = modifier.abilityMod;
-		if (modifier.advantage) newModifier.advantage = true;
-		if (modifier.removeDisadvantage) newModifier.removeDisadvantage = true;
-		if (modifier.proficiencyBonus) newModifier.proficiencyBonus = true;
-		if (modifier.ignore) newModifier.ignore = true;
-		if (modifier.equalToWalk) newModifier.equalToWalk = true;
+		if (modifier.sourceType) newModifier.sourceType = modifier.sourceType;
+		if (modifier.duration) newModifier.duration = modifier.duration;
 		if (modifier.conditional) newModifier.conditional = modifier.conditional;
+
+		// Numeric modifier adjustments
+		if (modifier.perLevel) newModifier.perLevel = true;
+		if (modifier.perClassLevel) newModifier.perClassLevel = modifier.perClassLevel;
+		if (modifier.multiplier) newModifier.multiplier = modifier.multiplier;
+		if (modifier.abilityMod) newModifier.abilityMod = modifier.abilityMod;
+		if (modifier.proficiencyBonus) newModifier.proficiencyBonus = true;
+		if (modifier.halfProficiency) newModifier.halfProficiency = true;
+		if (modifier.bonusDie) newModifier.bonusDie = modifier.bonusDie;
+
+		// Set/override values
+		if (modifier.setValue) newModifier.setValue = modifier.setValue === true ? modifier.value : modifier.setValue;
+		if (modifier.setMinimum != null) newModifier.setMinimum = modifier.setMinimum;
+		if (modifier.setMaximum != null) newModifier.setMaximum = modifier.setMaximum;
+		if (modifier.equalTo) newModifier.equalTo = modifier.equalTo;
+		if (modifier.equalToWalk) newModifier.equalToWalk = true;
+		if (modifier.sizeIncrease) newModifier.sizeIncrease = true;
+
+		// Advantage/disadvantage
+		if (modifier.advantage) newModifier.advantage = true;
+		if (modifier.disadvantage) newModifier.disadvantage = true;
+		if (modifier.removeAdvantage) newModifier.removeAdvantage = true;
+		if (modifier.removeDisadvantage) newModifier.removeDisadvantage = true;
+
+		// Roll modifications
+		if (modifier.reroll != null) newModifier.reroll = modifier.reroll;
+		if (modifier.autoCrit) newModifier.autoCrit = true;
+		if (modifier.autoSuccess) newModifier.autoSuccess = true;
+		if (modifier.autoFail) newModifier.autoFail = true;
+
+		// Save/check modifications
+		if (modifier.halfOnSave) newModifier.halfOnSave = true;
+		if (modifier.noneOnSave) newModifier.noneOnSave = true;
+		if (modifier.ignore) newModifier.ignore = true;
 
 		this._data.namedModifiers.push(newModifier);
 		this._recalculateCustomModifiers();
@@ -13557,18 +13637,33 @@ class CharacterSheetState {
 					// Also apply to initiative (it's a DEX check)
 					cm.initiative += value;
 					break;
+				case "d20:all":
+					// Global d20 modifier - applies to all d20 rolls
+					// This is used for things like exhaustion (-X to all d20 rolls)
+					cm.attackBonus += value;
+					cm.initiative += value;
+					Parser.ABIL_ABVS.forEach(abl => {
+						cm.savingThrows[abl] = (cm.savingThrows[abl] || 0) + value;
+						cm.abilityChecks[abl] = (cm.abilityChecks[abl] || 0) + value;
+					});
+					cm.skills["_all"] = (cm.skills["_all"] || 0) + value;
+					break;
 				default:
 					// Handle save:str, save:dex, etc.
 					if (mod.type.startsWith("save:")) {
 						const abl = mod.type.split(":")[1];
-						cm.savingThrows[abl] = (cm.savingThrows[abl] || 0) + value;
+						if (abl !== "all") {
+							cm.savingThrows[abl] = (cm.savingThrows[abl] || 0) + value;
+						}
 					}
 					// Handle check:str, check:dex, etc.
 					else if (mod.type.startsWith("check:")) {
 						const abl = mod.type.split(":")[1];
-						cm.abilityChecks[abl] = (cm.abilityChecks[abl] || 0) + value;
-						// DEX checks include initiative
-						if (abl === "dex") cm.initiative += value;
+						if (abl !== "all") {
+							cm.abilityChecks[abl] = (cm.abilityChecks[abl] || 0) + value;
+							// DEX checks include initiative
+							if (abl === "dex") cm.initiative += value;
+						}
 					}
 					// Handle skill:stealth, skill:athletics, etc.
 					else if (mod.type.startsWith("skill:")) {
@@ -13578,6 +13673,18 @@ class CharacterSheetState {
 						} else {
 							cm.skills[skill] = (cm.skills[skill] || 0) + value;
 						}
+					}
+					// Handle attack subtypes
+					else if (mod.type.startsWith("attack:")) {
+						// Specific attack types are tracked for the aggregation system
+						// For quick totals, we only track the global attack bonus
+						cm.attackBonus += value;
+					}
+					// Handle damage subtypes
+					else if (mod.type.startsWith("damage:")) {
+						// Specific damage types are tracked for the aggregation system
+						// For quick totals, we only track the global damage bonus
+						cm.damageBonus += value;
 					}
 					// Handle speed:walk, speed:fly, etc.
 					else if (mod.type.startsWith("speed:")) {
@@ -13602,6 +13709,34 @@ class CharacterSheetState {
 								cm.senses[sense] += value;
 							}
 						}
+					}
+					// Handle passive:perception, passive:investigation, passive:insight
+					else if (mod.type.startsWith("passive:")) {
+						// Passive scores use the skill modifier system
+						// They get their own separate tracking
+						if (!cm.passives) cm.passives = {};
+						const skill = mod.type.split(":")[1];
+						cm.passives[skill] = (cm.passives[skill] || 0) + value;
+					}
+					// Handle concentration saves
+					else if (mod.type === "concentration") {
+						if (!cm.concentration) cm.concentration = 0;
+						cm.concentration += value;
+					}
+					// Handle death saves
+					else if (mod.type === "deathSave") {
+						if (!cm.deathSave) cm.deathSave = 0;
+						cm.deathSave += value;
+					}
+					// Handle hp:max specifically
+					else if (mod.type === "hp:max") {
+						cm.hp += value;
+					}
+					// Handle hp:temp - usually doesn't stack, but track additions
+					else if (mod.type === "hp:temp") {
+						// Temp HP is handled separately in the HP system
+						if (!cm.tempHp) cm.tempHp = 0;
+						cm.tempHp += value;
 					}
 					break;
 			}
@@ -13691,6 +13826,278 @@ class CharacterSheetState {
 				}
 				return 0;
 		}
+	}
+
+	// ============================================================================
+	// Advanced Modifier Aggregation Methods
+	// These methods collect all applicable modifiers for a given target and return
+	// the aggregated effects (numeric bonus, advantage/disadvantage, etc.)
+	// ============================================================================
+
+	/**
+	 * Get all enabled modifiers that apply to a specific type
+	 * Handles type hierarchies (e.g., "attack:melee" matches "attack" and "attack:melee")
+	 * @param {string} type - The target type (e.g., "skill:stealth", "save:dex", "attack")
+	 * @returns {Array} Array of matching modifier objects
+	 */
+	getModifiersForType (type) {
+		if (!type) return [];
+		const parts = type.split(":");
+		const category = parts[0];
+		const specific = parts[1];
+
+		return this._data.namedModifiers.filter(mod => {
+			if (!mod.enabled) return false;
+
+			const modParts = mod.type.split(":");
+			const modCategory = modParts[0];
+			const modSpecific = modParts[1];
+
+			// Exact match
+			if (mod.type === type) return true;
+
+			// "all" types match everything in that category
+			if (modSpecific === "all" && modCategory === category) return true;
+
+			// d20:all matches all d20 rolls
+			if (mod.type === "d20:all" && ["attack", "save", "check", "skill", "initiative", "deathSave", "concentration"].includes(category)) {
+				return true;
+			}
+
+			// Category-level modifier matches specific subtypes
+			// e.g., "attack" modifier applies to "attack:melee" type
+			if (!modSpecific && modCategory === category) return true;
+
+			// Skill checks also get ability check modifiers
+			if (category === "skill" && modCategory === "check") {
+				// Get the skill's ability
+				const skillAbility = this._getSkillAbility(specific);
+				if (modSpecific === "all" || modSpecific === skillAbility) return true;
+			}
+
+			// Initiative is a special case - it's a DEX check
+			if (type === "initiative" && mod.type === "check:dex") return true;
+			if (type === "initiative" && mod.type === "check:all") return true;
+
+			return false;
+		});
+	}
+
+	/**
+	 * Aggregate all modifiers for a type into a combined result object
+	 * @param {string} type - The target type
+	 * @returns {Object} Aggregated result with {bonus, advantage, disadvantage, minimum, maximum, bonusDice, special}
+	 */
+	aggregateModifiers (type) {
+		const modifiers = this.getModifiersForType(type);
+
+		const result = {
+			bonus: 0,
+			advantage: false,
+			disadvantage: false,
+			removeAdvantage: false,
+			removeDisadvantage: false,
+			minimum: null,      // Minimum roll result (Reliable Talent)
+			maximum: null,      // Maximum roll result
+			setValue: null,     // Override with set value
+			multiplier: 1,      // Result multiplier
+			bonusDice: [],      // Array of bonus dice to add (e.g., ["d4", "d6"])
+			reroll: null,       // Reroll threshold (e.g., 1 for Lucky)
+			autoCrit: false,
+			autoSuccess: false,
+			autoFail: false,
+			halfOnSave: false,
+			noneOnSave: false,
+			sources: [],        // Names of modifier sources for display
+			conditionals: [],   // Conditional text for display
+		};
+
+		modifiers.forEach(mod => {
+			// Track sources
+			if (mod.name && !result.sources.includes(mod.name)) {
+				result.sources.push(mod.name);
+			}
+			if (mod.conditional && !result.conditionals.includes(mod.conditional)) {
+				result.conditionals.push(mod.conditional);
+			}
+
+			// Numeric bonus calculation
+			let value = mod.value || 0;
+
+			// Per-level modifiers
+			if (mod.perLevel) {
+				value *= this.getTotalLevel() || 1;
+			} else if (mod.perClassLevel) {
+				value *= this.getClassLevel(mod.perClassLevel) || 0;
+			}
+
+			// Ability modifier addition
+			if (mod.abilityMod) {
+				value += this.getAbilityMod(mod.abilityMod);
+			}
+
+			// Proficiency bonus addition
+			if (mod.proficiencyBonus) {
+				value += this.getProficiencyBonus();
+			} else if (mod.halfProficiency) {
+				value += Math.floor(this.getProficiencyBonus() / 2);
+			}
+
+			result.bonus += value;
+
+			// Advantage/Disadvantage
+			if (mod.advantage) result.advantage = true;
+			if (mod.disadvantage) result.disadvantage = true;
+			if (mod.removeAdvantage) result.removeAdvantage = true;
+			if (mod.removeDisadvantage) result.removeDisadvantage = true;
+
+			// Minimum/Maximum values (take the best minimum, worst maximum)
+			if (mod.setMinimum != null) {
+				result.minimum = result.minimum == null ? mod.setMinimum : Math.max(result.minimum, mod.setMinimum);
+			}
+			if (mod.setMaximum != null) {
+				result.maximum = result.maximum == null ? mod.setMaximum : Math.min(result.maximum, mod.setMaximum);
+			}
+
+			// Set value (last one wins)
+			if (mod.setValue != null) {
+				result.setValue = typeof mod.setValue === "number" ? mod.setValue : mod.value;
+			}
+
+			// Multipliers stack multiplicatively
+			if (mod.multiplier) {
+				result.multiplier *= mod.multiplier;
+			}
+
+			// Bonus dice
+			if (mod.bonusDie && !result.bonusDice.includes(mod.bonusDie)) {
+				result.bonusDice.push(mod.bonusDie);
+			}
+
+			// Reroll threshold (use highest)
+			if (mod.reroll != null) {
+				result.reroll = result.reroll == null ? mod.reroll : Math.max(result.reroll, mod.reroll);
+			}
+
+			// Auto effects
+			if (mod.autoCrit) result.autoCrit = true;
+			if (mod.autoSuccess) result.autoSuccess = true;
+			if (mod.autoFail) result.autoFail = true;
+			if (mod.halfOnSave) result.halfOnSave = true;
+			if (mod.noneOnSave) result.noneOnSave = true;
+		});
+
+		// Resolve advantage/disadvantage (they cancel out, unless one is removed)
+		if (result.removeAdvantage && result.advantage) result.advantage = false;
+		if (result.removeDisadvantage && result.disadvantage) result.disadvantage = false;
+
+		return result;
+	}
+
+	/**
+	 * Check if a roll type has advantage from modifiers
+	 * @param {string} type - The roll type
+	 * @returns {{advantage: boolean, disadvantage: boolean, sources: string[]}}
+	 */
+	getAdvantageState (type) {
+		const agg = this.aggregateModifiers(type);
+		let hasAdvantage = agg.advantage;
+		let hasDisadvantage = agg.disadvantage;
+
+		// Also check active states for advantage/disadvantage
+		const activeStates = this.getActiveStates() || [];
+		activeStates.forEach(state => {
+			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.type];
+			if (!stateType?.effects) return;
+
+			stateType.effects.forEach(effect => {
+				if (effect.type === "advantage" && this._effectMatchesType(effect.target, type)) {
+					hasAdvantage = true;
+					if (!agg.sources.includes(stateType.name)) agg.sources.push(stateType.name);
+				}
+				if (effect.type === "disadvantage" && this._effectMatchesType(effect.target, type)) {
+					hasDisadvantage = true;
+					if (!agg.sources.includes(stateType.name)) agg.sources.push(stateType.name);
+				}
+			});
+		});
+
+		// Apply removals
+		if (agg.removeAdvantage) hasAdvantage = false;
+		if (agg.removeDisadvantage) hasDisadvantage = false;
+
+		return {
+			advantage: hasAdvantage && !hasDisadvantage,
+			disadvantage: hasDisadvantage && !hasAdvantage,
+			cancelled: hasAdvantage && hasDisadvantage,
+			sources: agg.sources,
+		};
+	}
+
+	/**
+	 * Get the total numeric bonus for a roll type
+	 * @param {string} type - The roll type
+	 * @returns {number} Total bonus from modifiers
+	 */
+	getModifierBonus (type) {
+		const agg = this.aggregateModifiers(type);
+		return agg.bonus;
+	}
+
+	/**
+	 * Check if an effect target matches a type (for active state effects)
+	 * @private
+	 */
+	_effectMatchesType (effectTarget, type) {
+		if (!effectTarget || !type) return false;
+		if (effectTarget === type) return true;
+
+		const targetParts = effectTarget.split(":");
+		const typeParts = type.split(":");
+
+		// Category match (e.g., "check:str" matches "skill:athletics" if athletics uses STR)
+		if (targetParts[0] === "check" && typeParts[0] === "skill") {
+			const skillAbility = this._getSkillAbility(typeParts[1]);
+			return targetParts[1] === "all" || targetParts[1] === skillAbility;
+		}
+
+		// "all" matches
+		if (targetParts[1] === "all" && targetParts[0] === typeParts[0]) return true;
+
+		return false;
+	}
+
+	/**
+	 * Get the ability used for a skill
+	 * @private
+	 */
+	_getSkillAbility (skill) {
+		const skillMap = {
+			athletics: "str",
+			acrobatics: "dex", sleightofhand: "dex", stealth: "dex",
+			arcana: "int", history: "int", investigation: "int", nature: "int", religion: "int",
+			animalhandling: "wis", insight: "wis", medicine: "wis", perception: "wis", survival: "wis",
+			deception: "cha", intimidation: "cha", performance: "cha", persuasion: "cha",
+		};
+		return skillMap[skill?.toLowerCase().replace(/\s+/g, "")] || "int";
+	}
+
+	/**
+	 * Get the passive score for a skill (10 + skill mod + passive bonuses)
+	 * @param {string} skill - The skill name
+	 * @returns {number} The passive score
+	 */
+	getPassiveScore (skill) {
+		const skillMod = this.getSkillMod?.(skill) || 0;
+		const passiveAgg = this.aggregateModifiers(`passive:${skill}`);
+
+		// Advantage gives +5, disadvantage gives -5 to passive scores
+		const advState = this.getAdvantageState(`skill:${skill}`);
+		let advBonus = 0;
+		if (advState.advantage) advBonus = 5;
+		else if (advState.disadvantage) advBonus = -5;
+
+		return 10 + skillMod + passiveAgg.bonus + advBonus;
 	}
 	// #endregion
 

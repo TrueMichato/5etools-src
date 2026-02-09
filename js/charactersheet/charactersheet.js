@@ -5054,35 +5054,128 @@ class CharacterSheetPage {
 			},
 		});
 
-		// Get modifier type options
-		const modifierTypes = [
-			{value: "ac", label: "Armor Class (AC)"},
-			{value: "initiative", label: "Initiative"},
-			{value: "speed", label: "Speed (ft.)"},
-			{value: "attack", label: "Attack Rolls"},
-			{value: "damage", label: "Damage Rolls"},
-			{value: "spellDc", label: "Spell Save DC"},
-			{value: "spellAttack", label: "Spell Attack"},
-			{value: "save:all", label: "All Saving Throws"},
-			{value: "check:all", label: "All Ability Checks"},
-			{value: "skill:all", label: "All Skill Checks"},
+		// Get modifier type options - organized by category with optgroups
+		const skills = this.getSkillsList();
+		const customSkills = this._state.getCustomSkills();
+
+		// Build grouped options structure
+		const modifierGroups = [
+			{
+				group: "⭐ Global",
+				options: [
+					{value: "d20:all", label: "All d20 Rolls"},
+				],
+			},
+			{
+				group: "🛡️ Combat",
+				options: [
+					{value: "ac", label: "Armor Class (AC)"},
+					{value: "initiative", label: "Initiative"},
+					{value: "attack", label: "Attack Rolls (All)"},
+					{value: "attack:melee", label: "Melee Attack Rolls"},
+					{value: "attack:ranged", label: "Ranged Attack Rolls"},
+					{value: "attack:weapon", label: "Weapon Attack Rolls"},
+					{value: "attack:spell", label: "Spell Attack Rolls"},
+					{value: "damage", label: "Damage Rolls (All)"},
+					{value: "damage:melee", label: "Melee Damage"},
+					{value: "damage:ranged", label: "Ranged Damage"},
+					{value: "damage:weapon", label: "Weapon Damage"},
+					{value: "damage:spell", label: "Spell Damage"},
+				],
+			},
+			{
+				group: "👟 Movement",
+				options: [
+					{value: "speed", label: "Speed (All)"},
+					{value: "speed:walk", label: "Walking Speed"},
+					{value: "speed:fly", label: "Flying Speed"},
+					{value: "speed:swim", label: "Swimming Speed"},
+					{value: "speed:climb", label: "Climbing Speed"},
+					{value: "speed:burrow", label: "Burrowing Speed"},
+				],
+			},
+			{
+				group: "✨ Spellcasting",
+				options: [
+					{value: "spellDc", label: "Spell Save DC"},
+					{value: "spellAttack", label: "Spell Attack Bonus"},
+					{value: "concentration", label: "Concentration Saves"},
+				],
+			},
+			{
+				group: "💪 Saving Throws",
+				options: [
+					{value: "save:all", label: "All Saving Throws"},
+					...Parser.ABIL_ABVS.map(abl => ({value: `save:${abl}`, label: `${Parser.attAbvToFull(abl)} Save`})),
+				],
+			},
+			{
+				group: "🎲 Ability Checks",
+				options: [
+					{value: "check:all", label: "All Ability Checks"},
+					...Parser.ABIL_ABVS.map(abl => ({value: `check:${abl}`, label: `${Parser.attAbvToFull(abl)} Checks`})),
+				],
+			},
+			{
+				group: "📚 Skills",
+				options: [
+					{value: "skill:all", label: "All Skill Checks"},
+					{value: "skill:custom", label: "✏️ Custom Skill (specify below)"},
+					...skills.map(skill => {
+						const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
+						return {value: `skill:${skillKey}`, label: `${skill.name} (${skill.ability?.toUpperCase() || "—"})`};
+					}),
+				],
+			},
+			{
+				group: "👁️ Passive Scores",
+				options: [
+					{value: "passive:all", label: "All Passive Scores"},
+					{value: "passive:custom", label: "✏️ Custom Passive (specify below)"},
+					...skills.map(skill => {
+						const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
+						return {value: `passive:${skillKey}`, label: `Passive ${skill.name}`};
+					}),
+				],
+			},
+			{
+				group: "❤️ Hit Points",
+				options: [
+					{value: "hp:max", label: "HP Maximum"},
+					{value: "hp:temp", label: "Temp HP"},
+				],
+			},
+			{
+				group: "📊 Ability Scores",
+				options: [
+					...Parser.ABIL_ABVS.map(abl => ({value: `ability:${abl}`, label: `${Parser.attAbvToFull(abl)} Score`})),
+				],
+			},
+			{
+				group: "🌙 Senses",
+				options: [
+					{value: "sense:darkvision", label: "Darkvision"},
+					{value: "sense:blindsight", label: "Blindsight"},
+					{value: "sense:tremorsense", label: "Tremorsense"},
+					{value: "sense:truesight", label: "Truesight"},
+				],
+			},
+			{
+				group: "📈 Miscellaneous",
+				options: [
+					{value: "proficiencyBonus", label: "Proficiency Bonus"},
+					{value: "carryCapacity", label: "Carry Capacity"},
+					{value: "deathSave", label: "Death Saving Throws"},
+				],
+			},
 		];
 
-		// Add individual saving throws
-		Parser.ABIL_ABVS.forEach(abl => {
-			modifierTypes.push({value: `save:${abl}`, label: `${Parser.attAbvToFull(abl)} Save`});
-		});
-
-		// Add individual ability checks
-		Parser.ABIL_ABVS.forEach(abl => {
-			modifierTypes.push({value: `check:${abl}`, label: `${Parser.attAbvToFull(abl)} Checks`});
-		});
-
-		// Add individual skills
-		const skills = this.getSkillsList();
-		skills.forEach(skill => {
-			const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
-			modifierTypes.push({value: `skill:${skillKey}`, label: `${skill.name} (${skill.ability.toUpperCase()})`});
+		// Create a flat lookup map for type labels
+		const modifierTypeLabels = new Map();
+		modifierGroups.forEach(group => {
+			group.options.forEach(opt => {
+				modifierTypeLabels.set(opt.value, `${group.group.replace(/^[^\s]+\s/, "")} › ${opt.label}`);
+			});
 		});
 
 		// Render the modifiers list
@@ -5097,9 +5190,34 @@ class CharacterSheetPage {
 			}
 
 			modifiers.forEach(mod => {
-				const typeLabel = modifierTypes.find(t => t.value === mod.type)?.label || mod.type;
-				const valueStr = mod.value >= 0 ? `+${mod.value}` : mod.value;
-				
+				// Look up type label from flat map, or use custom skill name if present
+				let typeLabel = modifierTypeLabels.get(mod.type);
+				if (!typeLabel && mod.customSkillName) {
+					typeLabel = mod.type.startsWith("passive:") ? `Passive ${mod.customSkillName}` : `${mod.customSkillName} Skill`;
+				}
+				if (!typeLabel) {
+					// Fallback: try to make the type readable
+					typeLabel = mod.type.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/:/, " › ");
+				}
+
+				// Build effect description
+				const effects = [];
+				if (mod.value && !mod.advantage && !mod.disadvantage && !mod.setMinimum && !mod.setMaximum) {
+					const valueStr = mod.value >= 0 ? `+${mod.value}` : mod.value;
+					effects.push(`<span class="${mod.value >= 0 ? "text-success" : "text-danger"}">${valueStr}</span>`);
+				}
+				if (mod.advantage) effects.push(`<span class="text-success">Advantage</span>`);
+				if (mod.disadvantage) effects.push(`<span class="text-danger">Disadvantage</span>`);
+				if (mod.setMinimum != null) effects.push(`<span class="ve-muted">Min: ${mod.setMinimum}</span>`);
+				if (mod.setMaximum != null) effects.push(`<span class="ve-muted">Max: ${mod.setMaximum}</span>`);
+				if (mod.bonusDie) effects.push(`<span class="text-info">+${mod.bonusDie}</span>`);
+				if (mod.reroll != null) effects.push(`<span class="ve-muted">Reroll ≤${mod.reroll}</span>`);
+				if (mod.proficiencyBonus) effects.push(`<span class="text-info">+Prof</span>`);
+				if (mod.halfProficiency) effects.push(`<span class="text-info">+½Prof</span>`);
+				if (mod.abilityMod) effects.push(`<span class="text-info">+${mod.abilityMod.toUpperCase()}</span>`);
+
+				const effectsStr = effects.length ? effects.join(" ") : `<span class="ve-muted">+0</span>`;
+
 				const $row = $$`<div class="charsheet__modifier-row ${mod.enabled ? "" : "charsheet__modifier-row--disabled"}">
 					<div class="charsheet__modifier-toggle">
 						<input type="checkbox" ${mod.enabled ? "checked" : ""} title="Enable/disable this modifier">
@@ -5108,8 +5226,9 @@ class CharacterSheetPage {
 						<div class="charsheet__modifier-name">${mod.name}</div>
 						<div class="charsheet__modifier-type ve-small ve-muted">${typeLabel}</div>
 						${mod.note ? `<div class="charsheet__modifier-note ve-small ve-muted">${mod.note}</div>` : ""}
+						${mod.conditional ? `<div class="charsheet__modifier-conditional ve-small ve-muted">⚡ ${mod.conditional}</div>` : ""}
 					</div>
-					<div class="charsheet__modifier-value ${mod.value >= 0 ? "charsheet__modifier-value--positive" : "charsheet__modifier-value--negative"}">${valueStr}</div>
+					<div class="charsheet__modifier-effects">${effectsStr}</div>
 					<div class="charsheet__modifier-actions">
 						<button class="ve-btn ve-btn-xs ve-btn-default charsheet__modifier-edit" title="Edit"><span class="glyphicon glyphicon-pencil"></span></button>
 						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__modifier-delete" title="Remove"><span class="glyphicon glyphicon-trash"></span></button>
@@ -5120,6 +5239,7 @@ class CharacterSheetPage {
 				$row.find("input[type='checkbox']").on("change", () => {
 					this._state.toggleNamedModifier(mod.id);
 					renderModifiersList();
+					renderSummary();
 				});
 
 				// Edit handler
@@ -5132,11 +5252,23 @@ class CharacterSheetPage {
 					if (confirm(`Remove "${mod.name}" modifier?`)) {
 						this._state.removeNamedModifier(mod.id);
 						renderModifiersList();
+						renderSummary();
 					}
 				});
 
 				$list.append($row);
 			});
+		};
+
+		// Show/hide custom skill fields based on type selection
+		const updateCustomSkillVisibility = ($form) => {
+			const type = $form.find("#mod-type").val();
+			const $customSkillFields = $form.find(".charsheet__modifier-form-row--custom-skill");
+			if (type === "skill:custom" || type === "passive:custom") {
+				$customSkillFields.show();
+			} else {
+				$customSkillFields.hide();
+			}
 		};
 
 		// Show edit/add form
@@ -5148,28 +5280,62 @@ class CharacterSheetPage {
 			const $typeSelect = $form.find("#mod-type");
 			const $valueInput = $form.find("#mod-value");
 			const $noteInput = $form.find("#mod-note");
+			const $advSelect = $form.find("#mod-advantage");
+			const $minInput = $form.find("#mod-minimum");
+			const $diceCountInput = $form.find("#mod-dice-count");
+			const $diceTypeSelect = $form.find("#mod-dice-type");
+			const $conditionalInput = $form.find("#mod-conditional");
+			const $customSkillInput = $form.find("#mod-custom-skill");
+			const $customSkillAbilitySelect = $form.find("#mod-custom-skill-ability");
 
 			if (existingMod) {
 				$nameInput.val(existingMod.name);
 				$typeSelect.val(existingMod.type);
-				$valueInput.val(existingMod.value);
+				$valueInput.val(existingMod.value || 0);
 				$noteInput.val(existingMod.note || "");
+				$advSelect.val(existingMod.advantage ? "advantage" : existingMod.disadvantage ? "disadvantage" : "");
+				$minInput.val(existingMod.setMinimum != null ? existingMod.setMinimum : "");
+				// Parse bonusDie (e.g., "2d6") into count and type
+				if (existingMod.bonusDie) {
+					const diceMatch = existingMod.bonusDie.match(/(\d+)d(\d+)/);
+					if (diceMatch) {
+						$diceCountInput.val(diceMatch[1]);
+						$diceTypeSelect.val(`d${diceMatch[2]}`);
+					}
+				} else {
+					$diceCountInput.val("");
+					$diceTypeSelect.val("");
+				}
+				$conditionalInput.val(existingMod.conditional || "");
+				$customSkillInput.val(existingMod.customSkillName || "");
+				$customSkillAbilitySelect.val(existingMod.customSkillAbility || "");
 				$form.data("editing-id", existingMod.id);
 				$form.find(".charsheet__modifier-form-title-text").text("Edit Modifier");
 			} else {
 				$nameInput.val("");
 				$typeSelect.val("ac");
-				$valueInput.val(1);
+				$valueInput.val(0);
 				$noteInput.val("");
+				$advSelect.val("");
+				$minInput.val("");
+				$diceCountInput.val("");
+				$diceTypeSelect.val("");
+				$conditionalInput.val("");
+				$customSkillInput.val("");
+				$customSkillAbilitySelect.val("");
 				$form.removeData("editing-id");
 				$form.find(".charsheet__modifier-form-title-text").text("Add Modifier");
 			}
 
+			updateCustomSkillVisibility($form);
 			$nameInput.focus();
 		};
 
-		// Build type select options
-		const $typeOptions = modifierTypes.map(t => `<option value="${t.value}">${t.label}</option>`).join("");
+		// Build type select options using optgroups
+		const $typeOptions = modifierGroups.map(group => {
+			const options = group.options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join("");
+			return `<optgroup label="${group.group}">${options}</optgroup>`;
+		}).join("");
 
 		// Build modal content
 		$$`<div class="charsheet__modifiers-modal">
@@ -5202,8 +5368,61 @@ class CharacterSheetPage {
 						</select>
 					</div>
 					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--value">
-						<label class="charsheet__modifier-form-label">Value</label>
-						<input type="number" class="form-control form-control--minimal" id="mod-value" value="1">
+						<label class="charsheet__modifier-form-label">Bonus</label>
+						<input type="number" class="form-control form-control--minimal" id="mod-value" value="0" placeholder="±0">
+					</div>
+				</div>
+				<div class="charsheet__modifier-form-row charsheet__modifier-form-row--custom-skill" style="display: none;">
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--custom-skill-name">
+						<label class="charsheet__modifier-form-label">Custom Skill Name</label>
+						<input type="text" class="form-control form-control--minimal" id="mod-custom-skill" placeholder="e.g., Sleight of Hand">
+					</div>
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--custom-skill-ability">
+						<label class="charsheet__modifier-form-label">Ability (optional)</label>
+						<select class="form-control form-control--minimal" id="mod-custom-skill-ability">
+							<option value="">Any / None</option>
+							<option value="str">Strength</option>
+							<option value="dex">Dexterity</option>
+							<option value="con">Constitution</option>
+							<option value="int">Intelligence</option>
+							<option value="wis">Wisdom</option>
+							<option value="cha">Charisma</option>
+						</select>
+					</div>
+				</div>
+				<div class="charsheet__modifier-form-row">
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--advantage">
+						<label class="charsheet__modifier-form-label">Advantage/Disadvantage</label>
+						<select class="form-control form-control--minimal" id="mod-advantage">
+							<option value="">None</option>
+							<option value="advantage">Advantage</option>
+							<option value="disadvantage">Disadvantage</option>
+						</select>
+					</div>
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--minimum">
+						<label class="charsheet__modifier-form-label">Minimum Roll</label>
+						<input type="number" class="form-control form-control--minimal" id="mod-minimum" value="" placeholder="e.g., 10">
+					</div>
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--bonus-dice">
+						<label class="charsheet__modifier-form-label">Bonus Dice</label>
+						<div class="charsheet__modifier-form-dice-group">
+							<input type="number" class="form-control form-control--minimal charsheet__modifier-dice-count" id="mod-dice-count" min="1" max="20" placeholder="#" value="">
+							<select class="form-control form-control--minimal charsheet__modifier-dice-type" id="mod-dice-type">
+								<option value="">—</option>
+								<option value="d4">d4</option>
+								<option value="d6">d6</option>
+								<option value="d8">d8</option>
+								<option value="d10">d10</option>
+								<option value="d12">d12</option>
+								<option value="d20">d20</option>
+							</select>
+						</div>
+					</div>
+				</div>
+				<div class="charsheet__modifier-form-row">
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--conditional">
+						<label class="charsheet__modifier-form-label">Conditional (optional)</label>
+						<input type="text" class="form-control form-control--minimal" id="mod-conditional" placeholder="e.g., against undead, while in dim light">
 					</div>
 				</div>
 				<div class="charsheet__modifier-form-field charsheet__modifier-form-field--note">
@@ -5279,24 +5498,60 @@ class CharacterSheetPage {
 		// Add modifier button
 		$modalInner.find("#charsheet-btn-add-modifier").on("click", () => showEditForm());
 
+		// Bind type change to show/hide custom skill fields
+		$modalInner.on("change", "#mod-type", function () {
+			updateCustomSkillVisibility($modalInner.find("#charsheet-modifier-form"));
+		});
+
 		// Save modifier
 		$modalInner.find("#mod-save").on("click", () => {
 			const $form = $modalInner.find("#charsheet-modifier-form");
 			const name = $form.find("#mod-name").val().trim();
-			const type = $form.find("#mod-type").val();
+			let type = $form.find("#mod-type").val();
 			const value = parseInt($form.find("#mod-value").val()) || 0;
 			const note = $form.find("#mod-note").val().trim();
+			const advantageVal = $form.find("#mod-advantage").val();
+			const minimumVal = $form.find("#mod-minimum").val();
+			const diceCount = parseInt($form.find("#mod-dice-count").val()) || 0;
+			const diceType = $form.find("#mod-dice-type").val();
+			const conditional = $form.find("#mod-conditional").val().trim();
+			const customSkillName = $form.find("#mod-custom-skill").val().trim();
+			const customSkillAbility = $form.find("#mod-custom-skill-ability").val();
 
 			if (!name) {
 				JqueryUtil.doToast({type: "warning", content: "Please enter a name for the modifier."});
 				return;
 			}
 
+			// Handle custom skill/passive types
+			if (type === "skill:custom" || type === "passive:custom") {
+				if (!customSkillName) {
+					JqueryUtil.doToast({type: "warning", content: "Please enter a custom skill name."});
+					return;
+				}
+				// Convert custom skill to proper type
+				const skillKey = customSkillName.toLowerCase().replace(/\s+/g, "");
+				type = type === "skill:custom" ? `skill:${skillKey}` : `passive:${skillKey}`;
+			}
+
+			// Build modifier object with only non-empty properties
+			const modifier = {name, type, value, enabled: true};
+			if (note) modifier.note = note;
+			if (advantageVal === "advantage") modifier.advantage = true;
+			if (advantageVal === "disadvantage") modifier.disadvantage = true;
+			if (minimumVal && !isNaN(parseInt(minimumVal))) modifier.setMinimum = parseInt(minimumVal);
+			// Combine dice count and type into bonusDie string (e.g., "2d6")
+			if (diceCount > 0 && diceType) modifier.bonusDie = `${diceCount}${diceType}`;
+			if (conditional) modifier.conditional = conditional;
+			// Store custom skill info for editing later
+			if (customSkillName) modifier.customSkillName = customSkillName;
+			if (customSkillAbility) modifier.customSkillAbility = customSkillAbility;
+
 			const editingId = $form.data("editing-id");
 			if (editingId) {
-				this._state.updateNamedModifier(editingId, {name, type, value, note});
+				this._state.updateNamedModifier(editingId, modifier);
 			} else {
-				this._state.addNamedModifier({name, type, value, note, enabled: true});
+				this._state.addNamedModifier(modifier);
 			}
 
 			$form.hide();
