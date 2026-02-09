@@ -297,6 +297,38 @@ class CharacterSheetPage {
 			this._races = [...this._races, ...processedBrewRaces];
 		}
 
+		// Subraces - adopt onto their parent races using the standard method
+		if (brewData.subrace?.length) {
+			// Group subraces by parent to handle adoption failures gracefully
+			// Instead of letting one bad subrace fail everything, process them individually
+			const successfulAdoptions = [];
+			const failedSubraces = [];
+
+			for (const subrace of MiscUtil.copyFast(brewData.subrace)) {
+				try {
+					// Attempt to adopt this single subrace
+					const adopted = Renderer.race.adoptSubraces(this._races, [subrace]);
+					if (adopted.length) {
+						successfulAdoptions.push(...adopted);
+					}
+				} catch (e) {
+					// Log but don't fail - this subrace just won't work
+					console.warn(`[CharSheet] Skipping orphan subrace "${subrace.name}" (${subrace.source}): parent race not found`);
+					failedSubraces.push(`${subrace.name}|${subrace.source}`);
+				}
+			}
+
+			if (successfulAdoptions.length) {
+				// Process adopted races (mergeSubraces, expand _versions) and replace their parents
+				const processedAdopted = this._processRaceData(successfulAdoptions);
+
+				// Remove existing parent race entries that were adopted onto, then add processed versions
+				const adoptedKeys = new Set(successfulAdoptions.map(r => `${r.name}|${r.source}`));
+				this._races = this._races.filter(r => !adoptedKeys.has(`${r.name}|${r.source}`) || r._baseName);
+				this._races = [...this._races, ...processedAdopted];
+			}
+		}
+
 		// Classes
 		if (brewData.class?.length) {
 			this._classes = [...this._classes, ...MiscUtil.copyFast(brewData.class)];
@@ -5395,6 +5427,38 @@ class CharacterSheetPage {
 		});
 		// Sort alphabetically
 		return Array.from(langMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * Get all available language names sorted by priority sources first
+	 * @returns {Array} Array of language names with priority sources first
+	 */
+	getLanguageNamesSorted () {
+		const prioritySources = this._state.getPrioritySources() || [];
+		const langMap = new Map();
+
+		// Build map of languages, tracking source for each
+		this._languagesData.forEach(lang => {
+			const existing = langMap.get(lang.name);
+			// Prefer priority sources, then XPHB
+			if (!existing) {
+				langMap.set(lang.name, {name: lang.name, source: lang.source});
+			} else if (prioritySources.includes(lang.source) && !prioritySources.includes(existing.source)) {
+				langMap.set(lang.name, {name: lang.name, source: lang.source});
+			} else if (lang.source === Parser.SRC_XPHB && !prioritySources.includes(existing.source)) {
+				langMap.set(lang.name, {name: lang.name, source: lang.source});
+			}
+		});
+
+		// Convert to array and sort: priority sources first, then alphabetically
+		const languages = Array.from(langMap.values());
+		return languages.sort((a, b) => {
+			const aIsPriority = prioritySources.includes(a.source);
+			const bIsPriority = prioritySources.includes(b.source);
+			if (aIsPriority && !bIsPriority) return -1;
+			if (!aIsPriority && bIsPriority) return 1;
+			return a.name.localeCompare(b.name);
+		}).map(l => l.name);
 	}
 
 	async saveCharacter () {

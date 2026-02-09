@@ -8,6 +8,7 @@ class CharacterSheetCombat {
 		this._state = page.getState();
 		this._allItems = [];
 		this._cachedAttacks = [];
+		this._sneakAttackEnabled = false; // Toggle for including Sneak Attack in damage rolls
 
 		this._init();
 	}
@@ -158,6 +159,8 @@ class CharacterSheetCombat {
 					<div class="charsheet__attack-field">
 						<label class="charsheet__attack-label">Ability</label>
 						<select class="charsheet__attack-select charsheet__attack-select--ability">
+							<option value="finesse" ${attack.abilityMod === "finesse" ? "selected" : ""}>Finesse (STR/DEX)</option>
+							<option value="spellcasting" ${attack.abilityMod === "spellcasting" ? "selected" : ""}>Spellcasting (INT/WIS/CHA)</option>
 							${Parser.ABIL_ABVS.map(a => `<option value="${a}" ${attack.abilityMod === a ? "selected" : ""}>${Parser.attAbvToFull(a)} (${a.toUpperCase()})</option>`).join("")}
 						</select>
 					</div>
@@ -295,10 +298,12 @@ class CharacterSheetCombat {
 				const weapon = inventoryWeapons.find(i => i.name === weaponName);
 				if (weapon) {
 					$name.val(weapon.name);
-					const isRanged = weapon.properties?.some(p => p.includes("A") || p.toLowerCase().includes("ammunition")) || weapon.range;
+					// Use property (5etools format) or properties (normalized format)
+					const props = weapon.property || weapon.properties || [];
+					const isRanged = props.some(p => p.includes("A") || p.toLowerCase().includes("ammunition")) || weapon.range;
 					$type.val(isRanged ? "ranged" : "melee");
-					const hasFinesse = weapon.properties?.some(p => p.includes("F") || p.toLowerCase().includes("finesse"));
-					$ability.val(isRanged ? "dex" : (hasFinesse ? "dex" : "str"));
+					const hasFinesse = props.some(p => p.includes("F") || p.toLowerCase().includes("finesse"));
+					$ability.val(isRanged ? "dex" : (hasFinesse ? "finesse" : "str"));
 					if (weapon.damage) {
 						const dmgMatch = weapon.damage.match(/(\d+d\d+)/);
 						if (dmgMatch) $damage.val(dmgMatch[1]);
@@ -306,7 +311,7 @@ class CharacterSheetCombat {
 						if (typeMatch) $damageType.val(typeMatch[1].toLowerCase());
 					}
 					if (weapon.range) $range.val(weapon.range);
-					if (weapon.properties) $properties.val(weapon.properties.map(p => typeof p === "string" ? p : Parser.itemPropertyToFull(p)).join(", "));
+					if (props.length) $properties.val(props.map(p => typeof p === "string" ? p : Parser.itemPropertyToFull(p)).join(", "));
 					const attackBonusVal = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
 					const damageBonusVal = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponDamage || 0);
 					$bonus.val(attackBonusVal);
@@ -326,7 +331,7 @@ class CharacterSheetCombat {
 				const isRanged = weapon.property?.includes("A") || weapon.range;
 				$type.val(isRanged ? "ranged" : "melee");
 				const hasFinesse = weapon.property?.includes("F");
-				$ability.val(isRanged ? "dex" : (hasFinesse ? "dex" : "str"));
+				$ability.val(isRanged ? "dex" : (hasFinesse ? "finesse" : "str"));
 				if (weapon.dmg1) $damage.val(weapon.dmg1);
 				if (weapon.dmgType) $damageType.val(Parser.dmgTypeToFull(weapon.dmgType).toLowerCase());
 				if (weapon.range) $range.val(weapon.range);
@@ -451,7 +456,7 @@ class CharacterSheetCombat {
 			range: overrides.range ?? (weapon.range || ""),
 			properties: overrides.properties ?? (weapon.property?.map(p => this._formatProperty(p)) || []),
 			isMelee: overrides.isMelee ?? !isRanged,
-			abilityMod: overrides.abilityMod ?? (isRanged ? "dex" : (hasFinesse ? "dex" : "str")),
+			abilityMod: overrides.abilityMod ?? (isRanged ? "dex" : (hasFinesse ? "finesse" : "str")),
 		};
 
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
@@ -781,8 +786,8 @@ class CharacterSheetCombat {
 		if (hasAdvantage && !hasDisadvantage) stateMode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) stateMode = "disadvantage";
 
-		// Calculate total attack bonus
-		const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
+		// Calculate total attack bonus - resolve finesse to use higher of STR/DEX
+		const abilityMod = this._resolveAbilityMod(attack.abilityMod || "str");
 		const profBonus = this._state.getProficiencyBonus();
 
 		// Get attack modifiers from named modifiers (from features like Battle Tactics, magic items, etc.)
@@ -845,7 +850,7 @@ class CharacterSheetCombat {
 
 		// Parse damage dice
 		const damageRoll = this._parseDamage(attack.damage, isCrit);
-		const abilityMod = this._state.getAbilityMod(attack.abilityMod || "str");
+		const abilityMod = this._resolveAbilityMod(attack.abilityMod || "str");
 
 		// Get damage modifiers from named modifiers (from features, magic items, etc.)
 		const damageModifiers = this._state.getNamedModifiersByType("damage");
@@ -865,9 +870,19 @@ class CharacterSheetCombat {
 			) || 0;
 		}
 
+		// Check for Sneak Attack
+		let sneakAttackDamage = 0;
+		let sneakAttackDice = "";
+		const sneakAttackInfo = this._state.getFeatureCalculations?.()?.sneakAttack;
+		if (sneakAttackInfo && this._sneakAttackEnabled && !attack.isSpell) {
+			const sneakRoll = this._parseDamage(sneakAttackInfo.dice, isCrit);
+			sneakAttackDamage = sneakRoll.total;
+			sneakAttackDice = sneakAttackInfo.dice;
+		}
+
 		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus + stateDamageBonus;
 
-		const total = damageRoll.total + totalBonus;
+		const total = damageRoll.total + totalBonus + sneakAttackDamage;
 
 		// Build subtitle with breakdown
 		let subtitle = `${attack.damage}${isCrit ? " (crit)" : ""} + ${abilityMod} (${attack.abilityMod || "STR"})`;
@@ -875,16 +890,23 @@ class CharacterSheetCombat {
 		if (featureDamageBonus) subtitle += ` + ${featureDamageBonus} (features)`;
 		if (rageBonus) subtitle += ` + ${rageBonus} (rage)`;
 		if (stateDamageBonus) subtitle += ` + ${stateDamageBonus} (states)`;
+		if (sneakAttackDamage) subtitle += ` + ${sneakAttackDamage} (sneak attack ${sneakAttackDice})`;
 		subtitle += ` ${attack.damageType}`;
 
 		// Show result
 		this._page.showDiceResult({
 			title: `${attack.name} Damage`,
-			roll: damageRoll.total,
+			roll: damageRoll.total + sneakAttackDamage,
 			modifier: totalBonus,
 			total,
 			subtitle,
 		});
+
+		// Auto-disable sneak attack after use (once per turn)
+		if (sneakAttackDamage > 0) {
+			this._sneakAttackEnabled = false;
+			this._renderSneakAttackToggle?.();
+		}
 	}
 
 	_parseDamage (damageStr, isCrit = false) {
@@ -913,6 +935,24 @@ class CharacterSheetCombat {
 		total += modifier;
 
 		return {total, rolls, modifier};
+	}
+
+	/**
+	 * Resolve an ability modifier key, handling special cases like "finesse" and "spellcasting"
+	 * @param {string} abilityKey - The ability key (e.g., "str", "dex", "finesse", "spellcasting")
+	 * @returns {number} The resolved ability modifier
+	 */
+	_resolveAbilityMod (abilityKey) {
+		if (abilityKey === "finesse") {
+			return Math.max(this._state.getAbilityMod("str"), this._state.getAbilityMod("dex"));
+		} else if (abilityKey === "spellcasting") {
+			return Math.max(
+				this._state.getAbilityMod("int"),
+				this._state.getAbilityMod("wis"),
+				this._state.getAbilityMod("cha"),
+			);
+		}
+		return this._state.getAbilityMod(abilityKey);
 	}
 
 	/**
@@ -1040,10 +1080,12 @@ class CharacterSheetCombat {
 				const overrides = weapon.attackOverrides || {};
 
 				// Auto-generate attack from weapon
-				const isRanged = weapon.properties?.some(p => p === "A" || p === "T" || p.startsWith("A|") || p.startsWith("T|"));
-				const hasFinesse = weapon.properties?.some(p => p === "F" || p.startsWith("F|"));
+				// Use property (5etools format) or properties (normalized format)
+				const props = weapon.property || weapon.properties || [];
+				const isRanged = props.some(p => p === "A" || p === "T" || p.startsWith("A|") || p.startsWith("T|"));
+				const hasFinesse = props.some(p => p === "F" || p.startsWith("F|"));
 				const isMonkWeapon = this._state.isMonkWeapon?.(weapon);
-				const defaultAbility = isRanged ? "dex" : ((hasFinesse || isMonkWeapon) ? (this._state.getAbilityMod("dex") >= this._state.getAbilityMod("str") ? "dex" : "str") : "str");
+				const defaultAbility = isRanged ? "dex" : ((hasFinesse || isMonkWeapon) ? "finesse" : "str");
 
 				// Calculate total bonuses including magic item bonuses and custom bonuses
 				const magicAttackBonus = (weapon.bonusWeapon || 0) + (weapon.bonusWeaponAttack || 0);
@@ -1062,7 +1104,7 @@ class CharacterSheetCombat {
 					damage: overrides.damage ?? (weapon.damage || "1d6"),
 					damageType: overrides.damageType ?? (weapon.damageType || "slashing"),
 					damageBonus: magicDamageBonus + customDamageBonus,
-					properties: overrides.properties ?? (weapon.properties || []),
+					properties: overrides.properties ?? props,
 					mastery: weapon.mastery || [],
 					isAutoGenerated: true,
 					isMonkWeapon: !!isMonkWeapon,
@@ -2198,6 +2240,87 @@ class CharacterSheetCombat {
 
 			$container.append($resource);
 		}
+
+		// Render Sneak Attack toggle if character is a Rogue
+		this._renderSneakAttackToggle($container);
+	}
+
+	/**
+	 * Render Sneak Attack toggle and Cunning Strike options in combat resources
+	 */
+	_renderSneakAttackToggle ($container) {
+		if (!$container) $container = $("#charsheet-combat-resources");
+		if (!$container.length) return;
+
+		// Remove existing sneak attack UI
+		$container.find(".charsheet__sneak-attack-section").remove();
+
+		const calcs = this._state.getFeatureCalculations?.();
+		if (!calcs?.sneakAttack) return;
+
+		const sa = calcs.sneakAttack;
+		const $section = $(`<div class="charsheet__sneak-attack-section mt-3" style="border-top: 1px solid var(--rgb-border-grey, #444); padding-top: 0.5rem;"></div>`);
+
+		// Sneak Attack toggle
+		const $toggle = $(`
+			<div class="ve-flex-v-center mb-1">
+				<button class="ve-btn ve-btn-xs ${this._sneakAttackEnabled ? "ve-btn-success" : "ve-btn-default"} charsheet__sneak-attack-toggle mr-2" title="Toggle Sneak Attack (adds ${sa.dice} to next damage roll)">
+					<span class="glyphicon glyphicon-flash mr-1"></span>${this._sneakAttackEnabled ? "Sneak Attack ON" : "Sneak Attack OFF"}
+				</button>
+				<span class="ve-small ve-muted">${sa.dice} (avg ${sa.avgDamage})</span>
+			</div>
+		`);
+
+		$toggle.find(".charsheet__sneak-attack-toggle").on("click", () => {
+			this._sneakAttackEnabled = !this._sneakAttackEnabled;
+			this._renderSneakAttackToggle();
+		});
+
+		$section.append($toggle);
+
+		// Cunning Strike options (if available)
+		if (calcs.hasCunningStrike) {
+			const $cunningStrike = $(`<div class="ve-small mt-1"><strong>Cunning Strike</strong> <span class="ve-muted">(sacrifice Sneak Attack dice)</span></div>`);
+
+			const options = [];
+			// Base options (level 5)
+			options.push({name: "Poison", cost: 1, desc: "Target must succeed CON save or be poisoned"});
+			options.push({name: "Trip", cost: 1, desc: "Target must succeed DEX save or fall prone"});
+			options.push({name: "Withdraw", cost: 1, desc: "Disengage as part of this attack"});
+
+			// Improved options (level 11)
+			if (calcs.hasImprovedCunningStrike) {
+				options.push({name: "Daze", cost: 2, desc: "Target must succeed CON save or be dazed"});
+			}
+
+			// Devious Strikes (level 14)
+			if (calcs.hasDeviousStrikes) {
+				options.push({name: "Knock Out", cost: 6, desc: "Target must succeed CON save or fall unconscious"});
+				options.push({name: "Obscure", cost: 3, desc: "Target must succeed DEX save or be blinded"});
+			}
+
+			const sneakDice = parseInt(sa.dice) || Math.ceil((this._state.getClassLevel?.("Rogue") || 1) / 2);
+			const $optList = $(`<div class="ve-flex gap-1 flex-wrap mt-1"></div>`);
+			options.forEach(opt => {
+				const $btn = $(`<button class="ve-btn ve-btn-xs ve-btn-default" title="${opt.desc} (costs ${opt.cost}d6 from Sneak Attack)">${opt.name} (${opt.cost}d6)</button>`);
+				$btn.on("click", async () => {
+					if (opt.cost > sneakDice) {
+						JqueryUtil.doToast({type: "warning", content: `Not enough Sneak Attack dice (need ${opt.cost}d6, have ${sneakDice}d6)`});
+						return;
+					}
+					const saveDC = 8 + this._state.getProficiencyBonus() + this._state.getAbilityMod("dex");
+					JqueryUtil.doToast({
+						type: "info",
+						content: `<strong>Cunning Strike: ${opt.name}</strong><br>${opt.desc}<br>Save DC: <strong>${saveDC}</strong><br>Reduced Sneak Attack: ${sneakDice - opt.cost}d6`,
+					});
+				});
+				$optList.append($btn);
+			});
+			$cunningStrike.append($optList);
+			$section.append($cunningStrike);
+		}
+
+		$container.append($section);
 	}
 
 	/**

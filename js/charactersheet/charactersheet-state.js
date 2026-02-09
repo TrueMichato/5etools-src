@@ -4785,7 +4785,7 @@ class CharacterSheetState {
 		const levelIndex = Math.min(level, 20) - 1;
 		const classData = cls._classData;
 		const source = cls.source || "PHB";
-		const is2024 = source === "XPHB" || source === "xphb";
+		const is2024 = source === "XPHB" || source === "xphb" || source === "TGTT";
 
 		// Try to get progression from class data first (supports 2024 and homebrew)
 		if (classData) {
@@ -5492,7 +5492,7 @@ class CharacterSheetState {
 			switch (className) {
 				case "Rogue": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 
 					// Sneak Attack: 1d6 at level 1, +1d6 every 2 levels (rounded up)
 					const sneakDice = Math.ceil(level / 2);
@@ -5866,7 +5866,7 @@ class CharacterSheetState {
 				}
 				case "Monk": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 
 					// Ki/Focus points = monk level
 					const kiPoints = level;
@@ -6333,7 +6333,7 @@ class CharacterSheetState {
 				}
 				case "Barbarian": {
 					const source = cls.source || "PHB";
-					const isXPHB = source === "XPHB";
+					const isXPHB = source === "XPHB" || source === "TGTT";
 
 					// Rage (level 1+) - all barbarians have rage
 					calculations.hasRage = true;
@@ -6642,7 +6642,7 @@ class CharacterSheetState {
 				}
 				case "Paladin": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 					const chaMod = this.getAbilityMod("cha");
 
 					// =========================================================
@@ -7088,7 +7088,7 @@ class CharacterSheetState {
 				}
 				case "Fighter": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 
 					// Second Wind healing (1d10 + fighter level), uses scale in XPHB
 					if (level >= 1) {
@@ -7440,7 +7440,7 @@ class CharacterSheetState {
 				}
 				case "Warlock": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 					const chaMod = this.getAbilityMod("cha");
 
 					// Eldritch Blast beams (based on total character level)
@@ -7807,7 +7807,7 @@ class CharacterSheetState {
 				}
 				case "Sorcerer": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 
 					// Spellcasting
 					calculations.hasSpellcasting = true;
@@ -8133,7 +8133,7 @@ class CharacterSheetState {
 				}
 				case "Cleric": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 
 					// Channel Divinity DC is spell save DC
 					calculations.channelDivinityDc = this.getSpellSaveDc();
@@ -8636,7 +8636,7 @@ class CharacterSheetState {
 				}
 				case "Druid": {
 					const source = cls.source || "PHB";
-					const isXPHB = source === "XPHB";
+					const isXPHB = source === "XPHB" || source === "TGTT";
 
 					// Wild Shape DC is spell save DC
 					calculations.wildShapeDc = this.getSpellSaveDc();
@@ -8966,7 +8966,7 @@ class CharacterSheetState {
 				}
 				case "Bard": {
 					const source = cls.source || "PHB";
-					const isXPHB = source === "XPHB";
+					const isXPHB = source === "XPHB" || source === "TGTT";
 
 					// Bardic Inspiration die
 					const inspirationDie = level >= 15 ? "1d12" : level >= 10 ? "1d10" : level >= 5 ? "1d8" : "1d6";
@@ -9261,7 +9261,7 @@ class CharacterSheetState {
 				}
 				case "Ranger": {
 					const source = cls.source || "PHB";
-					const isXPHB = source === "XPHB";
+					const isXPHB = source === "XPHB" || source === "TGTT";
 					const wisMod = this.getAbilityMod("wis");
 
 					// Favored Foe damage (TCE optional feature replaces Favored Enemy)
@@ -9610,7 +9610,7 @@ class CharacterSheetState {
 				}
 				case "Wizard": {
 					const source = cls.source || "PHB";
-					const is2024 = source === "XPHB";
+					const is2024 = source === "XPHB" || source === "TGTT";
 					const intMod = this.getAbilityMod("int");
 
 					// Spellcasting
