@@ -28,9 +28,12 @@ class CharacterSheetBuilder {
 		this._selectedLanguages = []; // For background language choices
 		this._selectedClassFeatureLanguages = []; // For class feature language choices (like Deft Explorer)
 		this._selectedFeatureOptions = {}; // For class/subclass features with embedded options (like Specialties)
+		this._selectedFeatureSkillChoices = {}; // For specialty features that require skill/expertise choices
 		this._selectedCombatTraditions = []; // For combat tradition proficiency choices (Thelemar homebrew)
 		this._selectedRacialSkills = []; // For racial skill proficiency choices (e.g., Elf)
 		this._selectedRacialTools = []; // For racial tool proficiency choices (e.g., Dwarf)
+		this._selectedRacialLanguages = []; // For racial language proficiency choices (TGTT races with choose/anyStandard)
+		this._selectedRacialAbilityChoices = {}; // For races with choose-based ASI (TGTT races)
 		this._useTashasRules = false; // For Tasha's Custom Origin rules - reassign racial ASI
 		this._tashasAbilityBonuses = {}; // Stores custom ASI when using Tasha's rules
 		this._customBackground = null; // Stores custom background object
@@ -49,8 +52,12 @@ class CharacterSheetBuilder {
 	// Check if race uses 2024 ASI rules (ASI comes from background, not race)
 	_raceUses2024ASI () {
 		if (!this._selectedRace) return false;
-		// 2024 species have no "ability" property - ASI moved to background
-		return this._is2024Edition(this._selectedRace) || !this._selectedRace.ability;
+		// Only 2024 species (XPHB) truly have no ASI from race
+		// Races with ability: [{choose: ...}] are NOT 2024 — they have choose-based ASI
+		if (this._is2024Edition(this._selectedRace)) return true;
+		if (!this._selectedRace.ability) return true;
+		// If race only has choose entries, it still provides ASI (just player chooses)
+		return false;
 	}
 
 	// Check if background provides ASI (2024 backgrounds)
@@ -603,24 +610,49 @@ class CharacterSheetBuilder {
 
 		// Ability score bonuses
 		if (this._selectedRace.ability) {
-			this._selectedRace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi)) {
-						this._state.setAbilityBonus(abi, bonus);
-					}
-				});
+			this._selectedRace.ability.forEach((abiSet, abiIdx) => {
+				if (abiSet.choose) {
+					// Handle choose-based ASI — apply stored choices for THIS ability set only
+					const raceKey = `${this._selectedRace.name}|${this._selectedRace.source}`;
+					const choices = this._selectedRacialAbilityChoices[raceKey] || {};
+					Object.entries(choices).forEach(([key, abi]) => {
+						// Only process choices that belong to this ability set index
+						if (!key.startsWith(`choose_${abiIdx}_`) || key.includes("_amount") || !abi) return;
+						const amount = choices[`${key}_amount`] || 1;
+						this._state.setAbilityBonus(abi, (this._state.getAbilityBonus(abi) || 0) + amount);
+					});
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi)) {
+							this._state.setAbilityBonus(abi, bonus);
+						}
+					});
+				}
 			});
 		}
 
 		// Subrace bonuses
 		if (this._selectedSubrace?.ability) {
-			this._selectedSubrace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi)) {
+			this._selectedSubrace.ability.forEach((abiSet, abiIdx) => {
+				if (abiSet.choose) {
+					// Handle choose-based ASI — apply stored choices for THIS ability set only
+					const raceKey = `${this._selectedSubrace.name}|${this._selectedSubrace.source}`;
+					const choices = this._selectedRacialAbilityChoices[raceKey] || {};
+					Object.entries(choices).forEach(([key, abi]) => {
+						// Only process choices that belong to this ability set index
+						if (!key.startsWith(`choose_${abiIdx}_`) || key.includes("_amount") || !abi) return;
+						const amount = choices[`${key}_amount`] || 1;
 						const current = this._state.getAbilityBonus(abi);
-						this._state.setAbilityBonus(abi, current + bonus);
-					}
-				});
+						this._state.setAbilityBonus(abi, current + amount);
+					});
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi)) {
+							const current = this._state.getAbilityBonus(abi);
+							this._state.setAbilityBonus(abi, current + bonus);
+						}
+					});
+				}
 			});
 		}
 
@@ -628,9 +660,8 @@ class CharacterSheetBuilder {
 		if (this._selectedRace.languageProficiencies) {
 			this._selectedRace.languageProficiencies.forEach(langProf => {
 				Object.keys(langProf).forEach(lang => {
-					if (lang !== "anyStandard" && lang !== "any") {
-						this._state.addLanguage(lang.toTitleCase());
-					}
+					if (lang === "anyStandard" || lang === "any" || lang === "choose") return;
+					this._state.addLanguage(lang.toTitleCase());
 				});
 			});
 		}
@@ -639,10 +670,16 @@ class CharacterSheetBuilder {
 		if (this._selectedSubrace?.languageProficiencies) {
 			this._selectedSubrace.languageProficiencies.forEach(langProf => {
 				Object.keys(langProf).forEach(lang => {
-					if (lang !== "anyStandard" && lang !== "any") {
-						this._state.addLanguage(lang.toTitleCase());
-					}
+					if (lang === "anyStandard" || lang === "any" || lang === "choose") return;
+					this._state.addLanguage(lang.toTitleCase());
 				});
+			});
+		}
+
+		// Apply selected racial language choices
+		if (this._selectedRacialLanguages.length) {
+			this._selectedRacialLanguages.forEach(lang => {
+				this._state.addLanguage(lang.toTitleCase());
 			});
 		}
 
@@ -1361,6 +1398,35 @@ class CharacterSheetBuilder {
 						isFeatureOption: true,
 						parentFeature: featureKey.split("_")[0], // Track which feature this is an option of
 					});
+
+					// Apply any skill sub-choices for this specialty
+					const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
+					const skillSelections = this._selectedFeatureSkillChoices[choiceKey];
+					if (skillSelections?.length) {
+						const skillChoice = this._parseFeatureSkillChoice(opt);
+						if (skillChoice) {
+							skillSelections.forEach(skill => {
+								const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+								if (skillChoice.type === "proficiency") {
+									this._state.setSkillProficiency(skillKey, 1);
+									console.log(`[CharSheet Builder] Applied proficiency in ${skill} from "${opt.name}"`);
+								} else if (skillChoice.type === "expertise") {
+									this._state.setSkillProficiency(skillKey, 2);
+									console.log(`[CharSheet Builder] Applied expertise in ${skill} from "${opt.name}"`);
+								} else if (skillChoice.type === "bonus") {
+									// For "bonus equal to proficiency" - add a named modifier
+									this._state.addNamedModifier({
+										name: `${opt.name} (${skill})`,
+										type: `skill:${skillKey}`,
+										value: "proficiency",
+										note: `From ${opt.name}: bonus equal to proficiency bonus`,
+										enabled: true,
+									});
+									console.log(`[CharSheet Builder] Applied skill bonus to ${skill} from "${opt.name}"`);
+								}
+							});
+						}
+					}
 				} else if (opt.type === "subclassFeature" && opt.ref) {
 					// Handle subclass feature options
 					this._state.addFeature({
@@ -1843,6 +1909,7 @@ class CharacterSheetBuilder {
 					// Reset racial proficiency selections when race group changes
 					this._selectedRacialSkills = [];
 					this._selectedRacialTools = [];
+					this._selectedRacialLanguages = [];
 
 					if (hasSubraces) {
 						// Show subrace selection in preview
@@ -1928,6 +1995,7 @@ class CharacterSheetBuilder {
 				// Reset racial proficiency selections when race changes
 				this._selectedRacialSkills = [];
 				this._selectedRacialTools = [];
+				this._selectedRacialLanguages = [];
 				this._renderSubraceDetails($detailsContainer, selectedSubrace, group.baseName);
 			} else {
 				this._selectedRace = null;
@@ -1935,6 +2003,7 @@ class CharacterSheetBuilder {
 				// Reset racial proficiency selections
 				this._selectedRacialSkills = [];
 				this._selectedRacialTools = [];
+				this._selectedRacialLanguages = [];
 				$detailsContainer.empty();
 			}
 		});
@@ -1983,15 +2052,27 @@ class CharacterSheetBuilder {
 
 		// Ability scores
 		if (race.ability?.length) {
-			const abilityStr = race.ability.map(a => {
-				return Object.entries(a)
-					.filter(([k]) => Parser.ABIL_ABVS.includes(k))
-					.map(([k, v]) => `${k.toUpperCase()} +${v}`)
-					.join(", ");
-			}).join("; ");
+			const abilityParts = [];
+			race.ability.forEach(a => {
+				if (a.choose) {
+					const c = a.choose;
+					const fromList = (c.from || Parser.ABIL_ABVS).map(ab => ab.toUpperCase()).join(", ");
+					abilityParts.push(`Choose ${c.count || 1}: +${c.amount || 1} from ${fromList}`);
+				} else {
+					Object.entries(a)
+						.filter(([k]) => Parser.ABIL_ABVS.includes(k))
+						.forEach(([k, v]) => abilityParts.push(`${k.toUpperCase()} +${v}`));
+				}
+			});
 
-			if (abilityStr) {
-				$details.append(`<p><strong>Ability Scores:</strong> ${abilityStr}</p>`);
+			if (abilityParts.length) {
+				$details.append(`<p><strong>Ability Scores:</strong> ${abilityParts.join("; ")}</p>`);
+			}
+
+			// Ability score choice UI
+			const $asiChoices = this._renderRaceAbilityChoices(race);
+			if ($asiChoices) {
+				$details.append($asiChoices);
 			}
 		}
 
@@ -2025,6 +2106,82 @@ class CharacterSheetBuilder {
 		}
 
 		$container.append($details);
+	}
+
+	/**
+	 * Render ability score choice dropdowns for races with choose-based ASI
+	 * @param {Object} race - The race data
+	 * @returns {jQuery|null} jQuery element with dropdowns, or null if no choices
+	 */
+	_renderRaceAbilityChoices (race) {
+		if (!race.ability?.length) return null;
+
+		const chooseEntries = [];
+		race.ability.forEach((abiSet, abiIdx) => {
+			if (abiSet.choose) {
+				chooseEntries.push({idx: abiIdx, choose: abiSet.choose});
+			}
+		});
+
+		if (!chooseEntries.length) return null;
+
+		const raceKey = `${race.name}|${race.source}`;
+		if (!this._selectedRacialAbilityChoices[raceKey]) {
+			this._selectedRacialAbilityChoices[raceKey] = {};
+		}
+
+		const $container = $(`<div class="charsheet__builder-race-asi-choices mt-2"></div>`);
+		$container.append(`<p class="ve-small ve-muted">Choose your ability score increases:</p>`);
+
+		let globalChoiceIdx = 0;
+		for (const {idx: abiIdx, choose} of chooseEntries) {
+			const count = choose.count || 1;
+			const amount = choose.amount || 1;
+			const from = choose.from || Parser.ABIL_ABVS;
+
+			for (let i = 0; i < count; i++) {
+				const choiceKey = `choose_${abiIdx}_${i}`;
+				const $row = $(`<div class="ve-flex-v-center mb-1"></div>`);
+				$row.append(`<span class="mr-2">+${amount}:</span>`);
+
+				const $select = $(`<select class="form-control form-control--minimal ve-inline-block w-auto" data-race-asi-key="${choiceKey}"></select>`);
+				$select.append(`<option value="">-- Select --</option>`);
+
+				from.forEach(ab => {
+					const abName = Parser.attAbvToFull(ab);
+					const selected = this._selectedRacialAbilityChoices[raceKey]?.[choiceKey] === ab ? "selected" : "";
+					$select.append(`<option value="${ab}" ${selected}>${abName}</option>`);
+				});
+
+				$select.on("change", (e) => {
+					const val = e.target.value;
+					this._selectedRacialAbilityChoices[raceKey][choiceKey] = val || null;
+					this._selectedRacialAbilityChoices[raceKey][`${choiceKey}_amount`] = amount;
+
+					// Disable already-selected abilities in other dropdowns
+					$container.find("select").each((_, sel) => {
+						const $sel = $(sel);
+						const selKey = $sel.data("race-asi-key");
+						$sel.find("option").each((__, opt) => {
+							const $opt = $(opt);
+							const optVal = $opt.val();
+							if (!optVal) return;
+							const isSelectedElsewhere = Object.entries(this._selectedRacialAbilityChoices[raceKey])
+								.some(([k, v]) => k.startsWith("choose_") && !k.includes("_amount") && k !== selKey && v === optVal);
+							$opt.prop("disabled", isSelectedElsewhere);
+						});
+					});
+
+					this._updateAbilitySummary?.();
+				});
+
+				$row.append($select);
+				$container.append($row);
+				globalChoiceIdx++;
+			}
+		}
+
+		return $container;
 	}
 
 	/**
@@ -2075,6 +2232,33 @@ class CharacterSheetBuilder {
 					hasChoices = true;
 					const anyCount = toolProf.any;
 					const $section = this._renderRacialToolChoice(null, anyCount, profIdx);
+					$container.append($section);
+				}
+			});
+		}
+
+		// Language proficiency choices
+		if (race.languageProficiencies) {
+			race.languageProficiencies.forEach((langProf, profIdx) => {
+				if (langProf.choose) {
+					hasChoices = true;
+					const chooseFrom = langProf.choose.from || [];
+					const chooseCount = langProf.choose.count || 1;
+					if (chooseFrom.length > 0) {
+						const $section = this._renderRacialLanguageChoice(chooseFrom, chooseCount, profIdx);
+						$container.append($section);
+					}
+				}
+				if (langProf.anyStandard) {
+					hasChoices = true;
+					const anyCount = typeof langProf.anyStandard === "number" ? langProf.anyStandard : 1;
+					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx);
+					$container.append($section);
+				}
+				if (langProf.any) {
+					hasChoices = true;
+					const anyCount = typeof langProf.any === "number" ? langProf.any : 1;
+					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx);
 					$container.append($section);
 				}
 			});
@@ -2204,6 +2388,92 @@ class CharacterSheetBuilder {
 	}
 
 	/**
+	 * Render language choice UI for racial language proficiencies
+	 * @param {string[]|null} languages - Array of language names to choose from (may include source suffix like "lexalian|TGTT"), or null for any standard language
+	 * @param {number} count - Number of languages to choose
+	 * @param {number} profIdx - Index for tracking multiple choice sections
+	 * @returns {jQuery} - jQuery element
+	 */
+	_renderRacialLanguageChoice (languages, count, profIdx) {
+		// Get all available languages from the page, sorted by priority sources
+		const allLanguages = this._page.getLanguageNamesSorted();
+		const prioritySources = this._state.getPrioritySources() || [];
+
+		// Standard languages as fallback if no languages loaded
+		const standardLanguages = [
+			"Common", "Dwarvish", "Elvish", "Giant", "Gnomish",
+			"Goblin", "Halfling", "Orc", "Abyssal", "Celestial",
+			"Draconic", "Deep Speech", "Infernal", "Primordial",
+			"Sylvan", "Undercommon",
+		];
+
+		let availableLanguages;
+		if (languages) {
+			// Process specific language choices (strip source suffixes like "|TGTT")
+			availableLanguages = languages.map(l => {
+				const name = l.split("|")[0];
+				return name.toTitleCase();
+			});
+			// Sort chosen languages by priority sources too
+			availableLanguages.sort((a, b) => {
+				// Check if language is from priority source (marked by presence in loaded data)
+				const aInAll = allLanguages.indexOf(a);
+				const bInAll = allLanguages.indexOf(b);
+				// Languages from priority sources will be at the start of allLanguages
+				if (aInAll >= 0 && bInAll >= 0) {
+					return aInAll - bInAll;
+				}
+				return a.localeCompare(b);
+			});
+		} else {
+			// "any" or "anyStandard" - use all loaded languages, or fall back to standard
+			availableLanguages = allLanguages.length > 0 ? allLanguages : standardLanguages;
+		}
+
+		const label = languages
+			? `Choose ${count} language${count > 1 ? "s" : ""} from:`
+			: `Choose any ${count} language${count > 1 ? "s" : ""}:`;
+
+		const $section = $(`
+			<div class="charsheet__builder-racial-lang-selection mt-2">
+				<p><strong>Racial Languages:</strong> ${label}</p>
+				<div class="charsheet__builder-lang-checkboxes"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-lang-count">${this._selectedRacialLanguages.length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $checkboxes = $section.find(".charsheet__builder-lang-checkboxes");
+
+		availableLanguages.forEach(lang => {
+			const isSelected = this._selectedRacialLanguages.includes(lang);
+			const $label = $(`
+				<label class="charsheet__builder-lang-checkbox mr-3 mb-1">
+					<input type="checkbox" value="${lang}" ${isSelected ? "checked" : ""}>
+					${lang}
+				</label>
+			`);
+
+			$label.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedRacialLanguages.length < count) {
+						this._selectedRacialLanguages.push(lang);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} language${count > 1 ? "s" : ""}.`});
+					}
+				} else {
+					this._selectedRacialLanguages = this._selectedRacialLanguages.filter(l => l !== lang);
+				}
+				$section.find(".racial-lang-count").text(this._selectedRacialLanguages.length);
+			});
+
+			$checkboxes.append($label);
+		});
+
+		return $section;
+	}
+
+	/**
 	 * Get the total number of skill choices required by a race
 	 * @param {Object} race - The race data
 	 * @returns {number} - Total number of skill choices required
@@ -2255,16 +2525,28 @@ class CharacterSheetBuilder {
 
 		// Ability scores
 		if (race.ability?.length) {
-			const abilityStr = race.ability.map(a => {
-				return Object.entries(a)
-					.filter(([k]) => Parser.ABIL_ABVS.includes(k))
-					.map(([k, v]) => `${k.toUpperCase()} +${v}`)
-					.join(", ");
-			}).join("; ");
+			const abilityParts = [];
+			race.ability.forEach(a => {
+				if (a.choose) {
+					const c = a.choose;
+					const fromList = (c.from || Parser.ABIL_ABVS).map(ab => ab.toUpperCase()).join(", ");
+					abilityParts.push(`Choose ${c.count || 1}: +${c.amount || 1} from ${fromList}`);
+				} else {
+					Object.entries(a)
+						.filter(([k]) => Parser.ABIL_ABVS.includes(k))
+						.forEach(([k, v]) => abilityParts.push(`${k.toUpperCase()} +${v}`));
+				}
+			});
 
-			if (abilityStr) {
-				$content.append(`<p><strong>Ability Scores:</strong> ${abilityStr}</p>`);
+			if (abilityParts.length) {
+				$content.append(`<p><strong>Ability Scores:</strong> ${abilityParts.join("; ")}</p>`);
 			}
+		}
+
+		// Ability score choice UI (for races with choose-based ASI)
+		const $asiChoices = this._renderRaceAbilityChoices(race);
+		if ($asiChoices) {
+			$content.append($asiChoices);
 		}
 
 		// Speed
@@ -2609,15 +2891,14 @@ class CharacterSheetBuilder {
 	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
 	 */
 	_getClassExpertiseInfoEarlyLevels (cls) {
-		// Check levels 1 and 2 for expertise-granting features
-		for (const level of [1, 2]) {
-			const expertiseInfo = this._getClassExpertiseInfo(cls, level);
-			if (expertiseInfo) return expertiseInfo;
-		}
+		// During character creation (builder), only check level 1 features
+		// Level 2+ features (like Wizard Scholar) should be offered at level-up
+		const expertiseInfo = this._getClassExpertiseInfo(cls, 1);
+		if (expertiseInfo) return expertiseInfo;
 
 		// Fallback: For homebrew classes, check feature entries directly for expertise text
-		// This handles cases where feature reference matching fails
-		return this._getClassExpertiseInfoFromEntries(cls);
+		// but ONLY at level 1
+		return this._getClassExpertiseInfoFromEntries(cls, 1);
 	}
 
 	/**
@@ -2625,14 +2906,14 @@ class CharacterSheetBuilder {
 	 * @param {Object} cls - Class data
 	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
 	 */
-	_getClassExpertiseInfoFromEntries (cls) {
+	_getClassExpertiseInfoFromEntries (cls, maxLevel = 2) {
 		const classFeatures = this._page.getClassFeatures();
 		if (!classFeatures?.length) return null;
 
-		// Find all features for this class at levels 1-2
+		// Find all features for this class up to maxLevel
 		const earlyFeatures = classFeatures.filter(f => {
 			if (f.className !== cls.name) return false;
-			if (f.level > 2) return false;
+			if (f.level > maxLevel) return false;
 			// For homebrew, classSource might not match exactly - be lenient
 			return true;
 		});
@@ -3934,6 +4215,173 @@ class CharacterSheetBuilder {
 	}
 
 	/**
+	 * Analyze a feature's text to detect if it requires a skill/expertise choice.
+	 * Returns a descriptor object or null if no choice is needed.
+	 * @param {Object} opt - The option object (with ref, name, type)
+	 * @returns {Object|null} - { type: "proficiency"|"expertise"|"bonus", count: number, from: "any_proficient"|string[] }
+	 */
+	_parseFeatureSkillChoice (opt) {
+		if (opt.type !== "classFeature" || !opt.ref) return null;
+
+		const fullOpt = this._getClassFeatureDataFromRef(opt.ref);
+		if (!fullOpt?.entries) return null;
+
+		const text = JSON.stringify(fullOpt.entries);
+
+		// "You gain proficiency in one of the following: Acrobatics, Athletics, Investigation, Perception, Stealth, or any tool"
+		if (text.includes("You gain proficiency in one of the following")) {
+			const skills = this._extractSkillListFromText(text);
+			return {type: "proficiency", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+
+		// "bonus equal to your proficiency bonus on checks made with one of the following skills or tools: X, Y, Z"
+		if (text.includes("bonus equal to your proficiency bonus on checks made with one of")) {
+			const skills = this._extractSkillListFromText(text);
+			return {type: "bonus", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+
+		// "Choose one skill you are proficient in. You gain a bonus..."
+		if (text.includes("Choose one skill you are proficient in")) {
+			return {type: "bonus", count: 1, from: "any_proficient"};
+		}
+
+		// "Choose two of your skill proficiencies" / "Choose two more of your skill proficiencies"
+		if (/Choose two (more )?of your skill proficiencies/.test(text)) {
+			return {type: "expertise", count: 2, from: "any_proficient"};
+		}
+
+		// "Choose one of the following skills in which you have proficiency: X, Y, Z. You gain expertise"
+		if (text.includes("Choose one of the following skills in which you have proficiency")) {
+			const skills = this._extractSkillListFromText(text);
+			return {type: "expertise", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+
+		// "Choose one skill proficiency; you gain Expertise in that skill"
+		if (text.includes("Choose one skill proficiency") && text.includes("Expertise")) {
+			return {type: "expertise", count: 1, from: "any_proficient"};
+		}
+
+		// "Choose two skill proficiencies; you gain Expertise in them"
+		if (text.includes("Choose two skill proficiencies") && text.includes("Expertise")) {
+			return {type: "expertise", count: 2, from: "any_proficient"};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Extract skill names from feature text.
+	 * Looks for patterns like "Acrobatics, Athletics, Investigation, Perception, Stealth"
+	 * Also handles {@skill Arcana}, {@skill History} format.
+	 */
+	_extractSkillListFromText (text) {
+		const allSkills = [
+			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+			"History", "Insight", "Intimidation", "Investigation", "Medicine",
+			"Nature", "Perception", "Performance", "Persuasion", "Religion",
+			"Sleight of Hand", "Stealth", "Survival",
+		];
+
+		const found = [];
+
+		// Match {@skill SkillName} format
+		const tagMatches = text.matchAll(/\{@skill\s+([^}]+)\}/gi);
+		for (const m of tagMatches) {
+			const skillName = m[1].trim();
+			if (allSkills.some(s => s.toLowerCase() === skillName.toLowerCase())) {
+				found.push(skillName.toTitleCase());
+			}
+		}
+
+		if (found.length) return [...new Set(found)];
+
+		// Match comma-separated skill names in the text
+		for (const skill of allSkills) {
+			if (text.includes(skill)) {
+				found.push(skill);
+			}
+		}
+
+		return [...new Set(found)];
+	}
+
+	/**
+	 * Render a skill sub-choice UI below a specialty checkbox.
+	 * @param {Object} choice - From _parseFeatureSkillChoice: {type, count, from}
+	 * @param {string} choiceKey - Unique key for storing selections (featureKey + optName)
+	 * @returns {jQuery}
+	 */
+	_renderFeatureSkillSubChoice (choice, choiceKey) {
+		const allSkills = [
+			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+			"History", "Insight", "Intimidation", "Investigation", "Medicine",
+			"Nature", "Perception", "Performance", "Persuasion", "Religion",
+			"Sleight of Hand", "Stealth", "Survival",
+		];
+
+		// Determine available skills
+		let availableSkills;
+		if (choice.from === "any_proficient") {
+			// Get currently proficient skills
+			const proficientSkills = allSkills.filter(s => {
+				const key = s.toLowerCase().replace(/\s+/g, "");
+				return this._state?.getSkillProficiency?.(key) > 0;
+			});
+			// If we don't have state yet, show all skills
+			availableSkills = proficientSkills.length ? proficientSkills : allSkills;
+		} else {
+			availableSkills = choice.from;
+		}
+
+		const typeLabel = choice.type === "proficiency" ? "Proficiency"
+			: choice.type === "expertise" ? "Expertise"
+				: "Bonus";
+
+		// Initialize storage
+		if (!this._selectedFeatureSkillChoices[choiceKey]) {
+			this._selectedFeatureSkillChoices[choiceKey] = [];
+		}
+
+		const $wrapper = $(`
+			<div class="charsheet__builder-feat-skill-sub-choice ml-4 mt-1 mb-1 pl-2" style="border-left: 2px solid var(--rgb-border-grey, #888);">
+				<div class="ve-small"><em>Choose ${choice.count} skill${choice.count > 1 ? "s" : ""} for ${typeLabel}:</em></div>
+				<div class="charsheet__builder-feat-skill-checkboxes"></div>
+				<div class="ve-small ve-muted">Selected: <span class="feat-skill-count">${this._selectedFeatureSkillChoices[choiceKey].length}</span>/${choice.count}</div>
+			</div>
+		`);
+
+		const $checkboxes = $wrapper.find(".charsheet__builder-feat-skill-checkboxes");
+
+		for (const skill of availableSkills) {
+			const isSelected = this._selectedFeatureSkillChoices[choiceKey].includes(skill);
+			const $label = $(`
+				<label class="charsheet__builder-feat-skill-cb mr-2 mb-1" style="display: inline-block;">
+					<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
+					<span class="ve-small">${skill}</span>
+				</label>
+			`);
+
+			$label.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedFeatureSkillChoices[choiceKey].length < choice.count) {
+						this._selectedFeatureSkillChoices[choiceKey].push(skill);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${choice.count} skill${choice.count > 1 ? "s" : ""}.`});
+					}
+				} else {
+					this._selectedFeatureSkillChoices[choiceKey] = this._selectedFeatureSkillChoices[choiceKey].filter(s => s !== skill);
+				}
+				$wrapper.find(".feat-skill-count").text(this._selectedFeatureSkillChoices[choiceKey].length);
+			});
+
+			$checkboxes.append($label);
+		}
+
+		return $wrapper;
+	}
+
+	/**
 	 * Render selection UI for class features that have embedded options (like Specialties)
 	 * These are features with {type: "options", count: N, entries: [refClassFeature, ...]}
 	 */
@@ -4036,7 +4484,27 @@ class CharacterSheetBuilder {
 
 			const $list = $section.find(".charsheet__builder-feat-opt-list");
 
+			// Get already-selected features in other groups (for same-session deduplication)
+			const allSelectedInSession = Object.values(this._selectedFeatureOptions).flat().map(s => s.name);
+
 			for (const opt of optGroup.options) {
+				// Check if already selected in ANOTHER group (different feature key)
+				const isSelectedInOtherGroup = !this._selectedFeatureOptions[featureKey]?.some(s => s.name === opt.name)
+					&& allSelectedInSession.includes(opt.name);
+
+				// Check if the feature can be taken multiple times
+				let canRepeat = false;
+				if (isSelectedInOtherGroup && opt.type === "classFeature" && opt.ref) {
+					const fullOpt = this._getClassFeatureDataFromRef(opt.ref);
+					if (fullOpt?.entries) {
+						const text = JSON.stringify(fullOpt.entries).toLowerCase();
+						canRepeat = text.includes("multiple times") || text.includes("chosen again") || text.includes("retaken");
+					}
+				}
+
+				// Skip if selected in another group and not repeatable
+				if (isSelectedInOtherGroup && !canRepeat) continue;
+
 				const isSelected = this._selectedFeatureOptions[featureKey].some(
 					s => s.name === opt.name && s.ref === opt.ref,
 				);
@@ -4044,12 +4512,37 @@ class CharacterSheetBuilder {
 				const $item = $(`
 					<label class="charsheet__builder-feat-opt-item">
 						<input type="checkbox" ${isSelected ? "checked" : ""}>
-						<span class="feat-opt-name">${opt.name}</span>
+						<span class="feat-opt-name"></span>
 						${opt.source ? `<span class="ve-muted ve-small">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 					</label>
 				`);
 
-				// Show description on hover/click for class features
+				// Create hoverable link for the option name
+				const $nameSpan = $item.find(".feat-opt-name");
+				if (opt.type === "classFeature" && opt.ref) {
+					const parts = opt.ref.split("|");
+					// Hash format: name, className, classSource, level, featureSource
+					const featureSource = parts[2] || opt.source || "TGTT";
+					const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
+					try {
+						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
+						$nameSpan.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} onclick="event.preventDefault(); event.stopPropagation();">${opt.name}</a>`);
+					} catch (e) {
+						$nameSpan.text(opt.name);
+					}
+				} else if (opt.type === "optionalfeature" && opt.ref) {
+					const refParts = opt.ref.split("|");
+					try {
+						$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], refParts[1] || opt.source || "TGTT"));
+						$nameSpan.find("a").on("click", (e) => e.preventDefault());
+					} catch (e) {
+						$nameSpan.text(opt.name);
+					}
+				} else {
+					$nameSpan.text(opt.name);
+				}
+
+				// Show description on name click for class features
 				if (opt.type === "classFeature" && opt.ref) {
 					$item.find(".feat-opt-name").on("click", (e) => {
 						e.preventDefault();
@@ -4065,6 +4558,14 @@ class CharacterSheetBuilder {
 					if (e.target.checked) {
 						if (this._selectedFeatureOptions[featureKey].length < optGroup.count) {
 							this._selectedFeatureOptions[featureKey].push(opt);
+
+							// Check if this option requires a skill sub-choice
+							const skillChoice = this._parseFeatureSkillChoice(opt);
+							if (skillChoice) {
+								const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
+								const $subChoice = this._renderFeatureSkillSubChoice(skillChoice, choiceKey);
+								$item.after($subChoice);
+							}
 						} else {
 							e.target.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only choose ${optGroup.count} options.`});
@@ -4073,6 +4574,11 @@ class CharacterSheetBuilder {
 						this._selectedFeatureOptions[featureKey] = this._selectedFeatureOptions[featureKey].filter(
 							s => !(s.name === opt.name && s.ref === opt.ref),
 						);
+
+						// Remove skill sub-choice UI
+						const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
+						delete this._selectedFeatureSkillChoices[choiceKey];
+						$item.next(".charsheet__builder-feat-skill-sub-choice").remove();
 					}
 					$section.find(".feat-opt-count").text(this._selectedFeatureOptions[featureKey].length);
 				});
@@ -4198,21 +4704,29 @@ class CharacterSheetBuilder {
 
 		if (this._selectedRace?.ability) {
 			this._selectedRace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi)) {
-						total += bonus;
-					}
-				});
+				if (abiSet.choose) {
+					total += (abiSet.choose.count || 1) * (abiSet.choose.amount || 1);
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi)) {
+							total += bonus;
+						}
+					});
+				}
 			});
 		}
 
 		if (this._selectedSubrace?.ability) {
 			this._selectedSubrace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi)) {
-						total += bonus;
-					}
-				});
+				if (abiSet.choose) {
+					total += (abiSet.choose.count || 1) * (abiSet.choose.amount || 1);
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi)) {
+							total += bonus;
+						}
+					});
+				}
 			});
 		}
 
@@ -4228,21 +4742,38 @@ class CharacterSheetBuilder {
 
 		if (this._selectedRace?.ability) {
 			this._selectedRace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi) && typeof bonus === "number") {
-						bonuses.push({amount: bonus, source: this._selectedRace.name});
+				if (abiSet.choose) {
+					// For choose-based ASI, create entries for each choice
+					const count = abiSet.choose.count || 1;
+					const amount = abiSet.choose.amount || 1;
+					for (let i = 0; i < count; i++) {
+						bonuses.push({amount, source: this._selectedRace.name, isChoose: true});
 					}
-				});
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi) && typeof bonus === "number") {
+							bonuses.push({amount: bonus, source: this._selectedRace.name});
+						}
+					});
+				}
 			});
 		}
 
 		if (this._selectedSubrace?.ability) {
 			this._selectedSubrace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi) && typeof bonus === "number") {
-						bonuses.push({amount: bonus, source: this._selectedSubrace.name});
+				if (abiSet.choose) {
+					const count = abiSet.choose.count || 1;
+					const amount = abiSet.choose.amount || 1;
+					for (let i = 0; i < count; i++) {
+						bonuses.push({amount, source: this._selectedSubrace.name, isChoose: true});
 					}
-				});
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi) && typeof bonus === "number") {
+							bonuses.push({amount: bonus, source: this._selectedSubrace.name});
+						}
+					});
+				}
 			});
 		}
 
@@ -4490,16 +5021,31 @@ class CharacterSheetBuilder {
 		// Standard racial bonuses
 		let bonus = 0;
 
-		if (this._selectedRace?.ability) {
-			this._selectedRace.ability.forEach(abiSet => {
-				if (abiSet[ability]) bonus += abiSet[ability];
+		const addFromAbilityArray = (abilityArray, raceName, raceSource) => {
+			if (!abilityArray) return;
+			abilityArray.forEach((abiSet, abiIdx) => {
+				if (abiSet.choose) {
+					// Look up stored choices for THIS ability set only
+					const raceKey = `${raceName}|${raceSource}`;
+					const choices = this._selectedRacialAbilityChoices[raceKey] || {};
+					Object.entries(choices).forEach(([key, val]) => {
+						// Only process choices that belong to this ability set index
+						if (!key.startsWith(`choose_${abiIdx}_`) || key.includes("_amount") || !val) return;
+						if (val === ability) {
+							bonus += choices[`${key}_amount`] || 1;
+						}
+					});
+				} else if (abiSet[ability]) {
+					bonus += abiSet[ability];
+				}
 			});
-		}
+		};
 
-		if (this._selectedSubrace?.ability) {
-			this._selectedSubrace.ability.forEach(abiSet => {
-				if (abiSet[ability]) bonus += abiSet[ability];
-			});
+		if (this._selectedRace) {
+			addFromAbilityArray(this._selectedRace.ability, this._selectedRace.name, this._selectedRace.source);
+		}
+		if (this._selectedSubrace) {
+			addFromAbilityArray(this._selectedSubrace.ability, this._selectedSubrace.name, this._selectedSubrace.source);
 		}
 
 		return bonus;
@@ -4509,22 +5055,57 @@ class CharacterSheetBuilder {
 		const bonuses = [];
 
 		if (this._selectedRace?.ability) {
-			this._selectedRace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi)) {
-						bonuses.push(`${Parser.attAbvToFull(abi)} +${bonus}`);
+			this._selectedRace.ability.forEach((abiSet, abiIdx) => {
+				if (abiSet.choose) {
+					// Show stored choices or pending message for THIS ability set only
+					const raceKey = `${this._selectedRace.name}|${this._selectedRace.source}`;
+					const choices = this._selectedRacialAbilityChoices[raceKey] || {};
+					const count = abiSet.choose.count || 1;
+					const amount = abiSet.choose.amount || 1;
+					let foundChoices = 0;
+					Object.entries(choices).forEach(([k, v]) => {
+						// Only show choices that belong to this ability set index
+						if (!k.startsWith(`choose_${abiIdx}_`) || k.includes("_amount") || !v) return;
+						bonuses.push(`${Parser.attAbvToFull(v)} +${amount} (chosen)`);
+						foundChoices++;
+					});
+					if (foundChoices < count) {
+						bonuses.push(`Choose ${count - foundChoices} more: +${amount}`);
 					}
-				});
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi)) {
+							bonuses.push(`${Parser.attAbvToFull(abi)} +${bonus}`);
+						}
+					});
+				}
 			});
 		}
 
 		if (this._selectedSubrace?.ability) {
-			this._selectedSubrace.ability.forEach(abiSet => {
-				Object.entries(abiSet).forEach(([abi, bonus]) => {
-					if (Parser.ABIL_ABVS.includes(abi)) {
-						bonuses.push(`${Parser.attAbvToFull(abi)} +${bonus} (${this._selectedSubrace.name})`);
+			this._selectedSubrace.ability.forEach((abiSet, abiIdx) => {
+				if (abiSet.choose) {
+					const raceKey = `${this._selectedSubrace.name}|${this._selectedSubrace.source}`;
+					const choices = this._selectedRacialAbilityChoices[raceKey] || {};
+					const count = abiSet.choose.count || 1;
+					const amount = abiSet.choose.amount || 1;
+					let foundChoices = 0;
+					Object.entries(choices).forEach(([k, v]) => {
+						// Only show choices that belong to this ability set index
+						if (!k.startsWith(`choose_${abiIdx}_`) || k.includes("_amount") || !v) return;
+						bonuses.push(`${Parser.attAbvToFull(v)} +${amount} (${this._selectedSubrace.name}, chosen)`);
+						foundChoices++;
+					});
+					if (foundChoices < count) {
+						bonuses.push(`Choose ${count - foundChoices} more: +${amount} (${this._selectedSubrace.name})`);
 					}
-				});
+				} else {
+					Object.entries(abiSet).forEach(([abi, bonus]) => {
+						if (Parser.ABIL_ABVS.includes(abi)) {
+							bonuses.push(`${Parser.attAbvToFull(abi)} +${bonus} (${this._selectedSubrace.name})`);
+						}
+					});
+				}
 			});
 		}
 

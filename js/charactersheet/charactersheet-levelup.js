@@ -6,6 +6,7 @@ class CharacterSheetLevelUp {
 	constructor (page) {
 		this._page = page;
 		this._state = page.getState();
+		this._selectedFeatureSkillChoices = {}; // For specialty features that require skill/expertise choices
 	}
 
 	/**
@@ -517,6 +518,7 @@ class CharacterSheetLevelUp {
 		// Feature options tracking - defined early for use in subclass callback
 		let selectedFeatureOptions = {};
 		let featureOptionGroups = [];
+		this._selectedFeatureSkillChoices = {}; // Reset skill sub-choices for new level-up
 		let $featOptSection = null;
 
 		const updateFeatureOptionsDisplay = () => {
@@ -1976,6 +1978,147 @@ class CharacterSheetLevelUp {
 	 * @param {Array} optionGroups - Array of {featureName, featureSource, count, options} objects
 	 * @param {Function} onSelect - Callback(featureKey, selectedOptions)
 	 */
+	/**
+	 * Analyze a feature's text to detect if it requires a skill/expertise choice.
+	 * @param {Object} opt - The option object
+	 * @returns {Object|null} - { type: "proficiency"|"expertise"|"bonus", count: number, from: "any_proficient"|string[] }
+	 */
+	_parseFeatureSkillChoice (opt) {
+		if (opt.type !== "classFeature" || !opt.ref) return null;
+
+		const parts = opt.ref.split("|");
+		const classFeatures = this._page.getClassFeatures();
+		const fullOpt = classFeatures.find(f =>
+			f.name === parts[0] && f.className === parts[1] && f.source === parts[2],
+		);
+		if (!fullOpt?.entries) return null;
+
+		const text = JSON.stringify(fullOpt.entries);
+
+		if (text.includes("You gain proficiency in one of the following")) {
+			const skills = this._extractSkillListFromText(text);
+			return {type: "proficiency", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+		if (text.includes("bonus equal to your proficiency bonus on checks made with one of")) {
+			const skills = this._extractSkillListFromText(text);
+			return {type: "bonus", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+		if (text.includes("Choose one skill you are proficient in")) {
+			return {type: "bonus", count: 1, from: "any_proficient"};
+		}
+		if (/Choose two (more )?of your skill proficiencies/.test(text)) {
+			return {type: "expertise", count: 2, from: "any_proficient"};
+		}
+		if (text.includes("Choose one of the following skills in which you have proficiency")) {
+			const skills = this._extractSkillListFromText(text);
+			return {type: "expertise", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+		if (text.includes("Choose one skill proficiency") && text.includes("Expertise")) {
+			return {type: "expertise", count: 1, from: "any_proficient"};
+		}
+		if (text.includes("Choose two skill proficiencies") && text.includes("Expertise")) {
+			return {type: "expertise", count: 2, from: "any_proficient"};
+		}
+
+		return null;
+	}
+
+	/** Extract skill names from feature text */
+	_extractSkillListFromText (text) {
+		const allSkills = [
+			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+			"History", "Insight", "Intimidation", "Investigation", "Medicine",
+			"Nature", "Perception", "Performance", "Persuasion", "Religion",
+			"Sleight of Hand", "Stealth", "Survival",
+		];
+
+		const found = [];
+		const tagMatches = text.matchAll(/\{@skill\s+([^}]+)\}/gi);
+		for (const m of tagMatches) {
+			const skillName = m[1].trim();
+			if (allSkills.some(s => s.toLowerCase() === skillName.toLowerCase())) {
+				found.push(skillName.toTitleCase());
+			}
+		}
+		if (found.length) return [...new Set(found)];
+
+		for (const skill of allSkills) {
+			if (text.includes(skill)) found.push(skill);
+		}
+		return [...new Set(found)];
+	}
+
+	/**
+	 * Render a skill sub-choice UI below a specialty checkbox (level-up version).
+	 * @param {Object} choice - From _parseFeatureSkillChoice: {type, count, from}
+	 * @param {string} choiceKey - Unique key for storing selections
+	 * @returns {jQuery}
+	 */
+	_renderFeatureSkillSubChoice (choice, choiceKey) {
+		const allSkills = [
+			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+			"History", "Insight", "Intimidation", "Investigation", "Medicine",
+			"Nature", "Perception", "Performance", "Persuasion", "Religion",
+			"Sleight of Hand", "Stealth", "Survival",
+		];
+
+		let availableSkills;
+		if (choice.from === "any_proficient") {
+			const proficientSkills = allSkills.filter(s => {
+				const key = s.toLowerCase().replace(/\s+/g, "");
+				return this._state?.getSkillProficiency?.(key) > 0;
+			});
+			availableSkills = proficientSkills.length ? proficientSkills : allSkills;
+		} else {
+			availableSkills = choice.from;
+		}
+
+		const typeLabel = choice.type === "proficiency" ? "Proficiency"
+			: choice.type === "expertise" ? "Expertise" : "Bonus";
+
+		if (!this._selectedFeatureSkillChoices[choiceKey]) {
+			this._selectedFeatureSkillChoices[choiceKey] = [];
+		}
+
+		const $wrapper = $(`
+			<div class="charsheet__levelup-feat-skill-sub-choice ml-4 mt-1 mb-1 pl-2" style="border-left: 2px solid var(--rgb-border-grey, #888);">
+				<div class="ve-small"><em>Choose ${choice.count} skill${choice.count > 1 ? "s" : ""} for ${typeLabel}:</em></div>
+				<div class="charsheet__levelup-feat-skill-checkboxes"></div>
+				<div class="ve-small ve-muted">Selected: <span class="feat-skill-count">${this._selectedFeatureSkillChoices[choiceKey].length}</span>/${choice.count}</div>
+			</div>
+		`);
+
+		const $checkboxes = $wrapper.find(".charsheet__levelup-feat-skill-checkboxes");
+
+		for (const skill of availableSkills) {
+			const isSelected = this._selectedFeatureSkillChoices[choiceKey].includes(skill);
+			const $label = $(`
+				<label class="mr-2 mb-1" style="display: inline-block; cursor: pointer;">
+					<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
+					<span class="ve-small">${skill}</span>
+				</label>
+			`);
+
+			$label.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedFeatureSkillChoices[choiceKey].length < choice.count) {
+						this._selectedFeatureSkillChoices[choiceKey].push(skill);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${choice.count} skill${choice.count > 1 ? "s" : ""}.`});
+					}
+				} else {
+					this._selectedFeatureSkillChoices[choiceKey] = this._selectedFeatureSkillChoices[choiceKey].filter(s => s !== skill);
+				}
+				$wrapper.find(".feat-skill-count").text(this._selectedFeatureSkillChoices[choiceKey].length);
+			});
+
+			$checkboxes.append($label);
+		}
+
+		return $wrapper;
+	}
+
 	_renderFeatureOptionsSelection (optionGroups, onSelect) {
 		const $section = $(`
 			<div class="charsheet__levelup-section">
@@ -2002,17 +2145,67 @@ class CharacterSheetLevelUp {
 
 			const $list = $groupSection.find(".charsheet__levelup-feat-opt-list");
 
+			// Get already-chosen features to filter out duplicates
+			const existingFeatures = this._state.getFeatures?.() || [];
+			const existingFeatureNames = new Set(existingFeatures.map(f => f.name));
+
 			if (!optGroup.options.length) {
 				$list.append(`<div class="ve-muted">No options available.</div>`);
 			} else {
 				optGroup.options.forEach(opt => {
+					// Check if this option was already chosen (deduplication)
+					const isAlreadyChosen = existingFeatureNames.has(opt.name);
+
+					// Check if the feature can be taken multiple times
+					let canRepeat = false;
+					if (isAlreadyChosen && opt.type === "classFeature" && opt.ref) {
+						const parts = opt.ref.split("|");
+						const classFeatures = this._page.getClassFeatures();
+						const fullOpt = classFeatures.find(f =>
+							f.name === parts[0]
+							&& f.className === parts[1]
+							&& f.source === parts[2],
+						);
+						if (fullOpt?.entries) {
+							const text = JSON.stringify(fullOpt.entries).toLowerCase();
+							canRepeat = text.includes("multiple times") || text.includes("chosen again") || text.includes("retaken");
+						}
+					}
+
+					// Skip already-chosen non-repeatable features
+					if (isAlreadyChosen && !canRepeat) return;
 					const $item = $(`
 						<label class="charsheet__levelup-feat-opt-item d-block mb-1" style="cursor: pointer; padding: 0.25rem; border-radius: 4px;">
 							<input type="checkbox" class="mr-2">
-							<span class="feat-opt-name">${opt.name}</span>
+							<span class="feat-opt-name"></span>
 							${opt.source ? `<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 						</label>
 					`);
+
+					// Create hoverable link for the option name
+					const $nameSpan = $item.find(".feat-opt-name");
+					if (opt.type === "classFeature" && opt.ref) {
+						const parts = opt.ref.split("|");
+						// Hash format: name, className, classSource, level, featureSource
+						const featureSource = parts[2] || opt.source || "TGTT";
+						const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
+						try {
+							const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
+							$nameSpan.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} onclick="event.preventDefault(); event.stopPropagation();">${opt.name}</a>`);
+						} catch (e) {
+							$nameSpan.text(opt.name);
+						}
+					} else if (opt.type === "optionalfeature" && opt.ref) {
+						const refParts = opt.ref.split("|");
+						try {
+							$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], refParts[1] || opt.source || "TGTT"));
+							$nameSpan.find("a").on("click", (e) => e.preventDefault());
+						} catch (e) {
+							$nameSpan.text(opt.name);
+						}
+					} else {
+						$nameSpan.text(opt.name);
+					}
 
 					// Show description on name click for class features
 					if (opt.type === "classFeature" && opt.ref) {
@@ -2038,6 +2231,14 @@ class CharacterSheetLevelUp {
 							if (selectedForGroup.length < optGroup.count) {
 								selectedForGroup.push(opt);
 								$item.css("background", "var(--rgb-link-opacity-10)");
+
+								// Check if this option requires a skill sub-choice
+								const skillChoice = this._parseFeatureSkillChoice(opt);
+								if (skillChoice) {
+									const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
+									const $subChoice = this._renderFeatureSkillSubChoice(skillChoice, choiceKey);
+									$item.after($subChoice);
+								}
 							} else {
 								e.target.checked = false;
 								JqueryUtil.doToast({type: "warning", content: `You can only choose ${optGroup.count} options.`});
@@ -2046,6 +2247,11 @@ class CharacterSheetLevelUp {
 							const idx = selectedForGroup.findIndex(s => s.name === opt.name && s.ref === opt.ref);
 							if (idx >= 0) selectedForGroup.splice(idx, 1);
 							$item.css("background", "");
+
+							// Remove skill sub-choice UI
+							const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
+							delete this._selectedFeatureSkillChoices[choiceKey];
+							$item.next(".charsheet__levelup-feat-skill-sub-choice").remove();
 						}
 						$groupSection.find(".feat-opt-count").text(selectedForGroup.length);
 						onSelect(featureKey, [...selectedForGroup]);
@@ -2436,6 +2642,34 @@ class CharacterSheetLevelUp {
 							isFeatureOption: true,
 							parentFeature: featureKey.split("_")[0],
 						});
+
+						// Apply any skill sub-choices for this specialty
+						const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
+						const skillSelections = this._selectedFeatureSkillChoices[choiceKey];
+						if (skillSelections?.length) {
+							const skillChoice = this._parseFeatureSkillChoice(opt);
+							if (skillChoice) {
+								skillSelections.forEach(skill => {
+									const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+									if (skillChoice.type === "proficiency") {
+										this._state.setSkillProficiency(skillKey, 1);
+										console.log(`[LevelUp] Applied proficiency in ${skill} from "${opt.name}"`);
+									} else if (skillChoice.type === "expertise") {
+										this._state.setSkillProficiency(skillKey, 2);
+										console.log(`[LevelUp] Applied expertise in ${skill} from "${opt.name}"`);
+									} else if (skillChoice.type === "bonus") {
+										this._state.addNamedModifier({
+											name: `${opt.name} (${skill})`,
+											type: `skill:${skillKey}`,
+											value: "proficiency",
+											note: `From ${opt.name}: bonus equal to proficiency bonus`,
+											enabled: true,
+										});
+										console.log(`[LevelUp] Applied skill bonus to ${skill} from "${opt.name}"`);
+									}
+								});
+							}
+						}
 					} else if (opt.type === "subclassFeature" && opt.ref) {
 						const currentSubclass = this._state.getClasses().find(c => c.name === classEntry.name)?.subclass;
 						// Look up full subclass feature data for description
@@ -3551,6 +3785,31 @@ class CharacterSheetLevelUp {
 					parentFeature: featureName,
 					description,
 				});
+
+				// Apply any skill sub-choices for this specialty
+				const choiceKey = `${featureKey}__${option.name}__${option.ref || ""}`;
+				const skillSelections = this._selectedFeatureSkillChoices[choiceKey];
+				if (skillSelections?.length) {
+					const skillChoice = this._parseFeatureSkillChoice(option);
+					if (skillChoice) {
+						skillSelections.forEach(skill => {
+							const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+							if (skillChoice.type === "proficiency") {
+								this._state.setSkillProficiency(skillKey, 1);
+							} else if (skillChoice.type === "expertise") {
+								this._state.setSkillProficiency(skillKey, 2);
+							} else if (skillChoice.type === "bonus") {
+								this._state.addNamedModifier({
+									name: `${option.name} (${skill})`,
+									type: `skill:${skillKey}`,
+									value: "proficiency",
+									note: `From ${option.name}`,
+									enabled: true,
+								});
+							}
+						});
+					}
+				}
 			}
 		}
 
