@@ -2378,16 +2378,13 @@ class CharacterSheetLevelUp {
 		// Get current character languages
 		const currentLanguages = (this._state.getLanguages() || []).map(l => l.toLowerCase());
 
-		// Get all available languages
-		const languages = this._page.getLanguages?.() || [];
-		const languageNames = languages.map(l => l.name).filter(n => !currentLanguages.includes(n.toLowerCase()));
-
-		// Add standard languages if not already in list
-		const standardLanguages = ["Common", "Dwarvish", "Elvish", "Giant", "Gnomish", "Goblin", "Halfling", "Orc"];
-		const exoticLanguages = ["Abyssal", "Celestial", "Draconic", "Deep Speech", "Infernal", "Primordial", "Sylvan", "Undercommon"];
-		const allLanguages = [...new Set([...standardLanguages, ...exoticLanguages, ...languageNames])]
-			.filter(l => !currentLanguages.includes(l.toLowerCase()))
-			.sort();
+		// Get grouped language options including homebrew
+		const langOptions = this._page.getLanguageOptionsGrouped?.() || {
+			standard: Parser.LANGUAGES_STANDARD || ["Common", "Dwarvish", "Elvish", "Giant", "Gnomish", "Goblin", "Halfling", "Orc"],
+			exotic: Parser.LANGUAGES_EXOTIC || ["Abyssal", "Celestial", "Draconic", "Deep Speech", "Infernal", "Primordial", "Sylvan", "Undercommon"],
+			secret: Parser.LANGUAGES_SECRET || ["Druidic", "Thieves' Cant"],
+			homebrew: [],
+		};
 
 		languageGrants.forEach(grant => {
 			const featureKey = grant.featureName;
@@ -2411,9 +2408,19 @@ class CharacterSheetLevelUp {
 					</select>
 				`);
 
-				// Add language options grouped by type
+				// Add language options grouped by type - homebrew first if available
+				if (langOptions.homebrew.length) {
+					$select.append(`<optgroup label="──── Homebrew Languages ────">`);
+					langOptions.homebrew.forEach(lang => {
+						if (!currentLanguages.includes(lang.toLowerCase())) {
+							$select.append(`<option value="${lang}">${lang}</option>`);
+						}
+					});
+					$select.append(`</optgroup>`);
+				}
+
 				$select.append(`<optgroup label="──── Standard Languages ────">`);
-				standardLanguages.forEach(lang => {
+				langOptions.standard.forEach(lang => {
 					if (!currentLanguages.includes(lang.toLowerCase())) {
 						$select.append(`<option value="${lang}">${lang}</option>`);
 					}
@@ -2421,26 +2428,20 @@ class CharacterSheetLevelUp {
 				$select.append(`</optgroup>`);
 
 				$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
-				exoticLanguages.forEach(lang => {
+				langOptions.exotic.forEach(lang => {
 					if (!currentLanguages.includes(lang.toLowerCase())) {
 						$select.append(`<option value="${lang}">${lang}</option>`);
 					}
 				});
 				$select.append(`</optgroup>`);
 
-				// Add any other languages from data
-				const otherLangs = languageNames.filter(l =>
-					!standardLanguages.includes(l)
-					&& !exoticLanguages.includes(l)
-					&& !currentLanguages.includes(l.toLowerCase()),
-				);
-				if (otherLangs.length) {
-					$select.append(`<optgroup label="──── Other Languages ────">`);
-					otherLangs.forEach(lang => {
+				$select.append(`<optgroup label="──── Secret Languages ────">`);
+				langOptions.secret.forEach(lang => {
+					if (!currentLanguages.includes(lang.toLowerCase())) {
 						$select.append(`<option value="${lang}">${lang}</option>`);
-					});
-					$select.append(`</optgroup>`);
-				}
+					}
+				});
+				$select.append(`</optgroup>`);
 
 				$select.on("change", () => {
 					// Rebuild selected languages from all dropdowns

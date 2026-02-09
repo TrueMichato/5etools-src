@@ -5461,6 +5461,81 @@ class CharacterSheetPage {
 		}).map(l => l.name);
 	}
 
+	/**
+	 * Get languages grouped by type for dropdown rendering
+	 * Includes homebrew languages in a separate group with priority sources first
+	 * @returns {{standard: string[], exotic: string[], secret: string[], homebrew: string[]}}
+	 */
+	getLanguageOptionsGrouped () {
+		const prioritySources = this._state.getPrioritySources() || [];
+
+		// Standard D&D language categories
+		const standardSet = new Set(Parser.LANGUAGES_STANDARD);
+		const exoticSet = new Set(Parser.LANGUAGES_EXOTIC);
+		const secretSet = new Set(Parser.LANGUAGES_SECRET);
+
+		// Collect all loaded language names, preferring priority sources
+		const langMap = new Map();
+		this._languagesData.forEach(lang => {
+			const existing = langMap.get(lang.name);
+			if (!existing) {
+				langMap.set(lang.name, {name: lang.name, source: lang.source});
+			} else if (prioritySources.includes(lang.source) && !prioritySources.includes(existing.source)) {
+				langMap.set(lang.name, {name: lang.name, source: lang.source});
+			} else if (lang.source === Parser.SRC_XPHB && !prioritySources.includes(existing.source)) {
+				langMap.set(lang.name, {name: lang.name, source: lang.source});
+			}
+		});
+
+		// Categorize languages
+		const standard = [];
+		const exotic = [];
+		const secret = [];
+		const homebrew = [];
+
+		// Sort helper: priority sources first, then alphabetically
+		const sortLangs = (arr) => arr.sort((a, b) => {
+			const aInfo = langMap.get(a);
+			const bInfo = langMap.get(b);
+			const aIsPriority = aInfo && prioritySources.includes(aInfo.source);
+			const bIsPriority = bInfo && prioritySources.includes(bInfo.source);
+			if (aIsPriority && !bIsPriority) return -1;
+			if (!aIsPriority && bIsPriority) return 1;
+			return a.localeCompare(b);
+		});
+
+		// Add languages from loaded data
+		for (const [name] of langMap) {
+			if (standardSet.has(name)) {
+				standard.push(name);
+			} else if (exoticSet.has(name)) {
+				exotic.push(name);
+			} else if (secretSet.has(name)) {
+				secret.push(name);
+			} else {
+				homebrew.push(name);
+			}
+		}
+
+		// Add any standard/exotic/secret languages not in loaded data (fallback)
+		Parser.LANGUAGES_STANDARD.forEach(l => {
+			if (!langMap.has(l)) standard.push(l);
+		});
+		Parser.LANGUAGES_EXOTIC.forEach(l => {
+			if (!langMap.has(l)) exotic.push(l);
+		});
+		Parser.LANGUAGES_SECRET.forEach(l => {
+			if (!langMap.has(l)) secret.push(l);
+		});
+
+		return {
+			standard: sortLangs(standard),
+			exotic: sortLangs(exotic),
+			secret: sortLangs(secret),
+			homebrew: sortLangs(homebrew),
+		};
+	}
+
 	async saveCharacter () {
 		await this._saveCurrentCharacter();
 	}
