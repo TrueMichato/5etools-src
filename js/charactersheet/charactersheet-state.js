@@ -2173,6 +2173,90 @@ const FeatureEffectRegistry = {
 			{type: "immunity", damageType: "poison"},
 			{type: "conditionImmunity", condition: "poisoned"},
 		]);
+
+		// ======= TGTT RACE FEATURES =======
+
+		// Thelemerian Dragonborn features
+		this.register("Dragon Scales", [
+			{type: "acFormula", base: 13, addDex: true, formulaType: "naturalArmor"},
+		]);
+		this.register("Ancestral Affinity", [
+			{type: "resistance", damageType: "psychic"},
+			{type: "modifier", modType: "save:advantage:frightened", value: 1},
+		]);
+
+		// Half-Ogre features
+		this.register("Ogre Toughness", [
+			{type: "hpBonus", value: 1, perLevel: true},
+		]);
+		this.register("Powerful Build", [
+			{type: "modifier", modType: "carryCapacity", sizeIncrease: true, value: 1},
+		]);
+		this.register("Enraged", [
+			// Resource: 1/long rest - expand crit range to 19-20 when below half HP
+		]);
+
+		// Nyuidj features
+		this.register("Dual Mind", [
+			{type: "modifier", modType: "save:advantage:wis", value: 1},
+		]);
+		this.register("Mental Discipline", [
+			{type: "resistance", damageType: "psychic"},
+		]);
+
+		// Genasi features (base race)
+		this.register("Elemental Empowerment", [
+			// Damage bonus tracked via getFeatureCalculations
+		]);
+
+		// Dendulra features
+		this.register("Bubbling Energy", [
+			// 4-hour long rest - narrative effect
+		]);
+		this.register("Step of Feywild", [
+			// Teleport 30ft, charm effect at level 3+
+		]);
+
+		// Descathi features
+		this.register("Hollow Rest", [
+			// 4-hour long rest - narrative effect
+		]);
+		this.register("Shadow Affinity", [
+			// Can hide when only lightly obscured
+		]);
+		this.register("Step of Shadowfell", [
+			// Teleport 30ft, frighten effect at level 3+
+		]);
+
+		// Gnoll features
+		this.register("Thrill of the Hunt", [
+			// Mark + advantage tracking, reaction ally advantage
+		]);
+		this.register("Rampage", [
+			// Bonus action move + bite on kill
+		]);
+		this.register("Carrion Feeder", [
+			{type: "modifier", modType: "save:advantage:disease", value: 1},
+		]);
+
+		// TGTT Tiefling variants
+		this.register("Mental Fortitude", [
+			{type: "resistance", damageType: "psychic"},
+		]);
+		this.register("Dark Queen's Blessing", [
+			{type: "modifier", modType: "save:advantage:int:magic", value: 1},
+			{type: "modifier", modType: "save:advantage:wis:magic", value: 1},
+			{type: "modifier", modType: "save:advantage:cha:magic", value: 1},
+		]);
+		this.register("Warm Embrace", [
+			{type: "resistance", damageType: "cold"},
+		]);
+		this.register("Temptation's Guidance", [
+			{type: "skillProficiency", skill: "persuasion", level: 2}, // Expertise
+		]);
+		this.register("Infernal Luck", [
+			// Reroll 1/long rest - resource
+		]);
 	},
 
 	/**
@@ -4146,8 +4230,10 @@ class CharacterSheetState {
 			}
 			// Heavy armor: no DEX bonus
 
-			// Natural armor that doesn't add DEX might still be better (e.g., Tortle's 17)
-			if (bestAcFormula && bestAcFormula.ac > ac && bestAcFormula.formula.noDex) {
+			// Natural armor might still be better than equipped armor
+			// For non-DEX formulas (e.g., Tortle's 17): compare flat values
+			// For DEX-adding formulas (e.g., Lizardfolk, Dragon Scales): compare calculated values
+			if (bestAcFormula && bestAcFormula.ac > ac) {
 				ac = bestAcFormula.ac;
 			}
 		} else if (hasUnarmoredDefense || bestAcFormula) {
@@ -5920,6 +6006,9 @@ class CharacterSheetState {
 
 									// Trick DC: 8 + proficiency + DEX or INT (use max)
 									calculations.trickDcBase = 8 + profBonus + Math.max(dexMod, intMod) - exhaustionPenalty;
+
+									// Get prepared tricks with their effects
+									calculations.tricksterTricks = this.getTricksterTricks();
 								}
 
 								// Quick Hands (level 3, enhanced at 6 and 10)
@@ -6537,6 +6626,8 @@ class CharacterSheetState {
 						calculations.preciseStrikeMethodsKnown = level >= 17 ? 6 : level >= 11 ? 5 : level >= 6 ? 4 : 3;
 						// DC for each method varies: some are kiDc, some kiDc-2, kiDc-4, kiDc-6
 						calculations.preciseStrikeDcBase = kiDc;
+						// Get all known methods with their individual DCs
+						calculations.preciseStrikeMethods = this.getPreciseStrikeMethods();
 
 						// Deflect Strike (level 6): Deflect Missiles works for melee too
 						if (level >= 6) {
@@ -7457,6 +7548,63 @@ class CharacterSheetState {
 						}
 					}
 
+					// =========================================================
+					// TGTT SUBCLASS: OATH OF INQUISITION
+					// =========================================================
+					if (cls.subclass?.shortName === "Inquisition") {
+						const chaMod = this.getAbilityMod("cha");
+
+						// Arcane Sense (level 3) - use CHA for Arcana, detect spellcasters
+						if (level >= 3) {
+							calculations.hasArcaneSense = true;
+							calculations.arcanaAbilityOverride = "cha";
+						}
+
+						// Channel Divinity: Blind The Impure (level 3)
+						// CON save or blinded when you smite
+						if (level >= 3) {
+							calculations.hasBlindTheImpure = true;
+							// DC is spell save DC
+						}
+
+						// Channel Divinity: Defy The Heretics (level 3)
+						// Auto-succeed counterspell up to threshold, higher needs CHA check
+						if (level >= 3) {
+							calculations.hasDefyTheHeretics = true;
+							// Auto-succeed threshold = ceil(level/2), max 5
+							calculations.defyHereticsThreshold = Math.min(5, Math.ceil(level / 2));
+						}
+
+						// Suppressive Aura (level 7) - psychic damage to enemies in aura
+						// Range: 10ft at 7, 30ft at 18
+						if (level >= 7) {
+							calculations.hasSuppressiveAura = true;
+							calculations.suppressiveAuraRange = level >= 18 ? 30 : 10;
+							// Damage = ceil(level/2) to enemies entering/starting turn
+							calculations.suppressiveAuraDamage = Math.ceil(level / 2);
+							// Spellcasting damage: 1d8 per spell level (max 6d8)
+							calculations.suppressiveAuraSpellDamagePerLevel = "1d8";
+							calculations.suppressiveAuraMaxSpellDice = 6;
+						}
+
+						// Unfazed Believer (level 15) - smite uses d10s, choose blessing
+						if (level >= 15) {
+							calculations.hasUnfazedBeliever = true;
+							calculations.smiteDieSize = "d10"; // Instead of d8
+							// Blessing HP boost (Divine Endurance) = level
+							calculations.divineEnduranceHpBoost = level;
+						}
+
+						// Blessed Inquisitor (level 20) - ultimate form
+						if (level >= 20) {
+							calculations.hasBlessedInquisitor = true;
+							// True Seeing, all blessings active
+							calculations.hasTrueSeeingCapstone = true;
+							// Add CHA to melee/radiant damage
+							calculations.blessedInquisitorDamageBonus = Math.max(0, chaMod);
+						}
+					}
+
 					break;
 				}
 				case "Fighter": {
@@ -8221,6 +8369,68 @@ class CharacterSheetState {
 								}
 								break;
 							}
+
+							// =====================================================================
+							// TGTT The Horror (Warlock Subclass) - Melee/Unarmed Warlock
+							// =====================================================================
+							case "The Horror":
+							case "Horror": {
+								const dexMod = this.getAbilityMod("dex");
+								const conMod = this.getAbilityMod("con");
+
+								// Devastating Strike (level 1) - enhanced unarmed strikes
+								// Uses = CON mod (min 1) per long rest
+								calculations.hasDevastatingStrike = true;
+								calculations.devastatingStrikeUses = Math.max(1, conMod);
+
+								// Damage scales with level: 1d8 -> 3d8 (5) -> 5d8 (11) -> 8d8 (17)
+								if (level >= 17) {
+									calculations.devastatingStrikeDamage = "8d8";
+									calculations.devastatingStrikePush = 30;
+								} else if (level >= 11) {
+									calculations.devastatingStrikeDamage = "5d8";
+									calculations.devastatingStrikePush = 25;
+								} else if (level >= 5) {
+									calculations.devastatingStrikeDamage = "3d8";
+									calculations.devastatingStrikePush = 20;
+								} else {
+									calculations.devastatingStrikeDamage = "1d8";
+									calculations.devastatingStrikePush = 15;
+								}
+
+								// Unarmored Defense (like Monk/Barb but unique to Horror)
+								// AC = 10 + DEX + CON when unarmored
+								calculations.horrorUnarmoredAc = 10 + dexMod + conMod;
+
+								// Lone Survivor (level 6) - immune to frightened when alone
+								if (level >= 6) {
+									calculations.hasLoneSurvivor = true;
+								}
+
+								// Unearthly Manifestation (level 6) - CON save proficiency, magical unarmed
+								if (level >= 6) {
+									calculations.hasUnearthlyManifestation = true;
+									calculations.hasConstitutionSaveProficiency = true;
+									calculations.hasMagicalUnarmedStrikes = true;
+								}
+
+								// Degenerating Touch (level 10) - strip immunities/resistances
+								// DC = spell save DC, CON save
+								if (level >= 10) {
+									calculations.hasDegeneratingTouch = true;
+									// DC uses spell save DC already calculated
+								}
+
+								// Imploding Infestation (level 14) - chain reaction necrotic
+								if (level >= 14) {
+									calculations.hasImplodingInfestation = true;
+									calculations.implodingInfestationDamage = "6d12";
+									calculations.implodingInfestationRadius = 30;
+									// Chain reactions deal 1 less die each (5d12, 4d12...)
+									calculations.implodingInfestationChainReduction = 1;
+								}
+								break;
+							}
 						}
 					}
 
@@ -8545,6 +8755,106 @@ class CharacterSheetState {
 								// Lunar Phenomenon (level 18)
 								if (level >= 18) {
 									calculations.hasLunarPhenomenon = true;
+								}
+								break;
+							}
+
+							// =====================================================================
+							// TGTT Heroic Soul (Sorcerer Subclass) - Martial Sorcerer
+							// =====================================================================
+							case "Heroic Soul": {
+								const chaMod = this.getAbilityMod("cha");
+
+								// Over Soul (level 1) - advantage on next roll
+								// Uses = proficiency bonus, costs 1 sorcery point
+								calculations.hasOverSoul = true;
+								calculations.overSoulUses = profBonus;
+								calculations.overSoulCost = 1;
+
+								// Legendary Weapon (level 1) - manifest weapon with options
+								calculations.hasLegendaryWeapon = true;
+								// Colossal Might bonus = floor(prof/2)
+								calculations.colossalMightBonus = Math.floor(profBonus / 2);
+								// Rending Strike DC = 8 + prof + CHA
+								calculations.rendingStrikeDc = 8 + profBonus + chaMod - exhaustionPenalty;
+								// Ancient's Reach base = 5ft (+5 per additional sorcery point)
+								calculations.ancientsReachBase = 5;
+								// Hero's Flame extra damage
+								calculations.heroFlameExtraDamage = "1d6";
+
+								// Hero's Reflex (level 6) - weapon attack as bonus action after spell
+								// Uses = prof bonus, temp HP on Over Soul hit = spell level + CHA (min 1)
+								if (level >= 6) {
+									calculations.hasHerosReflex = true;
+									calculations.herosReflexUses = profBonus;
+									calculations.herosReflexTempHpBase = Math.max(1, chaMod);
+								}
+
+								// Manifest Legend (level 14) - ultimate form, Extra Attack
+								// Costs 3 sorcery points, temp HP = level, Extra Attack
+								if (level >= 14) {
+									calculations.hasManifestLegend = true;
+									calculations.manifestLegendCost = 3;
+									calculations.manifestLegendTempHp = level;
+									calculations.manifestLegendExtraAttack = true;
+									calculations.manifestLegendExtraDamage = "1d6"; // Radiant
+								}
+
+								// Eternal Hero (level 18) - Over Soul always active, death save heal
+								if (level >= 18) {
+									calculations.hasEternalHero = true;
+									calculations.overSoulAlwaysActive = true;
+									// Heal when dropping to 0 = level + CHA
+									calculations.eternalHeroHeal = level + Math.max(0, chaMod);
+								}
+								break;
+							}
+
+							// =====================================================================
+							// TGTT Fiendish Bloodline (Sorcerer Subclass) - Summoner Sorcerer
+							// =====================================================================
+							case "Fiendish Bloodline": {
+								const chaMod = this.getAbilityMod("cha");
+
+								// Summoner's Magic (level 1) - can learn summoning spells from any list
+								calculations.hasSummonersMagic = true;
+
+								// Summoned Ferocity (level 1) - add CHA to summoned creature rolls
+								// Bonus applies to attack rolls, skill checks, saving throws
+								calculations.hasSummonedFerocity = true;
+								calculations.summonedFerocityBonus = Math.max(0, chaMod);
+								calculations.summonedTelepathyRange = 120;
+
+								// Infernal Companion (level 1) - fiendish familiar, Help as bonus action
+								calculations.hasInfernalCompanion = true;
+								calculations.infernalFamiliarHelpBonus = true;
+
+								// Hellish Summoner (level 6) - enhanced summons
+								// Costs 2 sorcery points, temp HP = level to summons
+								if (level >= 6) {
+									calculations.hasHellishSummoner = true;
+									calculations.hellishSummonerCost = 2;
+									calculations.hellishSummonerTempHp = level;
+								}
+
+								// Dark Dominion (level 14) - charm summoned creatures
+								// DC = spell save DC, uses = prof bonus, disadvantage costs 2 points
+								if (level >= 14) {
+									calculations.hasDarkDominion = true;
+									calculations.darkDominionUses = profBonus;
+									calculations.darkDominionDisadvantageCost = 2;
+								}
+
+								// Summoned Aggression (level 14) - summons get extra attack
+								if (level >= 14) {
+									calculations.hasSummonedAggression = true;
+								}
+
+								// Infernal Legion (level 18) - double summon count, concentration-free
+								if (level >= 18) {
+									calculations.hasInfernalLegion = true;
+									calculations.summonCountMultiplier = 2;
+									calculations.concentrationFreeSummonUses = 1;
 								}
 								break;
 							}
@@ -11164,6 +11474,237 @@ class CharacterSheetState {
 		}
 
 		// =====================================================
+		// RACE SCALING CALCULATIONS (Thelemar homebrew)
+		// =====================================================
+		const raceName = this._data.race?.name?.toLowerCase() || "";
+		const subraceName = this._data.subrace?.name?.toLowerCase() || "";
+		const fullRaceName = this.getRaceName()?.toLowerCase() || "";
+		const totalLevel = this.getTotalLevel() || 1;
+
+		// Genasi: Elemental Empowerment scaling
+		// Damage dice scale with proficiency bonus: 1d6, 2d6, 3d6, 4d6, 5d6
+		// Uses per long rest = proficiency bonus
+		if (raceName === "genasi" || raceName.includes("genasi")) {
+			const empowermentDice = `${profBonus}d6`;
+			calculations.elementalEmpowermentDamage = empowermentDice;
+			calculations.elementalEmpowermentUses = profBonus;
+		}
+
+		// Dragonborn: Terrifying Exhalation (breath weapon)
+		// DC = 8 + CON mod + proficiency bonus
+		// Damage scales by level: 1d10 (L1), 2d10 (L5), 3d10 (L11), 4d10 (L17)
+		// Uses per long rest = proficiency bonus
+		if (raceName === "dragonborn" || raceName.includes("dragonborn")) {
+			const conMod = this.getAbilityMod("con");
+			calculations.terrifyingExhalationDc = 8 + conMod + profBonus;
+			calculations.terrifyingExhalationUses = profBonus;
+			
+			// Damage scaling by level tier
+			let breathDice;
+			if (totalLevel >= 17) breathDice = "4d10";
+			else if (totalLevel >= 11) breathDice = "3d10";
+			else if (totalLevel >= 5) breathDice = "2d10";
+			else breathDice = "1d10";
+			calculations.terrifyingExhalationDamage = breathDice;
+			
+			// Level 5+: Aura abilities
+			if (totalLevel >= 5) {
+				const chaMod = this.getAbilityMod("cha");
+				calculations.auraOfDreadDc = 8 + chaMod + profBonus;
+				calculations.auraOfProtectionTempHp = profBonus;
+			}
+		}
+
+		// Nyuidj: Mind Link range scales with level
+		// Range = 10 × character level feet
+		if (raceName === "nyuidj" || fullRaceName.includes("nyuidj")) {
+			calculations.mindLinkRange = 10 * totalLevel;
+		}
+
+		// Tiefling Step abilities: Teleport DCs
+		// Step of Feywild: DC = 8 + proficiency bonus + CHA mod (level 3+)
+		// Step of Shadowfell: DC = 8 + proficiency bonus + INT mod (level 3+)
+		if (raceName === "tiefling" || raceName.includes("tiefling")) {
+			if (totalLevel >= 3) {
+				// Feywild variant uses CHA
+				if (subraceName.includes("feywild") || fullRaceName.includes("feywild")) {
+					const chaMod = this.getAbilityMod("cha");
+					calculations.stepOfFeywildDc = 8 + profBonus + chaMod;
+				}
+				// Shadowfell variant uses INT
+				if (subraceName.includes("shadowfell") || fullRaceName.includes("shadowfell")) {
+					const intMod = this.getAbilityMod("int");
+					calculations.stepOfShadowfellDc = 8 + profBonus + intMod;
+				}
+			}
+		}
+
+		// =====================================================
+		// TGTT FEATS
+		// =====================================================
+
+		// Spellsword Technique (TGTT)
+		// Prerequisites: Spellcasting, Martial weapon proficiency
+		// - Can use simple/martial melee weapons as spellcasting focus
+		// - After casting a spell (1st+ level) as an action, bonus action to dash/disengage/dodge
+		// - Until end of next turn, weapon attacks deal +1d6 damage based on spell school
+		if (this.hasFeat("Spellsword Technique")) {
+			calculations.hasSpellswordTechnique = true;
+			calculations.spellswordBonusDamage = "1d6";
+			calculations.spellswordDamageTypes = {
+				evocation: "varies/force",  // Same type as spell, or force if no damage
+				necromancy: "necrotic",
+				abjuration: "force",
+				conjuration: "bludgeoning/piercing/slashing",
+				transmutation: "bludgeoning/piercing/slashing",
+				divination: "psychic",
+				enchantment: "psychic",
+				illusion: "psychic",
+			};
+		}
+
+		// Whip Master (TGTT)
+		// Prerequisites: Martial weapon proficiency, whip
+		// - After Attack action with whip, bonus action for additional whip attack (same ability mod)
+		// - Can use whip for Grapple/Shove (can't attack grappled target with grappling whip; shove pulls 5ft)
+		// - Use whip as elongated appendage for object interactions and ability checks
+		if (this.hasFeat("Whip Master")) {
+			calculations.hasWhipMaster = true;
+			calculations.whipBonusAttack = true;
+			calculations.whipGrappleShove = true;
+			calculations.whipUtility = true;
+			calculations.whipReach = 20;  // Bullwhip reach
+		}
+
+		// Dreamer (TGTT)
+		// - +1 to one ability score
+		// - Gain up to 2 Dreamwalker abilities (DW:C or DW:S optional features)
+		// Uses existing feature system - Dreamwalker abilities are added as features
+		if (this.hasFeat("Dreamer")) {
+			calculations.hasDreamerFeat = true;
+			calculations.dreamerAbilitiesMax = 2;
+		}
+
+		// Lore Mastery (TGTT)
+		// - +2 to two existing lore skill proficiencies, OR
+		// - +2 proficiency in two new lore skills
+		// Skill bonuses are handled via named modifiers added in addFeat()
+		if (this.hasFeat("Lore Mastery")) {
+			calculations.hasLoreMastery = true;
+		}
+
+		// =====================================================
+		// TGTT BATTLE TACTICS
+		// =====================================================
+
+		// Battle Tactics are optional features for TGTT Fighters
+		// They provide conditional attack bonuses, reaction abilities,
+		// and critical range expansion
+		if (this.hasBattleTactics()) {
+			calculations.hasBattleTactics = true;
+			calculations.battleTactics = this.getBattleTactics();
+
+			// Collect conditional attack modifiers
+			calculations.conditionalAttackModifiers = {
+				melee: this.getConditionalAttackModifiers("melee"),
+				ranged: this.getConditionalAttackModifiers("ranged"),
+				all: this.getConditionalAttackModifiers(null),
+			};
+
+			// Collect available combat reactions
+			calculations.combatReactions = this.getAvailableCombatReactions();
+
+			// Track specific tactics with calculable effects
+			const tacticNames = calculations.battleTactics.map(t => t.name);
+
+			// High Ground (+2 ranged when elevated)
+			if (tacticNames.includes("High Ground")) {
+				calculations.hasHighGround = true;
+				calculations.highGroundBonus = 2;
+			}
+
+			// Sweeping Blows (+2 melee from below)
+			if (tacticNames.includes("Sweeping Blows")) {
+				calculations.hasSweepingBlows = true;
+				calculations.sweepingBlowsBonus = 2;
+			}
+
+			// Hammer and Anvil (+2 melee vs pinned enemy)
+			if (tacticNames.includes("Hammer and Anvil")) {
+				calculations.hasHammerAndAnvil = true;
+				calculations.hammerAndAnvilBonus = 2;
+			}
+
+			// Flanking (+2 melee or opportunity attack)
+			if (tacticNames.includes("Flanking")) {
+				calculations.hasFlanking = true;
+				calculations.flankingBonus = 2;
+			}
+
+			// Daring Feint (Fighter 9+): advantage + crit 19-20
+			if (tacticNames.includes("Daring Feint")) {
+				calculations.hasDaringFeint = true;
+				if (this.meetsBattleTacticPrerequisite(9)) {
+					calculations.daringFeintAvailable = true;
+					calculations.daringFeintCritRange = 19;
+				}
+			}
+
+			// Sheathing the Sword (Fighter 9+): advantage + crit 19-20 on reaction
+			if (tacticNames.includes("Sheathing the Sword")) {
+				calculations.hasSheathingTheSword = true;
+				if (this.meetsBattleTacticPrerequisite(9)) {
+					calculations.sheathingTheSwordAvailable = true;
+					calculations.sheathingTheSwordCritRange = 19;
+				}
+			}
+
+			// Eye of the Storm (Fighter 7+)
+			if (tacticNames.includes("Eye of the Storm")) {
+				calculations.hasEyeOfTheStorm = true;
+				if (this.meetsBattleTacticPrerequisite(7)) {
+					calculations.eyeOfTheStormAvailable = true;
+				}
+			}
+
+			// Back to the Wall (Fighter 7+)
+			if (tacticNames.includes("Back to the Wall")) {
+				calculations.hasBackToTheWall = true;
+				if (this.meetsBattleTacticPrerequisite(7)) {
+					calculations.backToTheWallAvailable = true;
+				}
+			}
+
+			// Dying Surge (Fighter 5+)
+			if (tacticNames.includes("Dying Surge")) {
+				calculations.hasDyingSurge = true;
+				if (this.meetsBattleTacticPrerequisite(5)) {
+					calculations.dyingSurgeAvailable = true;
+				}
+			}
+
+			// Last Ditch Evasion (no level requirement)
+			if (tacticNames.includes("Last Ditch Evasion")) {
+				calculations.hasLastDitchEvasion = true;
+			}
+
+			// Charging (no level requirement)
+			if (tacticNames.includes("Charging")) {
+				calculations.hasCharging = true;
+			}
+
+			// Covering Attack (no level requirement)
+			if (tacticNames.includes("Covering Attack")) {
+				calculations.hasCoveringAttack = true;
+			}
+
+			// Goading Movement (no level requirement)
+			if (tacticNames.includes("Goading Movement")) {
+				calculations.hasGoadingMovement = true;
+			}
+		}
+
+		// =====================================================
 		// AGGREGATE ALL EFFECTS FROM CALCULATIONS
 		// This allows features to declare their effects in a
 		// standardized format that gets auto-processed
@@ -12124,6 +12665,10 @@ class CharacterSheetState {
 					note: effect.conditional ? `From ${effect.source} - ${effect.conditional}` : `From ${effect.source}`,
 					enabled: effect.enabled !== false && !effect.conditional,
 					conditional: effect.conditional,
+					// Pass through special modifier properties
+					sizeIncrease: effect.sizeIncrease,
+					multiplier: effect.multiplier,
+					perLevel: effect.perLevel,
 				});
 				return `${effect.source}: ${effect.modType}${effect.conditional ? ` (${effect.conditional})` : ""}`;
 			}
@@ -13113,7 +13658,7 @@ class CharacterSheetState {
 	 * @param {string} source - The condition source
 	 */
 	_applyConditionEffects (conditionName, source) {
-		const condDef = CharacterSheetState.getConditionEffects(conditionName);
+		const condDef = CharacterSheetState.getConditionEffects(conditionName, source);
 		if (!condDef) {
 			// Unknown condition - just track it without effects
 			console.log(`Unknown condition "${conditionName}" - no effects defined`);
@@ -14068,6 +14613,49 @@ class CharacterSheetState {
 		// Process modifiers granted by this feat
 		this._processFeatureModifiers(featData, featData.id);
 
+		// ====================
+		// TGTT Feat: Lore Mastery
+		// Grants +2 to specified lore skills (either existing or new)
+		// ====================
+		if (feat.name === "Lore Mastery" && feat.loreSkillBonuses) {
+			// loreSkillBonuses is an object like: { "historyofdragons": 2, "planargeography": 2 }
+			for (const [skillKey, bonus] of Object.entries(feat.loreSkillBonuses)) {
+				this.addNamedModifier({
+					name: `Lore Mastery (${skillKey})`,
+					type: `skill:${skillKey}`,
+					value: bonus,
+					sourceFeatureId: featData.id,
+					sourceType: "feat",
+					note: "Lore Mastery feat bonus",
+				});
+				console.log(`[CharSheet State] Added +${bonus} Lore Mastery bonus to ${skillKey}`);
+			}
+		}
+
+		// ====================
+		// TGTT Feat: Lore Mastery - Grant new lore skills
+		// If lore skills are granted at +2 proficiency (not proficient but with a +2 bonus)
+		// ====================
+		if (feat.name === "Lore Mastery" && feat.grantLoreSkills) {
+			// grantLoreSkills is an array like: ["Planar Geography", "Demonic Hierarchies"]
+			for (const skillName of feat.grantLoreSkills) {
+				// Add the custom skill (lore skills use WIS by default in Thelemar)
+				const ability = feat.loreSkillAbilities?.[skillName] || "wis";
+				this.addCustomSkill(skillName, ability);
+				// Add the +2 bonus
+				const skillKey = skillName.toLowerCase().replace(/\s+/g, "");
+				this.addNamedModifier({
+					name: `Lore Mastery (${skillName})`,
+					type: `skill:${skillKey}`,
+					value: 2,
+					sourceFeatureId: featData.id,
+					sourceType: "feat",
+					note: "Lore Mastery feat (new skill)",
+				});
+				console.log(`[CharSheet State] Granted new Lore skill "${skillName}" with +2 from Lore Mastery`);
+			}
+		}
+
 		return true;
 	}
 
@@ -14268,6 +14856,608 @@ class CharacterSheetState {
 
 		console.log("[CharSheet State] usesCombatSystem:", hasMethods, "(checked", this._data.features?.length || 0, "features)");
 		return hasMethods;
+	}
+
+	// =========================================================================
+	// Battle Tactics (TGTT Fighter)
+	// =========================================================================
+
+	/**
+	 * Check if character has any Battle Tactics
+	 * @returns {boolean}
+	 */
+	hasBattleTactics () {
+		return this._data.features?.some(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "BT");
+		}) ?? false;
+	}
+
+	/**
+	 * Get list of Battle Tactics the character has learned
+	 * @returns {Array<object>} Array of tactic objects with name, effects, and prerequisites
+	 */
+	getBattleTactics () {
+		const tactics = this._data.features?.filter(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "BT");
+		}) ?? [];
+
+		return tactics.map(t => ({
+			name: t.name,
+			source: t.source,
+			description: t.description,
+			...this._getBattleTacticEffects(t.name),
+		}));
+	}
+
+	/**
+	 * Get mechanical effects for a specific Battle Tactic
+	 * @param {string} tacticName - Name of the tactic
+	 * @returns {object} Effects including attack bonuses, crit range, etc.
+	 */
+	_getBattleTacticEffects (tacticName) {
+		const effects = {
+			attackBonus: null,
+			attackType: null,
+			condition: null,
+			critRange: null,
+			advantage: false,
+			reaction: null,
+			fighterLevel: null,
+		};
+
+		switch (tacticName) {
+			case "High Ground":
+				effects.attackBonus = 2;
+				effects.attackType = "ranged";
+				effects.condition = "when 5+ ft above enemy";
+				break;
+			case "Sweeping Blows":
+				effects.attackBonus = 2;
+				effects.attackType = "melee";
+				effects.condition = "when 5+ ft below enemy";
+				break;
+			case "Hammer and Anvil":
+				effects.attackBonus = 2;
+				effects.attackType = "melee";
+				effects.condition = "vs enemy with solid object behind them";
+				break;
+			case "Flanking":
+				effects.attackBonus = 2;
+				effects.attackType = "melee";
+				effects.condition = "when flanking (optional rule)";
+				effects.reaction = {
+					name: "Flanking Opportunity",
+					trigger: "at start of flanked enemy's turn",
+					effect: "make opportunity attack",
+				};
+				break;
+			case "Charging":
+				effects.condition = "after moving 10+ ft";
+				effects.reaction = {
+					name: "Charging Shove",
+					trigger: "on melee hit after Charge",
+					effect: "may knock prone (DC = attack roll)",
+				};
+				break;
+			case "Covering Attack":
+				effects.reaction = {
+					name: "Covering Attack",
+					trigger: "when ally within 5 ft retreats",
+					effect: "ally doesn't provoke opportunity attacks",
+				};
+				break;
+			case "Goading Movement":
+				effects.reaction = {
+					name: "Goading Movement",
+					trigger: "when enemy follows you",
+					effect: "make opportunity attack",
+				};
+				break;
+			case "Last Ditch Evasion":
+				effects.reaction = {
+					name: "Last Ditch Evasion",
+					trigger: "when hit by attack",
+					effect: "avoid all damage, become Slowed",
+				};
+				break;
+			case "Eye of the Storm":
+				effects.fighterLevel = 7;
+				effects.reaction = {
+					name: "Eye of the Storm",
+					trigger: "when flanked",
+					effect: "one flanking enemy attacks with disadvantage",
+				};
+				break;
+			case "Back to the Wall":
+				effects.fighterLevel = 7;
+				effects.reaction = {
+					name: "Back to the Wall",
+					trigger: "DEX save vs attack roll",
+					effect: "on success, reflect half damage to attacker",
+				};
+				break;
+			case "Daring Feint":
+				effects.fighterLevel = 9;
+				effects.advantage = true;
+				effects.critRange = 19;
+				effects.reaction = {
+					name: "Daring Feint",
+					trigger: "use reaction",
+					effect: "next attack has advantage, crits on 19-20",
+				};
+				break;
+			case "Sheathing the Sword":
+				effects.fighterLevel = 9;
+				effects.advantage = true;
+				effects.critRange = 19;
+				effects.reaction = {
+					name: "Sheathing the Sword",
+					trigger: "let enemy attack auto-hit",
+					effect: "reaction attack with advantage, crits on 19-20",
+				};
+				break;
+			case "Dying Surge":
+				effects.fighterLevel = 5;
+				effects.reaction = {
+					name: "Dying Surge",
+					trigger: "when reduced to 0 HP",
+					effect: "make opportunity attack before falling unconscious",
+				};
+				break;
+		}
+
+		return effects;
+	}
+
+	/**
+	 * Get conditional attack modifiers from Battle Tactics
+	 * @param {string} attackType - "melee" or "ranged" or null for all
+	 * @returns {Array<object>} Array of {value, condition, source} objects
+	 */
+	getConditionalAttackModifiers (attackType = null) {
+		const modifiers = [];
+
+		const tactics = this.getBattleTactics();
+		tactics.forEach(t => {
+			if (t.attackBonus && (attackType === null || t.attackType === attackType)) {
+				modifiers.push({
+					value: t.attackBonus,
+					condition: t.condition,
+					source: t.name,
+					attackType: t.attackType,
+				});
+			}
+		});
+
+		return modifiers;
+	}
+
+	/**
+	 * Get the critical hit range (lowest number that crits)
+	 * Considers Champion Fighter, Battle Tactics, and other sources
+	 * @returns {number} The lowest roll that scores a critical hit (default 20)
+	 */
+	getCriticalRange () {
+		let critRange = 20;
+
+		// Check Champion Fighter (already in getFeatureCalculations)
+		const calcs = this.getFeatureCalculations();
+		if (calcs.criticalRange && calcs.criticalRange < critRange) {
+			critRange = calcs.criticalRange;
+		}
+
+		// Battle Tactics with crit expansion (when activated)
+		// Note: These are conditional - the UI should track activation state
+		// Here we just return the base crit range from class features
+
+		return critRange;
+	}
+
+	/**
+	 * Get available combat reactions from Battle Tactics
+	 * @returns {Array<object>} Array of reaction abilities
+	 */
+	getAvailableCombatReactions () {
+		const reactions = [];
+		const fighterLevel = this.getClassLevel("Fighter");
+
+		const tactics = this.getBattleTactics();
+		tactics.forEach(t => {
+			if (t.reaction) {
+				// Check Fighter level prerequisite
+				if (t.fighterLevel && fighterLevel < t.fighterLevel) {
+					return; // Skip if prerequisite not met
+				}
+				reactions.push({
+					...t.reaction,
+					source: t.name,
+					fighterLevelRequired: t.fighterLevel,
+				});
+			}
+		});
+
+		return reactions;
+	}
+
+	/**
+	 * Check if character meets Fighter level prerequisite for a Battle Tactic
+	 * @param {number} requiredLevel - Required Fighter level
+	 * @returns {boolean}
+	 */
+	meetsBattleTacticPrerequisite (requiredLevel) {
+		if (!requiredLevel) return true;
+		const fighterLevel = this.getClassLevel("Fighter");
+		return fighterLevel >= requiredLevel;
+	}
+
+	// =========================================================================
+	// Precise Strikes (TGTT Monk - Way of Debilitation)
+	// =========================================================================
+
+	/**
+	 * Check if character has Precise Strike feature
+	 * @returns {boolean}
+	 */
+	hasPreciseStrike () {
+		const monkClass = this._data.classes?.find(c => c.name === "Monk");
+		return monkClass?.subclass?.shortName === "Debilitation";
+	}
+
+	/**
+	 * Get list of Precise Strike methods the character knows
+	 * Methods are Optional Features with type "PS"
+	 * @returns {Array<object>} Array of method objects with name, effects, and DC
+	 */
+	getPreciseStrikeMethods () {
+		const methods = this._data.features?.filter(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "PS");
+		}) ?? [];
+
+		const monkLevel = this.getClassLevel("Monk");
+		const kiDc = this.getKiSaveDc?.() || (8 + this.getProficiencyBonus() + this.getAbilityMod("wis"));
+
+		return methods.map(m => ({
+			name: m.name,
+			source: m.source,
+			description: m.description,
+			...this._getPreciseStrikeMethodEffects(m.name, monkLevel, kiDc),
+		}));
+	}
+
+	/**
+	 * Get the DC for a specific Precise Strike method
+	 * @param {string} methodName - Name of the method
+	 * @returns {number|null} The save DC, or null if method not found
+	 */
+	getPreciseStrikeDc (methodName) {
+		const kiDc = this.getKiSaveDc?.() || (8 + this.getProficiencyBonus() + this.getAbilityMod("wis"));
+		const effects = this._getPreciseStrikeMethodEffects(methodName, 0, kiDc);
+		return effects.dc;
+	}
+
+	/**
+	 * Get number of Precise Strike methods known by monk level
+	 * @returns {number} Methods known: 3 at level 3, 4 at 6, 5 at 11, 6 at 17
+	 */
+	getPreciseStrikeMethodsKnown () {
+		const monkLevel = this.getClassLevel("Monk");
+		if (monkLevel >= 17) return 6;
+		if (monkLevel >= 11) return 5;
+		if (monkLevel >= 6) return 4;
+		return 3;
+	}
+
+	/**
+	 * Get mechanical effects for a specific Precise Strike method
+	 * @param {string} methodName - Name of the method
+	 * @param {number} monkLevel - Current monk level
+	 * @param {number} kiDc - Base ki save DC
+	 * @returns {object} Effects including DC, save type, duration, effect description
+	 */
+	_getPreciseStrikeMethodEffects (methodName, monkLevel, kiDc) {
+		const effects = {
+			dc: null,
+			dcModifier: 0,
+			saveType: null,
+			saveChoice: null, // For methods where target chooses save type
+			duration: null,
+			effect: null,
+			damage: null,
+		};
+
+		switch (methodName) {
+			case "Air Draining Strike":
+				effects.dcModifier = -6;
+				effects.dc = kiDc - 6;
+				effects.saveType = "con";
+				effects.duration = `${Math.max(1, Math.floor(monkLevel / 2))} turns`;
+				effects.effect = "target cannot breathe (suffocating)";
+				break;
+
+			case "Arm Snap":
+				effects.dcModifier = -4;
+				effects.dc = kiDc - 4;
+				effects.saveType = "con";
+				effects.duration = `${Math.max(1, monkLevel)} turns`;
+				effects.effect = "one arm goes numb, cannot use that limb";
+				break;
+
+			case "Ear Clap":
+				effects.dcModifier = -2;
+				effects.dc = kiDc - 2;
+				effects.saveType = "con";
+				effects.duration = `${Math.max(1, monkLevel)} turns`;
+				effects.effect = "deafened";
+				break;
+
+			case "Eye Gouge":
+				effects.dcModifier = 0;
+				effects.dc = kiDc;
+				effects.saveType = "con";
+				effects.duration = "1 turn";
+				effects.effect = "blinded";
+				break;
+
+			case "Finger Smash":
+				effects.dcModifier = 0;
+				effects.dc = kiDc;
+				effects.saveType = "dex";
+				effects.duration = "1 turn";
+				effects.effect = "fingers go numb, cannot use that hand for somatic components or fine manipulation";
+				break;
+
+			case "Heart Bursting Punch":
+				effects.dcModifier = -6;
+				effects.dc = kiDc - 6;
+				effects.saveType = "con";
+				effects.duration = "1 turn";
+				effects.damage = "3d10";
+				effects.effect = "3d10 damage + stunned (most powerful method)";
+				break;
+
+			case "Leg Sweeping Kick":
+				effects.dcModifier = 0;
+				effects.dc = kiDc;
+				effects.saveType = "dex";
+				effects.duration = "1 turn";
+				effects.effect = "speed becomes 0";
+				break;
+
+			case "Low Blow":
+				effects.dcModifier = -2;
+				effects.dc = kiDc - 2;
+				effects.saveChoice = ["con", "dex"]; // Target chooses
+				effects.duration = "1 turn";
+				effects.effect = "slowed, concentration impaired (disadvantage on checks)";
+				break;
+
+			case "Neck Chop":
+				effects.dcModifier = -4;
+				effects.dc = kiDc - 4;
+				effects.saveType = "con";
+				effects.duration = `${Math.max(1, monkLevel)} turns`;
+				effects.effect = "cannot speak or use verbal components";
+				break;
+
+			case "Pierce Defenses":
+				effects.dcModifier = 0;
+				effects.dc = null; // No save required
+				effects.saveType = null;
+				effects.duration = "instant";
+				effects.damage = "martial arts die";
+				effects.effect = "deals extra damage equal to martial arts die (no save)";
+				break;
+
+			case "Temple Strike":
+				effects.dcModifier = 0;
+				effects.dc = kiDc;
+				effects.saveChoice = ["str", "dex"]; // Target chooses
+				effects.duration = "1 turn";
+				effects.effect = "stunned";
+				break;
+		}
+
+		return effects;
+	}
+
+	// =========================================================================
+	// Trickster Tricks (TGTT Rogue - Trickster)
+	// =========================================================================
+
+	/**
+	 * Check if character has Trickster Shenanigans feature
+	 * @returns {boolean}
+	 */
+	hasTricksterTricks () {
+		const rogueClass = this._data.classes?.find(c => c.name === "Rogue");
+		return rogueClass?.subclass?.shortName === "Trickster";
+	}
+
+	/**
+	 * Get list of Trickster Tricks the character has prepared
+	 * Tricks are Optional Features with type "TT"
+	 * @returns {Array<object>} Array of trick objects with name, effects, and DC
+	 */
+	getTricksterTricks () {
+		const tricks = this._data.features?.filter(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "TT");
+		}) ?? [];
+
+		const rogueLevel = this.getClassLevel("Rogue");
+		const dexMod = this.getAbilityMod("dex");
+		const intMod = this.getAbilityMod("int");
+		const trickDc = 8 + this.getProficiencyBonus() + Math.max(dexMod, intMod);
+
+		return tricks.map(t => ({
+			name: t.name,
+			source: t.source,
+			description: t.description,
+			...this._getTricksterTrickEffects(t.name, rogueLevel, trickDc),
+		}));
+	}
+
+	/**
+	 * Get the DC for a specific Trickster Trick
+	 * @param {string} trickName - Name of the trick
+	 * @returns {number|null} The save DC, or null if trick has no save
+	 */
+	getTricksterTrickDc (trickName) {
+		const dexMod = this.getAbilityMod("dex");
+		const intMod = this.getAbilityMod("int");
+		const trickDc = 8 + this.getProficiencyBonus() + Math.max(dexMod, intMod);
+		const effects = this._getTricksterTrickEffects(trickName, 0, trickDc);
+		return effects.dc;
+	}
+
+	/**
+	 * Get number of Trickster Tricks known by rogue level
+	 * @returns {number} Tricks known: 3 at level 3, 4 at 7, 5 at 10, 6 at 15, 7 at 19
+	 */
+	getTricksterTricksKnown () {
+		const rogueLevel = this.getClassLevel("Rogue");
+		if (rogueLevel >= 19) return 7;
+		if (rogueLevel >= 15) return 6;
+		if (rogueLevel >= 10) return 5;
+		if (rogueLevel >= 7) return 4;
+		return 3;
+	}
+
+	/**
+	 * Get number of Trickster Dice by rogue level
+	 * @returns {number} Dice count: 4 at level 3, 5 at 9, 6 at 13, 7 at 17
+	 */
+	getTricksterDiceCount () {
+		const rogueLevel = this.getClassLevel("Rogue");
+		if (rogueLevel >= 17) return 7;
+		if (rogueLevel >= 13) return 6;
+		if (rogueLevel >= 9) return 5;
+		return 4;
+	}
+
+	/**
+	 * Get mechanical effects for a specific Trickster Trick
+	 * @param {string} trickName - Name of the trick
+	 * @param {number} rogueLevel - Current rogue level
+	 * @param {number} trickDc - Base trick save DC
+	 * @returns {object} Effects including DC, save type, trigger, effect description
+	 */
+	_getTricksterTrickEffects (trickName, rogueLevel, trickDc) {
+		const effects = {
+			dc: null,
+			saveType: null,
+			trigger: null,
+			timing: null, // action, reaction, bonus action
+			damage: "1d8", // Trickster die
+			effect: null,
+			condition: null,
+			duration: null,
+		};
+
+		switch (trickName) {
+			case "Disarming Strike":
+				effects.dc = trickDc;
+				effects.saveType = "str";
+				effects.trigger = "hit with weapon attack";
+				effects.timing = "attack";
+				effects.effect = "target drops one held item on failed save";
+				effects.condition = "disarmed";
+				break;
+
+			case "Trip Attack":
+				effects.dc = trickDc;
+				effects.saveType = "str";
+				effects.trigger = "hit with weapon attack";
+				effects.timing = "attack";
+				effects.effect = "target knocked prone on failed save";
+				effects.condition = "prone";
+				break;
+
+			case "Swing Away":
+				effects.dc = null;
+				effects.saveType = null;
+				effects.trigger = "creature misses you with melee attack";
+				effects.timing = "reaction";
+				effects.effect = "move half speed (no opportunity attacks); + trick die to next damage roll";
+				break;
+
+			case "Deafening Strike":
+				effects.dc = trickDc;
+				effects.saveType = "con";
+				effects.trigger = "hit with weapon attack";
+				effects.timing = "attack";
+				effects.effect = "target deafened until end of next turn on failed save";
+				effects.condition = "deafened";
+				effects.duration = "until end of next turn";
+				break;
+
+			case "Blinding Strike":
+				effects.dc = trickDc;
+				effects.saveType = "con";
+				effects.trigger = "hit with weapon attack";
+				effects.timing = "attack";
+				effects.effect = "target blinded until end of next turn on failed save";
+				effects.condition = "blinded";
+				effects.duration = "until end of next turn";
+				break;
+
+			case "Noise Maker":
+				effects.dc = trickDc;
+				effects.saveType = "wis";
+				effects.trigger = "use action";
+				effects.timing = "action";
+				effects.effect = "create noise at point within 60 ft; creatures within 30 ft grant advantage on attacks until end of next turn on failed save";
+				effects.duration = "until end of next turn";
+				break;
+
+			case "Rebounding Throw":
+				effects.dc = null;
+				effects.saveType = null;
+				effects.trigger = "throw object attack";
+				effects.timing = "attack";
+				effects.effect = "make second attack vs different target; + trick die to second attack's damage";
+				break;
+
+			case "Weaponized Debris":
+				effects.dc = trickDc;
+				effects.saveType = "dex";
+				effects.trigger = "holding improvised weapon";
+				effects.timing = "attack";
+				effects.effect = "choked (fragile), dazed (sturdy), or 1d4 fire/turn (flammable) on failed save";
+				effects.condition = "varies";
+				break;
+
+			case "Rapid Deployment":
+				effects.dc = null;
+				effects.saveType = null;
+				effects.trigger = "being attacked";
+				effects.timing = "reaction";
+				effects.effect = "subtract trick die from triggering attack roll";
+				break;
+
+			case "Explosive Flask":
+				effects.dc = null;
+				effects.saveType = null;
+				effects.trigger = "using oil or alchemist's fire";
+				effects.timing = "attack";
+				effects.effect = "+ trick die to damage; area becomes difficult terrain until end of next turn";
+				effects.duration = "until end of next turn";
+				break;
+
+			case "Instant Barrier":
+				effects.dc = null;
+				effects.saveType = null;
+				effects.trigger = "use bonus action";
+				effects.timing = "bonus action";
+				effects.effect = "gain half cover; + trick die to AC until start of next turn";
+				effects.duration = "until start of next turn";
+				break;
+		}
+
+		return effects;
 	}
 
 	/**
@@ -15159,6 +16349,11 @@ class CharacterSheetState {
 					break;
 			}
 		});
+
+		// Recalculate max HP if it was previously cached (HP modifiers may have changed)
+		if (this._data.hp.max > 0) {
+			this._recalculateMaxHp();
+		}
 	}
 
 	/**
@@ -17192,6 +18387,188 @@ class CharacterSheetState {
 				{type: "cantCast", target: "verbal", condition: "Silenced - cannot use verbal components"},
 			],
 		},
+
+		// =====================================================
+		// TGTT (Traveler's Guide to Thelemar) Conditions
+		// These have specific differences from standard 5e
+		// =====================================================
+
+		// TGTT Dazed - Unique condition not in standard 5e
+		dazed: {
+			name: "Dazed",
+			icon: "😵",
+			source: "TGTT",
+			description: "Limited activity - Move OR Action, not both; no Bonus Actions or Reactions",
+			effects: [
+				{type: "actionEconomy", value: "moveOrAction"},
+				{type: "note", value: "Move or Action on your turn, not both"},
+				{type: "note", value: "Cannot take Bonus Actions"},
+				{type: "note", value: "Cannot take Reactions"},
+			],
+		},
+
+		// TGTT Choked - Unique condition affecting spellcasting
+		choked: {
+			name: "Choked",
+			icon: "😤",
+			source: "TGTT",
+			description: "Speech faltering, hold breath halved, verbal spells require concentration check",
+			effects: [
+				{type: "verbalConstraint", value: "check"},
+				{type: "note", value: "Speech is faltering"},
+				{type: "note", value: "Hold breath for half normal duration"},
+				{type: "note", value: "Verbal spells require concentration check"},
+			],
+		},
+
+		// TGTT Hidden - Grants attack advantage, attacks against have disadvantage
+		hidden_tgtt: {
+			name: "Hidden",
+			icon: "👁️",
+			source: "TGTT",
+			description: "Unseen - advantage on attacks, disadvantage on attacks against you",
+			effects: [
+				{type: "advantage", target: "attack"},
+				{type: "disadvantage", target: "attacksAgainst"},
+				{type: "note", value: "Your location might be decipherable through non-sight means"},
+			],
+		},
+
+		// TGTT Undetected - Location unknown
+		undetected: {
+			name: "Undetected",
+			icon: "❓",
+			source: "TGTT",
+			description: "Location unknown - must be Hidden first",
+			effects: [
+				{type: "note", value: "Your location is unknown"},
+				{type: "note", value: "Must be Hidden to be Undetected"},
+			],
+		},
+
+		// TGTT Slowed - Different from 2024 Slowed (no AC penalty, but attacks against have advantage)
+		slowed_tgtt: {
+			name: "Slowed",
+			icon: "🐢",
+			source: "TGTT",
+			description: "Movement costs extra, attacks against have advantage, disadvantage on DEX saves",
+			effects: [
+				{type: "speedMultiplier", target: "all", value: 0.5},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "disadvantage", target: "save:dex"},
+			],
+		},
+
+		// TGTT Grappled - Adds somatic spell constraint
+		grappled_tgtt: {
+			name: "Grappled",
+			icon: "🤼",
+			source: "TGTT",
+			description: "Speed 0, disadvantage attacking others, somatic spells need concentration check",
+			effects: [
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "disadvantage", target: "attack", condition: "against non-grappler"},
+				{type: "somaticConstraint", value: "check"},
+				{type: "note", value: "Disadvantage on attacks against targets other than grappler"},
+				{type: "note", value: "Somatic spells require concentration check"},
+			],
+		},
+
+		// TGTT Restrained - Adds somatic spell ban
+		restrained_tgtt: {
+			name: "Restrained",
+			icon: "⛓️",
+			source: "TGTT",
+			description: "Speed 0, attacks have disadvantage, attacks against have advantage, DEX saves disadvantaged, somatic spells fail",
+			effects: [
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "disadvantage", target: "attack"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "disadvantage", target: "save:dex"},
+				{type: "somaticConstraint", value: "banned"},
+				{type: "note", value: "Somatic spells automatically fail"},
+			],
+		},
+
+		// TGTT Frightened - Adds verbal spell constraint
+		frightened_tgtt: {
+			name: "Frightened",
+			icon: "😨",
+			source: "TGTT",
+			description: "Disadvantage on attacks/checks while source visible, can't approach, verbal spells need concentration check",
+			effects: [
+				{type: "disadvantage", target: "attack", condition: "while source visible"},
+				{type: "disadvantage", target: "check", condition: "while source visible"},
+				{type: "verbalConstraint", value: "check"},
+				{type: "note", value: "Can't willingly move closer to source of fear"},
+				{type: "note", value: "Verbal spells require concentration check"},
+			],
+		},
+
+		// TGTT Poisoned - Adds concentration save disadvantage
+		poisoned_tgtt: {
+			name: "Poisoned",
+			icon: "🤢",
+			source: "TGTT",
+			description: "Disadvantage on attacks and ability checks, disadvantage on concentration saves",
+			effects: [
+				{type: "disadvantage", target: "attack"},
+				{type: "disadvantage", target: "check"},
+				{type: "disadvantage", target: "save:con:concentration"},
+				{type: "note", value: "Disadvantage on concentration saves"},
+			],
+		},
+
+		// TGTT Incapacitated - Adds surprise disadvantage on initiative
+		incapacitated_tgtt: {
+			name: "Incapacitated",
+			icon: "💫",
+			source: "TGTT",
+			description: "No actions or reactions, concentration broken, can't speak, disadvantage on initiative if surprised",
+			effects: [
+				{type: "incapacitated", value: true},
+				{type: "note", value: "Cannot take Actions or Reactions"},
+				{type: "note", value: "Concentration is broken"},
+				{type: "note", value: "Cannot speak"},
+				{type: "disadvantage", target: "initiative", condition: "if incapacitated at initiative roll"},
+			],
+		},
+
+		// TGTT Petrified - Uses TGTT Incapacitated, is aware
+		petrified_tgtt: {
+			name: "Petrified",
+			icon: "🗿",
+			source: "TGTT",
+			description: "Transformed to stone, incapacitated, aware, resistance to all damage, immune to poison",
+			effects: [
+				{type: "incapacitated", value: true},
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "autoFail", target: "save:str"},
+				{type: "autoFail", target: "save:dex"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "resistance", target: "all"},
+				{type: "immunity", target: "poison"},
+				{type: "conditionImmunity", target: "poisoned"},
+				{type: "note", value: "Aware of surroundings but can't move or speak"},
+			],
+		},
+
+		// TGTT Stunned - Uses TGTT Incapacitated
+		stunned_tgtt: {
+			name: "Stunned",
+			icon: "💥",
+			source: "TGTT",
+			description: "Incapacitated, can't move, faltering speech, auto-fail STR/DEX saves, attacks against have advantage",
+			effects: [
+				{type: "incapacitated", value: true},
+				{type: "setSpeed", target: "all", value: 0},
+				{type: "autoFail", target: "save:str"},
+				{type: "autoFail", target: "save:dex"},
+				{type: "advantage", target: "attacksAgainst"},
+				{type: "note", value: "Can speak only falteringly"},
+			],
+		},
+
 		// Custom/Homebrew condition placeholder
 		// Homebrew conditions can be added dynamically
 	};
@@ -17531,11 +18908,22 @@ class CharacterSheetState {
 
 	/**
 	 * Get condition effects by name (checks both standard and custom)
+	 * Prefers TGTT-specific versions when source is TGTT
 	 * @param {string} conditionName - The condition name
+	 * @param {string} [source] - Optional source (e.g., "TGTT") to prefer source-specific versions
 	 * @returns {object|null} The condition definition or null
 	 */
-	static getConditionEffects (conditionName) {
+	static getConditionEffects (conditionName, source = null) {
 		const key = conditionName.toLowerCase().replace(/\s+/g, "_");
+
+		// If source is TGTT, try the TGTT-specific version first
+		if (source === "TGTT") {
+			const tgttKey = `${key}_tgtt`;
+			if (CharacterSheetState.CONDITION_EFFECTS[tgttKey]) {
+				return CharacterSheetState.CONDITION_EFFECTS[tgttKey];
+			}
+		}
+
 		return CharacterSheetState.CONDITION_EFFECTS[key]
 			|| CharacterSheetState._customConditions[key]
 			|| null;

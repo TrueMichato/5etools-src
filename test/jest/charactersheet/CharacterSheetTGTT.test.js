@@ -4187,6 +4187,215 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasMasterOfMischief).toBe(true);
 				});
+
+				// =========== Trickster Tricks Tests ===========
+
+				it("should have hasTricksterTricks method", () => {
+					// No rogue class yet
+					expect(state.hasTricksterTricks()).toBe(false);
+
+					// Add Trickster rogue
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 3,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+					expect(state.hasTricksterTricks()).toBe(true);
+				});
+
+				it("should return tricksterTricks in getFeatureCalculations", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 3,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.tricksterTricks).toBeDefined();
+					expect(Array.isArray(calcs.tricksterTricks)).toBe(true);
+				});
+
+				it("should return empty array when no tricks prepared", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 3,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+
+					const tricks = state.getTricksterTricks();
+					expect(tricks).toEqual([]);
+				});
+
+				it("should return prepared Trickster Tricks with effects", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 5,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+					state.setAbilityBase("dex", 16); // +3
+
+					// Add Disarming Strike trick (STR save)
+					state.addFeature({
+						name: "Disarming Strike",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["TT"]
+					});
+
+					const tricks = state.getTricksterTricks();
+					expect(tricks.length).toBe(1);
+					expect(tricks[0].name).toBe("Disarming Strike");
+					// DC = 8 + prof(3) + DEX(3) = 14
+					expect(tricks[0].dc).toBe(14);
+					expect(tricks[0].saveType).toBe("str");
+					expect(tricks[0].condition).toBe("disarmed");
+				});
+
+				it("should calculate DC using max of DEX or INT", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 5,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+					state.setAbilityBase("dex", 14); // +2
+					state.setAbilityBase("int", 18); // +4
+
+					state.addFeature({name: "Trip Attack", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]});
+
+					const tricks = state.getTricksterTricks();
+					const tripAttack = tricks.find(t => t.name === "Trip Attack");
+					// DC = 8 + prof(3) + INT(4) = 15
+					expect(tripAttack.dc).toBe(15);
+				});
+
+				it("should correctly identify save types for different tricks", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 5,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+
+					// Add tricks with different save types
+					state.addFeature({name: "Disarming Strike", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // STR
+					state.addFeature({name: "Deafening Strike", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // CON
+					state.addFeature({name: "Noise Maker", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // WIS
+					state.addFeature({name: "Weaponized Debris", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // DEX
+
+					const tricks = state.getTricksterTricks();
+					expect(tricks.find(t => t.name === "Disarming Strike").saveType).toBe("str");
+					expect(tricks.find(t => t.name === "Deafening Strike").saveType).toBe("con");
+					expect(tricks.find(t => t.name === "Noise Maker").saveType).toBe("wis");
+					expect(tricks.find(t => t.name === "Weaponized Debris").saveType).toBe("dex");
+				});
+
+				it("should return null DC for tricks without saves", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 5,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Swing Away", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]});
+					state.addFeature({name: "Rebounding Throw", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]});
+					state.addFeature({name: "Rapid Deployment", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]});
+					state.addFeature({name: "Instant Barrier", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]});
+
+					const tricks = state.getTricksterTricks();
+					expect(tricks.find(t => t.name === "Swing Away").dc).toBeNull();
+					expect(tricks.find(t => t.name === "Rebounding Throw").dc).toBeNull();
+					expect(tricks.find(t => t.name === "Rapid Deployment").dc).toBeNull();
+					expect(tricks.find(t => t.name === "Instant Barrier").dc).toBeNull();
+				});
+
+				it("should correctly identify timing for different tricks", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 5,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Disarming Strike", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // attack
+					state.addFeature({name: "Swing Away", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // reaction
+					state.addFeature({name: "Noise Maker", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // action
+					state.addFeature({name: "Instant Barrier", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]}); // bonus action
+
+					const tricks = state.getTricksterTricks();
+					expect(tricks.find(t => t.name === "Disarming Strike").timing).toBe("attack");
+					expect(tricks.find(t => t.name === "Swing Away").timing).toBe("reaction");
+					expect(tricks.find(t => t.name === "Noise Maker").timing).toBe("action");
+					expect(tricks.find(t => t.name === "Instant Barrier").timing).toBe("bonus action");
+				});
+
+				it("should get individual DC via getTricksterTrickDc method", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 5,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+					state.setAbilityBase("dex", 16); // +3; base DC = 8 + 3 + 3 = 14
+
+					expect(state.getTricksterTrickDc("Disarming Strike")).toBe(14);
+					expect(state.getTricksterTrickDc("Trip Attack")).toBe(14);
+					expect(state.getTricksterTrickDc("Swing Away")).toBeNull(); // No save
+					expect(state.getTricksterTrickDc("Rapid Deployment")).toBeNull(); // No save
+				});
+
+				it("should calculate tricks known via getTricksterTricksKnown", () => {
+					state.addClass({name: "Rogue", source: "TGTT", level: 3, subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}});
+					expect(state.getTricksterTricksKnown()).toBe(3);
+
+					state.addClass({name: "Rogue", source: "TGTT", level: 7});
+					expect(state.getTricksterTricksKnown()).toBe(4);
+
+					state.addClass({name: "Rogue", source: "TGTT", level: 10});
+					expect(state.getTricksterTricksKnown()).toBe(5);
+
+					state.addClass({name: "Rogue", source: "TGTT", level: 15});
+					expect(state.getTricksterTricksKnown()).toBe(6);
+
+					state.addClass({name: "Rogue", source: "TGTT", level: 19});
+					expect(state.getTricksterTricksKnown()).toBe(7);
+				});
+
+				it("should calculate dice count via getTricksterDiceCount", () => {
+					state.addClass({name: "Rogue", source: "TGTT", level: 3, subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}});
+					expect(state.getTricksterDiceCount()).toBe(4);
+
+					state.addClass({name: "Rogue", source: "TGTT", level: 9});
+					expect(state.getTricksterDiceCount()).toBe(5);
+
+					state.addClass({name: "Rogue", source: "TGTT", level: 13});
+					expect(state.getTricksterDiceCount()).toBe(6);
+
+					state.addClass({name: "Rogue", source: "TGTT", level: 17});
+					expect(state.getTricksterDiceCount()).toBe(7);
+				});
+
+				it("should calculate all 11 Trickster Tricks correctly", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 10,
+						subclass: {name: "Trickster", shortName: "Trickster", source: "TGTT"}
+					});
+					state.setAbilityBase("dex", 16); // +3
+
+					// Add all 11 tricks
+					const trickNames = [
+						"Disarming Strike", "Trip Attack", "Swing Away", "Deafening Strike",
+						"Blinding Strike", "Noise Maker", "Rebounding Throw", "Weaponized Debris",
+						"Rapid Deployment", "Explosive Flask", "Instant Barrier"
+					];
+					trickNames.forEach(name => {
+						state.addFeature({name, source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["TT"]});
+					});
+
+					const tricks = state.getTricksterTricks();
+					expect(tricks.length).toBe(11);
+
+					// Verify each trick has basic properties
+					tricks.forEach(trick => {
+						expect(trick.name).toBeDefined();
+						expect(trick.timing).toBeDefined();
+						expect(trick.effect).toBeDefined();
+						expect(trick.damage).toBe("1d8"); // Trickster die
+					});
+
+					// Verify specific conditions
+					expect(tricks.find(t => t.name === "Disarming Strike").condition).toBe("disarmed");
+					expect(tricks.find(t => t.name === "Trip Attack").condition).toBe("prone");
+					expect(tricks.find(t => t.name === "Deafening Strike").condition).toBe("deafened");
+					expect(tricks.find(t => t.name === "Blinding Strike").condition).toBe("blinded");
+				});
 			});
 		});
 		
@@ -4289,6 +4498,237 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					state.addClass({name: "Monk", source: "TGTT", level: 5});
 					calcs = state.getFeatureCalculations();
 					expect(calcs.martialArtsDie).toBe("1d8");
+				});
+
+				// =========== Precise Strike Methods Tests ===========
+
+				it("should have hasPreciseStrike method", () => {
+					// No monk class yet
+					expect(state.hasPreciseStrike()).toBe(false);
+
+					// Add Way of Debilitation monk
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 3,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+					expect(state.hasPreciseStrike()).toBe(true);
+				});
+
+				it("should return preciseStrikeMethods in getFeatureCalculations", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 3,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.preciseStrikeMethods).toBeDefined();
+					expect(Array.isArray(calcs.preciseStrikeMethods)).toBe(true);
+				});
+
+				it("should return empty array when no methods selected", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 3,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+
+					const methods = state.getPreciseStrikeMethods();
+					expect(methods).toEqual([]);
+				});
+
+				it("should return selected Precise Strike methods with effects", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 5,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+					state.setAbilityBase("wis", 16); // +3
+
+					// Add Eye Gouge method (full DC, CON save)
+					state.addFeature({
+						name: "Eye Gouge",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["PS"]
+					});
+
+					const methods = state.getPreciseStrikeMethods();
+					expect(methods.length).toBe(1);
+					expect(methods[0].name).toBe("Eye Gouge");
+					// DC = 8 + prof(3) + WIS(3) = 14
+					expect(methods[0].dc).toBe(14);
+					expect(methods[0].dcModifier).toBe(0);
+					expect(methods[0].saveType).toBe("con");
+					expect(methods[0].effect).toBe("blinded");
+				});
+
+				it("should calculate DC modifiers for different methods", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 5,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+					state.setAbilityBase("wis", 16); // +3; base DC = 14
+
+					// Add methods with different DC modifiers
+					state.addFeature({name: "Eye Gouge", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+					state.addFeature({name: "Ear Clap", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+					state.addFeature({name: "Arm Snap", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+
+					const methods = state.getPreciseStrikeMethods();
+					const eyeGouge = methods.find(m => m.name === "Eye Gouge");
+					const earClap = methods.find(m => m.name === "Ear Clap");
+					const armSnap = methods.find(m => m.name === "Arm Snap");
+
+					expect(eyeGouge.dc).toBe(14); // DC -0
+					expect(eyeGouge.dcModifier).toBe(0);
+
+					expect(earClap.dc).toBe(12); // DC -2
+					expect(earClap.dcModifier).toBe(-2);
+
+					expect(armSnap.dc).toBe(10); // DC -4
+					expect(armSnap.dcModifier).toBe(-4);
+				});
+
+				it("should calculate Air Draining Strike and Heart Bursting Punch with DC -6", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 5,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+					state.setAbilityBase("wis", 16); // base DC = 14
+
+					state.addFeature({name: "Air Draining Strike", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+					state.addFeature({name: "Heart Bursting Punch", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+
+					const methods = state.getPreciseStrikeMethods();
+					const airDraining = methods.find(m => m.name === "Air Draining Strike");
+					const heartBursting = methods.find(m => m.name === "Heart Bursting Punch");
+
+					expect(airDraining.dc).toBe(8); // DC -6
+					expect(airDraining.dcModifier).toBe(-6);
+
+					expect(heartBursting.dc).toBe(8); // DC -6
+					expect(heartBursting.dcModifier).toBe(-6);
+					expect(heartBursting.damage).toBe("3d10");
+				});
+
+				it("should correctly identify save types for different methods", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 5,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+
+					// Add methods with different save types
+					state.addFeature({name: "Eye Gouge", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]}); // CON
+					state.addFeature({name: "Finger Smash", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]}); // DEX
+					state.addFeature({name: "Low Blow", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]}); // CON or DEX (choice)
+					state.addFeature({name: "Temple Strike", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]}); // STR or DEX (choice)
+
+					const methods = state.getPreciseStrikeMethods();
+					const eyeGouge = methods.find(m => m.name === "Eye Gouge");
+					const fingerSmash = methods.find(m => m.name === "Finger Smash");
+					const lowBlow = methods.find(m => m.name === "Low Blow");
+					const templeStrike = methods.find(m => m.name === "Temple Strike");
+
+					expect(eyeGouge.saveType).toBe("con");
+					expect(fingerSmash.saveType).toBe("dex");
+					expect(lowBlow.saveChoice).toEqual(["con", "dex"]);
+					expect(templeStrike.saveChoice).toEqual(["str", "dex"]);
+				});
+
+				it("should calculate duration based on monk level for level-scaling methods", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 10,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Arm Snap", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+					state.addFeature({name: "Ear Clap", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+					state.addFeature({name: "Air Draining Strike", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+
+					const methods = state.getPreciseStrikeMethods();
+					const armSnap = methods.find(m => m.name === "Arm Snap");
+					const earClap = methods.find(m => m.name === "Ear Clap");
+					const airDraining = methods.find(m => m.name === "Air Draining Strike");
+
+					expect(armSnap.duration).toBe("10 turns"); // monk level
+					expect(earClap.duration).toBe("10 turns"); // monk level
+					expect(airDraining.duration).toBe("5 turns"); // monk level / 2
+				});
+
+				it("should return Pierce Defenses with no save (dc = null)", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 5,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Pierce Defenses", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+
+					const methods = state.getPreciseStrikeMethods();
+					const pierceDefenses = methods.find(m => m.name === "Pierce Defenses");
+
+					expect(pierceDefenses.dc).toBeNull();
+					expect(pierceDefenses.saveType).toBeNull();
+					expect(pierceDefenses.damage).toBe("martial arts die");
+				});
+
+				it("should get individual DC via getPreciseStrikeDc method", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 5,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+					state.setAbilityBase("wis", 16); // base DC = 14
+
+					expect(state.getPreciseStrikeDc("Eye Gouge")).toBe(14);
+					expect(state.getPreciseStrikeDc("Ear Clap")).toBe(12);
+					expect(state.getPreciseStrikeDc("Arm Snap")).toBe(10);
+					expect(state.getPreciseStrikeDc("Heart Bursting Punch")).toBe(8);
+					expect(state.getPreciseStrikeDc("Pierce Defenses")).toBeNull();
+				});
+
+				it("should calculate methods known via getPreciseStrikeMethodsKnown", () => {
+					state.addClass({name: "Monk", source: "TGTT", level: 3, subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}});
+					expect(state.getPreciseStrikeMethodsKnown()).toBe(3);
+
+					state.addClass({name: "Monk", source: "TGTT", level: 6});
+					expect(state.getPreciseStrikeMethodsKnown()).toBe(4);
+
+					state.addClass({name: "Monk", source: "TGTT", level: 11});
+					expect(state.getPreciseStrikeMethodsKnown()).toBe(5);
+
+					state.addClass({name: "Monk", source: "TGTT", level: 17});
+					expect(state.getPreciseStrikeMethodsKnown()).toBe(6);
+				});
+
+				it("should calculate all 11 Precise Strike methods correctly", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 10,
+						subclass: {name: "Way of Debilitation", shortName: "Debilitation", source: "TGTT"}
+					});
+					state.setAbilityBase("wis", 14); // +2; base DC = 8 + 4 + 2 = 14
+
+					// Add all 11 methods
+					const methodNames = [
+						"Air Draining Strike", "Arm Snap", "Ear Clap", "Eye Gouge",
+						"Finger Smash", "Heart Bursting Punch", "Leg Sweeping Kick",
+						"Low Blow", "Neck Chop", "Pierce Defenses", "Temple Strike"
+					];
+					methodNames.forEach(name => {
+						state.addFeature({name, source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["PS"]});
+					});
+
+					const methods = state.getPreciseStrikeMethods();
+					expect(methods.length).toBe(11);
+
+					// Verify DC modifiers
+					expect(methods.find(m => m.name === "Air Draining Strike").dcModifier).toBe(-6);
+					expect(methods.find(m => m.name === "Arm Snap").dcModifier).toBe(-4);
+					expect(methods.find(m => m.name === "Ear Clap").dcModifier).toBe(-2);
+					expect(methods.find(m => m.name === "Eye Gouge").dcModifier).toBe(0);
+					expect(methods.find(m => m.name === "Finger Smash").dcModifier).toBe(0);
+					expect(methods.find(m => m.name === "Heart Bursting Punch").dcModifier).toBe(-6);
+					expect(methods.find(m => m.name === "Leg Sweeping Kick").dcModifier).toBe(0);
+					expect(methods.find(m => m.name === "Low Blow").dcModifier).toBe(-2);
+					expect(methods.find(m => m.name === "Neck Chop").dcModifier).toBe(-4);
+					expect(methods.find(m => m.name === "Pierce Defenses").dcModifier).toBe(0);
+					expect(methods.find(m => m.name === "Temple Strike").dcModifier).toBe(0);
 				});
 			});
 			
@@ -5641,6 +6081,325 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.hasEternalBastion).toBeFalsy();
 				});
 			});
+			
+			describe("Oath of Inquisition", () => {
+				it("should calculate Defy the Heretics threshold based on level", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 3,
+						subclass: {name: "Oath of Inquisition", shortName: "Inquisition", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasDefyTheHeretics).toBe(true);
+					expect(calcs.defyHereticsThreshold).toBe(2); // ceil(3/2) = 2
+					
+					state.addClass({name: "Paladin", source: "TGTT", level: 10});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.defyHereticsThreshold).toBe(5); // ceil(10/2) = 5 (max)
+					
+					state.addClass({name: "Paladin", source: "TGTT", level: 20});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.defyHereticsThreshold).toBe(5); // Still max 5
+				});
+				
+				it("should calculate Suppressive Aura range and damage progression", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 7,
+						subclass: {name: "Oath of Inquisition", shortName: "Inquisition", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasSuppressiveAura).toBe(true);
+					expect(calcs.suppressiveAuraRange).toBe(10);
+					expect(calcs.suppressiveAuraDamage).toBe(4); // ceil(7/2) = 4
+					
+					state.addClass({name: "Paladin", source: "TGTT", level: 18});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.suppressiveAuraRange).toBe(30); // Expanded at 18
+					expect(calcs.suppressiveAuraDamage).toBe(9); // ceil(18/2) = 9
+				});
+				
+				it("should grant Unfazed Believer and Divine Endurance HP boost at level 15", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 15,
+						subclass: {name: "Oath of Inquisition", shortName: "Inquisition", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasUnfazedBeliever).toBe(true);
+					expect(calcs.smiteDieSize).toBe("d10");
+					expect(calcs.divineEnduranceHpBoost).toBe(15);
+				});
+				
+				it("should calculate Blessed Inquisitor damage bonus at level 20", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 20,
+						subclass: {name: "Oath of Inquisition", shortName: "Inquisition", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 18); // +4 mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasBlessedInquisitor).toBe(true);
+					expect(calcs.hasTrueSeeingCapstone).toBe(true);
+					expect(calcs.blessedInquisitorDamageBonus).toBe(4);
+				});
+				
+				it("should grant Arcane Sense with CHA override for Arcana", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 3,
+						subclass: {name: "Oath of Inquisition", shortName: "Inquisition", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasArcaneSense).toBe(true);
+					expect(calcs.arcanaAbilityOverride).toBe("cha");
+				});
+			});
+		});
+		
+		// -----------------------------------------------------------------
+		// WARLOCK SUBCLASSES (Calculation Tests)
+		// -----------------------------------------------------------------
+		describe("Warlock Subclasses - Calculations", () => {
+			
+			describe("The Horror", () => {
+				it("should calculate Devastating Strike damage and push scaling", () => {
+					// Note: TGTT source gets subclass at level 3
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 3,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasDevastatingStrike).toBe(true);
+					expect(calcs.devastatingStrikeDamage).toBe("1d8");
+					expect(calcs.devastatingStrikePush).toBe(15);
+					
+					state.addClass({name: "Warlock", source: "TGTT", level: 5});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.devastatingStrikeDamage).toBe("3d8");
+					expect(calcs.devastatingStrikePush).toBe(20);
+					
+					state.addClass({name: "Warlock", source: "TGTT", level: 11});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.devastatingStrikeDamage).toBe("5d8");
+					expect(calcs.devastatingStrikePush).toBe(25);
+					
+					state.addClass({name: "Warlock", source: "TGTT", level: 17});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.devastatingStrikeDamage).toBe("8d8");
+					expect(calcs.devastatingStrikePush).toBe(30);
+				});
+				
+				it("should calculate Devastating Strike uses based on CON", () => {
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 3,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+					state.setAbilityBase("con", 16); // +3 mod
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.devastatingStrikeUses).toBe(3);
+					
+					// With CON 8 (-1), minimum should be 1
+					state.setAbilityBase("con", 8);
+					calcs = state.getFeatureCalculations();
+					expect(calcs.devastatingStrikeUses).toBe(1);
+				});
+				
+				it("should calculate Horror Unarmored AC", () => {
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 3,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+					state.setAbilityBase("dex", 16); // +3
+					state.setAbilityBase("con", 14); // +2
+					
+					const calcs = state.getFeatureCalculations();
+					// AC = 10 + DEX(3) + CON(2) = 15
+					expect(calcs.horrorUnarmoredAc).toBe(15);
+				});
+				
+				it("should grant level 6+ features at appropriate levels", () => {
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 6,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasLoneSurvivor).toBe(true);
+					expect(calcs.hasUnearthlyManifestation).toBe(true);
+					expect(calcs.hasConstitutionSaveProficiency).toBe(true);
+					expect(calcs.hasMagicalUnarmedStrikes).toBe(true);
+					expect(calcs.hasDegeneratingTouch).toBeFalsy(); // Level 10
+					
+					state.addClass({name: "Warlock", source: "TGTT", level: 10});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.hasDegeneratingTouch).toBe(true);
+					
+					state.addClass({name: "Warlock", source: "TGTT", level: 14});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.hasImplodingInfestation).toBe(true);
+					expect(calcs.implodingInfestationDamage).toBe("6d12");
+					expect(calcs.implodingInfestationRadius).toBe(30);
+				});
+			});
+		});
+		
+		// -----------------------------------------------------------------
+		// SORCERER SUBCLASSES (Calculation Tests)
+		// -----------------------------------------------------------------
+		describe("Sorcerer Subclasses - Calculations", () => {
+			
+			describe("Heroic Soul", () => {
+				it("should calculate Over Soul uses based on proficiency", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 1,
+						subclass: {name: "Heroic Soul", shortName: "Heroic Soul", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasOverSoul).toBe(true);
+					expect(calcs.overSoulUses).toBe(2); // Prof +2 at level 1
+					expect(calcs.overSoulCost).toBe(1);
+					
+					state.addClass({name: "Sorcerer", source: "TGTT", level: 9});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.overSoulUses).toBe(4); // Prof +4 at level 9
+				});
+				
+				it("should calculate Legendary Weapon options", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 5,
+						subclass: {name: "Heroic Soul", shortName: "Heroic Soul", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasLegendaryWeapon).toBe(true);
+					// Colossal Might = floor(prof/2) = floor(3/2) = 1
+					expect(calcs.colossalMightBonus).toBe(1);
+					// Rending Strike DC = 8 + prof(3) + CHA(3) = 14
+					expect(calcs.rendingStrikeDc).toBe(14);
+					expect(calcs.ancientsReachBase).toBe(5);
+					expect(calcs.heroFlameExtraDamage).toBe("1d6");
+				});
+				
+				it("should calculate Hero's Reflex at level 6", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 6,
+						subclass: {name: "Heroic Soul", shortName: "Heroic Soul", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 18); // +4
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasHerosReflex).toBe(true);
+					expect(calcs.herosReflexUses).toBe(3); // Prof +3
+					expect(calcs.herosReflexTempHpBase).toBe(4); // CHA mod
+				});
+				
+				it("should calculate Manifest Legend at level 14", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 14,
+						subclass: {name: "Heroic Soul", shortName: "Heroic Soul", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasManifestLegend).toBe(true);
+					expect(calcs.manifestLegendCost).toBe(3);
+					expect(calcs.manifestLegendTempHp).toBe(14);
+					expect(calcs.manifestLegendExtraAttack).toBe(true);
+				});
+				
+				it("should calculate Eternal Hero heal at level 18", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 18,
+						subclass: {name: "Heroic Soul", shortName: "Heroic Soul", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 20); // +5
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasEternalHero).toBe(true);
+					expect(calcs.overSoulAlwaysActive).toBe(true);
+					// Heal = level(18) + CHA(5) = 23
+					expect(calcs.eternalHeroHeal).toBe(23);
+				});
+			});
+			
+			describe("Fiendish Bloodline", () => {
+				it("should calculate Summoned Ferocity bonus based on CHA", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 1,
+						subclass: {name: "Fiendish Bloodline", shortName: "Fiendish Bloodline", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasSummonedFerocity).toBe(true);
+					expect(calcs.summonedFerocityBonus).toBe(3);
+					expect(calcs.summonedTelepathyRange).toBe(120);
+				});
+				
+				it("should grant Infernal Companion features", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 1,
+						subclass: {name: "Fiendish Bloodline", shortName: "Fiendish Bloodline", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasInfernalCompanion).toBe(true);
+					expect(calcs.infernalFamiliarHelpBonus).toBe(true);
+				});
+				
+				it("should calculate Hellish Summoner at level 6", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 6,
+						subclass: {name: "Fiendish Bloodline", shortName: "Fiendish Bloodline", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasHellishSummoner).toBe(true);
+					expect(calcs.hellishSummonerCost).toBe(2);
+					expect(calcs.hellishSummonerTempHp).toBe(6); // = level
+				});
+				
+				it("should calculate Dark Dominion at level 14", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 14,
+						subclass: {name: "Fiendish Bloodline", shortName: "Fiendish Bloodline", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasDarkDominion).toBe(true);
+					expect(calcs.darkDominionUses).toBe(5); // Prof +5
+					expect(calcs.darkDominionDisadvantageCost).toBe(2);
+					expect(calcs.hasSummonedAggression).toBe(true);
+				});
+				
+				it("should calculate Infernal Legion at level 18", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 18,
+						subclass: {name: "Fiendish Bloodline", shortName: "Fiendish Bloodline", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasInfernalLegion).toBe(true);
+					expect(calcs.summonCountMultiplier).toBe(2);
+					expect(calcs.concentrationFreeSummonUses).toBe(1);
+				});
+				
+				it("should not grant level 6+ features before appropriate level", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 5,
+						subclass: {name: "Fiendish Bloodline", shortName: "Fiendish Bloodline", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasHellishSummoner).toBeFalsy();
+					expect(calcs.hasDarkDominion).toBeFalsy();
+					expect(calcs.hasInfernalLegion).toBeFalsy();
+				});
+			});
 		});
 		
 		// -----------------------------------------------------------------
@@ -5922,6 +6681,1132 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			// Focus feature has savingThrowProficiencies data stored
 			const focusFeature = features.find(f => f.name === "Focus");
 			expect(focusFeature).toBeDefined();
+		});
+	});
+
+	// ==========================================================================
+	// TGTT RACE FEATURES
+	// ==========================================================================
+	describe("TGTT Race Features", () => {
+		// ======= Thelemerian Dragonborn =======
+		describe("Thelemerian Dragonborn - Dragon Scales", () => {
+			it("should calculate natural armor AC as 13 + DEX when unarmored", () => {
+				state.setAbilityBase("dex", 16); // +3 mod
+				state.setRace({name: "Thelemerian Dragonborn", source: "TGTT"});
+				state.addFeature({name: "Dragon Scales", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// No armor: should be 13 + 3 = 16
+				expect(state.getAc()).toBe(16);
+			});
+			
+			it("should use armor AC when armor provides higher AC", () => {
+				state.setAbilityBase("dex", 14); // +2 mod
+				state.setRace({name: "Thelemerian Dragonborn", source: "TGTT"});
+				state.addFeature({name: "Dragon Scales", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Natural armor: 13 + 2 = 15
+				// Chain mail: 16 (heavy, no DEX)
+				state.setArmor({name: "Chain Mail", ac: 16, type: "heavy"});
+				expect(state.getAc()).toBe(16); // Armor is higher
+			});
+			
+			it("should use natural armor when it provides higher AC than light armor", () => {
+				state.setAbilityBase("dex", 18); // +4 mod
+				state.setRace({name: "Thelemerian Dragonborn", source: "TGTT"});
+				state.addFeature({name: "Dragon Scales", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Natural armor: 13 + 4 = 17
+				// Leather: 11 + 4 = 15
+				state.setArmor({name: "Leather Armor", ac: 11, type: "light"});
+				// System takes best option
+				expect(state.getAc()).toBe(17); // Natural armor is higher
+			});
+			
+			it("should scale AC with Dexterity modifier changes", () => {
+				state.setAbilityBase("dex", 10); // +0 mod
+				state.addFeature({name: "Dragon Scales", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Initial: 13 + 0 = 13
+				expect(state.getAc()).toBe(13);
+				
+				// Increase DEX to 16 (+3)
+				state.setAbilityBase("dex", 16);
+				// Expected: 13 + 3 = 16
+				expect(state.getAc()).toBe(16);
+				
+				// Increase DEX to 20 (+5)
+				state.setAbilityBase("dex", 20);
+				// Expected: 13 + 5 = 18
+				expect(state.getAc()).toBe(18);
+			});
+		});
+		
+		describe("Thelemerian Dragonborn - Ancestral Affinity", () => {
+			it("should grant psychic resistance", () => {
+				state.addFeature({name: "Ancestral Affinity", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				const resistances = state.getResistances();
+				expect(resistances).toContain("psychic");
+			});
+			
+			it("should grant advantage on frightened saves", () => {
+				state.addFeature({name: "Ancestral Affinity", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Check modifier was added
+				const modifiers = state.getNamedModifiers();
+				const frightAdvMod = modifiers.find(m => 
+					m.type === "save:advantage:frightened" || 
+					m.note?.toLowerCase().includes("frightened")
+				);
+				expect(frightAdvMod).toBeDefined();
+			});
+		});
+		
+		// ======= Half-Ogre =======
+		describe("Half-Ogre - Ogre Toughness", () => {
+			it("should add +1 HP per level at level 1", () => {
+				state.setAbilityBase("con", 10); // +0 mod
+				state.addClass({name: "Fighter", source: "PHB", level: 1, hitDice: "d10"});
+				
+				// Base HP at level 1 Fighter with CON +0: 10
+				const baseHp = state.getMaxHp();
+				expect(baseHp).toBe(10);
+				
+				// Add Ogre Toughness
+				state.addFeature({name: "Ogre Toughness", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Should be base + 1 (1 per level)
+				expect(state.getMaxHp()).toBe(11);
+			});
+			
+			it("should scale HP bonus with level", () => {
+				state.setAbilityBase("con", 10); // +0 mod
+				state.addClass({name: "Fighter", source: "PHB", level: 5, hitDice: "d10"});
+				state.addFeature({name: "Ogre Toughness", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Level 5: 10 + 4*6 = 34 base (using average)
+				// Ogre Toughness: +5 (1 per level)
+				// Total: 39
+				const maxHp = state.getMaxHp();
+				expect(maxHp).toBe(34 + 5);
+			});
+			
+			it("should stack with Constitution modifier", () => {
+				state.setAbilityBase("con", 16); // +3 mod
+				state.addClass({name: "Fighter", source: "PHB", level: 5, hitDice: "d10"});
+				state.addFeature({name: "Ogre Toughness", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Level 5 with CON +3:
+				// Level 1: 10 + 3 = 13
+				// Levels 2-5: 4 * (6 + 3) = 36
+				// Base total: 49
+				// Ogre Toughness: +5
+				// Total: 54
+				expect(state.getMaxHp()).toBe(49 + 5);
+			});
+		});
+		
+		describe("Half-Ogre - Powerful Build", () => {
+			it("should double carry capacity", () => {
+				// Disable Thelemar carry rules to use standard 5e calculation
+				state.setSetting("thelemar_carryWeight", false);
+				state.setAbilityBase("str", 16); // Base carry = 15 * 16 = 240
+				state.addFeature({name: "Powerful Build", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Powerful Build doubles capacity
+				const capacity = state.getCarryingCapacity();
+				expect(capacity).toBe(240 * 2);
+			});
+		});
+		
+		// ======= Nyuidj =======
+		describe("Nyuidj - Dual Mind", () => {
+			it("should grant advantage on Wisdom saving throws", () => {
+				state.addFeature({name: "Dual Mind", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Check modifier was added
+				const modifiers = state.getNamedModifiers();
+				const wisAdvMod = modifiers.find(m => 
+					m.type === "save:advantage:wis" || 
+					m.type?.includes("wis") && m.type?.includes("advantage")
+				);
+				expect(wisAdvMod).toBeDefined();
+				expect(wisAdvMod.enabled).toBe(true);
+			});
+		});
+		
+		describe("Nyuidj - Mental Discipline", () => {
+			it("should grant psychic resistance", () => {
+				state.addFeature({name: "Mental Discipline", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				const resistances = state.getResistances();
+				expect(resistances).toContain("psychic");
+			});
+		});
+		
+		// ======= Gnoll =======
+		describe("Gnoll - Carrion Feeder", () => {
+			it("should grant advantage on disease saves", () => {
+				state.addFeature({name: "Carrion Feeder", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				const modifiers = state.getNamedModifiers();
+				const diseaseAdvMod = modifiers.find(m => 
+					m.type?.includes("disease") && m.type?.includes("advantage")
+				);
+				expect(diseaseAdvMod).toBeDefined();
+			});
+		});
+		
+		// ======= TGTT Tiefling Variants =======
+		describe("Rangda Tiefling - Mental Fortitude", () => {
+			it("should grant psychic resistance", () => {
+				state.addFeature({name: "Mental Fortitude", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				const resistances = state.getResistances();
+				expect(resistances).toContain("psychic");
+			});
+		});
+		
+		describe("Rangda Tiefling - Dark Queen's Blessing", () => {
+			it("should grant advantage on INT, WIS, CHA saves vs magic", () => {
+				state.addFeature({name: "Dark Queen's Blessing", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				const modifiers = state.getNamedModifiers();
+				
+				// Should have all three mental save advantages vs magic
+				const intMagicAdv = modifiers.find(m => m.type?.includes("int") && m.type?.includes("magic"));
+				const wisMagicAdv = modifiers.find(m => m.type?.includes("wis") && m.type?.includes("magic"));
+				const chaMagicAdv = modifiers.find(m => m.type?.includes("cha") && m.type?.includes("magic"));
+				
+				expect(intMagicAdv).toBeDefined();
+				expect(wisMagicAdv).toBeDefined();
+				expect(chaMagicAdv).toBeDefined();
+			});
+		});
+		
+		describe("Mara Tiefling - Warm Embrace", () => {
+			it("should grant cold resistance", () => {
+				state.addFeature({name: "Warm Embrace", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				const resistances = state.getResistances();
+				expect(resistances).toContain("cold");
+			});
+		});
+		
+		describe("Mara Tiefling - Temptation's Guidance", () => {
+			it("should grant Persuasion expertise", () => {
+				state.addFeature({name: "Temptation's Guidance", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Check for expertise-level proficiency (getSkillProficiency returns 0, 1, or 2)
+				const profLevel = state.getSkillProficiency("persuasion");
+				expect(profLevel).toBe(2); // 2 = expertise
+			});
+		});
+		
+		// ======= Combined Race Scenarios =======
+		describe("Combined Race Features", () => {
+			it("should correctly combine Dragon Scales AC with shield", () => {
+				state.setAbilityBase("dex", 14); // +2 mod
+				state.addFeature({name: "Dragon Scales", source: "TGTT", sourceType: "raceFeature"});
+				state.applyClassFeatureEffects();
+				state.setShield(true);
+				
+				// Natural armor: 13 + 2 = 15
+				// Shield: +2
+				// Total: 17
+				expect(state.getAc()).toBe(17);
+			});
+			
+			it("should stack Ogre Toughness with Draconic Resilience HP bonus", () => {
+				state.setAbilityBase("con", 14); // +2 mod
+				state.addClass({name: "Sorcerer", source: "PHB", level: 3, hitDice: "d6"});
+				
+				// Add both HP bonus features
+				state.addFeature({name: "Ogre Toughness", source: "TGTT", sourceType: "raceFeature"});
+				state.addFeature({name: "Draconic Resilience", source: "PHB", sourceType: "classFeature"});
+				state.applyClassFeatureEffects();
+				
+				// Base HP level 3 Sorcerer with CON +2:
+				// Level 1: 6 + 2 = 8
+				// Levels 2-3: 2 * (4 + 2) = 12
+				// Base: 20
+				// Ogre Toughness: +3
+				// Draconic Resilience: +3
+				// Total: 26
+				expect(state.getMaxHp()).toBe(26);
+			});
+		});
+		
+		// ======= Race Scaling Calculations =======
+		describe("Race Scaling Calculations", () => {
+			describe("Genasi Elemental Empowerment", () => {
+				it("should scale damage dice with proficiency bonus", () => {
+					state.setRace({name: "Genasi", source: "TGTT"});
+					state.addClass({name: "Fighter", source: "PHB", level: 1, hitDice: "d10"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// Level 1-4 has proficiency +2, so 2d6
+					expect(calcs.elementalEmpowermentDamage).toBe("2d6");
+					expect(calcs.elementalEmpowermentUses).toBe(2);
+				});
+				
+				it("should scale at higher proficiency levels", () => {
+					state.setRace({name: "Genasi", source: "TGTT"});
+					state.addClass({name: "Fighter", source: "PHB", level: 9, hitDice: "d10"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// Level 9-12 has proficiency +4, so 4d6
+					expect(calcs.elementalEmpowermentDamage).toBe("4d6");
+					expect(calcs.elementalEmpowermentUses).toBe(4);
+				});
+				
+				it("should work with Fire Genasi subrace", () => {
+					state.setRace({name: "Genasi", source: "TGTT"}, {name: "Fire Genasi", source: "TGTT"});
+					state.addClass({name: "Wizard", source: "PHB", level: 5, hitDice: "d6"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// Level 5-8 has proficiency +3, so 3d6
+					expect(calcs.elementalEmpowermentDamage).toBe("3d6");
+					expect(calcs.elementalEmpowermentUses).toBe(3);
+				});
+			});
+			
+			describe("Dragonborn Breath Weapon", () => {
+				it("should calculate Terrifying Exhalation DC correctly", () => {
+					state.setRace({name: "Dragonborn", source: "TGTT"});
+					state.setAbilityBase("con", 16); // +3 mod
+					state.addClass({name: "Fighter", source: "PHB", level: 1, hitDice: "d10"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// DC = 8 + CON (+3) + prof (+2) = 13
+					expect(calcs.terrifyingExhalationDc).toBe(13);
+					expect(calcs.terrifyingExhalationUses).toBe(2);
+				});
+				
+				it("should scale breath damage with level tiers", () => {
+					state.setRace({name: "Dragonborn", source: "TGTT"});
+					state.addClass({name: "Fighter", source: "PHB", level: 1, hitDice: "d10"});
+					
+					// Level 1-4: 1d10
+					expect(state.getFeatureCalculations().terrifyingExhalationDamage).toBe("1d10");
+					
+					// Level 5-10: 2d10
+					state.addClass({name: "Fighter", source: "PHB", level: 5, hitDice: "d10"});
+					expect(state.getFeatureCalculations().terrifyingExhalationDamage).toBe("2d10");
+					
+					// Level 11-16: 3d10
+					state.addClass({name: "Fighter", source: "PHB", level: 11, hitDice: "d10"});
+					expect(state.getFeatureCalculations().terrifyingExhalationDamage).toBe("3d10");
+					
+					// Level 17+: 4d10
+					state.addClass({name: "Fighter", source: "PHB", level: 17, hitDice: "d10"});
+					expect(state.getFeatureCalculations().terrifyingExhalationDamage).toBe("4d10");
+				});
+				
+				it("should unlock aura abilities at level 5", () => {
+					state.setRace({name: "Dragonborn", source: "TGTT"});
+					state.setAbilityBase("cha", 14); // +2 mod
+					state.addClass({name: "Paladin", source: "PHB", level: 4, hitDice: "d10"});
+					
+					let calcs = state.getFeatureCalculations();
+					
+					// Level 4: No aura abilities yet
+					expect(calcs.auraOfDreadDc).toBeUndefined();
+					expect(calcs.auraOfProtectionTempHp).toBeUndefined();
+					
+					// Level 5: Aura abilities unlock
+					state.addClass({name: "Paladin", source: "PHB", level: 5, hitDice: "d10"});
+					calcs = state.getFeatureCalculations();
+					
+					// Aura of Dread DC = 8 + CHA (+2) + prof (+3) = 13
+					expect(calcs.auraOfDreadDc).toBe(13);
+					// Aura of Protection TempHP = proficiency bonus
+					expect(calcs.auraOfProtectionTempHp).toBe(3);
+				});
+			});
+			
+			describe("Nyuidj Mind Link", () => {
+				it("should calculate Mind Link range based on level", () => {
+					state.setRace({name: "Nyuidj", source: "TGTT"});
+					state.addClass({name: "Rogue", source: "PHB", level: 5, hitDice: "d8"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// Range = 10 × level = 10 × 5 = 50 feet
+					expect(calcs.mindLinkRange).toBe(50);
+				});
+				
+				it("should scale Mind Link range with multiclassing", () => {
+					state.setRace({name: "Nyuidj", source: "TGTT"});
+					state.addClass({name: "Rogue", source: "PHB", level: 5, hitDice: "d8"});
+					state.addClass({name: "Fighter", source: "PHB", level: 7, hitDice: "d10"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// Range = 10 × total level = 10 × 12 = 120 feet
+					expect(calcs.mindLinkRange).toBe(120);
+				});
+				
+				it("should work at level 1", () => {
+					state.setRace({name: "Nyuidj", source: "TGTT"});
+					state.addClass({name: "Monk", source: "PHB", level: 1, hitDice: "d8"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// Range = 10 × 1 = 10 feet
+					expect(calcs.mindLinkRange).toBe(10);
+				});
+			});
+			
+			describe("Tiefling Step Abilities", () => {
+				it("should calculate Step of Feywild DC (CHA-based)", () => {
+					state.setRace({name: "Tiefling", source: "TGTT"}, {name: "Feywild Tiefling", source: "TGTT"});
+					state.setAbilityBase("cha", 16); // +3 mod
+					state.addClass({name: "Warlock", source: "PHB", level: 5, hitDice: "d8"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// DC = 8 + prof (+3) + CHA (+3) = 14
+					expect(calcs.stepOfFeywildDc).toBe(14);
+				});
+				
+				it("should calculate Step of Shadowfell DC (INT-based)", () => {
+					state.setRace({name: "Tiefling", source: "TGTT"}, {name: "Shadowfell Tiefling", source: "TGTT"});
+					state.setAbilityBase("int", 18); // +4 mod
+					state.addClass({name: "Wizard", source: "PHB", level: 9, hitDice: "d6"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// DC = 8 + prof (+4) + INT (+4) = 16
+					expect(calcs.stepOfShadowfellDc).toBe(16);
+				});
+				
+				it("should not unlock Step DCs before level 3", () => {
+					state.setRace({name: "Tiefling", source: "TGTT"}, {name: "Feywild Tiefling", source: "TGTT"});
+					state.setAbilityBase("cha", 16);
+					state.addClass({name: "Warlock", source: "PHB", level: 2, hitDice: "d8"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					expect(calcs.stepOfFeywildDc).toBeUndefined();
+				});
+				
+				it("should unlock Step DCs at level 3", () => {
+					state.setRace({name: "Tiefling", source: "TGTT"}, {name: "Shadowfell Tiefling", source: "TGTT"});
+					state.setAbilityBase("int", 14); // +2 mod
+					state.addClass({name: "Rogue", source: "PHB", level: 3, hitDice: "d8"});
+					
+					const calcs = state.getFeatureCalculations();
+					
+					// DC = 8 + prof (+2) + INT (+2) = 12
+					expect(calcs.stepOfShadowfellDc).toBe(12);
+				});
+			});
+		});
+	});
+
+	// =========================================================================
+	// TGTT FEATS TESTS
+	// Test the homebrew feats from Traveler's Guide to Thelemar
+	// =========================================================================
+	describe("TGTT Feats", () => {
+		
+		describe("Lore Mastery", () => {
+			it("should be recognized as a TGTT feat", () => {
+				state.addFeat({name: "Lore Mastery", source: "TGTT"});
+				
+				expect(state.hasFeat("Lore Mastery")).toBe(true);
+			});
+			
+			it("should set hasLoreMastery flag in calculations", () => {
+				state.addFeat({name: "Lore Mastery", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasLoreMastery).toBe(true);
+			});
+			
+			it("should add +2 bonus to existing lore skills via loreSkillBonuses", () => {
+				// First add a custom lore skill
+				state.addCustomSkill("History of Dragons", "int");
+				state.setSkillProficiency("historyofdragons", 1); // proficient
+				
+				// Add Lore Mastery with bonus to that skill
+				state.addFeat({
+					name: "Lore Mastery",
+					source: "TGTT",
+					loreSkillBonuses: {"historyofdragons": 2}
+				});
+				
+				// Check that the named modifier was added
+				const modifiers = state.getNamedModifiersByType("skill:historyofdragons");
+				expect(modifiers.length).toBeGreaterThan(0);
+				expect(modifiers.some(m => m.value === 2 && m.name.includes("Lore Mastery"))).toBe(true);
+			});
+			
+			it("should grant new lore skills at +2 via grantLoreSkills", () => {
+				state.addFeat({
+					name: "Lore Mastery",
+					source: "TGTT",
+					grantLoreSkills: ["Planar Geography", "Demonic Hierarchies"]
+				});
+				
+				// Check that custom skills were added
+				const customSkills = state.getCustomSkills();
+				expect(customSkills.some(s => s.name === "Planar Geography")).toBe(true);
+				expect(customSkills.some(s => s.name === "Demonic Hierarchies")).toBe(true);
+				
+				// Check that +2 modifiers were added
+				const pgModifiers = state.getNamedModifiersByType("skill:planargeography");
+				expect(pgModifiers.some(m => m.value === 2)).toBe(true);
+				
+				const dhModifiers = state.getNamedModifiersByType("skill:demonichierarchies");
+				expect(dhModifiers.some(m => m.value === 2)).toBe(true);
+			});
+			
+			it("should use WIS by default for new lore skills", () => {
+				state.addFeat({
+					name: "Lore Mastery",
+					source: "TGTT",
+					grantLoreSkills: ["Arcane Traditions"]
+				});
+				
+				const customSkills = state.getCustomSkills();
+				const arcaneSkill = customSkills.find(s => s.name === "Arcane Traditions");
+				expect(arcaneSkill).toBeDefined();
+				expect(arcaneSkill.ability).toBe("wis");
+			});
+			
+			it("should allow custom ability for new lore skills", () => {
+				state.addFeat({
+					name: "Lore Mastery",
+					source: "TGTT",
+					grantLoreSkills: ["Engineering Principles"],
+					loreSkillAbilities: {"Engineering Principles": "int"}
+				});
+				
+				const customSkills = state.getCustomSkills();
+				const engSkill = customSkills.find(s => s.name === "Engineering Principles");
+				expect(engSkill).toBeDefined();
+				expect(engSkill.ability).toBe("int");
+			});
+			
+			it("should be retakable (add second instance)", () => {
+				// First instance
+				state.addCustomSkill("History of Dragons", "int");
+				state.addFeat({
+					name: "Lore Mastery",
+					source: "TGTT",
+					loreSkillBonuses: {"historyofdragons": 2}
+				});
+				
+				// Note: Normally you'd track this with a different ID or incrementing name
+				// The sheet prevents exact duplicates, so we test the single feat case
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasLoreMastery).toBe(true);
+			});
+		});
+		
+		describe("Spellsword Technique", () => {
+			it("should be recognized as a TGTT feat", () => {
+				state.addFeat({name: "Spellsword Technique", source: "TGTT"});
+				
+				expect(state.hasFeat("Spellsword Technique")).toBe(true);
+			});
+			
+			it("should set hasSpellswordTechnique flag", () => {
+				state.addFeat({name: "Spellsword Technique", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasSpellswordTechnique).toBe(true);
+			});
+			
+			it("should provide 1d6 bonus damage", () => {
+				state.addFeat({name: "Spellsword Technique", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.spellswordBonusDamage).toBe("1d6");
+			});
+			
+			it("should provide damage type lookup by spell school", () => {
+				state.addFeat({name: "Spellsword Technique", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.spellswordDamageTypes).toBeDefined();
+				expect(calcs.spellswordDamageTypes.necromancy).toBe("necrotic");
+				expect(calcs.spellswordDamageTypes.abjuration).toBe("force");
+				expect(calcs.spellswordDamageTypes.divination).toBe("psychic");
+				expect(calcs.spellswordDamageTypes.enchantment).toBe("psychic");
+				expect(calcs.spellswordDamageTypes.illusion).toBe("psychic");
+			});
+			
+			it("should return physical damage types for conjuration/transmutation", () => {
+				state.addFeat({name: "Spellsword Technique", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.spellswordDamageTypes.conjuration).toBe("bludgeoning/piercing/slashing");
+				expect(calcs.spellswordDamageTypes.transmutation).toBe("bludgeoning/piercing/slashing");
+			});
+			
+			it("should return varies/force for evocation", () => {
+				state.addFeat({name: "Spellsword Technique", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.spellswordDamageTypes.evocation).toBe("varies/force");
+			});
+		});
+		
+		describe("Whip Master", () => {
+			it("should be recognized as a TGTT feat", () => {
+				state.addFeat({name: "Whip Master", source: "TGTT"});
+				
+				expect(state.hasFeat("Whip Master")).toBe(true);
+			});
+			
+			it("should set hasWhipMaster flag", () => {
+				state.addFeat({name: "Whip Master", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasWhipMaster).toBe(true);
+			});
+			
+			it("should enable bonus action whip attack", () => {
+				state.addFeat({name: "Whip Master", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.whipBonusAttack).toBe(true);
+			});
+			
+			it("should enable grapple/shove with whip", () => {
+				state.addFeat({name: "Whip Master", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.whipGrappleShove).toBe(true);
+			});
+			
+			it("should enable utility actions with whip", () => {
+				state.addFeat({name: "Whip Master", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.whipUtility).toBe(true);
+			});
+			
+			it("should track bullwhip reach (20 feet)", () => {
+				state.addFeat({name: "Whip Master", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.whipReach).toBe(20);
+			});
+		});
+		
+		describe("Dreamer", () => {
+			it("should be recognized as a TGTT feat", () => {
+				state.addFeat({name: "Dreamer", source: "TGTT"});
+				
+				expect(state.hasFeat("Dreamer")).toBe(true);
+			});
+			
+			it("should set hasDreamerFeat flag", () => {
+				state.addFeat({name: "Dreamer", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasDreamerFeat).toBe(true);
+			});
+			
+			it("should track maximum Dreamwalker abilities (2)", () => {
+				state.addFeat({name: "Dreamer", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.dreamerAbilitiesMax).toBe(2);
+			});
+			
+			it("should support ability score increase via abilityBonus", () => {
+				state.setAbilityBase("cha", 14);
+				state.addFeat({
+					name: "Dreamer",
+					source: "TGTT",
+					abilityBonus: {cha: 1}
+				});
+				
+				// The ability bonus should be processed by addFeat
+				// Check that the bonus is applied (14 base + 1 from feat = 15)
+				// Note: addAbilityBonus is called internally
+				// We need to check the total ability score
+				expect(state.getAbilityTotal("cha")).toBe(15);
+			});
+			
+			it("should allow adding Dreamwalker abilities as features", () => {
+				state.addFeat({name: "Dreamer", source: "TGTT"});
+				
+				// Add Dreamwalker abilities from the feat
+				state.addFeature({
+					name: "Dreamwalk",
+					source: "TGTT",
+					featureType: "Optional",
+					description: "You can create small portals in the Dreamtime..."
+				});
+				
+				state.addFeature({
+					name: "Dreamwatch",
+					source: "TGTT",
+					featureType: "Optional",
+					description: "You can perceive the waking world while in the Dreamtime..."
+				});
+				
+				expect(state.hasFeature("Dreamwalk")).toBe(true);
+				expect(state.hasFeature("Dreamwatch")).toBe(true);
+			});
+			
+			it("should integrate Dreamwalker abilities with Lucid Focus Die if present", () => {
+				// Add Dreamwalker class (which gets Lucid Focus Die)
+				state.addClass({name: "Dreamwalker", source: "TGTT", level: 5, hitDice: "d8"});
+				
+				// Also take Dreamer feat to get additional abilities
+				state.addFeat({name: "Dreamer", source: "TGTT"});
+				
+				const calcs = state.getFeatureCalculations();
+				
+				// Should have both Dreamwalker class calculations and Dreamer feat
+				expect(calcs.lucidFocusDie).toBe("1d8"); // Level 5 Dreamwalker
+				expect(calcs.hasDreamerFeat).toBe(true);
+			});
+		});
+		
+		describe("Spell Scribing Adept", () => {
+			it("should be recognized as a TGTT feat (basic tracking)", () => {
+				state.addFeat({name: "Spell Scribing Adept", source: "TGTT"});
+				
+				expect(state.hasFeat("Spell Scribing Adept")).toBe(true);
+			});
+			
+			// Note: Full spellbook functionality is deferred for future implementation
+			// The basic feat tracking works, but the spellbook subsystem is not yet implemented
+		});
+	});
+
+	// =========================================================================
+	// TGTT BATTLE TACTICS TESTS
+	// Test the fighter optional features from Traveler's Guide to Thelemar
+	// =========================================================================
+	describe("TGTT Battle Tactics", () => {
+		
+		describe("Detection", () => {
+			it("should detect BT optional features", () => {
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+					description: "When standing 5+ ft above enemy, +2 to ranged attacks"
+				});
+				
+				expect(state.hasBattleTactics()).toBe(true);
+			});
+			
+			it("should return false when no BT features", () => {
+				state.addFeature({
+					name: "Some Other Feature",
+					source: "TGTT",
+					featureType: "Class",
+					description: "Not a battle tactic"
+				});
+				
+				expect(state.hasBattleTactics()).toBe(false);
+			});
+			
+			it("should get list of learned Battle Tactics", () => {
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				state.addFeature({
+					name: "Sweeping Blows",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const tactics = state.getBattleTactics();
+				expect(tactics.length).toBe(2);
+				expect(tactics.map(t => t.name)).toContain("High Ground");
+				expect(tactics.map(t => t.name)).toContain("Sweeping Blows");
+			});
+		});
+		
+		describe("Attack Bonuses", () => {
+			it("should provide +2 ranged conditional from High Ground", () => {
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const mods = state.getConditionalAttackModifiers("ranged");
+				expect(mods.length).toBe(1);
+				expect(mods[0].value).toBe(2);
+				expect(mods[0].source).toBe("High Ground");
+				expect(mods[0].condition).toBe("when 5+ ft above enemy");
+			});
+			
+			it("should provide +2 melee conditional from Sweeping Blows", () => {
+				state.addFeature({
+					name: "Sweeping Blows",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const mods = state.getConditionalAttackModifiers("melee");
+				expect(mods.length).toBe(1);
+				expect(mods[0].value).toBe(2);
+				expect(mods[0].source).toBe("Sweeping Blows");
+				expect(mods[0].condition).toBe("when 5+ ft below enemy");
+			});
+			
+			it("should provide +2 melee conditional from Hammer and Anvil", () => {
+				state.addFeature({
+					name: "Hammer and Anvil",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const mods = state.getConditionalAttackModifiers("melee");
+				expect(mods.length).toBe(1);
+				expect(mods[0].value).toBe(2);
+				expect(mods[0].source).toBe("Hammer and Anvil");
+			});
+			
+			it("should provide +2 melee conditional from Flanking", () => {
+				state.addFeature({
+					name: "Flanking",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const mods = state.getConditionalAttackModifiers("melee");
+				expect(mods.length).toBe(1);
+				expect(mods[0].value).toBe(2);
+				expect(mods[0].source).toBe("Flanking");
+			});
+			
+			it("should return all conditionals when attackType is null", () => {
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				state.addFeature({
+					name: "Sweeping Blows",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const allMods = state.getConditionalAttackModifiers(null);
+				expect(allMods.length).toBe(2);
+			});
+		});
+		
+		describe("Feature Calculations", () => {
+			it("should set hasBattleTactics flag", () => {
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasBattleTactics).toBe(true);
+			});
+			
+			it("should track specific tactics with hasX flags", () => {
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				state.addFeature({
+					name: "Charging",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasHighGround).toBe(true);
+				expect(calcs.highGroundBonus).toBe(2);
+				expect(calcs.hasCharging).toBe(true);
+			});
+			
+			it("should collect conditional attack modifiers in calculations", () => {
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				state.addFeature({
+					name: "Sweeping Blows",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.conditionalAttackModifiers).toBeDefined();
+				expect(calcs.conditionalAttackModifiers.ranged.length).toBe(1);
+				expect(calcs.conditionalAttackModifiers.melee.length).toBe(1);
+				expect(calcs.conditionalAttackModifiers.all.length).toBe(2);
+			});
+		});
+		
+		describe("Fighter Level Prerequisites", () => {
+			it("should check Fighter level for Daring Feint (level 9)", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5, hitDice: "d10"});
+				state.addFeature({
+					name: "Daring Feint",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasDaringFeint).toBe(true);
+				expect(calcs.daringFeintAvailable).toBeUndefined(); // Not available at level 5
+			});
+			
+			it("should enable Daring Feint at Fighter level 9", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 9, hitDice: "d10"});
+				state.addFeature({
+					name: "Daring Feint",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasDaringFeint).toBe(true);
+				expect(calcs.daringFeintAvailable).toBe(true);
+				expect(calcs.daringFeintCritRange).toBe(19);
+			});
+			
+			it("should enable Eye of the Storm at Fighter level 7", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 7, hitDice: "d10"});
+				state.addFeature({
+					name: "Eye of the Storm",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasEyeOfTheStorm).toBe(true);
+				expect(calcs.eyeOfTheStormAvailable).toBe(true);
+			});
+			
+			it("should enable Dying Surge at Fighter level 5", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5, hitDice: "d10"});
+				state.addFeature({
+					name: "Dying Surge",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasDyingSurge).toBe(true);
+				expect(calcs.dyingSurgeAvailable).toBe(true);
+			});
+			
+			it("should NOT enable Dying Surge at Fighter level 4", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 4, hitDice: "d10"});
+				state.addFeature({
+					name: "Dying Surge",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasDyingSurge).toBe(true);
+				expect(calcs.dyingSurgeAvailable).toBeUndefined();
+			});
+			
+			it("should use meetsBattleTacticPrerequisite helper", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 7, hitDice: "d10"});
+				
+				expect(state.meetsBattleTacticPrerequisite(5)).toBe(true);
+				expect(state.meetsBattleTacticPrerequisite(7)).toBe(true);
+				expect(state.meetsBattleTacticPrerequisite(9)).toBe(false);
+				expect(state.meetsBattleTacticPrerequisite(null)).toBe(true);
+			});
+		});
+		
+		describe("Combat Reactions", () => {
+			it("should list available combat reactions", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 9, hitDice: "d10"});
+				state.addFeature({
+					name: "Daring Feint",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				state.addFeature({
+					name: "Last Ditch Evasion",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const reactions = state.getAvailableCombatReactions();
+				expect(reactions.length).toBe(2);
+				expect(reactions.map(r => r.name)).toContain("Daring Feint");
+				expect(reactions.map(r => r.name)).toContain("Last Ditch Evasion");
+			});
+			
+			it("should exclude reactions that don't meet level prerequisites", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 6, hitDice: "d10"});
+				state.addFeature({
+					name: "Eye of the Storm", // Requires level 7
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				state.addFeature({
+					name: "Dying Surge", // Requires level 5
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const reactions = state.getAvailableCombatReactions();
+				// Only Dying Surge should be available (level 5 req met at level 6)
+				expect(reactions.length).toBe(1);
+				expect(reactions[0].name).toBe("Dying Surge");
+			});
+			
+			it("should include reaction details", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 10, hitDice: "d10"});
+				state.addFeature({
+					name: "Sheathing the Sword",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const reactions = state.getAvailableCombatReactions();
+				expect(reactions.length).toBe(1);
+				expect(reactions[0].name).toBe("Sheathing the Sword");
+				expect(reactions[0].trigger).toBe("let enemy attack auto-hit");
+				expect(reactions[0].effect).toBe("reaction attack with advantage, crits on 19-20");
+				expect(reactions[0].source).toBe("Sheathing the Sword");
+			});
+		});
+		
+		describe("Critical Range", () => {
+			it("should return default crit range of 20", () => {
+				expect(state.getCriticalRange()).toBe(20);
+			});
+			
+			it("should return Champion Fighter crit range", () => {
+				state.addClass({
+					name: "Fighter",
+					source: "PHB",
+					level: 3,
+					hitDice: "d10",
+					subclass: {name: "Champion", shortName: "Champion", source: "PHB"}
+				});
+				
+				// Champion gets 19-20 crit at level 3
+				expect(state.getCriticalRange()).toBe(19);
+			});
+			
+			it("should return improved crit range for high-level Champion", () => {
+				state.addClass({
+					name: "Fighter",
+					source: "PHB",
+					level: 15,
+					hitDice: "d10",
+					subclass: {name: "Champion", shortName: "Champion", source: "PHB"}
+				});
+				
+				// Champion gets 18-20 crit at level 15
+				expect(state.getCriticalRange()).toBe(18);
+			});
+		});
+		
+		describe("Integration", () => {
+			it("should work with multiclass Fighter", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5, hitDice: "d10"});
+				state.addClass({name: "Rogue", source: "PHB", level: 3, hitDice: "d8"});
+				
+				state.addFeature({
+					name: "Dying Surge",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				const calcs = state.getFeatureCalculations();
+				// Fighter level is 5, so Dying Surge should be available
+				expect(calcs.dyingSurgeAvailable).toBe(true);
+			});
+			
+			it("should combine with Combat Methods system", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5, hitDice: "d10"});
+				
+				// Add a Battle Tactic
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				
+				// Add a Combat Method
+				state.addFeature({
+					name: "Disarming Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1BM"],
+				});
+				
+				// Both systems should work
+				expect(state.hasBattleTactics()).toBe(true);
+				expect(state.usesCombatSystem()).toBe(true);
+				
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasBattleTactics).toBe(true);
+				expect(calcs.hasHighGround).toBe(true);
+			});
 		});
 	});
 });
