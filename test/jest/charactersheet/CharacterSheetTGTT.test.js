@@ -4982,73 +4982,110 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 		describe("Wizard Subclasses", () => {
 			
 			describe("Order of the Animal Accomplice", () => {
-				beforeEach(() => {
+				it("should calculate Improved Familiar stats at level 3", () => {
+					state.addClass({
+						name: "Wizard",
+						source: "TGTT",
+						level: 3,
+						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasImprovedFamiliar).toBe(true);
+					expect(calcs.familiarIntelligence).toBe(8 + 2); // 8 + prof(2)
+					expect(calcs.familiarMaxHp).toBe(3 * 3); // 3 × level
+					expect(calcs.familiarProfBonus).toBe(2); // Prof bonus at level 3
+				});
+				
+				it("should scale familiar Intelligence with proficiency bonus", () => {
+					state.addClass({
+						name: "Wizard",
+						source: "TGTT",
+						level: 10,
+						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.familiarIntelligence).toBe(8 + 4); // 8 + prof(4) at level 10
+				});
+				
+				it("should scale familiar HP with wizard level", () => {
 					state.addClass({
 						name: "Wizard",
 						source: "TGTT",
 						level: 14,
 						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
 					});
-				});
-				
-				it("should grant Improved Familiar at level 3", () => {
-					state.addFeature({
-						name: "Improved Familiar",
-						source: "TGTT",
-						featureType: "Subclass",
-						className: "Wizard",
-						subclassName: "Order of the Animal Accomplice",
-						level: 3,
-						description: "You learn the Find Familiar spell. Your familiar becomes more capable and can take more forms."
-					});
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Improved Familiar")).toBe(true);
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.familiarMaxHp).toBe(3 * 14); // 42 HP
 				});
 				
-				it("should grant Wizard's Apprentice at level 6", () => {
-					state.addFeature({
-						name: "Wizard's Apprentice",
+				it("should calculate Wizard's Apprentice features at level 6", () => {
+					state.addClass({
+						name: "Wizard",
 						source: "TGTT",
-						featureType: "Subclass",
-						className: "Wizard",
-						subclassName: "Order of the Animal Accomplice",
 						level: 6,
-						description: "Your familiar can now assist you in spellcasting."
+						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
 					});
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Wizard's Apprentice")).toBe(true);
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasWizardsApprentice).toBe(true);
+					expect(calcs.familiarCanCastCantrips).toBe(true);
+					expect(calcs.familiarCantripsUseWizardDc).toBe(true);
+					expect(calcs.familiarPocketDimensionWeight).toBe(20); // 20 lb
 				});
 				
-				it("should grant Shared Senses at level 10", () => {
-					state.addFeature({
-						name: "Shared Senses",
+				it("should NOT have Wizard's Apprentice before level 6", () => {
+					state.addClass({
+						name: "Wizard",
 						source: "TGTT",
-						featureType: "Subclass",
-						className: "Wizard",
-						subclassName: "Order of the Animal Accomplice",
+						level: 5,
+						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasWizardsApprentice).toBeFalsy();
+				});
+				
+				it("should calculate Shared Senses at level 10", () => {
+					state.addClass({
+						name: "Wizard",
+						source: "TGTT",
 						level: 10,
-						description: "You can perceive through your familiar's senses with greater clarity."
+						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
 					});
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Shared Senses")).toBe(true);
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasSharedSenses).toBe(true);
+					expect(calcs.sharedSensesRange).toBe(100); // 100 ft
+					expect(calcs.canCastThroughFamiliar).toBe(true);
 				});
 				
-				it("should grant Tiny Wizard capstone at level 14", () => {
-					state.addFeature({
-						name: "Tiny Wizard",
+				it("should calculate Tiny Wizard at level 14", () => {
+					state.addClass({
+						name: "Wizard",
 						source: "TGTT",
-						featureType: "Subclass",
-						className: "Wizard",
-						subclassName: "Order of the Animal Accomplice",
 						level: 14,
-						description: "Your familiar can now cast spells on its own."
+						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
 					});
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Tiny Wizard")).toBe(true);
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasTinyWizard).toBe(true);
+					expect(calcs.familiarMaxSpellLevel).toBe(4);
+					expect(calcs.familiarUsesWizardSlots).toBe(true);
+				});
+				
+				it("should NOT have Tiny Wizard before level 14", () => {
+					state.addClass({
+						name: "Wizard",
+						source: "TGTT",
+						level: 13,
+						subclass: {name: "Order of the Animal Accomplice", shortName: "Animal Accomplice", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasTinyWizard).toBeFalsy();
 				});
 			});
 		});
@@ -5183,129 +5220,425 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			});
 			
 			describe("College of Surrealism", () => {
-				beforeEach(() => {
+				it("should calculate Lucid Insight WIS save bonus at level 3", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 3,
+						subclass: {name: "College of Surrealism", shortName: "Surrealism", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasLucidInsight).toBe(true);
+					expect(calcs.lucidInsightWisSaveBonus).toBe(3); // CHA mod
+				});
+				
+				it("should scale Lucid Insight bonus with CHA", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 6,
+						subclass: {name: "College of Surrealism", shortName: "Surrealism", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 20); // +5 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.lucidInsightWisSaveBonus).toBe(5);
+				});
+				
+				it("should calculate Warped Reality save DC at level 3", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 3,
+						subclass: {name: "College of Surrealism", shortName: "Surrealism", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3 CHA mod
+					// Proficiency at level 3 = +2
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasWarpedReality).toBe(true);
+					expect(calcs.warpedRealityUses).toBe(1);
+					expect(calcs.warpedRealitySaveDc).toBe(8 + 2 + 3); // 8 + prof + CHA
+				});
+				
+				it("should calculate Canvas of the Mind perception DC at level 6", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 6,
+						subclass: {name: "College of Surrealism", shortName: "Surrealism", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 18); // +4 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasCanvasOfTheMind).toBe(true);
+					expect(calcs.canvasOfTheMindUses).toBe(1);
+					expect(calcs.canvasOfTheMindPerceptionDc).toBe(10 + 4); // 10 + CHA
+				});
+				
+				it("should NOT have Canvas of the Mind before level 6", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 5,
+						subclass: {name: "College of Surrealism", shortName: "Surrealism", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasCanvasOfTheMind).toBeFalsy();
+				});
+				
+				it("should calculate Guiding Whispers at level 14", () => {
 					state.addClass({
 						name: "Bard",
 						source: "TGTT",
 						level: 14,
 						subclass: {name: "College of Surrealism", shortName: "Surrealism", source: "TGTT"}
 					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasGuidingWhispers).toBe(true);
+					expect(calcs.guidingWhispersUses).toBe(1);
 				});
 				
-				it("should grant Lucid Insight at level 3", () => {
-					state.addFeature({
-						name: "Lucid Insight",
+				it("should apply Lucid Insight save bonus via aggregator", () => {
+					state.addClass({
+						name: "Bard",
 						source: "TGTT",
-						featureType: "Subclass",
-						className: "Bard",
-						subclassName: "College of Surrealism",
 						level: 3,
-						description: "You gain insight into the surreal nature of reality."
+						subclass: {name: "College of Surrealism", shortName: "Surrealism", source: "TGTT"}
 					});
+					state.setAbilityBase("cha", 16); // +3 CHA mod
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Lucid Insight")).toBe(true);
-				});
-				
-				it("should grant Warped Reality at level 3", () => {
-					state.addFeature({
-						name: "Warped Reality",
-						source: "TGTT",
-						featureType: "Subclass",
-						className: "Bard",
-						subclassName: "College of Surrealism",
-						level: 3,
-						description: "You can bend the perception of reality around you."
-					});
-					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Warped Reality")).toBe(true);
-				});
-				
-				it("should grant Canvas of the Mind at level 6", () => {
-					state.addFeature({
-						name: "Canvas of the Mind",
-						source: "TGTT",
-						featureType: "Subclass",
-						className: "Bard",
-						subclassName: "College of Surrealism",
-						level: 6,
-						description: "You harness the ethereal energies of the Dreamtime to shape illusions and perceptions on the battlefield."
-					});
-					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Canvas of the Mind")).toBe(true);
-				});
-				
-				it("should grant Guiding Whispers capstone at level 14", () => {
-					state.addFeature({
-						name: "Guiding Whispers",
-						source: "TGTT",
-						featureType: "Subclass",
-						className: "Bard",
-						subclassName: "College of Surrealism",
-						level: 14,
-						description: "You've become a master empath. As an action, you can choose a single creature and manipulate their feelings."
-					});
-					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Guiding Whispers")).toBe(true);
+					const calcs = state.getFeatureCalculations();
+					const effects = calcs._effects || [];
+					const saveBonus = effects.find(e => e.type === "saveBonus" && e.ability === "wis");
+					expect(saveBonus).toBeDefined();
+					expect(saveBonus.value).toBe(3);
+					expect(saveBonus.source).toBe("Lucid Insight");
 				});
 			});
 			
 			describe("College of Conduction", () => {
-				beforeEach(() => {
+				it("should calculate Maestro Principiante sub-features at level 3", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 3,
+						subclass: {name: "College of Conduction", shortName: "Conduction", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasMaestroPrincipiante).toBe(true);
+					expect(calcs.hasDivisi).toBe(true); // Roll initiative twice
+					expect(calcs.hasBatonMastery).toBe(true); // No V/M components
+					expect(calcs.hasNonSequitur).toBe(true); // Bardic Inspiration bonus
+				});
+				
+				it("should calculate Adagio targets at level 6 with CHA mod", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 6,
+						subclass: {name: "College of Conduction", shortName: "Conduction", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasAdagio).toBe(true);
+					expect(calcs.adagioMaxTargets).toBe(3); // CHA mod
+					expect(calcs.adagioRange).toBe(60);
+					expect(calcs.adagioSaveDc).toBe(8 + 3 + 3); // 8 + prof(3) + CHA(3)
+				});
+				
+				it("should enforce minimum 1 target for Adagio with low CHA", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 6,
+						subclass: {name: "College of Conduction", shortName: "Conduction", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 8); // -1 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.adagioMaxTargets).toBe(1); // Minimum 1
+				});
+				
+				it("should NOT have Adagio before level 6", () => {
+					state.addClass({
+						name: "Bard",
+						source: "TGTT",
+						level: 5,
+						subclass: {name: "College of Conduction", shortName: "Conduction", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasAdagio).toBeFalsy();
+				});
+				
+				it("should calculate Prestissimo targets and uses at level 14", () => {
 					state.addClass({
 						name: "Bard",
 						source: "TGTT",
 						level: 14,
 						subclass: {name: "College of Conduction", shortName: "Conduction", source: "TGTT"}
 					});
+					state.setAbilityBase("cha", 20); // +5 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasPrestissimo).toBe(true);
+					expect(calcs.prestissimoUses).toBe(1); // 1/long rest
+					expect(calcs.prestissimoMaxTargets).toBe(5); // CHA mod
+					expect(calcs.prestissimoRange).toBe(60);
+					expect(calcs.prestissimoDuration).toBe("1 minute");
 				});
 				
-				it("should grant Maestro Principiante at level 3", () => {
-					state.addFeature({
-						name: "Maestro Principiante",
+				it("should NOT have Prestissimo before level 14", () => {
+					state.addClass({
+						name: "Bard",
 						source: "TGTT",
-						featureType: "Subclass",
-						className: "Bard",
-						subclassName: "College of Conduction",
-						level: 3,
-						description: "You begin to conduct the battlefield like an orchestra."
+						level: 13,
+						subclass: {name: "College of Conduction", shortName: "Conduction", source: "TGTT"}
 					});
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Maestro Principiante")).toBe(true);
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasPrestissimo).toBeFalsy();
+				});
+			});
+		});
+		
+		// -----------------------------------------------------------------
+		// ROGUE SUBCLASSES (Calculation Tests)
+		// -----------------------------------------------------------------
+		describe("Rogue Subclasses - Calculations", () => {
+			
+			describe("Belly Dancer", () => {
+				it("should calculate Dance of the Country uses based on proficiency bonus", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 3,
+						subclass: {name: "The Belly Dancer", shortName: "Belly Dancer", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasDanceOfTheCountry).toBe(true);
+					expect(calcs.danceOfTheCountryUses).toBe(2); // Level 3 = prof +2
+					
+					state.addClass({name: "Rogue", source: "TGTT", level: 9});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.danceOfTheCountryUses).toBe(4); // Level 9 = prof +4
+					
+					state.addClass({name: "Rogue", source: "TGTT", level: 17});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.danceOfTheCountryUses).toBe(6); // Level 17 = prof +6
 				});
 				
-				it("should grant Adagio at level 6", () => {
-					state.addFeature({
-						name: "Adagio",
-						source: "TGTT",
-						featureType: "Subclass",
-						className: "Bard",
-						subclassName: "College of Conduction",
-						level: 6,
-						description: "You can slow the tempo of combat."
+				it("should calculate Snake Charmer AC bonus based on CHA modifier", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 3,
+						subclass: {name: "The Belly Dancer", shortName: "Belly Dancer", source: "TGTT"}
 					});
+					state.setAbilityBase("cha", 16); // +3 mod
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Adagio")).toBe(true);
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasSnakeCharmer).toBe(true);
+					expect(calcs.danceAcBonus).toBe(3);
+					
+					// With CHA 8 (-1), minimum should be 1
+					state.setAbilityBase("cha", 8);
+					calcs = state.getFeatureCalculations();
+					expect(calcs.danceAcBonus).toBe(1);
 				});
 				
-				it("should grant Prestissimo capstone at level 14", () => {
-					state.addFeature({
-						name: "Prestissimo",
-						source: "TGTT",
-						featureType: "Subclass",
-						className: "Bard",
-						subclassName: "College of Conduction",
-						level: 14,
-						description: "You can accelerate the tempo to a frenzy."
+				it("should calculate Hypnotic Movement DC at level 9", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 9,
+						subclass: {name: "The Belly Dancer", shortName: "Belly Dancer", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3 mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasHypnoticMovement).toBe(true);
+					// DC = 8 + prof(4) + CHA(3) = 15
+					expect(calcs.hypnoticMovementDc).toBe(15);
+				});
+				
+				it("should calculate Percussive Strike DC at level 17", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 17,
+						subclass: {name: "The Belly Dancer", shortName: "Belly Dancer", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 18); // +4 mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasPercussiveStrike).toBe(true);
+					// DC = 8 + prof(6) + CHA(4) = 18
+					expect(calcs.percussiveStrikeDc).toBe(18);
+				});
+				
+				it("should not grant level 9+ features before appropriate level", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 8,
+						subclass: {name: "The Belly Dancer", shortName: "Belly Dancer", source: "TGTT"}
 					});
 					
-					const features = state.getFeatures();
-					expect(features.some(f => f.name === "Prestissimo")).toBe(true);
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasHypnoticMovement).toBeFalsy();
+					expect(calcs.hasPercussiveStrike).toBeFalsy();
+				});
+			});
+		});
+		
+		// -----------------------------------------------------------------
+		// FIGHTER SUBCLASSES (Calculation Tests)
+		// -----------------------------------------------------------------
+		describe("Fighter Subclasses - Calculations", () => {
+			
+			describe("The Warder", () => {
+				it("should calculate Guardian's Bond range progression", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 3,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasGuardiansBond).toBe(true);
+					expect(calcs.warderBondRange).toBe(30); // 30ft at level 3
+					
+					state.addClass({name: "Fighter", source: "TGTT", level: 7});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.warderBondRange).toBe(60); // 60ft at level 7+
+				});
+				
+				it("should calculate Warding Senses uses at level 7", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 7,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasWardingSenses).toBe(true);
+					expect(calcs.wardingSensesUses).toBe(3); // Level 7 = prof +3
+				});
+				
+				it("should grant saving throw advantages at appropriate levels", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 3,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasConSaveAdvantageWhileBonded).toBe(true); // Level 3
+					expect(calcs.hasStrSaveAdvantage).toBeFalsy(); // Level 10
+					
+					state.addClass({name: "Fighter", source: "TGTT", level: 10});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.hasUnwaveringDefense).toBe(true);
+					expect(calcs.hasStrSaveAdvantage).toBe(true);
+					
+					state.addClass({name: "Fighter", source: "TGTT", level: 18});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.hasIndomitableGuardian).toBe(true);
+					expect(calcs.hasDexSaveAdvantage).toBe(true);
+				});
+				
+				it("should calculate Guardian's Vengeance damage at level 15", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 15,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					state.setAbilityBase("str", 18); // +4 mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasGuardiansVengeance).toBe(true);
+					expect(calcs.guardiansVengeanceDamage).toBe(4);
+				});
+			});
+		});
+		
+		// -----------------------------------------------------------------
+		// PALADIN SUBCLASSES (Calculation Tests)
+		// -----------------------------------------------------------------
+		describe("Paladin Subclasses - Calculations", () => {
+			
+			describe("Oath of Bastion", () => {
+				it("should calculate Bulwark of Faith temp HP at level 3", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 3,
+						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3 mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasBulwarkOfFaith).toBe(true);
+					// Temp HP = level(3) + CHA(3) = 6
+					expect(calcs.bulwarkOfFaithTempHp).toBe(6);
+				});
+				
+				it("should calculate Rebuke the Aggressor DC at level 3", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 3,
+						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3 mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasRebukeTheAggressor).toBe(true);
+					// DC = 8 + prof(2) + CHA(3) = 13
+					expect(calcs.rebukeTheAggressorDc).toBe(13);
+				});
+				
+				it("should calculate Fortifying Aura range progression", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 7,
+						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+					});
+					
+					let calcs = state.getFeatureCalculations();
+					expect(calcs.hasFortifyingAura).toBe(true);
+					expect(calcs.fortifyingAuraRange).toBe(10); // 10ft at level 7
+					expect(calcs.fortifyingAuraTempHp).toBe(3); // prof +3
+					
+					state.addClass({name: "Paladin", source: "TGTT", level: 18});
+					calcs = state.getFeatureCalculations();
+					expect(calcs.fortifyingAuraRange).toBe(30); // 30ft at level 18
+					expect(calcs.fortifyingAuraTempHp).toBe(6); // prof +6
+				});
+				
+				it("should grant Indomitable Guardian (BPS resistance) at level 15", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 15,
+						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasIndomitableGuardianPaladin).toBe(true);
+				});
+				
+				it("should calculate Eternal Bastion damage reduction at level 20", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 20,
+						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 18); // +4 mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasEternalBastion).toBe(true);
+					expect(calcs.eternalBastionDamageReduction).toBe(4);
+					expect(calcs.eternalBastionDuration).toBe(1); // 1 minute
+				});
+				
+				it("should not grant level 7+ features before appropriate level", () => {
+					state.addClass({
+						name: "Paladin", source: "TGTT", level: 6,
+						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasFortifyingAura).toBeFalsy();
+					expect(calcs.hasIndomitableGuardianPaladin).toBeFalsy();
+					expect(calcs.hasEternalBastion).toBeFalsy();
 				});
 			});
 		});

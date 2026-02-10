@@ -6017,6 +6017,46 @@ class CharacterSheetState {
 								}
 								break;
 							}
+
+							// =====================================================================
+							// TGTT Belly Dancer (Rogue Subclass)
+							// =====================================================================
+							case "The Belly Dancer": {
+								const chaMod = this.getAbilityMod("cha");
+
+								// Dance of the Country (level 3) - perform a traditional dance
+								// Uses = proficiency bonus, regained on short or long rest
+								if (level >= 3) {
+									calculations.hasDanceOfTheCountry = true;
+									calculations.danceOfTheCountryUses = profBonus;
+								}
+
+								// Snake Charmer (level 3) - bonus AC when dancing
+								// AC bonus = CHA modifier (minimum 1)
+								if (level >= 3) {
+									calculations.hasSnakeCharmer = true;
+									calculations.danceAcBonus = Math.max(1, chaMod);
+								}
+
+								// Hypnotic Movement (level 9) - mesmerize with movements
+								if (level >= 9) {
+									calculations.hasHypnoticMovement = true;
+									calculations.hypnoticMovementDc = 8 + profBonus + chaMod - exhaustionPenalty;
+								}
+
+								// Inspiring Dance (level 13) - grant benefits to allies
+								if (level >= 13) {
+									calculations.hasInspiringDance = true;
+								}
+
+								// Percussive Strike (level 17) - stunning strike with dance
+								// DC = 8 + proficiency + CHA
+								if (level >= 17) {
+									calculations.hasPercussiveStrike = true;
+									calculations.percussiveStrikeDc = 8 + profBonus + chaMod - exhaustionPenalty;
+								}
+								break;
+							}
 						}
 					}
 					break;
@@ -7372,6 +7412,51 @@ class CharacterSheetState {
 						}
 					}
 
+					// =========================================================
+					// TGTT SUBCLASS: OATH OF BASTION
+					// =========================================================
+					if (cls.subclass?.shortName === "Bastion") {
+						const chaMod = this.getAbilityMod("cha");
+
+						// Channel Divinity: Bulwark of Faith (level 3)
+						// Grant temporary HP to allies
+						if (level >= 3) {
+							calculations.hasBulwarkOfFaith = true;
+							// Temp HP granted = paladin level + CHA modifier
+							calculations.bulwarkOfFaithTempHp = level + Math.max(0, chaMod);
+						}
+
+						// Channel Divinity: Rebuke the Aggressor (level 3)
+						if (level >= 3) {
+							calculations.hasRebukeTheAggressor = true;
+							calculations.rebukeTheAggressorDc = 8 + profBonus + chaMod - exhaustionPenalty;
+						}
+
+						// Fortifying Aura (level 7) - aura that grants temp HP
+						// Range: 10 feet at 7, 30 feet at 18
+						if (level >= 7) {
+							calculations.hasFortifyingAura = true;
+							calculations.fortifyingAuraRange = level >= 18 ? 30 : 10;
+							// Temp HP = proficiency bonus at start of turn
+							calculations.fortifyingAuraTempHp = profBonus;
+						}
+
+						// Indomitable Guardian (level 15) - resistance to BPS from nonmagical weapons
+						if (level >= 15) {
+							calculations.hasIndomitableGuardianPaladin = true;
+							// This grants resistance to bludgeoning, piercing, slashing from nonmagical attacks
+						}
+
+						// Eternal Bastion (level 20) - ultimate defensive form
+						if (level >= 20) {
+							calculations.hasEternalBastion = true;
+							// Damage reduction = CHA modifier (minimum 1)
+							calculations.eternalBastionDamageReduction = Math.max(1, chaMod);
+							// Duration: 1 minute
+							calculations.eternalBastionDuration = 1;
+						}
+					}
+
 					break;
 				}
 				case "Fighter": {
@@ -7721,6 +7806,54 @@ class CharacterSheetState {
 						// Runic Juggernaut (level 18): Become Huge, reach increases
 						if (level >= 18) {
 							calculations.hasRunicJuggernaut = true;
+						}
+					}
+
+					// =========================================================
+					// TGTT SUBCLASS: THE WARDER
+					// =========================================================
+					if (cls.subclass?.shortName === "Warder") {
+						const strMod = this.getAbilityMod("str");
+
+						// Guardian's Bond (level 3) - magical link to bonded creature
+						// Range starts at 30 feet, extends to 60 feet at level 7
+						if (level >= 3) {
+							calculations.hasGuardiansBond = true;
+							calculations.warderBondRange = level >= 7 ? 60 : 30;
+							// Advantage on CON saves while bonded
+							calculations.hasConSaveAdvantageWhileBonded = true;
+						}
+
+						// Warding Aura (level 3) - protective presence
+						if (level >= 3) {
+							calculations.hasWardingAura = true;
+						}
+
+						// Warding Senses (level 7) - detect threats to bonded creature
+						// Uses = proficiency bonus per long rest
+						if (level >= 7) {
+							calculations.hasWardingSenses = true;
+							calculations.wardingSensesUses = profBonus;
+						}
+
+						// Unwavering Defense (level 10) - advantage on STR saves
+						if (level >= 10) {
+							calculations.hasUnwaveringDefense = true;
+							calculations.hasStrSaveAdvantage = true;
+						}
+
+						// Guardian's Vengeance (level 15) - reaction strike when ward takes damage
+						if (level >= 15) {
+							calculations.hasGuardiansVengeance = true;
+							// Extra damage = STR modifier
+							calculations.guardiansVengeanceDamage = Math.max(0, strMod);
+						}
+
+						// Indomitable Guardian (level 18) - ultimate protector
+						// Advantage on DEX saves
+						if (level >= 18) {
+							calculations.hasIndomitableGuardian = true;
+							calculations.hasDexSaveAdvantage = true;
 						}
 					}
 
@@ -9772,6 +9905,74 @@ class CharacterSheetState {
 								break;
 							}
 
+							// =====================================================================
+							// TGTT College of Surrealism (Bard Subclass)
+							// =====================================================================
+							case "College of Surrealism": {
+								// Lucid Insight (level 3) - Add CHA modifier to Wisdom saving throws
+								calculations.hasLucidInsight = true;
+								calculations.lucidInsightWisSaveBonus = chaMod;
+
+								// Warped Reality (level 3) - 1/short rest, costs Bardic Inspiration die
+								calculations.hasWarpedReality = true;
+								calculations.warpedRealityUses = 1; // 1 per short rest
+								// Duration = Bardic Inspiration die result in rounds
+								calculations.warpedRealitySaveDc = 8 + profBonus + chaMod - exhaustionPenalty;
+
+								// Canvas of the Mind (level 6) - 1/long rest, create illusions
+								if (level >= 6) {
+									calculations.hasCanvasOfTheMind = true;
+									calculations.canvasOfTheMindUses = 1; // 1 per long rest
+									calculations.canvasOfTheMindPerceptionDc = 10 + chaMod;
+								}
+
+								// Guiding Whispers (level 14) - 1/short or long rest
+								if (level >= 14) {
+									calculations.hasGuidingWhispers = true;
+									calculations.guidingWhispersUses = 1; // 1 per short or long rest
+									// Can also use Canvas of the Mind as bonus action with Bardic Inspiration
+								}
+								break;
+							}
+
+							// =====================================================================
+							// TGTT College of Conduction (Bard Subclass)
+							// =====================================================================
+							case "College of Conduction": {
+								// Maestro Principiante (level 3) - three sub-features
+								calculations.hasMaestroPrincipiante = true;
+
+								// Divisi: Roll initiative twice, choose result each round
+								calculations.hasDivisi = true;
+
+								// Baton Mastery: Cast bard spells without V/M components (no gold cost)
+								calculations.hasBatonMastery = true;
+
+								// Non Sequitur: When giving Bardic Inspiration, target uses reaction to move + attack/cantrip
+								calculations.hasNonSequitur = true;
+
+								// Adagio (level 6) - Slow effect on targets
+								if (level >= 6) {
+									calculations.hasAdagio = true;
+									// Max targets = CHA modifier (minimum 1)
+									calculations.adagioMaxTargets = Math.max(1, chaMod);
+									calculations.adagioRange = 60;
+									// Save DC is standard spell save DC
+									calculations.adagioSaveDc = 8 + profBonus + chaMod - exhaustionPenalty;
+								}
+
+								// Prestissimo (level 14) - Haste effect on targets
+								if (level >= 14) {
+									calculations.hasPrestissimo = true;
+									calculations.prestissimoUses = 1; // 1 per long rest
+									// Max targets = CHA modifier (minimum 1)
+									calculations.prestissimoMaxTargets = Math.max(1, chaMod);
+									calculations.prestissimoRange = 60;
+									calculations.prestissimoDuration = "1 minute";
+								}
+								break;
+							}
+
 							default:
 								// Unrecognized subclass - set generic flag
 								calculations[`has${subclassName.replace(/\s+/g, "")}`] = true;
@@ -10648,6 +10849,43 @@ class CharacterSheetState {
 								if (level >= 14) {
 									calculations.hasEventHorizon = true;
 									calculations.eventHorizonRange = 30;
+								}
+								break;
+							}
+
+							// =====================================================================
+							// TGTT Order of the Animal Accomplice (Wizard Subclass)
+							// =====================================================================
+							case "Order of the Animal Accomplice": {
+								const is2024 = source === "XPHB" || source === "TGTT";
+
+								// Improved Familiar (level 3) - Free Find Familiar, enhanced stats
+								calculations.hasImprovedFamiliar = true;
+								calculations.familiarIntelligence = 8 + profBonus;
+								calculations.familiarMaxHp = 3 * level;
+								// Familiar gains prof bonus to AC, saves, and skills when proficient
+								calculations.familiarProfBonus = profBonus;
+
+								// Wizard's Apprentice (level 6) - Familiar can cast cantrips
+								if (level >= 6) {
+									calculations.hasWizardsApprentice = true;
+									calculations.familiarCanCastCantrips = true;
+									calculations.familiarCantripsUseWizardDc = true;
+									calculations.familiarPocketDimensionWeight = 20; // 20 lb storage
+								}
+
+								// Shared Senses (level 10) - Cast spells through familiar
+								if (level >= 10) {
+									calculations.hasSharedSenses = true;
+									calculations.sharedSensesRange = 100; // ft
+									calculations.canCastThroughFamiliar = true;
+								}
+
+								// Tiny Wizard (level 14) - Familiar can cast spells up to 4th level
+								if (level >= 14) {
+									calculations.hasTinyWizard = true;
+									calculations.familiarMaxSpellLevel = 4;
+									calculations.familiarUsesWizardSlots = true;
 								}
 								break;
 							}
@@ -11561,6 +11799,16 @@ class CharacterSheetState {
 			});
 		}
 
+		// College of Surrealism - Lucid Insight: add CHA to WIS saves
+		if (calculations.hasLucidInsight && calculations.lucidInsightWisSaveBonus && !alreadyProcessed("Lucid Insight")) {
+			effects.push({
+				type: "saveBonus",
+				ability: "wis",
+				value: calculations.lucidInsightWisSaveBonus,
+				source: "Lucid Insight",
+			});
+		}
+
 		// =========================================================
 		// ARTIFICER FEATURES
 		// =========================================================
@@ -11715,6 +11963,19 @@ class CharacterSheetState {
 			case "saveProficiency": {
 				this._addClassFeatureSaveProficiency(effect.ability);
 				return `${effect.source}: ${effect.ability.toUpperCase()} save proficiency`;
+			}
+
+			case "saveBonus": {
+				// Add a bonus to a specific saving throw (e.g., Lucid Insight: CHA to WIS saves)
+				const saveTarget = `save:${effect.ability}`;
+				this._addClassFeatureModifier({
+					name: effect.source,
+					type: saveTarget,
+					value: effect.value,
+					note: `From ${effect.source}`,
+					enabled: true,
+				});
+				return `${effect.source}: +${effect.value} to ${effect.ability.toUpperCase()} saves`;
 			}
 
 			// ===== SKILLS =====
