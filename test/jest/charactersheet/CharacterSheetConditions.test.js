@@ -951,8 +951,9 @@ describe("CharacterSheetConditions", () => {
 	// ==========================================================================
 	describe("Homebrew Condition Support", () => {
 		it("should support registering conditions from homebrew sources", () => {
-			CharacterSheetState.registerCustomCondition("Dazed", {
-				name: "Dazed",
+			// Note: "Dazed" is now a built-in TGTT condition, so we test with a custom name
+			CharacterSheetState.registerCustomCondition("Bewildered", {
+				name: "Bewildered",
 				icon: "😵",
 				description: "You can take only one Action or Bonus Action on your turn.",
 				effects: [
@@ -961,7 +962,7 @@ describe("CharacterSheetConditions", () => {
 				source: "HB",
 			});
 
-			const effects = CharacterSheetState.getConditionEffects("Dazed");
+			const effects = CharacterSheetState.getConditionEffects("Bewildered");
 			expect(effects).not.toBeNull();
 			expect(effects.source).toBe("HB");
 		});
@@ -1072,6 +1073,270 @@ describe("CharacterSheetConditions", () => {
 					expect(def.description).toBeDefined();
 					expect(def.description.length).toBeGreaterThan(0);
 				}
+			});
+		});
+	});
+
+	// ==========================================================================
+	// TGTT (Traveler's Guide to Thelemar) Conditions
+	// ==========================================================================
+	describe("TGTT Conditions", () => {
+		describe("Dazed Condition (TGTT-specific)", () => {
+			it("should have definition for Dazed", () => {
+				const def = CharacterSheetState.getConditionEffects("Dazed");
+				expect(def).toBeDefined();
+				expect(def.name).toBe("Dazed");
+				expect(def.source).toBe("TGTT");
+			});
+
+			it("should include action economy restriction note", () => {
+				const def = CharacterSheetState.getConditionEffects("Dazed");
+				const notes = def.effects.filter(e => e.type === "note");
+				expect(notes.some(n => n.value.includes("Move or Action"))).toBe(true);
+			});
+
+			it("should include no bonus actions note", () => {
+				const def = CharacterSheetState.getConditionEffects("Dazed");
+				const notes = def.effects.filter(e => e.type === "note");
+				expect(notes.some(n => n.value.includes("Bonus Action"))).toBe(true);
+			});
+
+			it("should include no reactions note", () => {
+				const def = CharacterSheetState.getConditionEffects("Dazed");
+				const notes = def.effects.filter(e => e.type === "note");
+				expect(notes.some(n => n.value.includes("Reaction"))).toBe(true);
+			});
+
+			it("should apply Dazed effects when added", () => {
+				state.addCondition({name: "Dazed", source: "TGTT"});
+				expect(state.hasCondition("Dazed")).toBe(true);
+
+				const effects = state.getActiveStateEffects();
+				const actionEconomy = effects.find(e => e.type === "actionEconomy");
+				expect(actionEconomy).toBeDefined();
+			});
+		});
+
+		describe("Choked Condition (TGTT-specific)", () => {
+			it("should have definition for Choked", () => {
+				const def = CharacterSheetState.getConditionEffects("Choked");
+				expect(def).toBeDefined();
+				expect(def.name).toBe("Choked");
+				expect(def.source).toBe("TGTT");
+			});
+
+			it("should include verbal spell constraint", () => {
+				const def = CharacterSheetState.getConditionEffects("Choked");
+				const verbalConstraint = def.effects.find(e => e.type === "verbalConstraint");
+				expect(verbalConstraint).toBeDefined();
+				expect(verbalConstraint.value).toBe("check");
+			});
+
+			it("should include breath holding note", () => {
+				const def = CharacterSheetState.getConditionEffects("Choked");
+				const notes = def.effects.filter(e => e.type === "note");
+				expect(notes.some(n => n.value.includes("breath") || n.value.includes("Breath"))).toBe(true);
+			});
+
+			it("should apply Choked effects when added", () => {
+				state.addCondition({name: "Choked", source: "TGTT"});
+				expect(state.hasCondition("Choked")).toBe(true);
+
+				const effects = state.getActiveStateEffects();
+				const verbalConstraint = effects.find(e => e.type === "verbalConstraint");
+				expect(verbalConstraint).toBeDefined();
+			});
+		});
+
+		describe("TGTT Grappled (with somatic constraint)", () => {
+			it("should use TGTT version when source is TGTT", () => {
+				const def = CharacterSheetState.getConditionEffects("Grappled", "TGTT");
+				expect(def).toBeDefined();
+				expect(def.source).toBe("TGTT");
+			});
+
+			it("should include somatic spell constraint", () => {
+				const def = CharacterSheetState.getConditionEffects("Grappled", "TGTT");
+				const somaticConstraint = def.effects.find(e => e.type === "somaticConstraint");
+				expect(somaticConstraint).toBeDefined();
+				expect(somaticConstraint.value).toBe("check");
+			});
+
+			it("should still set speed to 0", () => {
+				const def = CharacterSheetState.getConditionEffects("Grappled", "TGTT");
+				const setSpeed = def.effects.find(e => e.type === "setSpeed");
+				expect(setSpeed).toBeDefined();
+				expect(setSpeed.value).toBe(0);
+			});
+
+			it("should apply TGTT effects when added with TGTT source", () => {
+				state.addCondition({name: "Grappled", source: "TGTT"});
+
+				const effects = state.getActiveStateEffects();
+				const somaticConstraint = effects.find(e => e.type === "somaticConstraint");
+				expect(somaticConstraint).toBeDefined();
+			});
+		});
+
+		describe("TGTT Restrained (with somatic ban)", () => {
+			it("should use TGTT version when source is TGTT", () => {
+				const def = CharacterSheetState.getConditionEffects("Restrained", "TGTT");
+				expect(def).toBeDefined();
+				expect(def.source).toBe("TGTT");
+			});
+
+			it("should ban somatic spells entirely", () => {
+				const def = CharacterSheetState.getConditionEffects("Restrained", "TGTT");
+				const somaticConstraint = def.effects.find(e => e.type === "somaticConstraint");
+				expect(somaticConstraint).toBeDefined();
+				expect(somaticConstraint.value).toBe("banned");
+			});
+
+			it("should include all standard restrained effects", () => {
+				const def = CharacterSheetState.getConditionEffects("Restrained", "TGTT");
+				
+				const setSpeed = def.effects.find(e => e.type === "setSpeed");
+				expect(setSpeed).toBeDefined();
+				
+				const attackDisadv = def.effects.find(e => e.type === "disadvantage" && e.target === "attack");
+				expect(attackDisadv).toBeDefined();
+				
+				const dexSaveDisadv = def.effects.find(e => e.type === "disadvantage" && e.target === "save:dex");
+				expect(dexSaveDisadv).toBeDefined();
+			});
+		});
+
+		describe("TGTT Frightened (with verbal constraint)", () => {
+			it("should use TGTT version when source is TGTT", () => {
+				const def = CharacterSheetState.getConditionEffects("Frightened", "TGTT");
+				expect(def).toBeDefined();
+				expect(def.source).toBe("TGTT");
+			});
+
+			it("should include verbal spell constraint", () => {
+				const def = CharacterSheetState.getConditionEffects("Frightened", "TGTT");
+				const verbalConstraint = def.effects.find(e => e.type === "verbalConstraint");
+				expect(verbalConstraint).toBeDefined();
+				expect(verbalConstraint.value).toBe("check");
+			});
+		});
+
+		describe("TGTT Poisoned (with concentration disadvantage)", () => {
+			it("should use TGTT version when source is TGTT", () => {
+				const def = CharacterSheetState.getConditionEffects("Poisoned", "TGTT");
+				expect(def).toBeDefined();
+				expect(def.source).toBe("TGTT");
+			});
+
+			it("should include concentration save disadvantage", () => {
+				const def = CharacterSheetState.getConditionEffects("Poisoned", "TGTT");
+				const concDisadv = def.effects.find(e => 
+					e.type === "disadvantage" && e.target?.includes("concentration")
+				);
+				expect(concDisadv).toBeDefined();
+			});
+
+			it("should still have attack and check disadvantage", () => {
+				const def = CharacterSheetState.getConditionEffects("Poisoned", "TGTT");
+				const attackDisadv = def.effects.find(e => e.type === "disadvantage" && e.target === "attack");
+				const checkDisadv = def.effects.find(e => e.type === "disadvantage" && e.target === "check");
+				expect(attackDisadv).toBeDefined();
+				expect(checkDisadv).toBeDefined();
+			});
+		});
+
+		describe("TGTT Slowed (different from 2024)", () => {
+			it("should use TGTT version when source is TGTT", () => {
+				const def = CharacterSheetState.getConditionEffects("Slowed", "TGTT");
+				expect(def).toBeDefined();
+				expect(def.source).toBe("TGTT");
+			});
+
+			it("should give attacks against advantage (not AC penalty like 2024)", () => {
+				const def = CharacterSheetState.getConditionEffects("Slowed", "TGTT");
+				const attacksAgainstAdv = def.effects.find(e => 
+					e.type === "advantage" && e.target === "attacksAgainst"
+				);
+				expect(attacksAgainstAdv).toBeDefined();
+				
+				// Should NOT have the 2024-style AC penalty
+				const acPenalty = def.effects.find(e => 
+					e.type === "bonus" && e.target === "ac"
+				);
+				expect(acPenalty).toBeUndefined();
+			});
+
+			it("should have speed multiplier and DEX save disadvantage", () => {
+				const def = CharacterSheetState.getConditionEffects("Slowed", "TGTT");
+				const speedMult = def.effects.find(e => e.type === "speedMultiplier");
+				const dexSaveDisadv = def.effects.find(e => 
+					e.type === "disadvantage" && e.target === "save:dex"
+				);
+				expect(speedMult).toBeDefined();
+				expect(dexSaveDisadv).toBeDefined();
+			});
+		});
+
+		describe("TGTT Hidden (with combat advantages)", () => {
+			it("should have definition for Hidden", () => {
+				const def = CharacterSheetState.getConditionEffects("Hidden", "TGTT");
+				expect(def).toBeDefined();
+			});
+
+			it("should grant attack advantage", () => {
+				const def = CharacterSheetState.getConditionEffects("Hidden", "TGTT");
+				const attackAdv = def.effects.find(e => 
+					e.type === "advantage" && e.target === "attack"
+				);
+				expect(attackAdv).toBeDefined();
+			});
+
+			it("should grant disadvantage on attacks against", () => {
+				const def = CharacterSheetState.getConditionEffects("Hidden", "TGTT");
+				const attacksAgainstDisadv = def.effects.find(e => 
+					e.type === "disadvantage" && e.target === "attacksAgainst"
+				);
+				expect(attacksAgainstDisadv).toBeDefined();
+			});
+		});
+
+		describe("TGTT Undetected", () => {
+			it("should have definition for Undetected", () => {
+				const def = CharacterSheetState.getConditionEffects("Undetected");
+				expect(def).toBeDefined();
+				expect(def.name).toBe("Undetected");
+			});
+		});
+
+		describe("Source-based condition selection", () => {
+			it("should use standard Grappled when source is not TGTT", () => {
+				const standardDef = CharacterSheetState.getConditionEffects("Grappled");
+				const tgttDef = CharacterSheetState.getConditionEffects("Grappled", "TGTT");
+				
+				// Standard should not have somatic constraint
+				const standardSomatic = standardDef.effects.find(e => e.type === "somaticConstraint");
+				expect(standardSomatic).toBeUndefined();
+				
+				// TGTT should have somatic constraint
+				const tgttSomatic = tgttDef.effects.find(e => e.type === "somaticConstraint");
+				expect(tgttSomatic).toBeDefined();
+			});
+
+			it("should use standard Slowed when source is not TGTT", () => {
+				const standardDef = CharacterSheetState.getConditionEffects("Slowed");
+				const tgttDef = CharacterSheetState.getConditionEffects("Slowed", "TGTT");
+				
+				// Standard 2024 Slowed has AC penalty
+				const standardAcBonus = standardDef.effects.find(e => 
+					e.type === "bonus" && e.target === "ac"
+				);
+				expect(standardAcBonus).toBeDefined();
+				
+				// TGTT Slowed has advantage on attacks against
+				const tgttAttacksAgainst = tgttDef.effects.find(e => 
+					e.type === "advantage" && e.target === "attacksAgainst"
+				);
+				expect(tgttAttacksAgainst).toBeDefined();
 			});
 		});
 	});
