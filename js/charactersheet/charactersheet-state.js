@@ -2544,6 +2544,20 @@ class CharacterSheetState {
 			exertionCurrent: 0, // Current exertion points
 			exertionMax: 0, // Max exertion = 2 × proficiency bonus
 
+			// Primal Focus (TGTT Ranger) - Predator/Prey mode switching
+			primalFocus: {
+				mode: "predator", // "predator" or "prey"
+				switchesUsed: 0, // Times switched since last long rest
+				huntersDodgeUsed: 0, // Hunter's Dodge uses (Prey focus)
+				quarryTargetId: null, // Current Focused Quarry target ID (Predator focus)
+			},
+
+			// Focus Pool (TGTT Dreamwalker) - Resource for dream abilities
+			focusPool: {
+				current: 0, // Current focus points
+				lucidFocusActive: false, // Whether Lucid Focus die is currently active
+			},
+
 			// Attacks (weapons + custom)
 			attacks: [], // [{name, attackBonus, damage, damageType, range, properties}]
 
@@ -3233,11 +3247,25 @@ class CharacterSheetState {
 	getSenses () {
 		const senseMods = this._data.customModifiers.senses || {};
 		const baseSenses = this._data.senses || {};
+		
+		// Also check named modifiers for sense bonuses
+		const getNamedModifierBonus = (senseType) => {
+			return this._data.namedModifiers
+				?.filter(m => m.enabled && m.type === `sense:${senseType}`)
+				?.reduce((total, m) => {
+					// If setValue is true, take the max value; otherwise add
+					if (m.setValue) {
+						return Math.max(total, m.value || 0);
+					}
+					return total + (m.value || 0);
+				}, 0) || 0;
+		};
+		
 		return {
-			darkvision: Math.max(baseSenses.darkvision || 0, senseMods.darkvision || 0),
-			blindsight: Math.max(baseSenses.blindsight || 0, senseMods.blindsight || 0),
-			tremorsense: Math.max(baseSenses.tremorsense || 0, senseMods.tremorsense || 0),
-			truesight: Math.max(baseSenses.truesight || 0, senseMods.truesight || 0),
+			darkvision: Math.max(baseSenses.darkvision || 0, senseMods.darkvision || 0) + getNamedModifierBonus("darkvision"),
+			blindsight: Math.max(baseSenses.blindsight || 0, senseMods.blindsight || 0) + getNamedModifierBonus("blindsight"),
+			tremorsense: Math.max(baseSenses.tremorsense || 0, senseMods.tremorsense || 0) + getNamedModifierBonus("tremorsense"),
+			truesight: Math.max(baseSenses.truesight || 0, senseMods.truesight || 0) + getNamedModifierBonus("truesight"),
 		};
 	}
 
@@ -3249,7 +3277,18 @@ class CharacterSheetState {
 	getSense (sense) {
 		const senseMods = this._data.customModifiers.senses || {};
 		const baseSenses = this._data.senses || {};
-		return Math.max(baseSenses[sense] || 0, senseMods[sense] || 0);
+		
+		// Get bonus from named modifiers
+		const namedBonus = this._data.namedModifiers
+			?.filter(m => m.enabled && m.type === `sense:${sense}`)
+			?.reduce((total, m) => {
+				if (m.setValue) {
+					return Math.max(total, m.value || 0);
+				}
+				return total + (m.value || 0);
+			}, 0) || 0;
+		
+		return Math.max(baseSenses[sense] || 0, senseMods[sense] || 0) + namedBonus;
 	}
 
 	/**
@@ -5860,6 +5899,124 @@ class CharacterSheetState {
 								}
 								break;
 							}
+
+							// =====================================================================
+							// TGTT Trickster (Rogue Subclass)
+							// =====================================================================
+							case "Trickster": {
+								const dexMod = this.getAbilityMod("dex");
+								const intMod = this.getAbilityMod("int");
+
+								// Trickster's Shenanigans (level 3)
+								if (level >= 3) {
+									calculations.hasTricksterShenanigans = true;
+
+									// Trickster Dice: 4 at 3, 5 at 9, 6 at 13, 7 at 17 (d8s)
+									calculations.tricksterDiceCount = level >= 17 ? 7 : level >= 13 ? 6 : level >= 9 ? 5 : 4;
+									calculations.tricksterDieSize = "d8";
+
+									// Tricks Known: 3 at 3, 4 at 7, 5 at 10, 6 at 15, 7 at 19
+									calculations.tricksterTricksKnown = level >= 19 ? 7 : level >= 15 ? 6 : level >= 10 ? 5 : level >= 7 ? 4 : 3;
+
+									// Trick DC: 8 + proficiency + DEX or INT (use max)
+									calculations.trickDcBase = 8 + profBonus + Math.max(dexMod, intMod) - exhaustionPenalty;
+								}
+
+								// Quick Hands (level 3, enhanced at 6 and 10)
+								if (level >= 3) {
+									calculations.hasQuickHands = true;
+									calculations.quickHandsNonmagical = true;
+								}
+								if (level >= 6) {
+									calculations.quickHandsMagicPotions = true;
+								}
+								if (level >= 10) {
+									calculations.quickHandsMagicItems = true;
+								}
+
+								// Sticky Hands (level 9)
+								if (level >= 9) {
+									calculations.hasStickyHands = true;
+								}
+
+								// The Switch (level 13)
+								if (level >= 13) {
+									calculations.hasTheSwitch = true;
+									calculations.theSwitchRange = 10;
+								}
+
+								// Master of Mischief (level 17)
+								if (level >= 17) {
+									calculations.hasMasterOfMischief = true;
+								}
+								break;
+							}
+
+							// =====================================================================
+							// TGTT Gambler (Rogue Subclass) - Unique Rolling Spellcasting
+							// =====================================================================
+							case "Gambler": {
+								// Gambler's Tools (level 3) - tool proficiencies and weapon options
+								if (level >= 3) {
+									calculations.hasGamblerTools = true;
+									// Cards, dice, coins as weapons
+									calculations.gamblerCoinsWeapon = { damage: "1d4", type: "piercing", range: "60/100" };
+									calculations.gamblerDiceWeapon = { damage: "1d6", type: "bludgeoning", range: "60/200" };
+									calculations.gamblerCardsWeapon = { damage: "1d8", type: "slashing", range: "30/60" };
+								}
+
+								// Gambler's Spellcasting (level 3) - UNIQUE: rolling modifier
+								if (level >= 3) {
+									calculations.hasGamblerSpellcasting = true;
+									calculations.gamblerSpellList = "warlock";
+
+									// Cantrips: 3 at level 3, 4 at level 10
+									calculations.gamblerCantripsKnown = level >= 10 ? 4 : 3;
+
+									// Spells prepared: 2d4 (or 3d6 at 13+) - this is a RANGE, not fixed
+									calculations.gamblerSpellsPreparedDice = level >= 13 ? "3d6" : "2d4";
+
+									// Gambling Modifier: roll 1d6 (or 2d4 at 13+) per spell cast
+									calculations.gamblerModifierDice = level >= 13 ? "2d4" : "1d6";
+
+									// Spell DC and attack are: 8 + prof + (roll) and prof + (roll)
+									// We show the formula, not a static value
+									calculations.gamblerSpellDcFormula = `8 + ${profBonus} + ${calculations.gamblerModifierDice}`;
+									calculations.gamblerSpellAttackFormula = `${profBonus} + ${calculations.gamblerModifierDice}`;
+
+									// 1/3 caster spell slots
+									const thirdCasterLevel = Math.floor(level / 3);
+									calculations.gamblerSpellSlots = {
+										level1: thirdCasterLevel >= 1 ? (thirdCasterLevel >= 2 ? (thirdCasterLevel >= 3 ? 4 : 3) : 2) : 0,
+										level2: thirdCasterLevel >= 4 ? (thirdCasterLevel >= 7 ? 3 : 2) : 0,
+										level3: thirdCasterLevel >= 7 ? (thirdCasterLevel >= 10 ? 3 : 2) : 0,
+										level4: thirdCasterLevel >= 10 ? 1 : 0,
+									};
+								}
+
+								// Gambler's Folly (level 3) - risk when casting
+								if (level >= 3) {
+									calculations.hasGamblerFolly = true;
+								}
+
+								// Extra Luck (level 9) - proficiency bonus uses
+								if (level >= 9) {
+									calculations.hasExtraLuck = true;
+									calculations.extraLuckUses = profBonus;
+								}
+
+								// Versatile Gambler (level 13) - already handled in spellcasting above
+								if (level >= 13) {
+									calculations.hasVersatileGambler = true;
+								}
+
+								// Master of Fortune (level 17)
+								if (level >= 17) {
+									calculations.hasMasterOfFortune = true;
+									calculations.masterOfFortuneUses = profBonus; // Treat nat 1 as nat 20
+								}
+								break;
+							}
 						}
 					}
 					break;
@@ -6329,6 +6486,103 @@ class CharacterSheetState {
 						}
 					}
 
+					// ===== TGTT MONK SUBCLASSES =====
+
+					// Way of Debilitation
+					if (cls.subclass?.shortName === "Debilitation") {
+						// Precise Strike (level 3): 2 ki, debilitating effects
+						calculations.hasPreciseStrike = true;
+						calculations.preciseStrikeCost = 2;
+						// Methods known: 3 at 3, 4 at 6, 5 at 11, 6 at 17
+						calculations.preciseStrikeMethodsKnown = level >= 17 ? 6 : level >= 11 ? 5 : level >= 6 ? 4 : 3;
+						// DC for each method varies: some are kiDc, some kiDc-2, kiDc-4, kiDc-6
+						calculations.preciseStrikeDcBase = kiDc;
+
+						// Deflect Strike (level 6): Deflect Missiles works for melee too
+						if (level >= 6) {
+							calculations.hasDeflectStrike = true;
+						}
+
+						// Brace (level 11): 1 ki to negate critical hit
+						if (level >= 11) {
+							calculations.hasBrace = true;
+							calculations.braceCost = 1;
+						}
+
+						// Battlefield Terror (level 17): frightened + speed 0 on failed Precise Strike
+						if (level >= 17) {
+							calculations.hasBattlefieldTerror = true;
+							calculations.battlefieldTerrorDc = kiDc;
+							calculations.battlefieldTerrorRange = 30;
+						}
+					}
+
+					// Way of The Shackled
+					if (cls.subclass?.shortName === "Shackled") {
+						// Hidden Arts (level 3): Acrobatics + Performance proficiency, DEX for Performance
+						calculations.hasHiddenArts = true;
+
+						// Rhythmic Step (level 3): 2 ki, bonus action, 1 minute
+						calculations.hasRhythmicStep = true;
+						calculations.rhythmicStepCost = 2;
+
+						// Balanced Whirlwind (level 6): immune to prone + counter-attack while Rhythmic Step
+						if (level >= 6) {
+							calculations.hasBalancedWhirlwind = true;
+						}
+
+						// Pendulum Swing (level 11): self-flanking + disadvantage on OA while Rhythmic Step
+						if (level >= 11) {
+							calculations.hasPendulumSwing = true;
+						}
+
+						// Maestro Kick (level 17): 1 ki miss→hit, 2 ki extra reaction
+						if (level >= 17) {
+							calculations.hasMaestroKick = true;
+							calculations.maestroKickMissToHitCost = 1;
+							calculations.maestroKickExtraReactionCost = 2;
+						}
+					}
+
+					// Way of the Five Animals
+					if (cls.subclass?.shortName === "Five Animals") {
+						// Animal Style (level 3): choose primary animal
+						calculations.hasAnimalStyle = true;
+						// Animal Versatility (level 3): 1 skill proficiency choice
+						calculations.hasAnimalVersatility = true;
+
+						// Crane parry: +2 AC for 1 ki (reaction)
+						calculations.craneParryAcBonus = 2;
+						calculations.craneParryCost = 1;
+
+						// Primal Fury (level 6): enhanced animal powers
+						if (level >= 6) {
+							calculations.hasPrimalFuryAnimal = true;
+							// Tiger's frightened roar: WIS save, ki DC
+							calculations.tigerRoarDc = kiDc;
+							calculations.tigerRoarRange = 10;
+						}
+
+						// Beastial Connection (level 11): deeper animal style mastery
+						if (level >= 11) {
+							calculations.hasBeastialConnection = true;
+							// Crane: Deflect Missiles uses 2d10 instead of 1d10
+							calculations.craneDeflectDice = "2d10";
+						}
+
+						// Feral Mastery (level 17): ultimate animal style
+						if (level >= 17) {
+							calculations.hasFeralMastery = true;
+							// Snake: +2d4 poison on unarmed, poisoned condition on Flurry
+							calculations.snakePoisonDamage = "2d4";
+							// Mantis: crit on 18-20
+							calculations.mantisCritRange = 18;
+							// Tiger: martial arts die becomes 2d6, force damage
+							calculations.tigerMartialArtsDie = "2d6";
+							calculations.tigerDamageType = "force";
+						}
+					}
+
 					break;
 				}
 				case "Barbarian": {
@@ -6633,6 +6887,40 @@ class CharacterSheetState {
 								// Travel Along the Tree (level 14) - mass teleport
 								if (level >= 14) {
 									calculations.hasTravelAlongTheTree = true;
+								}
+								break;
+							}
+							// ===== TGTT BARBARIAN SUBCLASSES =====
+							case "chained fury":
+							case "path of the chained fury": {
+								// Chain Mastery - damage scales with level
+								// 1d8 at level 3, 1d10 at level 6, 1d12 at level 10, 2d6 at level 14
+								calculations.hasChainMastery = true;
+								if (level >= 14) {
+									calculations.chainDamageDie = "2d6";
+								} else if (level >= 10) {
+									calculations.chainDamageDie = "1d12";
+								} else if (level >= 6) {
+									calculations.chainDamageDie = "1d10";
+								} else {
+									calculations.chainDamageDie = "1d8";
+								}
+
+								// Chained Rage (level 6) - chain attacks while raging
+								if (level >= 6) {
+									calculations.hasChainedRage = true;
+									calculations.chainReach = 15; // feet
+								}
+
+								// Furious Chains (level 10) - bonus action attack with chain
+								if (level >= 10) {
+									calculations.hasFuriousChains = true;
+								}
+
+								// Wrath of the Chained (level 14) - extra damage on critical
+								if (level >= 14) {
+									calculations.hasWrathOfTheChained = true;
+									calculations.chainCritDamage = calculations.chainDamageDie;
 								}
 								break;
 							}
@@ -8630,6 +8918,194 @@ class CharacterSheetState {
 								}
 								break;
 							}
+
+							// ===== TGTT CLERIC DOMAINS =====
+
+							case "beauty domain":
+							case "beauty": {
+								// Beautiful Distraction (level 3): reaction, 1 use per short/long rest
+								calculations.hasBeautifulDistraction = true;
+								calculations.beautifulDistractionUses = 1;
+
+								// Channel Divinity: All Eyes on Me (level 3): up to 5 creatures, WIS save
+								calculations.hasAllEyesOnMe = true;
+
+								// Blinding Beauty (level 6): upgrade to All Eyes on Me
+								if (level >= 6) {
+									calculations.hasBlindingBeauty = true;
+								}
+
+								// Potent Spellcasting (level 8): +WIS to cantrip damage
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Heavenly Beauty (level 17): attackers must make WIS save
+								if (level >= 17) {
+									calculations.hasHeavenlyBeauty = true;
+									calculations.heavenlyBeautyDc = 8 + profBonus + wisMod - exhaustionPenalty;
+								}
+								break;
+							}
+
+							case "blood domain":
+							case "blood": {
+								// Bonus Proficiencies (level 3): martial weapons (slashing/piercing)
+								calculations.hasBloodMartialProficiency = true;
+
+								// Blood Affinity (level 3): WIS mod uses per long rest
+								calculations.hasBloodAffinity = true;
+								calculations.bloodAffinityUses = Math.max(1, wisMod);
+
+								// Channel Divinity: Blood Curse (level 3): restrain, CON save
+								calculations.hasBloodCurse = true;
+
+								// Sanguine Boost (level 6): share Blood Affinity
+								if (level >= 6) {
+									calculations.hasSanguineBoost = true;
+								}
+
+								// Divine Strike (level 8): 1d8/2d8 necrotic on weapon hit
+								if (level >= 8) {
+									calculations.hasDivineStrike = true;
+									calculations.divineStrikeDamage = level >= 14 ? "2d8" : "1d8";
+									calculations.divineStrikeDamageType = "necrotic";
+								}
+
+								// Vampiric Mastery (level 17): regain spell slot on kill
+								if (level >= 17) {
+									calculations.hasVampiricMastery = true;
+								}
+								break;
+							}
+
+							case "darkness domain":
+							case "darkness": {
+								// Eyes of Night (level 3): 90ft darkvision, sees in magical darkness
+								calculations.hasDarknessEyesOfNight = true;
+								calculations.darknessEyesOfNightRange = 90;
+
+								// Shroud of Darkness (level 3): reaction, WIS mod uses per long rest
+								calculations.hasShroudOfDarkness = true;
+								calculations.shroudOfDarknessUses = Math.max(1, wisMod);
+
+								// Channel Divinity: Cloying Darkness (level 3): 2d10+level necrotic
+								calculations.hasCloyingDarkness = true;
+								calculations.cloyingDarknessDamage = `2d10+${level}`;
+
+								// Channel Divinity: Night Terrors (level 6): 8d4 psychic + frightened
+								if (level >= 6) {
+									calculations.hasNightTerrors = true;
+									calculations.nightTerrorsDamage = "8d4";
+								}
+
+								// Potent Spellcasting (level 8): +WIS to cantrip damage
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Night Supreme (level 17): 60ft aura, disadvantage on saves
+								if (level >= 17) {
+									calculations.hasNightSupreme = true;
+									calculations.nightSupremeRange = 60;
+								}
+								break;
+							}
+
+							case "lust domain":
+							case "lust": {
+								// Bonus Proficiencies (level 3): Deception + Persuasion
+								calculations.hasLustSkillProficiency = true;
+
+								// Deepest Desires (level 3): WIS mod uses
+								calculations.hasDeepestDesires = true;
+								calculations.deepestDesiresUses = Math.max(1, wisMod);
+
+								// Channel Divinity: Impulsive Infatuation (level 3)
+								calculations.hasImpulsiveInfatuation = true;
+
+								// Enchanting Presence (level 6): impose disadvantage within 5ft
+								if (level >= 6) {
+									calculations.hasEnchantingPresence = true;
+								}
+
+								// Potent Spellcasting (level 8): +WIS to cantrip damage
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Supplicant of the Flesh (level 17): damage doesn't break charm
+								if (level >= 17) {
+									calculations.hasSupplicantOfTheFlesh = true;
+								}
+								break;
+							}
+
+							case "madness domain":
+							case "madness": {
+								// Shattered Mind (level 3): psychic resistance + immune to thought reading
+								calculations.hasShatteredMind = true;
+
+								// Words of Chaos (level 3): free vicious mockery cantrip
+								calculations.hasWordsOfChaos = true;
+
+								// Channel Divinity: Touch of Madness (level 3): incapacitate, WIS save
+								calculations.hasTouchOfMadness = true;
+
+								// Channel Divinity: Paranoia (level 6): 2d4 psychic/turn
+								if (level >= 6) {
+									calculations.hasParanoia = true;
+									calculations.paranoiaDamage = "2d4";
+								}
+
+								// Potent Spellcasting (level 8): +WIS to cantrip damage
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Mantle of Insanity (level 17): redirect attacks, WIS mod uses
+								if (level >= 17) {
+									calculations.hasMantleOfInsanity = true;
+									calculations.mantleOfInsanityUses = Math.max(1, wisMod);
+								}
+								break;
+							}
+
+							case "time domain":
+							case "time": {
+								// Chronological Interference (level 3): swap initiative, prof bonus uses
+								calculations.hasChronologicalInterference = true;
+								calculations.chronologicalInterferenceUses = profBonus;
+
+								// Right on Time (level 3): +WIS to initiative
+								calculations.hasRightOnTime = true;
+								calculations.rightOnTimeBonus = wisMod;
+
+								// Channel Divinity: Temporal Manipulation (level 3)
+								calculations.hasTemporalManipulation = true;
+
+								// Eyes of the Future Past (level 6): WIS mod uses
+								if (level >= 6) {
+									calculations.hasEyesOfFuturePast = true;
+									calculations.eyesOfFuturePastUses = Math.max(1, wisMod);
+								}
+
+								// Potent Spellcasting (level 8): +WIS to cantrip damage
+								if (level >= 8) {
+									calculations.hasPotentSpellcasting = true;
+									calculations.potentSpellcastingBonus = wisMod;
+								}
+
+								// Temporal Mastery (level 17): time stop, age control
+								if (level >= 17) {
+									calculations.hasTemporalMastery = true;
+								}
+								break;
+							}
 						}
 					}
 					break;
@@ -9252,6 +9728,50 @@ class CharacterSheetState {
 								break;
 							}
 
+							// =====================================================================
+							// TGTT College of Jesters (Bard Subclass)
+							// =====================================================================
+							case "College of Jesters": {
+								// Calculate Performance skill bonus for Act DC
+								// Performance = CHA mod + proficiency (+ expertise if chosen)
+								const performanceProfBonus = profBonus; // Guaranteed at level 3
+								const hasPerformanceExpertise = this.getSkillProficiency("performance") === 2;
+								const performanceExpertise = hasPerformanceExpertise ? profBonus : 0;
+								const performanceSkillBonus = chaMod + performanceProfBonus + performanceExpertise;
+
+								// Bonus Proficiencies (level 3) - Performance + choice of Acrobatics/Persuasion
+								calculations.hasJesterBonusProficiencies = true;
+
+								// Jester's Acts (level 3) - Acts Known: 3 at 3, 4 at 6, 5 at 14
+								calculations.hasJesterActs = true;
+								calculations.jesterActsKnown = level >= 14 ? 5 : level >= 6 ? 4 : 3;
+
+								// Act DC = 8 + Performance skill bonus (unique formula!)
+								calculations.jesterActDcBase = 8 + performanceSkillBonus - exhaustionPenalty;
+
+								// Gifted Acrobat (level 6) - climbing speed, escape grapple bonus action
+								if (level >= 6) {
+									calculations.hasGiftedAcrobat = true;
+									calculations.climbingSpeedEqualsWalking = true;
+									calculations.escapeGrappleBonusAction = true;
+									calculations.standFromProneCost = 10; // 10 ft instead of half speed
+								}
+
+								// Unparalleled Skill (level 6) - expertise in one skill
+								if (level >= 6) {
+									calculations.hasUnparalleledSkill = true;
+								}
+
+								// Jester's Privilege (level 14) - charm on Bardic Inspiration
+								if (level >= 14) {
+									calculations.hasJesterPrivilege = true;
+									calculations.jesterPrivilegeUses = 1; // Once per long rest
+									calculations.jesterPrivilegeRange = 60;
+									// DC is Performance check result (variable), not fixed
+								}
+								break;
+							}
+
 							default:
 								// Unrecognized subclass - set generic flag
 								calculations[`has${subclassName.replace(/\s+/g, "")}`] = true;
@@ -9261,35 +9781,95 @@ class CharacterSheetState {
 				}
 				case "Ranger": {
 					const source = cls.source || "PHB";
-					const isXPHB = source === "XPHB" || source === "TGTT";
+					const isTGTT = source === "TGTT";
+					const isXPHB = source === "XPHB";
+					const is2024Style = isXPHB || isTGTT; // Both share some 2024 mechanics
 					const wisMod = this.getAbilityMod("wis");
 
-					// Favored Foe damage (TCE optional feature replaces Favored Enemy)
+					// =====================================================================
+					// TGTT Ranger: Primal Focus (replaces Favored Enemy entirely)
+					// =====================================================================
+					if (isTGTT) {
+						calculations.hasPrimalFocus = true;
+
+						// Focus Switches progression: 1 (L1-5) → 2 (L6-9) → 3 (L10-13) → 4 (L14-19) → Unlimited (L20)
+						if (level >= 20) {
+							calculations.focusSwitchesMax = "Unlimited";
+							calculations.focusSwitchesMaxNum = 99; // For comparison purposes
+						} else if (level >= 14) {
+							calculations.focusSwitchesMax = 4;
+							calculations.focusSwitchesMaxNum = 4;
+						} else if (level >= 10) {
+							calculations.focusSwitchesMax = 3;
+							calculations.focusSwitchesMaxNum = 3;
+						} else if (level >= 6) {
+							calculations.focusSwitchesMax = 2;
+							calculations.focusSwitchesMaxNum = 2;
+						} else {
+							calculations.focusSwitchesMax = 1;
+							calculations.focusSwitchesMaxNum = 1;
+						}
+
+						// Focused Quarry damage scaling: 1d4 (L1-4) → 1d6 (L5-9) → 1d8 (L10-13) → 1d10 (L14+)
+						calculations.focusedQuarryDamage = level >= 14 ? "1d10" : level >= 10 ? "1d8" : level >= 5 ? "1d6" : "1d4";
+
+						// Hunter's Dodge uses (Prey focus) = proficiency bonus per long rest
+						calculations.huntersDodgeUses = profBonus;
+
+						// Focused Quarry range: 60 ft default, 90 ft at level 6
+						calculations.focusedQuarryRange = level >= 6 ? 90 : 60;
+
+						// Primal Focus Upgrades at 6, 10, 14
+						if (level >= 6) {
+							calculations.primalFocusUpgrade1 = true;
+						}
+						if (level >= 10) {
+							calculations.primalFocusUpgrade2 = true;
+						}
+						if (level >= 14) {
+							calculations.primalFocusUpgrade3 = true;
+						}
+
+						// Level 20: Apex Focus (unlimited switches, enhanced abilities)
+						if (level >= 20) {
+							calculations.hasApexFocus = true;
+						}
+
+						// TGTT Deft Explorer at level 1 (expertise + languages)
+						if (level >= 1) {
+							calculations.hasDeftExplorer = true;
+							calculations.hasCanny = true;
+							calculations.hasTracker = true; // WIS mod bonus to find tracks
+							calculations.trackerBonus = Math.max(1, wisMod);
+						}
+					}
+
+					// Favored Foe damage (TCE optional feature - NOT for TGTT)
 					// Increases at level 6 and 14
-					if (this.hasFavoredFoe()) {
+					if (!isTGTT && this.hasFavoredFoe()) {
 						const favoredFoeDamage = level >= 14 ? "1d8" : level >= 6 ? "1d6" : "1d4";
 						calculations.favoredFoeDamage = favoredFoeDamage;
 					}
 
-					// XPHB: Favored Enemy grants free Hunter's Mark casts
+					// XPHB (but NOT TGTT): Favored Enemy grants free Hunter's Mark casts
 					// 2 uses at level 1, 3 at level 9, 4 at level 13, 5 at level 17
-					if (isXPHB) {
+					if (isXPHB && !isTGTT) {
 						calculations.huntersMarkFreeUses = level >= 17 ? 5 : level >= 13 ? 4 : level >= 9 ? 3 : 2;
 						calculations.hasFavoredEnemy = true;
-					} else {
+					} else if (!isTGTT) {
 						// PHB: Favored Enemy at level 1
 						calculations.hasFavoredEnemy = level >= 1;
 					}
 
-					// Spellcasting - PHB starts at level 2, XPHB starts at level 1
-					if ((isXPHB && level >= 1) || (!isXPHB && level >= 2)) {
+					// Spellcasting - PHB starts at level 2, XPHB/TGTT starts at level 1
+					if ((is2024Style && level >= 1) || (!is2024Style && level >= 2)) {
 						calculations.hasSpellcasting = true;
 						calculations.spellSaveDc = 8 + profBonus + wisMod - exhaustionPenalty;
 						calculations.spellAttackBonus = profBonus + wisMod - exhaustionPenalty;
 
-						// Spells known (PHB) or Prepared spells (XPHB)
-						if (isXPHB) {
-							// XPHB uses prepared spells progression
+						// Spells known (PHB) or Prepared spells (XPHB/TGTT)
+						if (is2024Style) {
+							// XPHB/TGTT uses prepared spells progression
 							const preparedProgression = [2, 3, 4, 5, 6, 6, 7, 7, 9, 9, 10, 10, 11, 11, 12, 12, 14, 14, 15, 15];
 							calculations.preparedSpells = preparedProgression[Math.min(level - 1, 19)];
 						} else {
@@ -9300,20 +9880,20 @@ class CharacterSheetState {
 					}
 
 					// Natural Explorer (PHB level 1) - additional terrain at 6 and 10
-					if (!isXPHB && level >= 1) {
+					if (!is2024Style && level >= 1) {
 						calculations.hasNaturalExplorer = true;
 						calculations.favoredTerrains = level >= 10 ? 3 : level >= 6 ? 2 : 1;
 					}
 
 					// Deft Explorer (TCE/XPHB) - Canny at 1/2, Roving at 6, Tireless at 10
-					// In XPHB: Deft Explorer at level 2
-					if (isXPHB && level >= 2) {
+					// In XPHB: Deft Explorer at level 2 (TGTT gets it at level 1, handled above)
+					if (isXPHB && !isTGTT && level >= 2) {
 						calculations.hasDeftExplorer = true;
 						calculations.hasCanny = true; // Expertise in one skill
 					}
 
-					// Roving (XPHB level 6) - +10 speed, climb/swim speed
-					if (isXPHB && level >= 6) {
+					// Roving (XPHB level 6) - +10 speed, climb/swim speed (NOT TGTT, they have specialties)
+					if (isXPHB && !isTGTT && level >= 6) {
 						calculations.hasRoving = true;
 						calculations.rovingSpeedBonus = 10;
 					}
@@ -9324,7 +9904,8 @@ class CharacterSheetState {
 					}
 
 					// Primeval Awareness (PHB level 3) / Primal Awareness (TCE level 3)
-					if (!isXPHB && level >= 3) {
+					// TGTT doesn't have this - they have specialties instead
+					if (!is2024Style && level >= 3) {
 						calculations.hasPrimevalAwareness = true;
 					}
 
@@ -9334,48 +9915,78 @@ class CharacterSheetState {
 						calculations.attacksPerAction = 2;
 					}
 
-					// Land's Stride (PHB level 8)
-					if (!isXPHB && level >= 8) {
+					// Land's Stride (PHB level 8) - not in TGTT (they have different high-level features)
+					if (!is2024Style && level >= 8) {
 						calculations.hasLandsStride = true;
 					}
 
-					// Expertise (XPHB level 9) - 2 skills
-					if (isXPHB && level >= 9) {
+					// Expertise (XPHB level 9) - 2 skills (TGTT has different features)
+					if (isXPHB && !isTGTT && level >= 9) {
 						calculations.hasExpertise = true;
 						calculations.expertiseCount = 2;
 					}
 
+					// TGTT Unrivaled Pioneer (level 9) - advantage on initiative, can't be surprised
+					if (isTGTT && level >= 9) {
+						calculations.hasUnrivaledPioneer = true;
+						calculations.initiativeAdvantage = true;
+					}
+
 					// Hide in Plain Sight (PHB level 10) / Nature's Veil (TCE/XPHB level 10/14)
-					if (!isXPHB && level >= 10) {
+					if (!is2024Style && level >= 10) {
 						calculations.hasHideInPlainSight = true;
 					}
 
-					// Tireless (XPHB level 10) - temp HP and reduce exhaustion
-					if (isXPHB && level >= 10) {
+					// Tireless (XPHB level 10, TGTT level 5) - temp HP and reduce exhaustion
+					if ((isXPHB && level >= 10) || (isTGTT && level >= 5)) {
 						calculations.hasTireless = true;
 						calculations.tirelessTempHp = `1d8 + ${wisMod}`;
 						calculations.tirelessUses = profBonus;
 					}
 
 					// Relentless Hunter (XPHB level 13) - no concentration on Hunter's Mark
-					if (isXPHB && level >= 13) {
+					// TGTT doesn't have this (they have Infallible Bearing at level 13)
+					if (isXPHB && !isTGTT && level >= 13) {
 						calculations.hasRelentlessHunter = true;
 					}
 
+					// TGTT Infallible Bearing (level 13) - always know direction and location of last Quarry
+					if (isTGTT && level >= 13) {
+						calculations.hasInfallibleBearing = true;
+					}
+
 					// Vanish (PHB level 14) - bonus action Hide, can't be tracked
-					if (!isXPHB && level >= 14) {
+					if (!is2024Style && level >= 14) {
 						calculations.hasVanish = true;
 					}
 
+					// TGTT Penetrating Senses (level 14) - enhanced senses
+					if (isTGTT && level >= 14) {
+						calculations.hasPenetratingSenses = true;
+					}
+
 					// Nature's Veil (XPHB level 14) - uses per long rest equal to prof bonus
-					if (isXPHB && level >= 14) {
+					// TGTT doesn't have this (they have Penetrating Senses)
+					if (isXPHB && !isTGTT && level >= 14) {
 						calculations.hasNaturesVeil = true;
 						calculations.naturesVeilUses = profBonus;
 					}
 
 					// Precise Hunter (XPHB level 17) - advantage on attacks vs Hunter's Mark target
-					if (isXPHB && level >= 17) {
+					// TGTT doesn't have this (they have Apex Sentinel)
+					if (isXPHB && !isTGTT && level >= 17) {
 						calculations.hasPreciseHunter = true;
+					}
+
+					// TGTT Apex Sentinel (level 17) - enhanced tracking and combat
+					if (isTGTT && level >= 17) {
+						calculations.hasApexSentinel = true;
+					}
+
+					// TGTT Battle Instincts (level 18) - can't be surprised, advantage on initiative
+					if (isTGTT && level >= 18) {
+						calculations.hasBattleInstincts = true;
+						calculations.surpriseImmunity = true;
 					}
 
 					// Feral Senses (level 18) - attack unseen creatures without disadvantage
@@ -10234,6 +10845,75 @@ class CharacterSheetState {
 					}
 					break;
 				}
+				// =========================================================
+				// DREAMWALKER (TGTT Custom Homebrew Class)
+				// A unique class that manipulates dreams and reality
+				// =========================================================
+				case "Dreamwalker": {
+					const conMod = this.getAbilityMod("con");
+					
+					// Dream DC: 8 + proficiency + CON modifier
+					calculations.dreamDc = 8 + profBonus + conMod - exhaustionPenalty;
+					
+					// Lucid Focus die scaling: d6 (L1-4) → d8 (L5-8) → d10 (L9-13) → d12 (L14+)
+					if (level >= 14) {
+						calculations.lucidFocusDie = "1d12";
+						calculations.lucidFocusDieSize = 12;
+					} else if (level >= 9) {
+						calculations.lucidFocusDie = "1d10";
+						calculations.lucidFocusDieSize = 10;
+					} else if (level >= 5) {
+						calculations.lucidFocusDie = "1d8";
+						calculations.lucidFocusDieSize = 8;
+					} else {
+						calculations.lucidFocusDie = "1d6";
+						calculations.lucidFocusDieSize = 6;
+					}
+					
+					// Focus Pool: CON mod + proficiency bonus uses per long rest (minimum 1)
+					calculations.focusPoolMax = Math.max(1, conMod + profBonus);
+					calculations.hasFocusPool = true;
+					
+					// Dreambend DC: same as Dream DC
+					calculations.dreambendDc = calculations.dreamDc;
+					
+					// Level 1 Features
+					if (level >= 1) {
+						calculations.hasFocus = true;
+						calculations.hasLucidFocus = true;
+						calculations.hasDreamwalk = true;
+					}
+					
+					// Level 4: Focus Improvement (advantage on CON checks and saves)
+					if (level >= 4) {
+						calculations.hasFocusImprovement = true;
+						calculations.focusImprovementLevel = 1;
+					}
+					
+					// Level 9: Focus Improvement Upgrade (expertise on CON saves)
+					if (level >= 9) {
+						calculations.focusImprovementLevel = 2;
+						calculations.hasConExpertise = true;
+					}
+					
+					// Level 13: Greater Focus (advantage on all concentration checks)
+					if (level >= 13) {
+						calculations.hasGreaterFocus = true;
+					}
+					
+					// Level 17: Master Focus (can maintain concentration while incapacitated)
+					if (level >= 17) {
+						calculations.hasMasterFocus = true;
+					}
+					
+					// Level 20: Dream Master (reality bending at will)
+					if (level >= 20) {
+						calculations.hasDreamMaster = true;
+						calculations.focusPoolMax = "Unlimited";
+					}
+					
+					break;
+				}
 			}
 		});
 
@@ -10510,6 +11190,12 @@ class CharacterSheetState {
 			effects.push({ type: "toolProficiency", tool: "Poisoner's Kit", source: "Assassin" });
 		}
 
+		// Gambler - Gaming set proficiencies
+		if (calculations.hasGamblerTools && !alreadyProcessed("Gambler's Tools")) {
+			effects.push({ type: "toolProficiency", tool: "Playing Card Set", source: "Gambler's Tools" });
+			effects.push({ type: "toolProficiency", tool: "Dice Set", source: "Gambler's Tools" });
+		}
+
 		// Inquisitive - Ear for Deceit: minimum 8 on Insight
 		if (calculations.hasEarForDeceit && calculations.insightMinimum && !alreadyProcessed("Ear for Deceit")) {
 			effects.push({
@@ -10649,6 +11335,56 @@ class CharacterSheetState {
 				source: "Inescapable Destruction",
 			});
 		}
+
+		// ===== TGTT CLERIC DOMAINS =====
+
+		// Madness Domain - Shattered Mind: psychic resistance
+		if (calculations.hasShatteredMind && !alreadyProcessed("Shattered Mind")) {
+			effects.push({ type: "resistance", damageType: "psychic", source: "Shattered Mind" });
+		}
+
+		// Darkness Domain - Eyes of Night: 90ft darkvision (sees in magical darkness)
+		if (calculations.hasDarknessEyesOfNight && calculations.darknessEyesOfNightRange && !alreadyProcessed("Darkness Eyes of Night")) {
+			effects.push({
+				type: "sense",
+				sense: "darkvision",
+				range: calculations.darknessEyesOfNightRange,
+				source: "Eyes of Night (Darkness)",
+				special: "seesInMagicalDarkness",
+			});
+		}
+
+		// Blood Domain - Martial weapon proficiency (slashing/piercing)
+		if (calculations.hasBloodMartialProficiency && !alreadyProcessed("Blood Martial Proficiency")) {
+			effects.push({ type: "weaponProficiency", weapon: "Martial (slashing)", source: "Blood Domain" });
+			effects.push({ type: "weaponProficiency", weapon: "Martial (piercing)", source: "Blood Domain" });
+		}
+
+		// Lust Domain - Deception/Persuasion proficiency
+		if (calculations.hasLustSkillProficiency && !alreadyProcessed("Lust Skill Proficiency")) {
+			effects.push({ type: "skillProficiency", skill: "deception", level: 1, source: "Lust Domain" });
+			effects.push({ type: "skillProficiency", skill: "persuasion", level: 1, source: "Lust Domain" });
+		}
+
+		// Time Domain - Right on Time: +WIS to initiative
+		if (calculations.hasRightOnTime && calculations.rightOnTimeBonus && !alreadyProcessed("Right on Time")) {
+			effects.push({
+				type: "initiativeBonus",
+				value: calculations.rightOnTimeBonus,
+				source: "Right on Time",
+			});
+		}
+
+		// ===== TGTT MONK SUBCLASSES =====
+
+		// Way of The Shackled - Hidden Arts: Acrobatics + Performance proficiency
+		if (calculations.hasHiddenArts && !alreadyProcessed("Hidden Arts")) {
+			effects.push({ type: "skillProficiency", skill: "acrobatics", level: 1, source: "Hidden Arts" });
+			effects.push({ type: "skillProficiency", skill: "performance", level: 1, source: "Hidden Arts" });
+		}
+
+		// Way of The Shackled - Balanced Whirlwind: immune to prone while Rhythmic Step
+		// (Conditional - tracked as a feature flag, not auto-applied)
 
 		// =========================================================
 		// DRUID FEATURES
@@ -10807,6 +11543,21 @@ class CharacterSheetState {
 				resource: "bardicInspiration",
 				property: "regainOnInitiative",
 				source: "Superior Inspiration",
+			});
+		}
+
+		// College of Jesters - Performance proficiency
+		if (calculations.hasJesterBonusProficiencies && !alreadyProcessed("Jester Bonus Proficiencies")) {
+			effects.push({ type: "skillProficiency", skill: "performance", source: "Jester Bonus Proficiencies" });
+		}
+
+		// College of Jesters - Gifted Acrobat: climbing speed equals walking speed
+		if (calculations.hasGiftedAcrobat && calculations.climbingSpeedEqualsWalking && !alreadyProcessed("Gifted Acrobat")) {
+			effects.push({
+				type: "speed",
+				speedType: "climb",
+				value: "walking", // Special value meaning equals walking speed
+				source: "Gifted Acrobat",
 			});
 		}
 
@@ -12824,6 +13575,7 @@ class CharacterSheetState {
 			if (mod.removeDisadvantage) modifierData.removeDisadvantage = true;
 			if (mod.proficiencyBonus) modifierData.proficiencyBonus = true;
 			if (mod.ignore) modifierData.ignore = true;
+			if (mod.conditional) modifierData.conditional = mod.conditional;
 
 			this.addNamedModifier(modifierData);
 
@@ -13302,6 +14054,411 @@ class CharacterSheetState {
 		if ((this._data.exertionCurrent || 0) < amount) return false;
 		this._data.exertionCurrent -= amount;
 		return true;
+	}
+
+	// =========================================================================
+	// Primal Focus (TGTT Ranger)
+	// =========================================================================
+
+	/**
+	 * Check if character has the Primal Focus feature
+	 * @returns {boolean}
+	 */
+	hasPrimalFocus () {
+		const rangerClass = this._data.classes?.find(c => c.name === "Ranger");
+		return rangerClass?.source === "TGTT";
+	}
+
+	/**
+	 * Get current Primal Focus mode
+	 * @returns {string} "predator" or "prey"
+	 */
+	getPrimalFocusMode () {
+		this._ensurePrimalFocusInitialized();
+		return this._data.primalFocus?.mode || "predator";
+	}
+
+	/**
+	 * Set Primal Focus mode directly (e.g., on long rest)
+	 * @param {string} mode - "predator" or "prey"
+	 */
+	setPrimalFocusMode (mode) {
+		this._ensurePrimalFocusInitialized();
+		if (mode !== "predator" && mode !== "prey") {
+			console.warn(`[CharSheet State] Invalid Primal Focus mode: ${mode}`);
+			return;
+		}
+		this._data.primalFocus.mode = mode;
+	}
+
+	/**
+	 * Switch Primal Focus mode (uses a focus switch)
+	 * @returns {boolean} True if successful, false if no switches remaining
+	 */
+	switchPrimalFocus () {
+		this._ensurePrimalFocusInitialized();
+		const calcs = this.getFeatureCalculations();
+
+		// Check if we have unlimited switches
+		if (calcs.focusSwitchesMax === "Unlimited") {
+			this._data.primalFocus.mode = this._data.primalFocus.mode === "predator" ? "prey" : "predator";
+			return true;
+		}
+
+		// Check if we have switches remaining
+		const maxSwitches = calcs.focusSwitchesMaxNum || 1;
+		if ((this._data.primalFocus.switchesUsed || 0) >= maxSwitches) {
+			return false;
+		}
+
+		// Perform switch
+		this._data.primalFocus.mode = this._data.primalFocus.mode === "predator" ? "prey" : "predator";
+		this._data.primalFocus.switchesUsed = (this._data.primalFocus.switchesUsed || 0) + 1;
+		return true;
+	}
+
+	/**
+	 * Get remaining focus switches
+	 * @returns {number|string} Number remaining or "Unlimited"
+	 */
+	getFocusSwitchesRemaining () {
+		this._ensurePrimalFocusInitialized();
+		const calcs = this.getFeatureCalculations();
+
+		if (calcs.focusSwitchesMax === "Unlimited") {
+			return "Unlimited";
+		}
+
+		const maxSwitches = calcs.focusSwitchesMaxNum || 1;
+		return maxSwitches - (this._data.primalFocus.switchesUsed || 0);
+	}
+
+	/**
+	 * Mark a creature as the Focused Quarry (Predator focus)
+	 * @param {string|null} targetId - Target identifier or null to clear
+	 */
+	setFocusedQuarry (targetId) {
+		this._ensurePrimalFocusInitialized();
+		this._data.primalFocus.quarryTargetId = targetId;
+	}
+
+	/**
+	 * Get current Focused Quarry target
+	 * @returns {string|null} Target identifier or null
+	 */
+	getFocusedQuarry () {
+		this._ensurePrimalFocusInitialized();
+		return this._data.primalFocus.quarryTargetId;
+	}
+
+	/**
+	 * Use Hunter's Dodge (Prey focus)
+	 * @returns {boolean} True if successful, false if no uses remaining
+	 */
+	useHuntersDodge () {
+		this._ensurePrimalFocusInitialized();
+		const calcs = this.getFeatureCalculations();
+		const maxUses = calcs.huntersDodgeUses || 0;
+
+		if ((this._data.primalFocus.huntersDodgeUsed || 0) >= maxUses) {
+			return false;
+		}
+
+		this._data.primalFocus.huntersDodgeUsed = (this._data.primalFocus.huntersDodgeUsed || 0) + 1;
+		return true;
+	}
+
+	/**
+	 * Get remaining Hunter's Dodge uses
+	 * @returns {number}
+	 */
+	getHuntersDodgeRemaining () {
+		this._ensurePrimalFocusInitialized();
+		const calcs = this.getFeatureCalculations();
+		const maxUses = calcs.huntersDodgeUses || 0;
+		return maxUses - (this._data.primalFocus.huntersDodgeUsed || 0);
+	}
+
+	/**
+	 * Restore Primal Focus on long rest
+	 */
+	restorePrimalFocus () {
+		if (!this.hasPrimalFocus()) return;
+
+		this._ensurePrimalFocusInitialized();
+		this._data.primalFocus.switchesUsed = 0;
+		this._data.primalFocus.huntersDodgeUsed = 0;
+		// Quarry remains set (can be dismissed manually or ends per rules)
+	}
+
+	/**
+	 * Initialize primal focus data if needed
+	 */
+	_ensurePrimalFocusInitialized () {
+		if (!this._data.primalFocus) {
+			this._data.primalFocus = {
+				mode: "predator",
+				switchesUsed: 0,
+				huntersDodgeUsed: 0,
+				quarryTargetId: null,
+			};
+		}
+	}
+	// #endregion
+
+	// #region Focus Pool (TGTT Dreamwalker)
+	/**
+	 * Check if character has the Focus Pool feature (Dreamwalker)
+	 * @returns {boolean}
+	 */
+	hasFocusPool () {
+		return this._data.classes?.some(c => c.name === "Dreamwalker" && c.source === "TGTT") ?? false;
+	}
+
+	/**
+	 * Get current Focus Pool points
+	 * @returns {number}
+	 */
+	getFocusPoolCurrent () {
+		this._ensureFocusPoolInitialized();
+		return this._data.focusPool.current || 0;
+	}
+
+	/**
+	 * Get max Focus Pool points (CON mod + proficiency bonus, or "Unlimited" at level 20)
+	 * @returns {number|string}
+	 */
+	getFocusPoolMax () {
+		if (!this.hasFocusPool()) return 0;
+		const calcs = this.getFeatureCalculations();
+		return calcs.focusPoolMax ?? 0;
+	}
+
+	/**
+	 * Spend focus points
+	 * @param {number} amount - Points to spend (default 1)
+	 * @returns {boolean} True if successful
+	 */
+	spendFocusPoint (amount = 1) {
+		this._ensureFocusPoolInitialized();
+		const max = this.getFocusPoolMax();
+		
+		// Level 20 Dreamwalkers have unlimited focus
+		if (max === "Unlimited") return true;
+		
+		if ((this._data.focusPool.current || 0) < amount) {
+			return false;
+		}
+		
+		this._data.focusPool.current = (this._data.focusPool.current || 0) - amount;
+		return true;
+	}
+
+	/**
+	 * Set current focus points directly
+	 * @param {number} value
+	 */
+	setFocusPoolCurrent (value) {
+		this._ensureFocusPoolInitialized();
+		const max = this.getFocusPoolMax();
+		if (max === "Unlimited") {
+			this._data.focusPool.current = value;
+		} else {
+			this._data.focusPool.current = Math.max(0, Math.min(value, max || 0));
+		}
+	}
+
+	/**
+	 * Activate Lucid Focus die (bonus action)
+	 * @returns {boolean} True if successful
+	 */
+	activateLucidFocus () {
+		this._ensureFocusPoolInitialized();
+		
+		// Lucid Focus costs 1 focus point to activate
+		if (!this.spendFocusPoint(1)) {
+			return false;
+		}
+		
+		this._data.focusPool.lucidFocusActive = true;
+		return true;
+	}
+
+	/**
+	 * Deactivate Lucid Focus die
+	 */
+	deactivateLucidFocus () {
+		this._ensureFocusPoolInitialized();
+		this._data.focusPool.lucidFocusActive = false;
+	}
+
+	/**
+	 * Check if Lucid Focus is currently active
+	 * @returns {boolean}
+	 */
+	isLucidFocusActive () {
+		this._ensureFocusPoolInitialized();
+		return this._data.focusPool.lucidFocusActive ?? false;
+	}
+
+	/**
+	 * Get the current Lucid Focus die
+	 * @returns {string} Die notation (e.g., "1d6", "1d8", etc.)
+	 */
+	getLucidFocusDie () {
+		if (!this.hasFocusPool()) return null;
+		const calcs = this.getFeatureCalculations();
+		return calcs.lucidFocusDie || "1d6";
+	}
+
+	/**
+	 * Get the Dream DC for Dreamwalker abilities
+	 * @returns {number}
+	 */
+	getDreamDc () {
+		if (!this.hasFocusPool()) return 0;
+		const calcs = this.getFeatureCalculations();
+		return calcs.dreamDc || 0;
+	}
+
+	/**
+	 * Restore Focus Pool on long rest
+	 */
+	restoreFocusPool () {
+		if (!this.hasFocusPool()) return;
+		
+		this._ensureFocusPoolInitialized();
+		const max = this.getFocusPoolMax();
+		this._data.focusPool.current = max === "Unlimited" ? 99 : (max || 0);
+		this._data.focusPool.lucidFocusActive = false;
+	}
+
+	/**
+	 * Initialize focus pool data if needed
+	 * Note: Does NOT auto-fill to max - call restoreFocusPool() after class setup
+	 */
+	_ensureFocusPoolInitialized () {
+		if (!this._data.focusPool) {
+			this._data.focusPool = {
+				current: 0,
+				lucidFocusActive: false,
+				_initialized: false, // Flag to track if pool was initialized to max
+			};
+		}
+	}
+
+	/**
+	 * Initialize Focus Pool to max if not already done
+	 * Call this after class setup to ensure pool is at max
+	 */
+	initializeFocusPool () {
+		this._ensureFocusPoolInitialized();
+		if (!this._data.focusPool._initialized && this.hasFocusPool()) {
+			const max = this.getFocusPoolMax();
+			this._data.focusPool.current = max === "Unlimited" ? 99 : (max || 0);
+			this._data.focusPool._initialized = true;
+		}
+	}
+	// #endregion
+
+	// #region Alternative Exertion Resources (TGTT Combat Methods)
+	/**
+	 * Check if character can use Ki/Focus Points to pay for Exertion costs
+	 * In TGTT, Monks can use their Focus Points instead of Exertion for Combat Methods
+	 * @returns {boolean}
+	 */
+	canUseFocusForExertion () {
+		// Monk from any source can use Ki/Focus for exertion if they have the combat system
+		const monkClass = this._data.classes?.find(c => c.name === "Monk");
+		return !!monkClass && this.usesCombatSystem();
+	}
+
+	/**
+	 * Use Focus/Ki Points instead of Exertion to pay for a Combat Method
+	 * @param {number} amount - Amount to spend
+	 * @returns {boolean} True if successful
+	 */
+	useFocusForExertion (amount) {
+		if (!this.canUseFocusForExertion()) return false;
+		return this.useKiPoint(amount);
+	}
+
+	/**
+	 * Check if character can convert Spell Slots to Exertion points
+	 * In TGTT, Paladins can fuel Combat Methods by sacrificing spell slots
+	 * @returns {boolean}
+	 */
+	canConvertSpellSlotToExertion () {
+		// Paladin from TGTT source can convert spell slots to exertion
+		const paladinClass = this._data.classes?.find(c => c.name === "Paladin");
+		return paladinClass?.source === "TGTT" && this.usesCombatSystem();
+	}
+
+	/**
+	 * Convert a spell slot to Exertion points
+	 * In TGTT, converting a spell slot gives exertion = 1 + (slot level)
+	 * @param {number} slotLevel - The spell slot level to sacrifice (1-9)
+	 * @returns {boolean} True if successful, false if no slot available
+	 */
+	convertSpellSlotToExertion (slotLevel) {
+		if (!this.canConvertSpellSlotToExertion()) return false;
+		if (slotLevel < 1 || slotLevel > 9) return false;
+
+		// Check if we have a slot at this level
+		const slot = this._data.spellcasting.spellSlots[slotLevel];
+		if (!slot || slot.current <= 0) return false;
+
+		// Use the spell slot
+		this._data.spellcasting.spellSlots[slotLevel].current--;
+
+		// Gain exertion = 1 + slot level
+		const exertionGained = 1 + slotLevel;
+		const newExertion = Math.min(
+			(this._data.exertionCurrent || 0) + exertionGained,
+			this._data.exertionMax || 0,
+		);
+		this._data.exertionCurrent = newExertion;
+
+		return true;
+	}
+
+	/**
+	 * Get the exertion gained from converting a spell slot
+	 * @param {number} slotLevel - The spell slot level
+	 * @returns {number} Exertion points that would be gained
+	 */
+	getExertionFromSpellSlot (slotLevel) {
+		return 1 + slotLevel;
+	}
+
+	/**
+	 * Get available resources that can be used for exertion (for UI display)
+	 * @returns {object} Object with available resources {exertion, focus, spellSlots}
+	 */
+	getExertionResources () {
+		const resources = {
+			exertion: {
+				current: this._data.exertionCurrent || 0,
+				max: this._data.exertionMax || 0,
+				available: this.usesCombatSystem(),
+			},
+			focus: {
+				current: this.getKiPointsCurrent(),
+				max: this.getKiPoints(),
+				available: this.canUseFocusForExertion(),
+			},
+			spellSlots: {
+				available: this.canConvertSpellSlotToExertion(),
+				slots: Object.entries(this._data.spellcasting.spellSlots || {})
+					.filter(([_, slot]) => slot.current > 0)
+					.map(([level, slot]) => ({
+						level: parseInt(level),
+						current: slot.current,
+						exertionValue: this.getExertionFromSpellSlot(parseInt(level)),
+					})),
+			},
+		};
+		return resources;
 	}
 	// #endregion
 
@@ -14360,7 +15517,7 @@ class CharacterSheetState {
 			effects: [], // Effects vary by target location
 			duration: "Instant",
 			resourceName: "Ki Points",
-			resourceCost: 1,
+			resourceCost: 2,
 			detectPatterns: ["precise strike", "debilitating strike"],
 			activationAction: "special", // Part of attack action
 			isGeneric: true,

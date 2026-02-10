@@ -440,6 +440,16 @@ class CharacterSheetRest {
 			this._state.restoreExertion?.();
 		}
 
+		// Restore Primal Focus (TGTT Ranger) - only on long rest
+		if (restType === "long" && this._state.hasPrimalFocus?.()) {
+			this._state.restorePrimalFocus?.();
+		}
+
+		// Restore Focus Pool (TGTT Dreamwalker) - only on long rest
+		if (restType === "long" && this._state.hasFocusPool?.()) {
+			this._state.restoreFocusPool?.();
+		}
+
 		// Restore item charges
 		const items = this._state.getItems();
 		const restoredItems = [];
