@@ -5657,6 +5657,238 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.hasGiftedAcrobat).toBe(true);
 					expect(calcs.climbingSpeedEqualsWalking).toBe(true);
 				});
+
+				// =========== Jester's Acts Tests ===========
+
+				it("should have hasJesterActs method", () => {
+					// No bard class yet
+					expect(state.hasJesterActs()).toBe(false);
+
+					// Add College of Jesters bard
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 3,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+					expect(state.hasJesterActs()).toBe(true);
+				});
+
+				it("should return jesterActs in getFeatureCalculations", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 3,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.jesterActs).toBeDefined();
+					expect(Array.isArray(calcs.jesterActs)).toBe(true);
+				});
+
+				it("should return empty array when no acts known", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 3,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					const acts = state.getJesterActs();
+					expect(acts).toEqual([]);
+				});
+
+				it("should return known Jester's Acts with effects", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3
+
+					// Add Pantomime act (WIS save)
+					state.addFeature({
+						name: "Pantomime",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["JA"]
+					});
+
+					const acts = state.getJesterActs();
+					expect(acts.length).toBe(1);
+					expect(acts[0].name).toBe("Pantomime");
+					// DC = 8 + Performance(prof 3 + CHA 3) = 14
+					expect(acts[0].dc).toBe(14);
+					expect(acts[0].saveType).toBe("wis");
+					expect(acts[0].condition).toBe("charmed");
+				});
+
+				it("should calculate DC with Performance expertise", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3
+					state.setSkillExpertise("performance", true);
+
+					state.addFeature({name: "Prankster", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+
+					const acts = state.getJesterActs();
+					const prankster = acts.find(a => a.name === "Prankster");
+					// DC = 8 + Performance(prof 3 + expertise 3 + CHA 3) = 17
+					expect(prankster.dc).toBe(17);
+				});
+
+				it("should correctly identify save types for different acts", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					// Add acts with different save types
+					state.addFeature({name: "Pantomime", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // WIS
+					state.addFeature({name: "Fool's Folly", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // INT
+
+					const acts = state.getJesterActs();
+					expect(acts.find(a => a.name === "Pantomime").saveType).toBe("wis");
+					expect(acts.find(a => a.name === "Fool's Folly").saveType).toBe("int");
+				});
+
+				it("should return null DC for acts without saves", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Tumbler", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+					state.addFeature({name: "Dazzling Disguise", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+					state.addFeature({name: "Laughing Lunge", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+
+					const acts = state.getJesterActs();
+					expect(acts.find(a => a.name === "Tumbler").dc).toBeNull();
+					expect(acts.find(a => a.name === "Dazzling Disguise").dc).toBeNull();
+					expect(acts.find(a => a.name === "Laughing Lunge").dc).toBeNull();
+				});
+
+				it("should correctly identify timing for different acts", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Pantomime", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // action
+					state.addFeature({name: "Tumbler", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // bonus action
+					state.addFeature({name: "Jester's Agility", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // reaction
+					state.addFeature({name: "Laughing Lunge", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // attack
+
+					const acts = state.getJesterActs();
+					expect(acts.find(a => a.name === "Pantomime").timing).toBe("action");
+					expect(acts.find(a => a.name === "Tumbler").timing).toBe("bonus action");
+					expect(acts.find(a => a.name === "Jester's Agility").timing).toBe("reaction");
+					expect(acts.find(a => a.name === "Laughing Lunge").timing).toBe("attack");
+				});
+
+				it("should track Bardic Inspiration cost for acts that use it", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Laughing Lunge", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // costs 1 BI
+					state.addFeature({name: "Jester's Jaunt", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // costs 1 BI
+					state.addFeature({name: "Tumbler", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]}); // no cost
+
+					const acts = state.getJesterActs();
+					const laughingLunge = acts.find(a => a.name === "Laughing Lunge");
+					const jestersJaunt = acts.find(a => a.name === "Jester's Jaunt");
+					const tumbler = acts.find(a => a.name === "Tumbler");
+
+					expect(laughingLunge.usesBardicInspiration).toBe(true);
+					expect(laughingLunge.bardicInspirationCost).toBe(1);
+					expect(jestersJaunt.usesBardicInspiration).toBe(true);
+					expect(jestersJaunt.bardicInspirationCost).toBe(1);
+					expect(tumbler.usesBardicInspiration).toBe(false);
+					expect(tumbler.bardicInspirationCost).toBe(0);
+				});
+
+				it("should track spells granted by acts", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Jester's Jaunt", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+					state.addFeature({name: "Ridiculous Ruse", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+
+					const acts = state.getJesterActs();
+					expect(acts.find(a => a.name === "Jester's Jaunt").grantsSpell).toBe("mirror image");
+					expect(acts.find(a => a.name === "Ridiculous Ruse").grantsSpell).toBe("silent image");
+				});
+
+				it("should get individual DC via getJesterActDc method", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3; base DC = 8 + 3 + 3 = 14
+
+					expect(state.getJesterActDc("Pantomime")).toBe(14);
+					expect(state.getJesterActDc("Prankster")).toBe(14);
+					expect(state.getJesterActDc("Tumbler")).toBeNull(); // No save
+					expect(state.getJesterActDc("Laughing Lunge")).toBeNull(); // No save
+				});
+
+				it("should calculate acts known via getJesterActsKnown", () => {
+					state.addClass({name: "Bard", source: "TGTT", level: 3, subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}});
+					expect(state.getJesterActsKnown()).toBe(3);
+
+					state.addClass({name: "Bard", source: "TGTT", level: 6});
+					expect(state.getJesterActsKnown()).toBe(4);
+
+					state.addClass({name: "Bard", source: "TGTT", level: 14});
+					expect(state.getJesterActsKnown()).toBe(5);
+				});
+
+				it("should calculate Jester's Agility AC bonus using proficiency", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 5, // prof = 3
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+
+					state.addFeature({name: "Jester's Agility", source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+
+					const acts = state.getJesterActs();
+					const jestersAgility = acts.find(a => a.name === "Jester's Agility");
+					expect(jestersAgility.acBonus).toBe(3); // proficiency bonus
+					expect(jestersAgility.effect).toBe("+3 to AC until start of next turn");
+				});
+
+				it("should calculate all 13 Jester's Acts correctly", () => {
+					state.addClass({
+						name: "Bard", source: "TGTT", level: 10,
+						subclass: {name: "College of Jesters", shortName: "Jesters", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3
+
+					// Add all 13 acts
+					const actNames = [
+						"Pantomime", "Prankster", "Trickster's Disengagement", "Tumbler",
+						"Dazzling Disguise", "Jester's Juggle", "Jester's Jest", "Witty Wordplay",
+						"Fool's Folly", "Laughing Lunge", "Jester's Jaunt", "Ridiculous Ruse", "Jester's Agility"
+					];
+					actNames.forEach(name => {
+						state.addFeature({name, source: "TGTT", featureType: "Optional Feature", optionalFeatureTypes: ["JA"]});
+					});
+
+					const acts = state.getJesterActs();
+					expect(acts.length).toBe(13);
+
+					// Verify each act has basic properties
+					acts.forEach(act => {
+						expect(act.name).toBeDefined();
+						expect(act.timing).toBeDefined();
+						expect(act.effect).toBeDefined();
+					});
+
+					// Verify conditions for save-based acts
+					expect(acts.find(a => a.name === "Pantomime").condition).toBe("charmed");
+					expect(acts.find(a => a.name === "Prankster").condition).toBe("dazed");
+					expect(acts.find(a => a.name === "Fool's Folly").condition).toBe("incapacitated");
+				});
 			});
 			
 			describe("College of Surrealism", () => {
