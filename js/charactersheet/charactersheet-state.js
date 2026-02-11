@@ -10192,6 +10192,9 @@ class CharacterSheetState {
 								// Act DC = 8 + Performance skill bonus (unique formula!)
 								calculations.jesterActDcBase = 8 + performanceSkillBonus - exhaustionPenalty;
 
+								// Get known acts with their effects
+								calculations.jesterActs = this.getJesterActs();
+
 								// Gifted Acrobat (level 6) - climbing speed, escape grapple bonus action
 								if (level >= 6) {
 									calculations.hasGiftedAcrobat = true;
@@ -15453,6 +15456,210 @@ class CharacterSheetState {
 				effects.trigger = "use bonus action";
 				effects.timing = "bonus action";
 				effects.effect = "gain half cover; + trick die to AC until start of next turn";
+				effects.duration = "until start of next turn";
+				break;
+		}
+
+		return effects;
+	}
+
+	// =========================================================================
+	// Jester's Acts (TGTT Bard - College of Jesters)
+	// =========================================================================
+
+	/**
+	 * Check if character has Jester's Acts feature
+	 * @returns {boolean}
+	 */
+	hasJesterActs () {
+		const bardClass = this._data.classes?.find(c => c.name === "Bard");
+		return bardClass?.subclass?.shortName === "Jesters" || bardClass?.subclass?.name === "College of Jesters";
+	}
+
+	/**
+	 * Get list of Jester's Acts the character knows
+	 * Acts are Optional Features with type "JA"
+	 * @returns {Array<object>} Array of act objects with name, effects, and DC
+	 */
+	getJesterActs () {
+		const acts = this._data.features?.filter(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "JA");
+		}) ?? [];
+
+		const bardLevel = this.getClassLevel("Bard");
+		// Act DC = 8 + Performance skill bonus (unique formula)
+		const chaMod = this.getAbilityMod("cha");
+		const profBonus = this.getProficiencyBonus();
+		const hasPerformanceExpertise = this.getSkillProficiency("performance") === 2;
+		const performanceSkillBonus = chaMod + profBonus + (hasPerformanceExpertise ? profBonus : 0);
+		const actDc = 8 + performanceSkillBonus;
+
+		return acts.map(a => ({
+			name: a.name,
+			source: a.source,
+			description: a.description,
+			...this._getJesterActEffects(a.name, bardLevel, actDc, profBonus),
+		}));
+	}
+
+	/**
+	 * Get the DC for a specific Jester's Act
+	 * @param {string} actName - Name of the act
+	 * @returns {number|null} The save DC, or null if act has no save
+	 */
+	getJesterActDc (actName) {
+		const chaMod = this.getAbilityMod("cha");
+		const profBonus = this.getProficiencyBonus();
+		const hasPerformanceExpertise = this.getSkillProficiency("performance") === 2;
+		const performanceSkillBonus = chaMod + profBonus + (hasPerformanceExpertise ? profBonus : 0);
+		const actDc = 8 + performanceSkillBonus;
+		const effects = this._getJesterActEffects(actName, 0, actDc, profBonus);
+		return effects.dc;
+	}
+
+	/**
+	 * Get number of Jester's Acts known by bard level
+	 * @returns {number} Acts known: 3 at level 3, 4 at 6, 5 at 14
+	 */
+	getJesterActsKnown () {
+		const bardLevel = this.getClassLevel("Bard");
+		if (bardLevel >= 14) return 5;
+		if (bardLevel >= 6) return 4;
+		return 3;
+	}
+
+	/**
+	 * Get mechanical effects for a specific Jester's Act
+	 * @param {string} actName - Name of the act
+	 * @param {number} bardLevel - Current bard level
+	 * @param {number} actDc - Base act save DC (8 + Performance skill)
+	 * @param {number} profBonus - Proficiency bonus
+	 * @returns {object} Effects including DC, save type, timing, conditions, costs
+	 */
+	_getJesterActEffects (actName, bardLevel, actDc, profBonus) {
+		const effects = {
+			dc: null,
+			saveType: null,
+			timing: null,
+			usesBardicInspiration: false,
+			bardicInspirationCost: 0,
+			effect: null,
+			condition: null,
+			duration: null,
+			range: null,
+			grantsSpell: null,
+		};
+
+		switch (actName) {
+			case "Pantomime":
+				effects.dc = actDc;
+				effects.saveType = "wis";
+				effects.timing = "action";
+				effects.effect = "target charmed, speed 0, disadvantage on attacks";
+				effects.condition = "charmed";
+				effects.duration = "until end of next turn";
+				effects.range = 30;
+				break;
+
+			case "Prankster":
+				effects.dc = actDc;
+				effects.saveType = "wis";
+				effects.timing = "action";
+				effects.effect = "target dazed until end of next turn";
+				effects.condition = "dazed";
+				effects.duration = "until end of next turn";
+				effects.range = 30;
+				break;
+
+			case "Trickster's Disengagement":
+				effects.dc = null;
+				effects.timing = "bonus action";
+				effects.effect = "disengage from up to 5 creatures";
+				break;
+
+			case "Tumbler":
+				effects.dc = null;
+				effects.timing = "bonus action";
+				effects.effect = "can move through hostile creature spaces this turn";
+				effects.duration = "this turn";
+				break;
+
+			case "Dazzling Disguise":
+				effects.dc = null;
+				effects.timing = "1 minute";
+				effects.effect = "advantage on Deception checks for 1 hour";
+				effects.duration = "1 hour";
+				break;
+
+			case "Jester's Juggle":
+				effects.dc = actDc;
+				effects.saveType = "wis";
+				effects.timing = "bonus action";
+				effects.effect = "enamored targets grant advantage on attacks against them";
+				effects.range = 30;
+				break;
+
+			case "Jester's Jest":
+				effects.dc = actDc;
+				effects.saveType = "wis";
+				effects.timing = "bonus action";
+				effects.effect = "target can't take reactions until end of next turn";
+				effects.duration = "until end of next turn";
+				effects.range = 30;
+				break;
+
+			case "Witty Wordplay":
+				effects.dc = null;
+				effects.timing = "with Bardic Inspiration";
+				effects.effect = "target has disadvantage on next attack against you or ally";
+				effects.range = 60;
+				break;
+
+			case "Fool's Folly":
+				effects.dc = actDc;
+				effects.saveType = "int";
+				effects.timing = "with Bardic Inspiration";
+				effects.usesBardicInspiration = true;
+				effects.effect = "target incapacitated until end of next turn on failed save";
+				effects.condition = "incapacitated";
+				effects.duration = "until end of next turn";
+				effects.range = 60;
+				break;
+
+			case "Laughing Lunge":
+				effects.dc = null;
+				effects.timing = "attack";
+				effects.usesBardicInspiration = true;
+				effects.bardicInspirationCost = 1;
+				effects.effect = "attack with advantage, +1d6 psychic damage";
+				break;
+
+			case "Jester's Jaunt":
+				effects.dc = null;
+				effects.timing = "action";
+				effects.usesBardicInspiration = true;
+				effects.bardicInspirationCost = 1;
+				effects.effect = "cast mirror image without spell slot or components";
+				effects.grantsSpell = "mirror image";
+				break;
+
+			case "Ridiculous Ruse":
+				effects.dc = null;
+				effects.timing = "action";
+				effects.usesBardicInspiration = true;
+				effects.bardicInspirationCost = 1;
+				effects.effect = "cast silent image without spell slot or components";
+				effects.grantsSpell = "silent image";
+				break;
+
+			case "Jester's Agility":
+				effects.dc = null;
+				effects.timing = "reaction";
+				effects.usesBardicInspiration = true;
+				effects.bardicInspirationCost = 1;
+				effects.effect = `+${profBonus} to AC until start of next turn`;
+				effects.acBonus = profBonus;
 				effects.duration = "until start of next turn";
 				break;
 		}
