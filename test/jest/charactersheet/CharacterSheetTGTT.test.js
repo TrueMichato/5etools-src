@@ -1583,6 +1583,763 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				expect(state.getExertionMax()).toBe(0);
 			});
 		});
+
+		// =====================================================================
+		// MONK COMBAT METHOD DC BONUS TESTS
+		// =====================================================================
+		describe("Monk Combat Method DC Bonus", () => {
+			it("should calculate Monk DC as 9 + prof + max(STR, DEX, WIS)", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 10); // +0
+				state.setAbilityBase("dex", 16); // +3
+				state.setAbilityBase("wis", 18); // +4 (highest)
+				state.setAbilityBase("con", 14);
+				state.addCombatTradition("RC");
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				// DC = 9 + 3 (prof) + 4 (WIS mod) = 16
+				expect(calcs.combatMethodDc).toBe(16);
+				expect(calcs.monkCombatMethodDcBonus).toBe(true);
+			});
+
+			it("should use DEX when it is highest for Monk", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 10); // +0
+				state.setAbilityBase("dex", 20); // +5 (highest)
+				state.setAbilityBase("wis", 14); // +2
+				state.setAbilityBase("con", 14);
+				state.addCombatTradition("RC");
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				// DC = 9 + 3 (prof) + 5 (DEX mod) = 17
+				expect(calcs.combatMethodDc).toBe(17);
+			});
+
+			it("should use STR when it is highest for Monk", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 20); // +5 (highest)
+				state.setAbilityBase("dex", 14); // +2
+				state.setAbilityBase("wis", 14); // +2
+				state.setAbilityBase("con", 14);
+				state.addCombatTradition("RC");
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				// DC = 9 + 3 (prof) + 5 (STR mod) = 17
+				expect(calcs.combatMethodDc).toBe(17);
+			});
+
+			it("should use standard DC formula for non-Monk classes", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 16); // +3
+				state.setAbilityBase("dex", 14); // +2
+				state.setAbilityBase("wis", 18); // +4 (not used for non-Monk)
+				state.setAbilityBase("con", 14);
+				state.addCombatTradition("AM");
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				// DC = 8 + 3 (prof) + 3 (STR mod, higher than DEX) = 14
+				expect(calcs.combatMethodDc).toBe(14);
+				expect(calcs.monkCombatMethodDcBonus).toBeUndefined();
+			});
+		});
+
+		// =====================================================================
+		// GENERIC METHOD PARSING TESTS
+		// =====================================================================
+		describe("Generic Combat Method Parsing", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+			});
+
+			it("should parse exertion cost from 'Bonus Action (1 Exertion Point)'", () => {
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). As a bonus action, you enter a heavily-braced stance. This stance lasts until you end it."
+				});
+
+				const methods = state.getCombatMethods();
+				const heavy = methods.find(m => m.name === "Heavy Stance");
+				expect(heavy.exertionCost).toBe(1);
+			});
+
+			it("should parse exertion cost from 'Action (3 Exertion Points)'", () => {
+				state.addFeature({
+					name: "Unbreakable",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:3AM", "CTM:AM", "CTM"],
+					description: "Reaction (3 Exertion Points). At the edge of death, you cling firmly to life."
+				});
+
+				const methods = state.getCombatMethods();
+				const unbreakable = methods.find(m => m.name === "Unbreakable");
+				expect(unbreakable.exertionCost).toBe(3);
+			});
+
+			it("should parse action type 'Bonus Action'", () => {
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You adopt a loose stance. Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				const methods = state.getCombatMethods();
+				const swift = methods.find(m => m.name === "Swift Stance");
+				expect(swift.actionType).toBe("Bonus Action");
+			});
+
+			it("should parse action type 'Reaction'", () => {
+				state.addFeature({
+					name: "Unbreakable",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:3AM", "CTM:AM", "CTM"],
+					description: "Reaction (3 Exertion Points). At the edge of death, you cling firmly to life."
+				});
+
+				const methods = state.getCombatMethods();
+				const unbreakable = methods.find(m => m.name === "Unbreakable");
+				expect(unbreakable.actionType).toBe("Reaction");
+			});
+
+			it("should parse save type 'Strength saving throw'", () => {
+				state.addFeature({
+					name: "Lean Into It",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (2 Exertion Points). When you hit, the creature makes a Strength saving throw or is knocked prone."
+				});
+
+				const methods = state.getCombatMethods();
+				const lean = methods.find(m => m.name === "Lean Into It");
+				expect(lean.saveType).toBe("strength");
+			});
+
+			it("should parse save type 'Wisdom save'", () => {
+				state.addFeature({
+					name: "Blackguard's Blight",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1EB", "CTM:EB", "CTM"],
+					description: "Bonus Action (1 Exertion Point). It must make a Wisdom save or be unable to gain advantage."
+				});
+
+				const methods = state.getCombatMethods();
+				const blight = methods.find(m => m.name === "Blackguard's Blight");
+				expect(blight.saveType).toBe("wisdom");
+			});
+
+			it("should detect stance from 'This stance lasts until'", () => {
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You enter a heavily-braced stance. This stance lasts until you are incapacitated."
+				});
+
+				const methods = state.getCombatMethods();
+				const heavy = methods.find(m => m.name === "Heavy Stance");
+				expect(heavy.isStance).toBe(true);
+			});
+
+			it("should extract degree and tradition from CTM:3AM", () => {
+				state.addFeature({
+					name: "Unbreakable",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:3AM", "CTM:AM", "CTM"],
+					description: "Reaction (3 Exertion Points). At the edge of death, you cling firmly to life."
+				});
+
+				const methods = state.getCombatMethods();
+				const unbreakable = methods.find(m => m.name === "Unbreakable");
+				expect(unbreakable.degree).toBe(3);
+				expect(unbreakable.tradition).toBe("AM");
+			});
+		});
+
+		// =====================================================================
+		// getCombatMethods() TESTS
+		// =====================================================================
+		describe("getCombatMethods()", () => {
+			it("should return array of methods with parsed effects", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). This stance lasts until you end it."
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods.length).toBe(1);
+				expect(methods[0]).toHaveProperty("name", "Heavy Stance");
+				expect(methods[0]).toHaveProperty("exertionCost");
+				expect(methods[0]).toHaveProperty("actionType");
+				expect(methods[0]).toHaveProperty("isStance");
+				expect(methods[0]).toHaveProperty("degree");
+				expect(methods[0]).toHaveProperty("tradition");
+			});
+
+			it("should return empty array when no CTM features", () => {
+				state.addClass({name: "Fighter", source: "PHB", level: 5});
+				expect(state.getCombatMethods()).toEqual([]);
+			});
+
+			it("should filter only CTM features (not BT or other types)", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+
+				// Add a Battle Tactic (BT)
+				state.addFeature({
+					name: "High Ground",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+					description: "You have advantage when 5 feet above."
+				});
+
+				// Add a Combat Method (CTM)
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). This stance lasts until you end it."
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods.length).toBe(1);
+				expect(methods[0].name).toBe("Heavy Stance");
+			});
+
+			it("should include all method properties", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("RC");
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				const [method] = state.getCombatMethods();
+				expect(method.name).toBe("Swift Stance");
+				expect(method.source).toBe("TGTT");
+				expect(method.exertionCost).toBe(1);
+				expect(method.actionType).toBe("Bonus Action");
+				expect(method.isStance).toBe(true);
+				expect(method.degree).toBe(1);
+				expect(method.tradition).toBe("RC");
+			});
+		});
+
+		// =====================================================================
+		// METHOD DEGREE ACCESS TESTS
+		// =====================================================================
+		describe("getMethodDegreeAccess()", () => {
+			it("should return 0 for non-CTM characters", () => {
+				state.addClass({name: "Wizard", source: "PHB", level: 10});
+				expect(state.getMethodDegreeAccess()).toBe(0);
+			});
+
+			it("should return degree 1 for Fighter level 1", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 1});
+				state.addCombatTradition("AM");
+				expect(state.getMethodDegreeAccess()).toBe(1);
+			});
+
+			it("should return degree 3 for Fighter level 8", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 8});
+				state.addCombatTradition("AM");
+				expect(state.getMethodDegreeAccess()).toBe(3);
+			});
+
+			it("should return degree 5 for Fighter level 16", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 16});
+				state.addCombatTradition("AM");
+				expect(state.getMethodDegreeAccess()).toBe(5);
+			});
+
+			it("should return degree 2 for Monk level 4", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 4});
+				state.addCombatTradition("RC");
+				expect(state.getMethodDegreeAccess()).toBe(2);
+			});
+
+			it("should return degree 4 for Paladin level 19 (max for Paladin)", () => {
+				state.addClass({name: "Paladin", source: "TGTT", level: 19});
+				state.addCombatTradition("SK");
+				expect(state.getMethodDegreeAccess()).toBe(4);
+			});
+
+			it("should return degree 4 for Rogue level 20 (capped at 4)", () => {
+				state.addClass({name: "Rogue", source: "TGTT", level: 20});
+				state.addCombatTradition("MS");
+				expect(state.getMethodDegreeAccess()).toBe(4);
+			});
+
+			it("should return degree 5 for Barbarian level 17", () => {
+				state.addClass({name: "Barbarian", source: "TGTT", level: 17});
+				state.addCombatTradition("TC");
+				expect(state.getMethodDegreeAccess()).toBe(5);
+			});
+		});
+
+		// =====================================================================
+		// STANCE ADDITION VS ACTIVATION TESTS (CRITICAL)
+		// =====================================================================
+		describe("Stance Addition vs Activation", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.setSpeed("walk", 30);
+				state.addCombatTradition("RC");
+				state.ensureExertionInitialized();
+			});
+
+			it("should NOT apply stance effects when feature is added (only added, not activated)", () => {
+				// Add Swift Stance feature but do NOT activate it
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				const calcs = state.getFeatureCalculations();
+
+				// Stance effects should NOT be applied - no active stance
+				expect(calcs.activeStance).toBeUndefined();
+				expect(calcs.stanceSpeedBonus).toBeUndefined();
+			});
+
+			it("should apply stance effects ONLY after activation", () => {
+				// Add Swift Stance feature
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				// Before activation - no effects
+				let calcs = state.getFeatureCalculations();
+				expect(calcs.activeStance).toBeUndefined();
+
+				// Activate the stance
+				const result = state.activateStance("Swift Stance");
+				expect(result).toBe(true);
+
+				// After activation - effects applied
+				calcs = state.getFeatureCalculations();
+				expect(calcs.activeStance).toBe("Swift Stance");
+				expect(calcs.stanceSpeedBonus).toBe(5);
+			});
+
+			it("should remove stance effects after deactivation", () => {
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				// Activate
+				state.activateStance("Swift Stance");
+				let calcs = state.getFeatureCalculations();
+				expect(calcs.stanceSpeedBonus).toBe(5);
+
+				// Deactivate
+				state.deactivateStance();
+				calcs = state.getFeatureCalculations();
+				expect(calcs.activeStance).toBeUndefined();
+				expect(calcs.stanceSpeedBonus).toBeUndefined();
+			});
+
+			it("should apply skill bonuses only when stance is activated", () => {
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You gain a bonus to Strength (Athletics) checks equal to your proficiency bonus. This stance lasts until you end it."
+				});
+
+				// Before activation - no bonus
+				let calcs = state.getFeatureCalculations();
+				expect(calcs.stanceSkillBonuses).toBeUndefined();
+
+				// After activation - bonus applied
+				state.activateStance("Heavy Stance");
+				calcs = state.getFeatureCalculations();
+				expect(calcs.stanceSkillBonuses).toBeDefined();
+				expect(calcs.stanceSkillBonuses.athletics).toBe(3); // Prof bonus at level 5
+			});
+
+			it("should only apply effects from the ACTIVATED stance when multiple stances are on sheet", () => {
+				// Add both stances to sheet
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You gain a bonus to Strength (Athletics) checks equal to your proficiency bonus. This stance lasts until you end it."
+				});
+
+				// Neither activated - no effects
+				let calcs = state.getFeatureCalculations();
+				expect(calcs.activeStance).toBeUndefined();
+				expect(calcs.stanceSpeedBonus).toBeUndefined();
+				expect(calcs.stanceSkillBonuses).toBeUndefined();
+
+				// Activate only Swift Stance
+				state.activateStance("Swift Stance");
+				calcs = state.getFeatureCalculations();
+				expect(calcs.activeStance).toBe("Swift Stance");
+				expect(calcs.stanceSpeedBonus).toBe(5);
+				expect(calcs.stanceSkillBonuses).toBeUndefined(); // Heavy Stance not active
+			});
+
+			it("should persist stance effects across multiple getFeatureCalculations() calls", () => {
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				state.activateStance("Swift Stance");
+
+				// Call getFeatureCalculations multiple times
+				const calcs1 = state.getFeatureCalculations();
+				const calcs2 = state.getFeatureCalculations();
+				const calcs3 = state.getFeatureCalculations();
+
+				expect(calcs1.activeStance).toBe("Swift Stance");
+				expect(calcs2.activeStance).toBe("Swift Stance");
+				expect(calcs3.activeStance).toBe("Swift Stance");
+				expect(calcs1.stanceSpeedBonus).toBe(calcs2.stanceSpeedBonus);
+			});
+		});
+
+		// =====================================================================
+		// STANCE MUTUAL EXCLUSIVITY TESTS (CRITICAL)
+		// =====================================================================
+		describe("Stance Mutual Exclusivity", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+				state.addCombatTradition("RC");
+				state.ensureExertionInitialized();
+
+				// Add both stances
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You gain a bonus to Strength (Athletics) checks equal to your proficiency bonus. This stance lasts until you end it."
+				});
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+			});
+
+			it("should only allow one stance active at a time", () => {
+				state.activateStance("Heavy Stance");
+				expect(state.getActiveStance()).toBe("Heavy Stance");
+				expect(state.isStanceActive("Heavy Stance")).toBe(true);
+
+				// Activate a different stance
+				state.activateStance("Swift Stance");
+				expect(state.getActiveStance()).toBe("Swift Stance");
+				expect(state.isStanceActive("Swift Stance")).toBe(true);
+				expect(state.isStanceActive("Heavy Stance")).toBe(false);
+			});
+
+			it("should remove old stance effects when activating new stance", () => {
+				// Activate Heavy Stance - get Athletics bonus
+				state.activateStance("Heavy Stance");
+				let calcs = state.getFeatureCalculations();
+				expect(calcs.stanceSkillBonuses).toBeDefined();
+				expect(calcs.stanceSkillBonuses.athletics).toBe(3);
+				expect(calcs.stanceSpeedBonus).toBeUndefined();
+
+				// Activate Swift Stance - Athletics bonus removed, speed bonus added
+				state.activateStance("Swift Stance");
+				calcs = state.getFeatureCalculations();
+				expect(calcs.stanceSpeedBonus).toBe(5);
+				expect(calcs.stanceSkillBonuses).toBeUndefined();
+			});
+
+			it("should clear active stance with deactivateStance()", () => {
+				state.activateStance("Heavy Stance");
+				expect(state.hasActiveStance()).toBe(true);
+
+				state.deactivateStance();
+				expect(state.getActiveStance()).toBeNull();
+				expect(state.hasActiveStance()).toBe(false);
+			});
+
+			it("should return false when activating non-existent method", () => {
+				const result = state.activateStance("Nonexistent Stance");
+				expect(result).toBe(false);
+				expect(state.getActiveStance()).toBeNull();
+			});
+
+			it("should return false when activating non-stance method", () => {
+				// Add a non-stance method
+				state.addFeature({
+					name: "Lean Into It",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (2 Exertion Points). When you hit, the creature makes a Strength saving throw or is knocked prone."
+				});
+
+				const result = state.activateStance("Lean Into It");
+				expect(result).toBe(false);
+				expect(state.getActiveStance()).toBeNull();
+			});
+		});
+
+		// =====================================================================
+		// EXERTION DEDUCTION TESTS
+		// =====================================================================
+		describe("Exertion Deduction on Method Use", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+				state.ensureExertionInitialized();
+			});
+
+			it("should spend 1 exertion when using Heavy Stance", () => {
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). This stance lasts until you end it."
+				});
+
+				const initialExertion = state.getExertionCurrent();
+				state.useCombatMethod("Heavy Stance");
+
+				expect(state.getExertionCurrent()).toBe(initialExertion - 1);
+			});
+
+			it("should spend 2 exertion when using Lean Into It", () => {
+				state.addFeature({
+					name: "Lean Into It",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (2 Exertion Points). When you hit, knock prone."
+				});
+
+				const initialExertion = state.getExertionCurrent();
+				state.useCombatMethod("Lean Into It");
+
+				expect(state.getExertionCurrent()).toBe(initialExertion - 2);
+			});
+
+			it("should fail if insufficient exertion", () => {
+				state.addFeature({
+					name: "Unbreakable",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:3AM", "CTM:AM", "CTM"],
+					description: "Reaction (3 Exertion Points). Succeed on death save."
+				});
+
+				// Set exertion to 2 (need 3)
+				state.setExertionCurrent(2);
+				const result = state.useCombatMethod("Unbreakable");
+
+				expect(result).toBe(false);
+				expect(state.getExertionCurrent()).toBe(2); // Unchanged
+			});
+
+			it("should activate stance when using a stance method", () => {
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). This stance lasts until you end it."
+				});
+
+				state.useCombatMethod("Heavy Stance");
+
+				expect(state.getActiveStance()).toBe("Heavy Stance");
+				expect(state.isStanceActive("Heavy Stance")).toBe(true);
+			});
+		});
+
+		// =====================================================================
+		// INTEGRATION TESTS
+		// =====================================================================
+		describe("Combat Methods Integration", () => {
+			it("should handle full flow: Fighter L8 adds, activates, and gets stance effects", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 8});
+				state.setAbilityBase("str", 16);
+				state.setAbilityBase("dex", 14);
+				state.setAbilityBase("con", 14);
+				state.setSpeed("walk", 30);
+				state.addCombatTradition("AM");
+				state.ensureExertionInitialized();
+
+				// Verify degree access
+				expect(state.getMethodDegreeAccess()).toBe(3); // L8 Fighter = 3rd degree
+
+				// Add Heavy Stance
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You gain a bonus to Strength (Athletics) checks equal to your proficiency bonus. This stance lasts until you end it."
+				});
+
+				// Before activation
+				let calcs = state.getFeatureCalculations();
+				expect(calcs.activeStance).toBeUndefined();
+
+				// Activate
+				state.activateStance("Heavy Stance");
+				calcs = state.getFeatureCalculations();
+				expect(calcs.activeStance).toBe("Heavy Stance");
+				expect(calcs.stanceSkillBonuses.athletics).toBe(3); // Prof bonus at L8
+
+				// Check Combat Method DC
+				expect(calcs.combatMethodDc).toBe(14); // 8 + 3 (prof) + 3 (STR)
+			});
+
+			it("should handle Monk using Focus instead of Exertion for method", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 10);
+				state.setAbilityBase("dex", 16);
+				state.setAbilityBase("wis", 18);
+				state.setAbilityBase("con", 14);
+				state.addCombatTradition("RC");
+				state.setKiPoints(5);
+				state.setKiPointsCurrent(5);
+				state.ensureExertionInitialized();
+
+				// Verify Monk DC bonus
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.combatMethodDc).toBe(16); // 9 + 3 (prof) + 4 (WIS)
+				expect(calcs.monkCombatMethodDcBonus).toBe(true);
+
+				// Monk can use Focus for Exertion
+				expect(state.canUseFocusForExertion()).toBe(true);
+
+				// Add Swift Stance
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				// Use Focus to pay for stance
+				state.useFocusForExertion(1);
+				expect(state.getKiPointsCurrent()).toBe(4);
+			});
+
+			it("should switch stances multiple times correctly", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+				state.addCombatTradition("RC");
+				state.ensureExertionInitialized();
+
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You gain a bonus to Strength (Athletics) checks equal to your proficiency bonus. This stance lasts until you end it."
+				});
+				state.addFeature({
+					name: "Swift Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (1 Exertion Point). Your Speed increases by 5 feet. This stance lasts until you end it."
+				});
+
+				// Switch multiple times
+				state.activateStance("Heavy Stance");
+				expect(state.getActiveStance()).toBe("Heavy Stance");
+
+				state.activateStance("Swift Stance");
+				expect(state.getActiveStance()).toBe("Swift Stance");
+
+				state.activateStance("Heavy Stance");
+				expect(state.getActiveStance()).toBe("Heavy Stance");
+
+				state.deactivateStance();
+				expect(state.getActiveStance()).toBeNull();
+
+				state.activateStance("Swift Stance");
+				expect(state.getActiveStance()).toBe("Swift Stance");
+			});
+
+			it("should identify stances correctly with isMethodStance()", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+
+				state.addFeature({
+					name: "Heavy Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Bonus Action (1 Exertion Point). This stance lasts until you end it."
+				});
+				state.addFeature({
+					name: "Lean Into It",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (2 Exertion Points). Knock prone on hit."
+				});
+
+				expect(state.isMethodStance("Heavy Stance")).toBe(true);
+				expect(state.isMethodStance("Lean Into It")).toBe(false);
+				expect(state.isMethodStance("Nonexistent")).toBe(false);
+			});
+		});
 	});
 	
 	// =========================================================================

@@ -2628,6 +2628,10 @@ class CharacterSheetState {
 			exertionCurrent: 0, // Current exertion points
 			exertionMax: 0, // Max exertion = 2 × proficiency bonus
 
+			// Active Stance (Thelemar homebrew) - only one stance can be active at a time
+			// Effects only apply when stance is ACTIVATED, not just added to sheet
+			activeStance: null, // Name of currently active stance, or null
+
 			// Primal Focus (TGTT Ranger) - Predator/Prey mode switching
 			primalFocus: {
 				mode: "predator", // "predator" or "prey"
@@ -11470,10 +11474,47 @@ class CharacterSheetState {
 
 		// Combat Methods DC (Thelemar homebrew)
 		if (this.usesCombatSystem?.()) {
-			// Combat Method DC: 8 + prof + STR or DEX (whichever is used for attack)
 			const strMod = this.getAbilityMod("str");
 			const dexMod = this.getAbilityMod("dex");
-			calculations.combatMethodDc = 8 + profBonus + Math.max(strMod, dexMod) - exhaustionPenalty;
+			const wisMod = this.getAbilityMod("wis");
+
+			// Check if character is a TGTT Monk - they get +1 base DC and can use WIS
+			const isTgttMonk = this._data.classes?.some(c =>
+				c.name?.toLowerCase() === "monk" && c.source === "TGTT"
+			);
+
+			if (isTgttMonk) {
+				// Monk DC: 9 + prof + max(STR, DEX, WIS) - exhaustion
+				calculations.combatMethodDc = 9 + profBonus + Math.max(strMod, dexMod, wisMod) - exhaustionPenalty;
+				calculations.monkCombatMethodDcBonus = true;
+			} else {
+				// Standard DC: 8 + prof + max(STR, DEX) - exhaustion
+				calculations.combatMethodDc = 8 + profBonus + Math.max(strMod, dexMod) - exhaustionPenalty;
+			}
+		}
+
+		// Active Stance Effects (Thelemar homebrew)
+		if (this._data.activeStance && this.usesCombatSystem?.()) {
+			const stanceEffects = this._getActiveStanceEffects();
+			if (stanceEffects) {
+				calculations.activeStance = this._data.activeStance;
+				calculations.activeStanceEffects = stanceEffects;
+
+				// Apply speed bonus from stance
+				if (stanceEffects.speedBonus) {
+					calculations.stanceSpeedBonus = stanceEffects.speedBonus;
+				}
+
+				// Apply skill bonuses from stance (only if non-empty)
+				if (stanceEffects.skillBonuses && Object.keys(stanceEffects.skillBonuses).length > 0) {
+					calculations.stanceSkillBonuses = stanceEffects.skillBonuses;
+				}
+
+				// Apply save bonuses from stance (only if non-empty)
+				if (stanceEffects.saveBonuses && Object.keys(stanceEffects.saveBonuses).length > 0) {
+					calculations.stanceSaveBonuses = stanceEffects.saveBonuses;
+				}
+			}
 		}
 
 		// =====================================================
@@ -14859,6 +14900,394 @@ class CharacterSheetState {
 
 		console.log("[CharSheet State] usesCombatSystem:", hasMethods, "(checked", this._data.features?.length || 0, "features)");
 		return hasMethods;
+	}
+
+	// =========================================================================
+	// Combat Methods (TGTT - Generic CTM System)
+	// =========================================================================
+
+	/**
+	 * Get all combat methods the character has learned
+	 * @returns {Array<object>} Array of method objects with parsed effects
+	 */
+	getCombatMethods () {
+		const methods = this._data.features?.filter(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"));
+		}) ?? [];
+
+		return methods.map(m => ({
+			name: m.name,
+			source: m.source,
+			description: m.description,
+			...this._parseCombatMethodEffects(m),
+		}));
+	}
+
+	/**
+	 * Parse mechanical effects from a combat method's entry text
+	 * @param {object} feature - The feature object
+	 * @returns {object} Parsed effects including exertionCost, actionType, saveType, isStance, degree, tradition
+	 */
+	_parseCombatMethodEffects (feature) {
+		const effects = {
+			exertionCost: 0,
+			actionType: null,
+			saveType: null,
+			isStance: false,
+			degree: 0,
+			tradition: null,
+			stanceEffects: null,
+		};
+
+		// Extract degree and tradition from optionalFeatureTypes
+		// Format: CTM:1AM (1st degree Adamant Mountain), CTM:3RC (3rd degree Rapid Current)
+		const types = feature.optionalFeatureTypes || [];
+		for (const ft of types) {
+			if (!ft?.startsWith?.("CTM:")) continue;
+			const suffix = ft.slice(4); // Remove "CTM:"
+			// Match degree + tradition code: "1AM", "3RC", "5UW"
+			const degreeMatch = suffix.match(/^(\d)([A-Z]{2,3})$/);
+			if (degreeMatch) {
+				effects.degree = parseInt(degreeMatch[1], 10);
+				effects.tradition = degreeMatch[2];
+				break;
+			}
+			// Also match just tradition code: "AM", "RC"
+			if (/^[A-Z]{2,3}$/.test(suffix) && !effects.tradition) {
+				effects.tradition = suffix;
+			}
+		}
+
+		// Parse from description text
+		const text = feature.description || "";
+
+		// Parse exertion cost: "(1 Exertion Point)", "(3 Exertion Points)"
+		const exertionMatch = text.match(/\((\d+)\s*Exertion\s*Points?\)/i);
+		if (exertionMatch) {
+			effects.exertionCost = parseInt(exertionMatch[1], 10);
+		}
+
+		// Parse action type from entry prefix
+		if (/Bonus\s*Action/i.test(text)) {
+			effects.actionType = "Bonus Action";
+		} else if (/\bReaction\b/i.test(text)) {
+			effects.actionType = "Reaction";
+		} else if (/\bAction\b.*Exertion/i.test(text) || /Exertion.*\bAction\b/i.test(text)) {
+			effects.actionType = "Action";
+		} else if (/as\s*part\s*of\s*an?\s*attack/i.test(text)) {
+			effects.actionType = "Attack";
+		}
+
+		// Parse save type
+		const saveMatch = text.match(/(Strength|Dexterity|Constitution|Wisdom|Intelligence|Charisma)\s*(?:saving\s*throw|save)/i);
+		if (saveMatch) {
+			effects.saveType = saveMatch[1].toLowerCase();
+		}
+
+		// Detect if this is a stance
+		if (/This\s+stance\s+lasts/i.test(text) || /enter\s+(?:a\s+)?.*stance/i.test(text) || /adopt\s+(?:a\s+)?.*stance/i.test(text)) {
+			effects.isStance = true;
+			effects.stanceEffects = this._parseStanceEffects(text);
+		}
+
+		return effects;
+	}
+
+	/**
+	 * Parse specific stance effects from stance description text
+	 * @param {string} text - The stance description
+	 * @returns {object} Parsed stance effects
+	 */
+	_parseStanceEffects (text) {
+		const effects = {
+			speedBonus: 0,
+			skillBonuses: {},
+			saveBonuses: {},
+			otherEffects: [],
+		};
+
+		// Speed bonus: "Speed increases by 5 feet", "gain +10 feet of movement"
+		const speedMatch = text.match(/Speed\s+increases?\s+by\s+(\d+)/i)
+			|| text.match(/gain\s+(?:a\s+)?\+?(\d+)\s*(?:feet?|ft)\.?\s+(?:of\s+)?(?:movement|speed)/i)
+			|| text.match(/your\s+speed\s+(?:is\s+)?increased?\s+by\s+(\d+)/i);
+		if (speedMatch) {
+			effects.speedBonus = parseInt(speedMatch[1], 10);
+		}
+
+		// Skill bonuses: "bonus to Strength (Athletics) checks equal to your proficiency bonus"
+		const skillBonusMatch = text.match(/bonus\s+to\s+(\w+)\s*\(([\w\s]+)\)\s+checks?\s+equal\s+to\s+your\s+proficiency\s+bonus/i);
+		if (skillBonusMatch) {
+			const skill = skillBonusMatch[2].toLowerCase().trim();
+			effects.skillBonuses[skill] = "proficiency"; // Will be resolved to actual value at calculation time
+		}
+
+		// Save bonuses: "bonus equal to your proficiency bonus on saving throws made to resist being moved"
+		const saveBonusMatch = text.match(/bonus\s+equal\s+to\s+your\s+proficiency\s+bonus\s+on\s+saving\s+throws?\s+(?:made\s+)?to\s+resist\s+being\s+(moved|knocked)/i);
+		if (saveBonusMatch) {
+			effects.saveBonuses.resistMovement = "proficiency";
+		}
+
+		// Difficult terrain: "ignore the first X feet of difficult terrain"
+		const terrainMatch = text.match(/ignore\s+(?:the\s+)?first\s+(\d+)\s+feet?\s+of\s+difficult\s+terrain/i);
+		if (terrainMatch) {
+			effects.otherEffects.push({
+				type: "ignoreDifficultTerrain",
+				amount: parseInt(terrainMatch[1], 10),
+			});
+		}
+
+		return effects;
+	}
+
+	/**
+	 * Get the effects of the currently active stance
+	 * @returns {object|null} The stance effects or null if no stance active
+	 */
+	_getActiveStanceEffects () {
+		if (!this._data.activeStance) return null;
+
+		// Find the stance method in features
+		const stanceFeature = this._data.features?.find(f =>
+			f.name === this._data.activeStance
+			&& f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"))
+		);
+
+		if (!stanceFeature) return null;
+
+		const parsed = this._parseCombatMethodEffects(stanceFeature);
+		if (!parsed.isStance) return null;
+
+		// Resolve "proficiency" placeholders to actual values
+		const profBonus = this.getProficiencyBonus();
+		const resolvedEffects = { ...parsed.stanceEffects };
+
+		// Resolve skill bonuses
+		if (resolvedEffects.skillBonuses) {
+			const resolved = {};
+			for (const [skill, value] of Object.entries(resolvedEffects.skillBonuses)) {
+				resolved[skill] = value === "proficiency" ? profBonus : value;
+			}
+			resolvedEffects.skillBonuses = resolved;
+		}
+
+		// Resolve save bonuses
+		if (resolvedEffects.saveBonuses) {
+			const resolved = {};
+			for (const [save, value] of Object.entries(resolvedEffects.saveBonuses)) {
+				resolved[save] = value === "proficiency" ? profBonus : value;
+			}
+			resolvedEffects.saveBonuses = resolved;
+		}
+
+		return resolvedEffects;
+	}
+
+	/**
+	 * Get the maximum method degree the character can access based on class and level
+	 * @returns {number} Maximum degree (1-5), or 0 if no CTM access
+	 */
+	getMethodDegreeAccess () {
+		if (!this.usesCombatSystem()) return 0;
+
+		let maxDegree = 0;
+
+		// Check each TGTT martial class for degree progression
+		const classes = this._data.classes || [];
+		for (const cls of classes) {
+			if (cls.source !== "TGTT") continue;
+			const level = cls.level || 0;
+			const className = cls.name?.toLowerCase();
+			let classDegree = 0;
+
+			switch (className) {
+				case "fighter":
+					// Fighter: L1→1, L4→2, L8→3, L12→4, L16→5
+					if (level >= 16) classDegree = 5;
+					else if (level >= 12) classDegree = 4;
+					else if (level >= 8) classDegree = 3;
+					else if (level >= 4) classDegree = 2;
+					else if (level >= 1) classDegree = 1;
+					break;
+
+				case "barbarian":
+					// Barbarian: L2→1, L5→2, L9→3, L12→4, L17→5
+					if (level >= 17) classDegree = 5;
+					else if (level >= 12) classDegree = 4;
+					else if (level >= 9) classDegree = 3;
+					else if (level >= 5) classDegree = 2;
+					else if (level >= 2) classDegree = 1;
+					break;
+
+				case "ranger":
+					// Ranger: L2→1, L5→2, L9→3, L13→4, L17→5
+					if (level >= 17) classDegree = 5;
+					else if (level >= 13) classDegree = 4;
+					else if (level >= 9) classDegree = 3;
+					else if (level >= 5) classDegree = 2;
+					else if (level >= 2) classDegree = 1;
+					break;
+
+				case "monk":
+					// Monk: L2→1, L4→2, L8→3, L13→4, L17→5
+					if (level >= 17) classDegree = 5;
+					else if (level >= 13) classDegree = 4;
+					else if (level >= 8) classDegree = 3;
+					else if (level >= 4) classDegree = 2;
+					else if (level >= 2) classDegree = 1;
+					break;
+
+				case "paladin":
+					// Paladin: L2→1, L7→2, L13→3, L19→4 (max 4th degree)
+					if (level >= 19) classDegree = 4;
+					else if (level >= 13) classDegree = 3;
+					else if (level >= 7) classDegree = 2;
+					else if (level >= 2) classDegree = 1;
+					break;
+
+				case "rogue":
+					// Rogue: L2→1, L7→2, L13→3, L19→4 (max 4th degree)
+					if (level >= 19) classDegree = 4;
+					else if (level >= 13) classDegree = 3;
+					else if (level >= 7) classDegree = 2;
+					else if (level >= 2) classDegree = 1;
+					break;
+			}
+
+			if (classDegree > maxDegree) maxDegree = classDegree;
+		}
+
+		return maxDegree;
+	}
+
+	// =========================================================================
+	// Stance Management (TGTT Combat Methods)
+	// =========================================================================
+
+	/**
+	 * Activate a stance. Only one stance can be active at a time.
+	 * Activating a new stance automatically deactivates the previous one.
+	 * @param {string} methodName - Name of the stance method to activate
+	 * @returns {boolean} True if activation successful, false otherwise
+	 */
+	activateStance (methodName) {
+		// Find the method feature
+		const method = this._data.features?.find(f =>
+			f.name === methodName
+			&& f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"))
+		);
+
+		if (!method) {
+			console.warn(`[CharSheet State] Cannot activate stance: method "${methodName}" not found`);
+			return false;
+		}
+
+		// Verify it's actually a stance
+		const parsed = this._parseCombatMethodEffects(method);
+		if (!parsed.isStance) {
+			console.warn(`[CharSheet State] Cannot activate stance: "${methodName}" is not a stance`);
+			return false;
+		}
+
+		// Deactivate any current stance first (mutual exclusivity)
+		if (this._data.activeStance && this._data.activeStance !== methodName) {
+			console.log(`[CharSheet State] Deactivating previous stance: ${this._data.activeStance}`);
+		}
+
+		// Activate the new stance
+		this._data.activeStance = methodName;
+		console.log(`[CharSheet State] Activated stance: ${methodName}`);
+
+		return true;
+	}
+
+	/**
+	 * Deactivate the currently active stance
+	 */
+	deactivateStance () {
+		if (this._data.activeStance) {
+			console.log(`[CharSheet State] Deactivated stance: ${this._data.activeStance}`);
+		}
+		this._data.activeStance = null;
+	}
+
+	/**
+	 * Get the name of the currently active stance
+	 * @returns {string|null} Name of active stance or null
+	 */
+	getActiveStance () {
+		return this._data.activeStance || null;
+	}
+
+	/**
+	 * Check if a specific stance is currently active
+	 * @param {string} methodName - Name of the stance to check
+	 * @returns {boolean}
+	 */
+	isStanceActive (methodName) {
+		return this._data.activeStance === methodName;
+	}
+
+	/**
+	 * Check if any stance is currently active
+	 * @returns {boolean}
+	 */
+	hasActiveStance () {
+		return this._data.activeStance != null;
+	}
+
+	/**
+	 * Use a combat method, spending the required exertion
+	 * @param {string} methodName - Name of the method to use
+	 * @returns {boolean} True if method used successfully, false if insufficient exertion or method not found
+	 */
+	useCombatMethod (methodName) {
+		// Find the method
+		const method = this._data.features?.find(f =>
+			f.name === methodName
+			&& f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"))
+		);
+
+		if (!method) {
+			console.warn(`[CharSheet State] Cannot use method: "${methodName}" not found`);
+			return false;
+		}
+
+		const parsed = this._parseCombatMethodEffects(method);
+		const cost = parsed.exertionCost || 0;
+
+		if (cost > 0) {
+			const success = this.spendExertion(cost);
+			if (!success) {
+				console.warn(`[CharSheet State] Cannot use method: insufficient exertion (need ${cost}, have ${this.getExertionCurrent()})`);
+				return false;
+			}
+		}
+
+		// If it's a stance, activate it
+		if (parsed.isStance) {
+			this.activateStance(methodName);
+		}
+
+		console.log(`[CharSheet State] Used combat method: ${methodName} (cost: ${cost} exertion)`);
+		return true;
+	}
+
+	/**
+	 * Check if a combat method is a stance
+	 * @param {string} methodName - Name of the method to check
+	 * @returns {boolean}
+	 */
+	isMethodStance (methodName) {
+		const method = this._data.features?.find(f =>
+			f.name === methodName
+			&& f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"))
+		);
+
+		if (!method) return false;
+
+		const parsed = this._parseCombatMethodEffects(method);
+		return parsed.isStance;
 	}
 
 	// =========================================================================
