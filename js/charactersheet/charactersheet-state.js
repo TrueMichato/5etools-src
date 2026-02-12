@@ -8606,7 +8606,10 @@ class CharacterSheetState {
 					// Metamagic options count
 					if (level >= 3 || (is2024 && level >= 2)) {
 						calculations.hasMetamagic = true;
-						if (is2024) {
+						if (source === "TGTT") {
+							// TGTT: 2 at level 2, 3 at level 3, 4 at level 6, 5 at level 10, 6 at level 13, 7 at level 17
+							calculations.metamagicOptions = level >= 17 ? 7 : level >= 13 ? 6 : level >= 10 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2;
+						} else if (source === "XPHB") {
 							// XPHB: 2 at level 2, 4 at level 10, 6 at level 17
 							calculations.metamagicOptions = level >= 17 ? 6 : level >= 10 ? 4 : 2;
 						} else {
@@ -21236,10 +21239,10 @@ class CharacterSheetState {
 		empowered: {name: "Empowered Spell", type: "passive", cost: 1, description: "Reroll damage dice up to CHA mod"},
 		extended: {name: "Extended Spell", type: "passive", cost: 1, description: "Double spell duration (max 24h)"},
 		transmuted: {name: "Transmuted Spell", type: "passive", cost: 1, description: "Change damage type (acid/cold/fire/lightning/poison/thunder)"},
-		resonant: {name: "Resonant Spell", type: "passive", cost: 2, description: "Repeat concentrating spell effect as bonus action"},
-		split: {name: "Split Spell", type: "passive", cost: 2, description: "Single-target spells can target two creatures"},
-		supple: {name: "Supple Spell", type: "passive", cost: 1, description: "Cast without verbal and somatic components"},
-		warding: {name: "Warding Spell", type: "passive", cost: 1, description: "Gain temp HP equal to spell level when casting"},
+		resonant: {name: "Resonant Spell", type: "passive", cost: 2, description: "Dispel/counter attempts have disadvantage"},
+		split: {name: "Split Spell", type: "passive", cost: 1, description: "Split AoE (10ft+) between two points within range"},
+		supple: {name: "Supple Spell", type: "passive", cost: 2, description: "Increase/decrease AoE (10ft+) by up to half"},
+		warding: {name: "Warding Spell", type: "passive", cost: 2, description: "AC +1 while concentrating"},
 		// Active Metamagics (standard - spend per cast)
 		heightened: {name: "Heightened Spell", type: "active", cost: 3, description: "One target has disadvantage on first save"},
 		quickened: {name: "Quickened Spell", type: "active", cost: 2, description: "Cast as bonus action instead of action"},
@@ -21247,13 +21250,13 @@ class CharacterSheetState {
 		subtle: {name: "Subtle Spell", type: "active", cost: 1, description: "Cast without verbal or somatic components"},
 		twinned: {name: "Twinned Spell", type: "active", cost: "level", description: "Single-target spell hits second target (cost = spell level)"},
 		// TGTT-only Active Metamagics
-		aimed: {name: "Aimed Spell", type: "active", cost: 1, description: "Ignore half/three-quarters cover on spell attacks"},
-		bestowed: {name: "Bestowed Spell", type: "active", cost: 2, description: "Willing creature you touch can cast your spell"},
-		bouncing: {name: "Bouncing Spell", type: "active", cost: 1, description: "Missed attack can retarget within 30ft"},
-		focused: {name: "Focused Spell", type: "active", cost: 1, description: "Add CHA mod to concentration saves for this spell"},
-		lingering: {name: "Lingering Spell", type: "active", cost: 2, description: "Instant spell's effects persist for extra round"},
-		overcharged: {name: "Overcharged Spell", type: "active", cost: 2, description: "Maximize one damage die"},
-		vampiric: {name: "Vampiric Spell", type: "active", cost: 3, description: "Heal for half of damage dealt"},
+		aimed: {name: "Aimed Spell", type: "active", cost: 2, description: "Add 1d6 to spell attack roll"},
+		bestowed: {name: "Bestowed Spell", type: "active", cost: "level", description: "Change self-range spell to touch range"},
+		bouncing: {name: "Bouncing Spell", type: "active", cost: 3, description: "On save success, spell bounces to new target in range"},
+		focused: {name: "Focused Spell", type: "active", cost: "level", description: "Reroll one concentration save die"},
+		lingering: {name: "Lingering Spell", type: "active", cost: "level", description: "On concentration loss, effect lingers until end of next turn"},
+		overcharged: {name: "Overcharged Spell", type: "active", cost: 4, description: "Maximize all damage dice (no rolling)"},
+		vampiric: {name: "Vampiric Spell", type: "active", cost: "halfLevel", description: "Heal equal to damage dealt"},
 	};
 
 	/**

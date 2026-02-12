@@ -3297,6 +3297,80 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				expect(keys).toContain("overcharged");
 				expect(keys).toContain("vampiric");
 			});
+
+			it("should have correct TGTT metamagic costs", () => {
+				// Verify passive costs
+				expect(state.getMetamagicInfo("split").cost).toBe(1); // Split AoE
+				expect(state.getMetamagicInfo("supple").cost).toBe(2); // Resize AoE
+				expect(state.getMetamagicInfo("warding").cost).toBe(2); // AC+1 concentrating
+				expect(state.getMetamagicInfo("resonant").cost).toBe(2); // Dispel disadvantage
+				
+				// Verify active costs
+				expect(state.getMetamagicInfo("aimed").cost).toBe(2); // +1d6 to attack
+				expect(state.getMetamagicInfo("bouncing").cost).toBe(3); // Bounce on save
+				expect(state.getMetamagicInfo("overcharged").cost).toBe(4); // Max all damage
+				
+				// Variable costs (spell level based)
+				expect(state.getMetamagicInfo("bestowed").cost).toBe("level");
+				expect(state.getMetamagicInfo("focused").cost).toBe("level");
+				expect(state.getMetamagicInfo("lingering").cost).toBe("level");
+				expect(state.getMetamagicInfo("vampiric").cost).toBe("halfLevel");
+			});
+		});
+
+		describe("TGTT Metamagic Options Progression", () => {
+			it("should have unique TGTT progression (2/3/4/5/6/7 at levels 2/3/6/10/13/17)", () => {
+				// Level 2: 2 options
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "TGTT", level: 2});
+				let calcs = state.getFeatureCalculations();
+				expect(calcs.hasMetamagic).toBe(true);
+				expect(calcs.metamagicOptions).toBe(2);
+				
+				// Level 3: 3 options
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "TGTT", level: 3});
+				calcs = state.getFeatureCalculations();
+				expect(calcs.metamagicOptions).toBe(3);
+				
+				// Level 6: 4 options
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "TGTT", level: 6});
+				calcs = state.getFeatureCalculations();
+				expect(calcs.metamagicOptions).toBe(4);
+				
+				// Level 10: 5 options
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "TGTT", level: 10});
+				calcs = state.getFeatureCalculations();
+				expect(calcs.metamagicOptions).toBe(5);
+				
+				// Level 13: 6 options
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "TGTT", level: 13});
+				calcs = state.getFeatureCalculations();
+				expect(calcs.metamagicOptions).toBe(6);
+				
+				// Level 17: 7 options
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "TGTT", level: 17});
+				calcs = state.getFeatureCalculations();
+				expect(calcs.metamagicOptions).toBe(7);
+			});
+
+			it("should differ from XPHB progression", () => {
+				// XPHB level 6: 2 options (not 4 like TGTT)
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "XPHB", level: 6});
+				const xphbCalcs = state.getFeatureCalculations();
+				
+				state = new CharacterSheetState();
+				state.addClass({name: "Sorcerer", source: "TGTT", level: 6});
+				const tgttCalcs = state.getFeatureCalculations();
+				
+				expect(xphbCalcs.metamagicOptions).toBe(2); // XPHB: 2 at level 6
+				expect(tgttCalcs.metamagicOptions).toBe(4); // TGTT: 4 at level 6
+			});
 		});
 
 		describe("Tuning Passive Metamagics", () => {
@@ -3376,7 +3450,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				state.tuneMetamagic("careful"); // locks 1
 				expect(state.getEffectiveSorceryPointMax()).toBe(4);
 				
-				state.tuneMetamagic("split"); // locks 2
+				state.tuneMetamagic("warding"); // locks 2 (TGTT: AC+1 while concentrating)
 				expect(state.getEffectiveSorceryPointMax()).toBe(2);
 			});
 
@@ -3391,10 +3465,10 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			});
 
 			it("should not allow tuning if insufficient effective SP", () => {
-				// Lock 4 SP (careful=1, distant=1, split=2)
+				// Lock 4 SP (careful=1, distant=1, supple=2)
 				state.tuneMetamagic("careful");
 				state.tuneMetamagic("distant");
-				state.tuneMetamagic("split");
+				state.tuneMetamagic("supple");
 				
 				// Effective max is now 1, can't tune resonant (cost 2)
 				const result = state.tuneMetamagic("resonant");
