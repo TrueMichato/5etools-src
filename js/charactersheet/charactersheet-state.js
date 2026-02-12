@@ -5743,10 +5743,18 @@ class CharacterSheetState {
 								break;
 							}
 							case "Assassin": {
+								const isTGTT = (cls.source || "PHB") === "TGTT";
 								// Assassinate (level 3)
 								if (level >= 3) {
 									calculations.hasAssassinate = true;
-									calculations.hasAdvantageOnSurprisedTargets = true;
+									if (isTGTT) {
+										// TGTT: Advantage on creatures that haven't acted in first round
+										calculations.hasAdvantageOnUnactedTargets = true;
+										calculations.assassinateAutoCrit = true; // No surprise requirement
+									} else {
+										// Official: Advantage on creatures that haven't taken a turn, auto-crit if surprised
+										calculations.hasAdvantageOnSurprisedTargets = true;
+									}
 								}
 								// Bonus Proficiencies (PHB level 3)
 								if (!is2024 && level >= 3) {
@@ -6654,12 +6662,17 @@ class CharacterSheetState {
 
 					// Way of The Shackled
 					if (cls.subclass?.shortName === "Shackled") {
+						const chaMod = this.getAbilityMod("cha");
+
 						// Hidden Arts (level 3): Acrobatics + Performance proficiency, DEX for Performance
 						calculations.hasHiddenArts = true;
 
 						// Rhythmic Step (level 3): 2 ki, bonus action, 1 minute
+						// Grants AC bonus = CHA modifier (minimum 1) while active
+						// Also grants advantage on DEX saves and Acrobatics checks
 						calculations.hasRhythmicStep = true;
 						calculations.rhythmicStepCost = 2;
+						calculations.rhythmicStepAcBonus = Math.max(1, chaMod);
 
 						// Balanced Whirlwind (level 6): immune to prone + counter-attack while Rhythmic Step
 						if (level >= 6) {
@@ -8079,6 +8092,21 @@ class CharacterSheetState {
 					// Pact Boon (PHB level 3)
 					if (!is2024 && level >= 3) {
 						calculations.hasPactBoon = true;
+					}
+
+					// TGTT: Pact of Transformation (level 3)
+					// Check if character has Pact of Transformation feature
+					const hasPactOfTransformation = this._data.features?.some(f =>
+						f.name?.toLowerCase()?.includes("pact of transformation") ||
+						f.name?.toLowerCase()?.includes("pact of the transformation")
+					);
+					if (hasPactOfTransformation && level >= 3) {
+						calculations.hasPactOfTransformation = true;
+						// Transformation uses = proficiency bonus per long rest
+						calculations.pactTransformationUses = profBonus;
+						// CR limit scales with warlock level
+						const crLimit = level >= 17 ? 4 : level >= 11 ? 2 : level >= 7 ? 1 : 0.5;
+						calculations.pactTransformationCrLimit = crLimit;
 					}
 
 					// Magical Cunning (XPHB level 2)
@@ -11629,6 +11657,31 @@ class CharacterSheetState {
 			calculations.dreamerAbilitiesMax = 2;
 		}
 
+		// Dreamwalker Abilities (DW:C / DW:S)
+		// Track all abilities from any source (Dreamer feat, Nyuidj race, Dreamwalker class)
+		if (this.hasDreamwalkerAbilities()) {
+			calculations.hasDreamwalkerAbilities = true;
+			calculations.dreamwalkerAbilities = this.getDreamwalkerAbilities();
+			calculations.dreamwalkerAbilityCounts = this.getDreamwalkerAbilityCounts();
+			calculations.dreamwalkerAbilitiesMax = this.getDreamwalkerAbilitiesMax();
+			calculations.dreamwalkerPrerequisiteErrors = this.validateDreamwalkerPrerequisites();
+
+			// Track specific core abilities
+			calculations.hasDreamwalkAbility = this.hasDreamwalkerAbility("Dreamwalk");
+			calculations.hasDreamwatchAbility = this.hasDreamwalkerAbility("Dreamwatch");
+			calculations.hasDreambendAbility = this.hasDreamwalkerAbility("Dreambend");
+
+			// Track specific special abilities
+			calculations.hasDreamjumpAbility = this.hasDreamwalkerAbility("Dreamjump");
+			calculations.hasDreamorphAbility = this.hasDreamwalkerAbility("Dreamorph");
+			calculations.hasDreamforgeAbility = this.hasDreamwalkerAbility("Dreamforge");
+			calculations.hasDreamakeAbility = this.hasDreamwalkerAbility("Dreamake");
+			calculations.hasDreamsnatchAbility = this.hasDreamwalkerAbility("Dreamsnatch");
+			calculations.hasDreamshareAbility = this.hasDreamwalkerAbility("Dreamshare");
+			calculations.hasDreamveilAbility = this.hasDreamwalkerAbility("Dreamveil");
+			calculations.hasDaydreamAbility = this.hasDreamwalkerAbility("Daydream");
+		}
+
 		// Lore Mastery (TGTT)
 		// - +2 to two existing lore skill proficiencies, OR
 		// - +2 proficiency in two new lore skills
@@ -12206,8 +12259,124 @@ class CharacterSheetState {
 			effects.push({ type: "skillProficiency", skill: "performance", level: 1, source: "Hidden Arts" });
 		}
 
+		// Way of The Shackled - Rhythmic Step: AC bonus = CHA mod (toggled)
+		if (calculations.hasRhythmicStep && calculations.rhythmicStepAcBonus && !alreadyProcessed("Rhythmic Step")) {
+			effects.push({
+				type: "acBonus",
+				value: calculations.rhythmicStepAcBonus,
+				source: "Rhythmic Step",
+				conditional: "while Rhythmic Step is active",
+				enabled: false,
+			});
+		}
+
 		// Way of The Shackled - Balanced Whirlwind: immune to prone while Rhythmic Step
-		// (Conditional - tracked as a feature flag, not auto-applied)
+		if (calculations.hasBalancedWhirlwind && !alreadyProcessed("Balanced Whirlwind")) {
+			effects.push({
+				type: "conditionImmunity",
+				condition: "prone",
+				source: "Balanced Whirlwind",
+				conditional: "while Rhythmic Step is active",
+				enabled: false,
+			});
+		}
+
+		// Way of Five Animals - Crane Parry: +2 AC as reaction (1 ki)
+		if (calculations.craneParryAcBonus && !alreadyProcessed("Crane Parry")) {
+			effects.push({
+				type: "acBonus",
+				value: calculations.craneParryAcBonus,
+				source: "Crane Parry",
+				conditional: "reaction, costs 1 ki",
+				enabled: false,
+			});
+		}
+
+		// ===== TGTT ROGUE SUBCLASSES =====
+
+		// Belly Dancer - Snake Charmer: AC bonus = CHA mod (while dancing/unarmored)
+		if (calculations.hasSnakeCharmer && calculations.danceAcBonus && !alreadyProcessed("Snake Charmer")) {
+			effects.push({
+				type: "acBonus",
+				value: calculations.danceAcBonus,
+				source: "Snake Charmer",
+				conditional: "while dancing, not wearing armor",
+				enabled: false,
+			});
+		}
+
+		// ===== TGTT WARLOCK SUBCLASSES =====
+
+		// The Horror - Unarmored Defense: AC = 10 + DEX + CON
+		if (calculations.hasDevastatingStrike && calculations.horrorUnarmoredAc && !alreadyProcessed("Horror Unarmored Defense")) {
+			effects.push({
+				type: "acFormula",
+				base: 10,
+				addDex: true,
+				secondAbility: "con",
+				source: "Horror Unarmored Defense",
+				conditional: "while unarmored",
+			});
+		}
+
+		// The Horror - Unearthly Manifestation: CON save proficiency
+		if (calculations.hasUnearthlyManifestation && calculations.hasConstitutionSaveProficiency && !alreadyProcessed("Unearthly Manifestation")) {
+			effects.push({
+				type: "saveProficiency",
+				ability: "con",
+				source: "Unearthly Manifestation",
+			});
+		}
+
+		// The Horror - Unearthly Manifestation: Magical unarmed strikes
+		if (calculations.hasMagicalUnarmedStrikes && !alreadyProcessed("Magical Unarmed Strikes")) {
+			effects.push({
+				type: "weaponProperty",
+				weaponType: "unarmed",
+				property: "magical",
+				source: "Unearthly Manifestation",
+			});
+		}
+
+		// The Horror - Lone Survivor: immune to frightened when no allies nearby
+		if (calculations.hasLoneSurvivor && !alreadyProcessed("Lone Survivor")) {
+			effects.push({
+				type: "conditionImmunity",
+				condition: "frightened",
+				source: "Lone Survivor",
+				conditional: "when no allies within 30 ft.",
+				enabled: false,
+			});
+		}
+
+		// ===== TGTT SORCERER SUBCLASSES =====
+
+		// Heroic Soul - Over Soul: advantage on next roll (uses = prof bonus)
+		// (Active ability, tracked as uses)
+
+		// Heroic Soul - Legendary Weapon properties tracked
+		if (calculations.hasLegendaryWeapon && !alreadyProcessed("Legendary Weapon")) {
+			effects.push({
+				type: "weaponProperty",
+				weaponType: "legendary",
+				property: "manifested",
+				source: "Legendary Weapon",
+			});
+		}
+
+		// Heroic Soul - Manifest Legend: Extra Attack while active
+		if (calculations.hasManifestLegend && calculations.manifestLegendExtraAttack && !alreadyProcessed("Manifest Legend")) {
+			effects.push({
+				type: "attackCount",
+				count: 2,
+				source: "Manifest Legend",
+				conditional: "while Manifest Legend is active",
+				enabled: false,
+			});
+		}
+
+		// Fiendish Bloodline - Summoned Ferocity: summons get CHA bonus
+		// (Affects summons, not self - tracked for reference)
 
 		// =========================================================
 		// DRUID FEATURES
@@ -13350,6 +13519,7 @@ class CharacterSheetState {
 	 * - Level 10 (Magic Item Adept): 4 items
 	 * - Level 14 (Magic Item Savant): 5 items
 	 * - Level 18 (Soul of Artifice): 6 items
+	 * Use Magic Device (Thief 13) grants 4 slots
 	 * @returns {number} Maximum attunement slots
 	 */
 	getMaxAttunement () {
@@ -13368,7 +13538,74 @@ class CharacterSheetState {
 			}
 		}
 
+		// Check for Use Magic Device (Thief 13+)
+		const hasUseMagicDevice = this._data.features?.some(f =>
+			f.name?.toLowerCase()?.includes("use magic device")
+		);
+		if (hasUseMagicDevice) {
+			max = Math.max(max, 4);
+		}
+
+		// Check for class feature attunement override
+		if (this._data._classFeatureAttunementSlots) {
+			max = Math.max(max, this._data._classFeatureAttunementSlots);
+		}
+
 		return max;
+	}
+
+	/**
+	 * Check if the character can ignore attunement requirements
+	 * Use Magic Device (Thief) allows ignoring class, race, spell, and level requirements
+	 * @returns {boolean} True if requirements can be ignored
+	 */
+	ignoresAttunementRequirements () {
+		// Check for Use Magic Device (TGTT/2024 version)
+		const hasUseMagicDevice = this._data.features?.some(f =>
+			f.name?.toLowerCase()?.includes("use magic device")
+		);
+		if (hasUseMagicDevice) return true;
+
+		// Check for class feature flag
+		if (this._data._classFeatureIgnoreAttunementRequirements) return true;
+
+		return false;
+	}
+
+	/**
+	 * Get the Use Magic Device spell scroll ability modifier
+	 * TGTT version uses INT for spell scrolls
+	 * @returns {object|null} {ability, modifier} or null if no UMD
+	 */
+	getUseMagicDeviceScrollAbility () {
+		const hasUseMagicDevice = this._data.features?.some(f =>
+			f.name?.toLowerCase()?.includes("use magic device") &&
+			(f.source === "TGTT" || f.source === "XPHB")
+		);
+		if (!hasUseMagicDevice) return null;
+
+		// TGTT and 2024 Use Magic Device uses INT for scrolls
+		return {
+			ability: "int",
+			modifier: this.getAbilityMod("int"),
+		};
+	}
+
+	/**
+	 * Roll a charge-saving roll for a magic item (TGTT Use Magic Device)
+	 * When using the last charge, roll 1d6. On a 1, the item is destroyed.
+	 * @returns {object} {roll, destroyed, message}
+	 */
+	rollChargeSavingThrow () {
+		const roll = Math.floor(Math.random() * 6) + 1;
+		const destroyed = roll === 1;
+		return {
+			roll,
+			destroyed,
+			message: destroyed
+				? `Rolled ${roll} - the item crumbles to dust!`
+				: `Rolled ${roll} - the item is saved!`,
+		};
 	}
 
 	getTotalWeight () {
@@ -16447,6 +16684,206 @@ class CharacterSheetState {
 		}
 	}
 	// #endregion
+
+	// =========================================================================
+	// Dreamwalker Abilities (DW:C / DW:S)
+	// =========================================================================
+
+	/**
+	 * Check if character has any Dreamwalker abilities
+	 * @returns {boolean}
+	 */
+	hasDreamwalkerAbilities () {
+		return this._data.features?.some(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "DW:C" || ft === "DW:S");
+		}) ?? false;
+	}
+
+	/**
+	 * Get all Dreamwalker abilities the character has
+	 * @returns {Array<object>} Array of ability objects with parsed effects
+	 */
+	getDreamwalkerAbilities () {
+		const abilities = this._data.features?.filter(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "DW:C" || ft === "DW:S");
+		}) ?? [];
+
+		return abilities.map(a => ({
+			name: a.name,
+			source: a.source,
+			description: a.description,
+			...this._parseDreamwalkerAbilityEffects(a),
+		}));
+	}
+
+	/**
+	 * Check if character has a specific Dreamwalker ability
+	 * @param {string} abilityName - Name of the ability to check
+	 * @returns {boolean}
+	 */
+	hasDreamwalkerAbility (abilityName) {
+		return this._data.features?.some(f => {
+			if (f.featureType !== "Optional Feature") return false;
+			if (f.name !== abilityName) return false;
+			return f.optionalFeatureTypes?.some(ft => ft === "DW:C" || ft === "DW:S");
+		}) ?? false;
+	}
+
+	/**
+	 * Parse effects from a Dreamwalker ability's entry text
+	 * @param {object} feature - The feature object
+	 * @returns {object} Parsed effects including abilityType, prerequisites, baseDc, etc.
+	 */
+	_parseDreamwalkerAbilityEffects (feature) {
+		const effects = {
+			abilityType: null, // "core" or "special"
+			prerequisites: [],
+			baseDc: null,
+			usesConcentration: false,
+			dcModifiers: [],
+		};
+
+		// Determine if core (DW:C) or special (DW:S)
+		const types = feature.optionalFeatureTypes || [];
+		if (types.includes("DW:C")) {
+			effects.abilityType = "core";
+		} else if (types.includes("DW:S")) {
+			effects.abilityType = "special";
+		}
+
+		// Get prerequisites from our mapping
+		effects.prerequisites = this._getDreamwalkerAbilityPrerequisites(feature.name);
+
+		// Parse from description text
+		const text = feature.description || "";
+
+		// Check if uses concentration checks
+		if (/concentration\s+check/i.test(text)) {
+			effects.usesConcentration = true;
+		}
+
+		// Parse base DC from text (e.g., "DC 15", "DC 20")
+		const dcMatch = text.match(/DC\s+(\d+)/i);
+		if (dcMatch) {
+			effects.baseDc = parseInt(dcMatch[1], 10);
+		}
+
+		// Parse DC modifiers (familiarity, distance, etc.)
+		if (/familiar|familiarity/i.test(text)) {
+			effects.dcModifiers.push({ type: "familiarity", description: "Modifier based on familiarity" });
+		}
+		if (/distance/i.test(text)) {
+			effects.dcModifiers.push({ type: "distance", description: "Modifier based on distance" });
+		}
+		if (/relationship/i.test(text)) {
+			effects.dcModifiers.push({ type: "relationship", description: "Modifier based on relationship" });
+		}
+
+		return effects;
+	}
+
+	/**
+	 * Get prerequisites for a Dreamwalker ability
+	 * @param {string} abilityName - Name of the ability
+	 * @returns {Array<string>} Array of prerequisite ability names
+	 */
+	_getDreamwalkerAbilityPrerequisites (abilityName) {
+		// DW:S abilities have specific prerequisites
+		const prerequisiteMap = {
+			// Special abilities and their prerequisites
+			"Dreamjump": ["Dreamwalk"],
+			"Dreamorph": ["Dreambend"],
+			"Dreamforge": ["Dreambend"],
+			"Dreamake": ["Dreambend", "Dreamforge"],
+			"Dreamsnatch": ["Dreamwatch"],
+			"Dreamshare": ["Dreamwatch"],
+			"Dreamveil": ["Dreamwatch", "Dreamwalk"],
+			"Daydream": ["Dreamwalk"],
+		};
+
+		return prerequisiteMap[abilityName] || [];
+	}
+
+	/**
+	 * Check if character meets prerequisites for a Dreamwalker ability
+	 * @param {string} abilityName - Name of the ability to check
+	 * @returns {boolean} True if all prerequisites are met
+	 */
+	meetsAbilityPrerequisite (abilityName) {
+		const prerequisites = this._getDreamwalkerAbilityPrerequisites(abilityName);
+		if (prerequisites.length === 0) return true;
+
+		// Check if character has all prerequisite abilities
+		return prerequisites.every(prereq => this.hasDreamwalkerAbility(prereq));
+	}
+
+	/**
+	 * Get the maximum number of Dreamwalker abilities the character can have
+	 * Sources: Dreamer feat (2 per taking), Nyuidj race (2), Dreamwalker class (progression)
+	 * @returns {number}
+	 */
+	getDreamwalkerAbilitiesMax () {
+		let max = 0;
+
+		// Count Dreamer feat instances (each gives 2 abilities)
+		// Multiple feats count if they have "Dreamer" in name with different numbers
+		const dreamerFeats = this._data.feats?.filter(f =>
+			f.name === "Dreamer" || /^Dreamer\s*\d*$/i.test(f.name)
+		) || [];
+		max += dreamerFeats.length * 2;
+
+		// Nyuidj race gets Dreamwalk + 1 additional ability (2 total)
+		const raceName = this._data.race?.name?.toLowerCase() || "";
+		if (raceName === "nyuidj" || raceName.includes("nyuidj")) {
+			max += 2;
+		}
+
+		// Dreamwalker class progression: 2 at L1, +2 at L4, +2 at L7, +2 at L9
+		const dreamwalkerClass = this._data.classes?.find(c =>
+			c.name === "Dreamwalker" && c.source === "TGTT"
+		);
+		if (dreamwalkerClass) {
+			const level = dreamwalkerClass.level || 0;
+			if (level >= 1) max += 2;
+			if (level >= 4) max += 2;
+			if (level >= 7) max += 2;
+			if (level >= 9) max += 2;
+		}
+
+		return max;
+	}
+
+	/**
+	 * Get the count of Dreamwalker abilities by type
+	 * @returns {object} {core: number, special: number, total: number}
+	 */
+	getDreamwalkerAbilityCounts () {
+		const abilities = this.getDreamwalkerAbilities();
+		const core = abilities.filter(a => a.abilityType === "core").length;
+		const special = abilities.filter(a => a.abilityType === "special").length;
+		return { core, special, total: core + special };
+	}
+
+	/**
+	 * Validate that all Dreamwalker abilities have their prerequisites met
+	 * @returns {Array<object>} Array of {ability, missingPrerequisites} for abilities with unmet prereqs
+	 */
+	validateDreamwalkerPrerequisites () {
+		const abilities = this.getDreamwalkerAbilities();
+		const invalid = [];
+
+		for (const ability of abilities) {
+			const prerequisites = this._getDreamwalkerAbilityPrerequisites(ability.name);
+			const missing = prerequisites.filter(prereq => !this.hasDreamwalkerAbility(prereq));
+			if (missing.length > 0) {
+				invalid.push({ ability: ability.name, missingPrerequisites: missing });
+			}
+		}
+
+		return invalid;
+	}
 
 	// #region Alternative Exertion Resources (TGTT Combat Methods)
 	/**
@@ -20528,6 +20965,152 @@ class CharacterSheetState {
 		return true;
 	}
 
+	// #region TGTT Passive Metamagic System
+	/**
+	 * TGTT Metamagic definitions - includes both standard and TGTT-specific metamagics
+	 * Passive metamagics lock SP from max and affect ALL spells until detuned
+	 * Active metamagics are spent per cast (standard behavior)
+	 */
+	static TGTT_METAMAGIC = {
+		// Passive Metamagics (tune once, affects all spells)
+		careful: {name: "Careful Spell", type: "passive", cost: 1, description: "Chosen creatures auto-succeed on spell saves"},
+		distant: {name: "Distant Spell", type: "passive", cost: 1, description: "Double range or make touch spells 30ft range"},
+		empowered: {name: "Empowered Spell", type: "passive", cost: 1, description: "Reroll damage dice up to CHA mod"},
+		extended: {name: "Extended Spell", type: "passive", cost: 1, description: "Double spell duration (max 24h)"},
+		transmuted: {name: "Transmuted Spell", type: "passive", cost: 1, description: "Change damage type (acid/cold/fire/lightning/poison/thunder)"},
+		resonant: {name: "Resonant Spell", type: "passive", cost: 2, description: "Repeat concentrating spell effect as bonus action"},
+		split: {name: "Split Spell", type: "passive", cost: 2, description: "Single-target spells can target two creatures"},
+		supple: {name: "Supple Spell", type: "passive", cost: 1, description: "Cast without verbal and somatic components"},
+		warding: {name: "Warding Spell", type: "passive", cost: 1, description: "Gain temp HP equal to spell level when casting"},
+		// Active Metamagics (standard - spend per cast)
+		heightened: {name: "Heightened Spell", type: "active", cost: 3, description: "One target has disadvantage on first save"},
+		quickened: {name: "Quickened Spell", type: "active", cost: 2, description: "Cast as bonus action instead of action"},
+		seeking: {name: "Seeking Spell", type: "active", cost: 2, description: "Reroll missed spell attack"},
+		subtle: {name: "Subtle Spell", type: "active", cost: 1, description: "Cast without verbal or somatic components"},
+		twinned: {name: "Twinned Spell", type: "active", cost: "level", description: "Single-target spell hits second target (cost = spell level)"},
+		// TGTT-only Active Metamagics
+		aimed: {name: "Aimed Spell", type: "active", cost: 1, description: "Ignore half/three-quarters cover on spell attacks"},
+		bestowed: {name: "Bestowed Spell", type: "active", cost: 2, description: "Willing creature you touch can cast your spell"},
+		bouncing: {name: "Bouncing Spell", type: "active", cost: 1, description: "Missed attack can retarget within 30ft"},
+		focused: {name: "Focused Spell", type: "active", cost: 1, description: "Add CHA mod to concentration saves for this spell"},
+		lingering: {name: "Lingering Spell", type: "active", cost: 2, description: "Instant spell's effects persist for extra round"},
+		overcharged: {name: "Overcharged Spell", type: "active", cost: 2, description: "Maximize one damage die"},
+		vampiric: {name: "Vampiric Spell", type: "active", cost: 3, description: "Heal for half of damage dealt"},
+	};
+
+	/**
+	 * Get currently tuned (passive) metamagics
+	 * @returns {string[]} Array of tuned metamagic keys
+	 */
+	getTunedMetamagics () {
+		return this._data.tunedMetamagics || [];
+	}
+
+	/**
+	 * Check if a specific metamagic is currently tuned
+	 * @param {string} key - Metamagic key (e.g., "careful", "distant")
+	 * @returns {boolean} True if tuned
+	 */
+	isMetamagicTuned (key) {
+		const tuned = this.getTunedMetamagics();
+		return tuned.includes(key);
+	}
+
+	/**
+	 * Tune a passive metamagic (lock SP from max)
+	 * @param {string} key - Metamagic key
+	 * @returns {boolean} True if successful
+	 */
+	tuneMetamagic (key) {
+		const metamagic = CharacterSheetState.TGTT_METAMAGIC[key];
+		if (!metamagic || metamagic.type !== "passive") return false;
+
+		if (!this._data.tunedMetamagics) this._data.tunedMetamagics = [];
+		if (this._data.tunedMetamagics.includes(key)) return false; // Already tuned
+
+		// Check if we have enough effective SP to lock
+		const effectiveMax = this.getEffectiveSorceryPointMax();
+		if (effectiveMax < metamagic.cost) return false;
+
+		this._data.tunedMetamagics.push(key);
+		return true;
+	}
+
+	/**
+	 * Detune a passive metamagic (free locked SP)
+	 * @param {string} key - Metamagic key
+	 * @returns {boolean} True if successful
+	 */
+	detuneMetamagic (key) {
+		if (!this._data.tunedMetamagics) return false;
+		const idx = this._data.tunedMetamagics.indexOf(key);
+		if (idx === -1) return false;
+		this._data.tunedMetamagics.splice(idx, 1);
+		return true;
+	}
+
+	/**
+	 * Get total sorcery points locked by tuned metamagics
+	 * @returns {number} Locked SP
+	 */
+	getLockedSorceryPoints () {
+		const tuned = this.getTunedMetamagics();
+		return tuned.reduce((total, key) => {
+			const meta = CharacterSheetState.TGTT_METAMAGIC[key];
+			return total + (meta?.cost || 0);
+		}, 0);
+	}
+
+	/**
+	 * Get effective sorcery point maximum (base max minus locked)
+	 * @returns {number} Effective max SP
+	 */
+	getEffectiveSorceryPointMax () {
+		const base = this.getSorceryPoints();
+		const locked = this.getLockedSorceryPoints();
+		return Math.max(0, base.max - locked);
+	}
+
+	/**
+	 * Get full metamagic information for UI display
+	 * @param {string} key - Metamagic key
+	 * @returns {object|null} Metamagic info with tuned status
+	 */
+	getMetamagicInfo (key) {
+		const meta = CharacterSheetState.TGTT_METAMAGIC[key];
+		if (!meta) return null;
+		return {
+			...meta,
+			key,
+			tuned: this.isMetamagicTuned(key),
+		};
+	}
+
+	/**
+	 * Get all active (non-passive) metamagics
+	 * @returns {object[]} Array of active metamagic definitions
+	 */
+	getActiveMetamagics () {
+		return Object.entries(CharacterSheetState.TGTT_METAMAGIC)
+			.filter(([_, meta]) => meta.type === "active")
+			.map(([key, meta]) => ({...meta, key}));
+	}
+
+	/**
+	 * Get all passive metamagics with tuned status
+	 * @returns {object[]} Array of passive metamagic definitions with tuned status
+	 */
+	getPassiveMetamagics () {
+		return Object.entries(CharacterSheetState.TGTT_METAMAGIC)
+			.filter(([_, meta]) => meta.type === "passive")
+			.map(([key, meta]) => ({
+				...meta,
+				key,
+				tuned: this.isMetamagicTuned(key),
+			}));
+	}
+	// #endregion
+
 	// #region Ki Points (Monk resource)
 	/**
 	 * Get Ki points maximum
@@ -20573,6 +21156,84 @@ class CharacterSheetState {
 		if (this._data.kiPoints.current < amount) return false;
 		this._data.kiPoints.current -= amount;
 		return true;
+	}
+	// #endregion
+
+	// #region Pact of Transformation (TGTT Warlock)
+	/**
+	 * Get Pact of Transformation state
+	 * @returns {object} {currentForm, usesRemaining, maxUses, tempHp}
+	 */
+	getPactTransformation () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasPactOfTransformation) return null;
+
+		return {
+			currentForm: this._data.pactTransformationForm || null,
+			usesRemaining: this._data.pactTransformationUses ?? calcs.pactTransformationUses,
+			maxUses: calcs.pactTransformationUses,
+			crLimit: calcs.pactTransformationCrLimit,
+			tempHp: this._data.pactTransformationTempHp || 0,
+		};
+	}
+
+	/**
+	 * Activate Pact of Transformation
+	 * @param {object} form - The creature form {name, cr, stats}
+	 * @returns {boolean} True if successful
+	 */
+	activatePactTransformation (form) {
+		const state = this.getPactTransformation();
+		if (!state) return false;
+		if (state.currentForm) return false; // Already transformed
+		if (state.usesRemaining <= 0) return false;
+
+		// Check CR limit
+		if (form.cr > state.crLimit) return false;
+
+		this._data.pactTransformationForm = form;
+		if (this._data.pactTransformationUses === undefined) {
+			this._data.pactTransformationUses = state.maxUses;
+		}
+		this._data.pactTransformationUses--;
+
+		// Grant temporary HP equal to warlock level
+		const warlockLevel = this._data.classes?.find(c =>
+			c.name?.toLowerCase() === "warlock"
+		)?.level || 0;
+		this._data.pactTransformationTempHp = warlockLevel * 3; // TGTT: 3 × warlock level
+
+		return true;
+	}
+
+	/**
+	 * End Pact of Transformation (revert to normal form)
+	 * @returns {boolean} True if successful
+	 */
+	endPactTransformation () {
+		if (!this._data.pactTransformationForm) return false;
+
+		this._data.pactTransformationForm = null;
+		this._data.pactTransformationTempHp = 0;
+		return true;
+	}
+
+	/**
+	 * Check if currently in pact transformation form
+	 * @returns {boolean} True if transformed
+	 */
+	isInPactTransformation () {
+		return !!this._data.pactTransformationForm;
+	}
+
+	/**
+	 * Reset Pact of Transformation uses (called on long rest)
+	 */
+	resetPactTransformationUses () {
+		const calcs = this.getFeatureCalculations();
+		if (calcs.hasPactOfTransformation) {
+			this._data.pactTransformationUses = calcs.pactTransformationUses;
+		}
 	}
 	// #endregion
 	// #endregion
