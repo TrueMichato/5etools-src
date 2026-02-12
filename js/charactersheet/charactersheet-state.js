@@ -7560,42 +7560,72 @@ class CharacterSheetState {
 					if (cls.subclass?.shortName === "Bastion") {
 						const chaMod = this.getAbilityMod("cha");
 
-						// Channel Divinity: Bulwark of Faith (level 3)
-						// Grant temporary HP to allies
+						// Level 3 Features
 						if (level >= 3) {
-							calculations.hasBulwarkOfFaith = true;
-							// Temp HP granted = paladin level + CHA modifier
-							calculations.bulwarkOfFaithTempHp = level + Math.max(0, chaMod);
+							// Channel Divinity: Sentry's Lingering Aura
+							// Touch ally, 1 min duration, ally immune to prone/push
+							// Creatures within 15ft make WIS save or frightened
+							calculations.hasSentrysLingeringAura = true;
+							calculations.sentrysLingeringAuraRange = 15;
+							calculations.sentrysLingeringAuraDuration = 1; // minute
+							// DC = spell save DC (8 + prof + CHA)
+							calculations.sentrysLingeringAuraDc = 8 + profBonus + chaMod - exhaustionPenalty;
+
+							// Channel Divinity: Shield of the Helpless
+							// Reaction when ally within 30ft targeted by attack
+							// Attack redirects to you, you gain resistance to that attack
+							calculations.hasShieldOfTheHelpless = true;
+							calculations.shieldOfTheHelplessRange = 30;
+
+							// Armor Bond
+							// Sleep in bonded armor without penalty
+							// Immune to effects that force armor removal
+							calculations.hasArmorBond = true;
+							calculations.armorBondSleepPenalty = false;
+							calculations.armorBondRemovalImmune = true;
 						}
 
-						// Channel Divinity: Rebuke the Aggressor (level 3)
-						if (level >= 3) {
-							calculations.hasRebukeTheAggressor = true;
-							calculations.rebukeTheAggressorDc = 8 + profBonus + chaMod - exhaustionPenalty;
-						}
-
-						// Fortifying Aura (level 7) - aura that grants temp HP
-						// Range: 10 feet at 7, 30 feet at 18
+						// Level 7 Features
 						if (level >= 7) {
+							// Fortifying Aura - temp HP to allies within range
+							// Range: 10ft at 7, 30ft at 18
 							calculations.hasFortifyingAura = true;
 							calculations.fortifyingAuraRange = level >= 18 ? 30 : 10;
 							// Temp HP = proficiency bonus at start of turn
 							calculations.fortifyingAuraTempHp = profBonus;
+
+							// Bastion's Sustenance
+							// 2x food/water duration, restore 1 exhaustion per rest
+							calculations.hasBastionsSustenance = true;
+							calculations.bastionsSustenanceFoodMultiplier = 2;
+							calculations.bastionsSustenanceExhaustionRecovery = 1;
 						}
 
-						// Indomitable Guardian (level 15) - resistance to BPS from nonmagical weapons
+						// Level 15 Feature: Indomitable Guardian
 						if (level >= 15) {
 							calculations.hasIndomitableGuardianPaladin = true;
-							// This grants resistance to bludgeoning, piercing, slashing from nonmagical attacks
+							// Resistance to nonmagical BPS damage
+							calculations.indomitableGuardianResistance = ["bludgeoning", "piercing", "slashing"];
+							// Unstoppable Advance: after 10ft charge + hit, bonus action push/prone
+							calculations.hasUnstoppableAdvance = true;
+							calculations.unstoppableAdvanceMinDistance = 10;
+							// Cannot be disarmed of shield
+							calculations.shieldDisarmImmune = true;
+							// Magic can't remove/bypass armor
+							calculations.armorBypassImmune = true;
 						}
 
-						// Eternal Bastion (level 20) - ultimate defensive form
+						// Level 20 Feature: Eternal Bastion
 						if (level >= 20) {
 							calculations.hasEternalBastion = true;
-							// Damage reduction = CHA modifier (minimum 1)
-							calculations.eternalBastionDamageReduction = Math.max(1, chaMod);
-							// Duration: 1 minute
-							calculations.eternalBastionDuration = 1;
+							// Living Fortress: immunity to nonmagical BPS, resistance to all other
+							calculations.eternalBastionImmunity = ["bludgeoning", "piercing", "slashing"];
+							calculations.eternalBastionResistanceAll = true;
+							// Unyielding Ward: allies within 30ft get resistance + CHA damage reduction
+							calculations.unyieldingWardRange = 30;
+							calculations.unyieldingWardDamageReduction = Math.max(1, chaMod);
+							// Undying Duty: drop to 1 HP instead of 0 (once)
+							calculations.hasUndyingDuty = true;
 						}
 					}
 

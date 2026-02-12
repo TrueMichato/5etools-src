@@ -7696,70 +7696,125 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 		describe("Paladin Subclasses - Calculations", () => {
 			
 			describe("Oath of Bastion", () => {
-				it("should calculate Bulwark of Faith temp HP at level 3", () => {
-					state.addClass({
-						name: "Paladin", source: "TGTT", level: 3,
-						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+				describe("Level 3 Features", () => {
+					beforeEach(() => {
+						state = new CharacterSheetState();
+						state.addClass({
+							name: "Paladin", source: "TGTT", level: 3,
+							subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+						});
+						state.setAbilityBase("cha", 16); // +3 mod
 					});
-					state.setAbilityBase("cha", 16); // +3 mod
 					
-					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasBulwarkOfFaith).toBe(true);
-					// Temp HP = level(3) + CHA(3) = 6
-					expect(calcs.bulwarkOfFaithTempHp).toBe(6);
+					it("should calculate Sentry's Lingering Aura DC", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasSentrysLingeringAura).toBe(true);
+						expect(calcs.sentrysLingeringAuraRange).toBe(15);
+						expect(calcs.sentrysLingeringAuraDuration).toBe(1);
+						// DC = 8 + prof(2) + CHA(3) = 13
+						expect(calcs.sentrysLingeringAuraDc).toBe(13);
+					});
+					
+					it("should grant Shield of the Helpless", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasShieldOfTheHelpless).toBe(true);
+						expect(calcs.shieldOfTheHelplessRange).toBe(30);
+					});
+					
+					it("should grant Armor Bond", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasArmorBond).toBe(true);
+						expect(calcs.armorBondSleepPenalty).toBe(false);
+						expect(calcs.armorBondRemovalImmune).toBe(true);
+					});
 				});
 				
-				it("should calculate Rebuke the Aggressor DC at level 3", () => {
-					state.addClass({
-						name: "Paladin", source: "TGTT", level: 3,
-						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+				describe("Level 7 Features", () => {
+					it("should calculate Fortifying Aura range progression", () => {
+						state.addClass({
+							name: "Paladin", source: "TGTT", level: 7,
+							subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+						});
+						
+						let calcs = state.getFeatureCalculations();
+						expect(calcs.hasFortifyingAura).toBe(true);
+						expect(calcs.fortifyingAuraRange).toBe(10); // 10ft at level 7
+						expect(calcs.fortifyingAuraTempHp).toBe(3); // prof +3
+						
+						state.addClass({name: "Paladin", source: "TGTT", level: 18});
+						calcs = state.getFeatureCalculations();
+						expect(calcs.fortifyingAuraRange).toBe(30); // 30ft at level 18
+						expect(calcs.fortifyingAuraTempHp).toBe(6); // prof +6
 					});
-					state.setAbilityBase("cha", 16); // +3 mod
 					
-					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasRebukeTheAggressor).toBe(true);
-					// DC = 8 + prof(2) + CHA(3) = 13
-					expect(calcs.rebukeTheAggressorDc).toBe(13);
+					it("should grant Bastion's Sustenance", () => {
+						state.addClass({
+							name: "Paladin", source: "TGTT", level: 7,
+							subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+						});
+						
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasBastionsSustenance).toBe(true);
+						expect(calcs.bastionsSustenanceFoodMultiplier).toBe(2);
+						expect(calcs.bastionsSustenanceExhaustionRecovery).toBe(1);
+					});
 				});
 				
-				it("should calculate Fortifying Aura range progression", () => {
-					state.addClass({
-						name: "Paladin", source: "TGTT", level: 7,
-						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+				describe("Level 15 Feature: Indomitable Guardian", () => {
+					beforeEach(() => {
+						state = new CharacterSheetState();
+						state.addClass({
+							name: "Paladin", source: "TGTT", level: 15,
+							subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+						});
 					});
 					
-					let calcs = state.getFeatureCalculations();
-					expect(calcs.hasFortifyingAura).toBe(true);
-					expect(calcs.fortifyingAuraRange).toBe(10); // 10ft at level 7
-					expect(calcs.fortifyingAuraTempHp).toBe(3); // prof +3
+					it("should grant Indomitable Guardian with BPS resistance", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasIndomitableGuardianPaladin).toBe(true);
+						expect(calcs.indomitableGuardianResistance).toEqual(["bludgeoning", "piercing", "slashing"]);
+					});
 					
-					state.addClass({name: "Paladin", source: "TGTT", level: 18});
-					calcs = state.getFeatureCalculations();
-					expect(calcs.fortifyingAuraRange).toBe(30); // 30ft at level 18
-					expect(calcs.fortifyingAuraTempHp).toBe(6); // prof +6
+					it("should grant Unstoppable Advance", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasUnstoppableAdvance).toBe(true);
+						expect(calcs.unstoppableAdvanceMinDistance).toBe(10);
+					});
+					
+					it("should grant shield and armor protection", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.shieldDisarmImmune).toBe(true);
+						expect(calcs.armorBypassImmune).toBe(true);
+					});
 				});
 				
-				it("should grant Indomitable Guardian (BPS resistance) at level 15", () => {
-					state.addClass({
-						name: "Paladin", source: "TGTT", level: 15,
-						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+				describe("Level 20 Feature: Eternal Bastion", () => {
+					beforeEach(() => {
+						state = new CharacterSheetState();
+						state.addClass({
+							name: "Paladin", source: "TGTT", level: 20,
+							subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+						});
+						state.setAbilityBase("cha", 18); // +4 mod
 					});
 					
-					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasIndomitableGuardianPaladin).toBe(true);
-				});
-				
-				it("should calculate Eternal Bastion damage reduction at level 20", () => {
-					state.addClass({
-						name: "Paladin", source: "TGTT", level: 20,
-						subclass: {name: "Oath of Bastion", shortName: "Bastion", source: "TGTT"}
+					it("should grant Eternal Bastion with immunities", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasEternalBastion).toBe(true);
+						expect(calcs.eternalBastionImmunity).toEqual(["bludgeoning", "piercing", "slashing"]);
+						expect(calcs.eternalBastionResistanceAll).toBe(true);
 					});
-					state.setAbilityBase("cha", 18); // +4 mod
 					
-					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasEternalBastion).toBe(true);
-					expect(calcs.eternalBastionDamageReduction).toBe(4);
-					expect(calcs.eternalBastionDuration).toBe(1); // 1 minute
+					it("should calculate Unyielding Ward properties", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.unyieldingWardRange).toBe(30);
+						expect(calcs.unyieldingWardDamageReduction).toBe(4); // CHA mod
+					});
+					
+					it("should grant Undying Duty", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasUndyingDuty).toBe(true);
+					});
 				});
 				
 				it("should not grant level 7+ features before appropriate level", () => {
@@ -7770,6 +7825,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasFortifyingAura).toBeFalsy();
+					expect(calcs.hasBastionsSustenance).toBeFalsy();
 					expect(calcs.hasIndomitableGuardianPaladin).toBeFalsy();
 					expect(calcs.hasEternalBastion).toBeFalsy();
 				});
