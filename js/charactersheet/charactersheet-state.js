@@ -6139,19 +6139,27 @@ class CharacterSheetState {
 									calculations.danceAcBonus = Math.max(1, chaMod);
 								}
 
-								// Hypnotic Movement (level 9) - mesmerize with movements
+								// Tantalizing Shivers (level 9) - charm with dance
+								// Bonus action: Performance vs Insight contest
+								// On success: target charmed + incapacitated, speed 0
+								// Advantage on attacks vs charmed target
 								if (level >= 9) {
-									calculations.hasHypnoticMovement = true;
-									calculations.hypnoticMovementDc = 8 + profBonus + chaMod - exhaustionPenalty;
+									calculations.hasTantalizingShivers = true;
 								}
 
-								// Inspiring Dance (level 13) - grant benefits to allies
+								// Fluid Step (level 13) - disengage while dancing
+								// Free Disengage while dancing
+								// Enemies can't Disengage from you while you dance
 								if (level >= 13) {
-									calculations.hasInspiringDance = true;
+									calculations.hasFluidStep = true;
+									calculations.freeDisengageWhileDancing = true;
+									calculations.preventEnemyDisengage = true;
 								}
 
-								// Percussive Strike (level 17) - stunning strike with dance
+								// Percussive Strike (level 17) - distract at dance start
+								// All hostile creatures seeing you: WIS save
 								// DC = 8 + proficiency + CHA
+								// Failures: you have advantage on attacks vs them
 								if (level >= 17) {
 									calculations.hasPercussiveStrike = true;
 									calculations.percussiveStrikeDc = 8 + profBonus + chaMod - exhaustionPenalty;
@@ -7041,34 +7049,60 @@ class CharacterSheetState {
 							// ===== TGTT BARBARIAN SUBCLASSES =====
 							case "chained fury":
 							case "path of the chained fury": {
-								// Chain Mastery - damage scales with level
-								// 1d8 at level 3, 1d10 at level 6, 1d12 at level 10, 2d6 at level 14
-								calculations.hasChainMastery = true;
+								const conMod = this.getAbilityMod("con");
+
+								// Manifest Chains (level 3)
+								// Spectral chains: martial, finesse, light, force damage
+								// Can grapple or shove on hit, count as 1 size larger
+								calculations.hasManifestChains = true;
+								calculations.chainProperties = ["finesse", "light"];
+								calculations.chainDamageType = "force";
+
+								// Damage and range scale with level
 								if (level >= 14) {
 									calculations.chainDamageDie = "2d6";
+									calculations.chainRange = 30;
+									calculations.chainGrappleSizeBonus = Infinity; // Any size
+									calculations.chainCount = 4;
+									calculations.chainExtraAttack = true; // 3 attacks if all chains
 								} else if (level >= 10) {
 									calculations.chainDamageDie = "1d12";
+									calculations.chainRange = 25;
+									calculations.chainGrappleSizeBonus = 2;
+									calculations.chainCount = 2;
 								} else if (level >= 6) {
 									calculations.chainDamageDie = "1d10";
+									calculations.chainRange = 20;
+									calculations.chainGrappleSizeBonus = 1;
+									calculations.chainCount = 2;
 								} else {
 									calculations.chainDamageDie = "1d8";
+									calculations.chainRange = 15;
+									calculations.chainGrappleSizeBonus = 1;
+									calculations.chainCount = 2;
 								}
 
-								// Chained Rage (level 6) - chain attacks while raging
+								// Chain Imprisonment (level 6)
+								// Chains magical, can restrain on grapple, damage per turn
 								if (level >= 6) {
-									calculations.hasChainedRage = true;
-									calculations.chainReach = 15; // feet
+									calculations.hasChainImprisonment = true;
+									calculations.chainsAreMagical = true;
+									calculations.chainRestrainDc = 8 + profBonus + conMod;
+									calculations.chainRestrainDamage = level; // Per turn
 								}
 
-								// Furious Chains (level 10) - bonus action attack with chain
+								// Chain Control (level 10)
+								// Immediate 10ft shove on grapple
 								if (level >= 10) {
-									calculations.hasFuriousChains = true;
+									calculations.hasChainControl = true;
+									calculations.chainShoveDistance = 10;
 								}
 
-								// Wrath of the Chained (level 14) - extra damage on critical
+								// Unchained Fury (level 14)
+								// No movement cost to move grappled creatures
 								if (level >= 14) {
-									calculations.hasWrathOfTheChained = true;
-									calculations.chainCritDamage = calculations.chainDamageDie;
+									calculations.hasUnchainedFury = true;
+									calculations.chainFreeMovement = true;
 								}
 								break;
 							}
@@ -7820,16 +7854,20 @@ class CharacterSheetState {
 
 					// Arcane Archer subclass
 					if (cls.subclass?.shortName === "Arcane Archer") {
-						// Arcane Shot uses: 2 per rest
-						calculations.arcaneShotUses = 2;
+						// Check for TGTT version vs official
+						const isAAFromTGTT = cls.source === "TGTT" || cls.subclass?.source === "TGTT";
+
+						// Arcane Shot uses: TGTT = prof bonus, Official = 2
+						calculations.arcaneShotUses = isAAFromTGTT ? profBonus : 2;
 
 						// Arcane Shot options known
 						const optionsKnown = level >= 18 ? 6 : level >= 15 ? 5 : level >= 10 ? 4 : level >= 7 ? 3 : 2;
 						calculations.arcaneShotOptions = optionsKnown;
 
-						// Arcane Shot save DC
-						const arcaneArrowDc = 8 + profBonus + this.getAbilityMod("int") - exhaustionPenalty;
-						calculations.arcaneShotSaveDc = arcaneArrowDc;
+						// Arcane Shot save DC: TGTT uses CON, Official uses INT
+						const aaSaveStat = isAAFromTGTT ? this.getAbilityMod("con") : this.getAbilityMod("int");
+						calculations.arcaneShotSaveDc = 8 + profBonus + aaSaveStat - exhaustionPenalty;
+						calculations.arcaneShotAbility = isAAFromTGTT ? "con" : "int";
 
 						// Curving Shot (level 7): Redirect missed arrow
 						if (level >= 7) {
@@ -8887,6 +8925,36 @@ class CharacterSheetState {
 									calculations.hasInfernalLegion = true;
 									calculations.summonCountMultiplier = 2;
 									calculations.concentrationFreeSummonUses = 1;
+								}
+								break;
+							}
+							case "Sun Bloodline":
+							case "Child of the Sun Bloodline": {
+								// Sun Bloodline (TGTT Sorcerer)
+								const chaMod = this.getAbilityMod("cha");
+
+								// Glimpse of the Sun (level 3)
+								// - Free Light cantrip
+								// - Can choose who perceives the light within 20ft
+								// - At level 3: 1 SP to blind creature within 20ft who can't see it
+								calculations.hasGlimpseOfTheSun = true;
+								calculations.lightCantrip = true;
+								calculations.glimpseSunRange = 20;
+								if (level >= 3) {
+									calculations.hasGlimpseBlind = true;
+									calculations.glimpseBlindCost = 1; // Sorcery point
+								}
+
+								// Summer's Defiant Blood (level 3)
+								// When attacked or forced to save: +CHA to next spell damage (1/round)
+								if (level >= 3) {
+									calculations.hasSummersDefiantBlood = true;
+									calculations.defiantBloodBonus = chaMod;
+								}
+
+								// Sun Spells (level 3) - always prepared spells
+								if (level >= 3) {
+									calculations.hasSunSpells = true;
 								}
 								break;
 							}
