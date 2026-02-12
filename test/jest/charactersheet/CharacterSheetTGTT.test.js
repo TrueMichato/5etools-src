@@ -949,6 +949,325 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			expect(features.some(f => f.name === "Keen Eye")).toBe(true);
 		});
 	});
+
+	// =========================================================================
+	// TGTT USE MAGIC DEVICE
+	// =========================================================================
+	describe("TGTT Use Magic Device", () => {
+		
+		beforeEach(() => {
+			state.addClass({name: "Rogue", source: "TGTT", level: 13});
+		});
+
+		describe("Attunement Slots", () => {
+			it("should grant 4 attunement slots with Use Magic Device", () => {
+				state.addFeature({
+					name: "Use Magic Device",
+					source: "TGTT",
+					className: "Rogue",
+					subclassName: "Thief",
+					level: 13,
+				});
+				
+				expect(state.getMaxAttunement()).toBe(4);
+			});
+
+			it("should default to 3 attunement without Use Magic Device", () => {
+				// Level 13 rogue without Use Magic Device
+				expect(state.getMaxAttunement()).toBe(3);
+			});
+
+			it("should stack with higher bonuses from Artificer", () => {
+				state.addFeature({
+					name: "Use Magic Device",
+					source: "TGTT",
+					className: "Rogue",
+					subclassName: "Thief",
+					level: 13,
+				});
+				state.addClass({name: "Artificer", source: "TCE", level: 14});
+				
+				// Artificer 14 = 5 slots, should override Use Magic Device's 4
+				expect(state.getMaxAttunement()).toBe(5);
+			});
+		});
+
+		describe("Ignore Attunement Requirements", () => {
+			it("should ignore attunement requirements with Use Magic Device", () => {
+				expect(state.ignoresAttunementRequirements()).toBe(false);
+				
+				state.addFeature({
+					name: "Use Magic Device",
+					source: "TGTT",
+					className: "Rogue",
+					subclassName: "Thief",
+					level: 13,
+				});
+				
+				expect(state.ignoresAttunementRequirements()).toBe(true);
+			});
+
+			it("should respect class feature flag for ignoring requirements", () => {
+				state._data._classFeatureIgnoreAttunementRequirements = true;
+				expect(state.ignoresAttunementRequirements()).toBe(true);
+			});
+		});
+
+		describe("Scroll Spellcasting", () => {
+			it("should use INT for spell scrolls with TGTT Use Magic Device", () => {
+				state.setAbilityBase("int", 16);
+				
+				state.addFeature({
+					name: "Use Magic Device",
+					source: "TGTT",
+					className: "Rogue",
+					subclassName: "Thief",
+					level: 13,
+				});
+				
+				const scrollAbility = state.getUseMagicDeviceScrollAbility();
+				expect(scrollAbility).not.toBeNull();
+				expect(scrollAbility.ability).toBe("int");
+				expect(scrollAbility.modifier).toBe(3); // +3 from 16 INT
+			});
+
+			it("should return null without Use Magic Device", () => {
+				const scrollAbility = state.getUseMagicDeviceScrollAbility();
+				expect(scrollAbility).toBeNull();
+			});
+		});
+
+		describe("Charge Saving Roll", () => {
+			it("should return roll result with destroyed flag", () => {
+				state.addFeature({
+					name: "Use Magic Device",
+					source: "TGTT",
+					className: "Rogue",
+					subclassName: "Thief",
+					level: 13,
+				});
+				
+				const result = state.rollChargeSavingThrow();
+				expect(result.roll).toBeGreaterThanOrEqual(1);
+				expect(result.roll).toBeLessThanOrEqual(6);
+				expect(typeof result.destroyed).toBe("boolean");
+				expect(typeof result.message).toBe("string");
+			});
+
+			it("should mark destroyed when roll is 1", () => {
+				// Mock Math.random to return a value that produces 1
+				const originalRandom = Math.random;
+				Math.random = () => 0; // Will produce roll of 1
+				
+				const result = state.rollChargeSavingThrow();
+				expect(result.roll).toBe(1);
+				expect(result.destroyed).toBe(true);
+				
+				Math.random = originalRandom;
+			});
+
+			it("should not destroy when roll is 2-6", () => {
+				// Mock Math.random to return a value that produces 6
+				const originalRandom = Math.random;
+				Math.random = () => 0.99; // Will produce roll of 6
+				
+				const result = state.rollChargeSavingThrow();
+				expect(result.roll).toBe(6);
+				expect(result.destroyed).toBe(false);
+				
+				Math.random = originalRandom;
+			});
+		});
+	});
+
+	// =========================================================================
+	// TGTT ASSASSINATE
+	// =========================================================================
+	describe("TGTT Assassinate", () => {
+		
+		describe("TGTT Version", () => {
+			beforeEach(() => {
+				state.addClass({name: "Rogue", source: "TGTT", level: 3});
+				state.setSubclass("Rogue", {name: "Assassin", source: "TGTT"});
+			});
+
+			it("should have hasAssassinate flag", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAssassinate).toBe(true);
+			});
+
+			it("should grant advantage on unacted targets in first round", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAdvantageOnUnactedTargets).toBe(true);
+			});
+
+			it("should grant auto-crit without surprise requirement", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.assassinateAutoCrit).toBe(true);
+			});
+
+			it("should NOT have the official surprised-only advantage", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAdvantageOnSurprisedTargets).toBeFalsy();
+			});
+		});
+
+		describe("Official Version", () => {
+			beforeEach(() => {
+				state.addClass({name: "Rogue", source: "PHB", level: 3});
+				state.setSubclass("Rogue", {name: "Assassin", source: "PHB"});
+			});
+
+			it("should have hasAssassinate flag", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAssassinate).toBe(true);
+			});
+
+			it("should grant advantage on surprised targets", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAdvantageOnSurprisedTargets).toBe(true);
+			});
+
+			it("should NOT have the TGTT unacted-targets advantage", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAdvantageOnUnactedTargets).toBeFalsy();
+			});
+		});
+	});
+
+	// =========================================================================
+	// TGTT PACT OF TRANSFORMATION
+	// =========================================================================
+	describe("TGTT Pact of Transformation", () => {
+		
+		beforeEach(() => {
+			state.addClass({name: "Warlock", source: "TGTT", level: 5});
+			state.addFeature({
+				name: "Pact of Transformation",
+				source: "TGTT",
+				className: "Warlock",
+				level: 3,
+			});
+		});
+
+		describe("Feature Detection", () => {
+			it("should have hasPactOfTransformation flag", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasPactOfTransformation).toBe(true);
+			});
+
+			it("should calculate uses based on proficiency bonus", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.pactTransformationUses).toBe(3); // Prof bonus at level 5
+			});
+
+			it("should calculate CR limit based on level", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.pactTransformationCrLimit).toBe(0.5); // Level 5 = CR 1/2
+			});
+
+			it("should increase CR limit at higher levels", () => {
+				state._data.classes[0].level = 11;
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.pactTransformationCrLimit).toBe(2); // Level 11 = CR 2
+			});
+		});
+
+		describe("Transformation State", () => {
+			it("should return transformation state", () => {
+				const transformation = state.getPactTransformation();
+				expect(transformation).not.toBeNull();
+				expect(transformation.maxUses).toBe(3);
+				expect(transformation.crLimit).toBe(0.5);
+				expect(transformation.currentForm).toBeNull();
+			});
+
+			it("should activate transformation", () => {
+				const form = {name: "Wolf", cr: 0.25, stats: {}};
+				const result = state.activatePactTransformation(form);
+				
+				expect(result).toBe(true);
+				expect(state.isInPactTransformation()).toBe(true);
+			});
+
+			it("should not activate if CR exceeds limit", () => {
+				const form = {name: "Dire Wolf", cr: 1, stats: {}};
+				const result = state.activatePactTransformation(form);
+				
+				expect(result).toBe(false);
+				expect(state.isInPactTransformation()).toBe(false);
+			});
+
+			it("should grant temp HP equal to 3 × warlock level", () => {
+				const form = {name: "Wolf", cr: 0.25, stats: {}};
+				state.activatePactTransformation(form);
+				
+				const transformation = state.getPactTransformation();
+				expect(transformation.tempHp).toBe(15); // 3 × level 5
+			});
+
+			it("should decrement uses on transformation", () => {
+				const form = {name: "Wolf", cr: 0.25, stats: {}};
+				state.activatePactTransformation(form);
+				
+				const transformation = state.getPactTransformation();
+				expect(transformation.usesRemaining).toBe(2);
+			});
+
+			it("should end transformation", () => {
+				const form = {name: "Wolf", cr: 0.25, stats: {}};
+				state.activatePactTransformation(form);
+				
+				const result = state.endPactTransformation();
+				expect(result).toBe(true);
+				expect(state.isInPactTransformation()).toBe(false);
+			});
+
+			it("should reset temp HP when transformation ends", () => {
+				const form = {name: "Wolf", cr: 0.25, stats: {}};
+				state.activatePactTransformation(form);
+				state.endPactTransformation();
+				
+				const transformation = state.getPactTransformation();
+				expect(transformation.tempHp).toBe(0);
+			});
+
+			it("should reset uses on long rest", () => {
+				const form = {name: "Wolf", cr: 0.25, stats: {}};
+				state.activatePactTransformation(form);
+				state.endPactTransformation();
+				state.activatePactTransformation(form);
+				state.endPactTransformation();
+				
+				expect(state.getPactTransformation().usesRemaining).toBe(1);
+				
+				state.resetPactTransformationUses();
+				expect(state.getPactTransformation().usesRemaining).toBe(3);
+			});
+
+			it("should not allow transformation while already transformed", () => {
+				const form1 = {name: "Wolf", cr: 0.25, stats: {}};
+				const form2 = {name: "Cat", cr: 0, stats: {}};
+				
+				state.activatePactTransformation(form1);
+				const result = state.activatePactTransformation(form2);
+				
+				expect(result).toBe(false);
+			});
+		});
+
+		describe("Without Feature", () => {
+			it("should return null without the feature", () => {
+				// Create new state without the feature
+				const plainState = new CharacterSheetState({
+					classes: [{name: "Warlock", source: "PHB", level: 5}],
+				});
+				
+				const transformation = plainState.getPactTransformation();
+				expect(transformation).toBeNull();
+			});
+		});
+	});
 	
 	// =========================================================================
 	// TGTT RANGER SPECIALTIES
@@ -2930,6 +3249,188 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			expect(features.some(f => f.name === "Strange Traces")).toBe(true);
 		});
 	});
+
+	// =========================================================================
+	// TGTT PASSIVE METAMAGIC SYSTEM
+	// =========================================================================
+	describe("TGTT Passive Metamagic System", () => {
+		
+		beforeEach(() => {
+			state.addClass({name: "Sorcerer", source: "TGTT", level: 5});
+			state.setSorceryPoints(5); // 5 SP at level 5
+		});
+
+		describe("Metamagic Definitions", () => {
+			it("should have passive metamagic definitions", () => {
+				const passiveMetamagics = state.getPassiveMetamagics();
+				expect(passiveMetamagics.length).toBeGreaterThan(0);
+				
+				// Check some key passive metamagics exist
+				const keys = passiveMetamagics.map(m => m.key);
+				expect(keys).toContain("careful");
+				expect(keys).toContain("distant");
+				expect(keys).toContain("empowered");
+				expect(keys).toContain("warding");
+			});
+
+			it("should have active metamagic definitions", () => {
+				const activeMetamagics = state.getActiveMetamagics();
+				expect(activeMetamagics.length).toBeGreaterThan(0);
+				
+				// Check standard active metamagics
+				const keys = activeMetamagics.map(m => m.key);
+				expect(keys).toContain("quickened");
+				expect(keys).toContain("twinned");
+				expect(keys).toContain("subtle");
+			});
+
+			it("should include TGTT-only active metamagics", () => {
+				const activeMetamagics = state.getActiveMetamagics();
+				const keys = activeMetamagics.map(m => m.key);
+				
+				// TGTT-specific active metamagics
+				expect(keys).toContain("aimed");
+				expect(keys).toContain("bestowed");
+				expect(keys).toContain("bouncing");
+				expect(keys).toContain("focused");
+				expect(keys).toContain("lingering");
+				expect(keys).toContain("overcharged");
+				expect(keys).toContain("vampiric");
+			});
+		});
+
+		describe("Tuning Passive Metamagics", () => {
+			it("should tune a passive metamagic", () => {
+				expect(state.isMetamagicTuned("careful")).toBe(false);
+				
+				const result = state.tuneMetamagic("careful");
+				expect(result).toBe(true);
+				expect(state.isMetamagicTuned("careful")).toBe(true);
+			});
+
+			it("should not allow tuning active metamagics", () => {
+				const result = state.tuneMetamagic("quickened");
+				expect(result).toBe(false);
+				expect(state.isMetamagicTuned("quickened")).toBe(false);
+			});
+
+			it("should not allow tuning same metamagic twice", () => {
+				state.tuneMetamagic("distant");
+				const result = state.tuneMetamagic("distant");
+				expect(result).toBe(false);
+			});
+
+			it("should track multiple tuned metamagics", () => {
+				state.tuneMetamagic("careful");
+				state.tuneMetamagic("distant");
+				state.tuneMetamagic("empowered");
+				
+				const tuned = state.getTunedMetamagics();
+				expect(tuned).toContain("careful");
+				expect(tuned).toContain("distant");
+				expect(tuned).toContain("empowered");
+				expect(tuned.length).toBe(3);
+			});
+		});
+
+		describe("Detuning Passive Metamagics", () => {
+			it("should detune a tuned metamagic", () => {
+				state.tuneMetamagic("careful");
+				expect(state.isMetamagicTuned("careful")).toBe(true);
+				
+				const result = state.detuneMetamagic("careful");
+				expect(result).toBe(true);
+				expect(state.isMetamagicTuned("careful")).toBe(false);
+			});
+
+			it("should return false when detuning non-tuned metamagic", () => {
+				const result = state.detuneMetamagic("careful");
+				expect(result).toBe(false);
+			});
+
+			it("should only remove the specified metamagic", () => {
+				state.tuneMetamagic("careful");
+				state.tuneMetamagic("distant");
+				
+				state.detuneMetamagic("careful");
+				
+				expect(state.isMetamagicTuned("careful")).toBe(false);
+				expect(state.isMetamagicTuned("distant")).toBe(true);
+			});
+		});
+
+		describe("Sorcery Point Locking", () => {
+			it("should lock SP when tuning metamagics", () => {
+				expect(state.getLockedSorceryPoints()).toBe(0);
+				
+				state.tuneMetamagic("careful"); // costs 1
+				expect(state.getLockedSorceryPoints()).toBe(1);
+				
+				state.tuneMetamagic("resonant"); // costs 2
+				expect(state.getLockedSorceryPoints()).toBe(3);
+			});
+
+			it("should calculate effective SP max", () => {
+				expect(state.getEffectiveSorceryPointMax()).toBe(5);
+				
+				state.tuneMetamagic("careful"); // locks 1
+				expect(state.getEffectiveSorceryPointMax()).toBe(4);
+				
+				state.tuneMetamagic("split"); // locks 2
+				expect(state.getEffectiveSorceryPointMax()).toBe(2);
+			});
+
+			it("should free locked SP when detuning", () => {
+				state.tuneMetamagic("careful");
+				state.tuneMetamagic("distant");
+				expect(state.getLockedSorceryPoints()).toBe(2);
+				
+				state.detuneMetamagic("careful");
+				expect(state.getLockedSorceryPoints()).toBe(1);
+				expect(state.getEffectiveSorceryPointMax()).toBe(4);
+			});
+
+			it("should not allow tuning if insufficient effective SP", () => {
+				// Lock 4 SP (careful=1, distant=1, split=2)
+				state.tuneMetamagic("careful");
+				state.tuneMetamagic("distant");
+				state.tuneMetamagic("split");
+				
+				// Effective max is now 1, can't tune resonant (cost 2)
+				const result = state.tuneMetamagic("resonant");
+				expect(result).toBe(false);
+			});
+		});
+
+		describe("Metamagic Info", () => {
+			it("should return full metamagic info", () => {
+				state.tuneMetamagic("careful");
+				
+				const info = state.getMetamagicInfo("careful");
+				expect(info.name).toBe("Careful Spell");
+				expect(info.type).toBe("passive");
+				expect(info.cost).toBe(1);
+				expect(info.tuned).toBe(true);
+				expect(info.key).toBe("careful");
+			});
+
+			it("should return null for unknown metamagic", () => {
+				const info = state.getMetamagicInfo("nonexistent");
+				expect(info).toBeNull();
+			});
+
+			it("should include tuned status in passive metamagic list", () => {
+				state.tuneMetamagic("careful");
+				
+				const passives = state.getPassiveMetamagics();
+				const careful = passives.find(m => m.key === "careful");
+				const distant = passives.find(m => m.key === "distant");
+				
+				expect(careful.tuned).toBe(true);
+				expect(distant.tuned).toBe(false);
+			});
+		});
+	});
 	
 	// =========================================================================
 	// TGTT CLERIC SPECIALTIES
@@ -4705,6 +5206,33 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					const features = state.getFeatures();
 					expect(features.some(f => f.name === "Percussive Strike")).toBe(true);
 				});
+
+				it("should calculate Snake Charmer AC bonus from CHA mod", () => {
+					state.setAbilityBase("cha", 16); // +3 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasSnakeCharmer).toBe(true);
+					expect(calcs.danceAcBonus).toBe(3);
+				});
+
+				it("should enforce minimum of 1 for Snake Charmer AC bonus", () => {
+					state.setAbilityBase("cha", 8); // -1 CHA mod
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.danceAcBonus).toBe(1); // minimum 1
+				});
+
+				it("should include Snake Charmer AC bonus in getBonuses() effects", () => {
+					state.setAbilityBase("cha", 16);
+					
+					const calcs = state.getFeatureCalculations();
+					const acEffect = calcs._effects.find(e => e.source === "Snake Charmer");
+					
+					expect(acEffect).toBeDefined();
+					expect(acEffect.type).toBe("acBonus");
+					expect(acEffect.value).toBe(3);
+					expect(acEffect.enabled).toBe(false); // Conditional - must be toggled
+				});
 			});
 			
 			describe("Gambler", () => {
@@ -5511,6 +6039,21 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.craneParryAcBonus).toBe(2);
 					expect(calcs.craneParryCost).toBe(1);
 				});
+
+				it("should include Crane Parry AC bonus in getBonuses() effects", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 3,
+						subclass: {name: "Way of the Five Animals", shortName: "Five Animals", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					const acEffect = calcs._effects.find(e => e.source === "Crane Parry");
+					
+					expect(acEffect).toBeDefined();
+					expect(acEffect.type).toBe("acBonus");
+					expect(acEffect.value).toBe(2);
+					expect(acEffect.enabled).toBe(false); // Reaction, costs 1 ki
+				});
 				
 				it("should calculate Tiger roar DC at level 6", () => {
 					state.addClass({
@@ -5609,6 +6152,44 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasRhythmicStep).toBe(true);
 					expect(calcs.rhythmicStepCost).toBe(2);
+				});
+
+				it("should calculate Rhythmic Step AC bonus from CHA mod", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 3,
+						subclass: {name: "Way of The Shackled", shortName: "Shackled", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16); // +3
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.rhythmicStepAcBonus).toBe(3);
+				});
+
+				it("should enforce minimum of 1 for Rhythmic Step AC bonus", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 3,
+						subclass: {name: "Way of The Shackled", shortName: "Shackled", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 8); // -1
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.rhythmicStepAcBonus).toBe(1);
+				});
+
+				it("should include Rhythmic Step AC bonus in getBonuses() effects", () => {
+					state.addClass({
+						name: "Monk", source: "TGTT", level: 3,
+						subclass: {name: "Way of The Shackled", shortName: "Shackled", source: "TGTT"}
+					});
+					state.setAbilityBase("cha", 16);
+					
+					const calcs = state.getFeatureCalculations();
+					const acEffect = calcs._effects.find(e => e.source === "Rhythmic Step");
+					
+					expect(acEffect).toBeDefined();
+					expect(acEffect.type).toBe("acBonus");
+					expect(acEffect.value).toBe(3);
+					expect(acEffect.enabled).toBe(false); // Conditional - must be toggled
 				});
 				
 				it("should grant Balanced Whirlwind at level 6", () => {
@@ -7232,6 +7813,66 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.implodingInfestationDamage).toBe("6d12");
 					expect(calcs.implodingInfestationRadius).toBe(30);
 				});
+
+				it("should include Horror Unarmored AC formula in getBonuses() effects", () => {
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 3,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+					state.setAbilityBase("dex", 16);
+					state.setAbilityBase("con", 14);
+
+					const calcs = state.getFeatureCalculations();
+					const acEffect = calcs._effects.find(e => e.source === "Horror Unarmored Defense");
+
+					expect(acEffect).toBeDefined();
+					expect(acEffect.type).toBe("acFormula");
+					expect(acEffect.base).toBe(10);
+					expect(acEffect.addDex).toBe(true);
+					expect(acEffect.secondAbility).toBe("con");
+				});
+
+				it("should include CON save proficiency in getBonuses() effects at level 6", () => {
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 6,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					const saveEffect = calcs._effects.find(e => e.source === "Unearthly Manifestation" && e.type === "saveProficiency");
+
+					expect(saveEffect).toBeDefined();
+					expect(saveEffect.ability).toBe("con");
+				});
+
+				it("should include magical unarmed strikes in getBonuses() effects at level 6", () => {
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 6,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					const weaponEffect = calcs._effects.find(e => e.source === "Unearthly Manifestation" && e.type === "weaponProperty");
+
+					expect(weaponEffect).toBeDefined();
+					expect(weaponEffect.weaponType).toBe("unarmed");
+					expect(weaponEffect.property).toBe("magical");
+				});
+
+				it("should include Lone Survivor condition immunity in getBonuses() effects", () => {
+					state.addClass({
+						name: "Warlock", source: "TGTT", level: 6,
+						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					const conditionEffect = calcs._effects.find(e => e.source === "Lone Survivor");
+
+					expect(conditionEffect).toBeDefined();
+					expect(conditionEffect.type).toBe("conditionImmunity");
+					expect(conditionEffect.condition).toBe("frightened");
+					expect(conditionEffect.enabled).toBe(false); // Conditional
+				});
 			});
 		});
 		
@@ -7312,6 +7953,35 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.overSoulAlwaysActive).toBe(true);
 					// Heal = level(18) + CHA(5) = 23
 					expect(calcs.eternalHeroHeal).toBe(23);
+				});
+
+				it("should include Legendary Weapon property in getBonuses() effects", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 1,
+						subclass: {name: "Heroic Soul", shortName: "Heroic Soul", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					const weaponEffect = calcs._effects.find(e => e.source === "Legendary Weapon");
+
+					expect(weaponEffect).toBeDefined();
+					expect(weaponEffect.type).toBe("weaponProperty");
+					expect(weaponEffect.weaponType).toBe("legendary");
+				});
+
+				it("should include Manifest Legend Extra Attack in getBonuses() effects", () => {
+					state.addClass({
+						name: "Sorcerer", source: "TGTT", level: 14,
+						subclass: {name: "Heroic Soul", shortName: "Heroic Soul", source: "TGTT"}
+					});
+
+					const calcs = state.getFeatureCalculations();
+					const attackEffect = calcs._effects.find(e => e.source === "Manifest Legend");
+
+					expect(attackEffect).toBeDefined();
+					expect(attackEffect.type).toBe("attackCount");
+					expect(attackEffect.count).toBe(2);
+					expect(attackEffect.enabled).toBe(false); // Conditional - must be toggled
 				});
 			});
 			
@@ -8378,6 +9048,510 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				// Should have both Dreamwalker class calculations and Dreamer feat
 				expect(calcs.lucidFocusDie).toBe("1d8"); // Level 5 Dreamwalker
 				expect(calcs.hasDreamerFeat).toBe(true);
+			});
+		});
+
+		// =====================================================================
+		// DREAMWALKER ABILITIES (DW:C / DW:S) TESTS
+		// =====================================================================
+		describe("Dreamwalker Abilities (DW:C / DW:S)", () => {
+
+			describe("Core Ability Detection (DW:C)", () => {
+				it("should detect Dreamwalk as a DW:C ability", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "The most basic ability of all dreamers."
+					});
+
+					expect(state.hasDreamwalkerAbilities()).toBe(true);
+					expect(state.hasDreamwalkerAbility("Dreamwalk")).toBe(true);
+				});
+
+				it("should detect Dreamwatch as a DW:C ability", () => {
+					state.addFeature({
+						name: "Dreamwatch",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "You learn how to access the dreams of others."
+					});
+
+					expect(state.hasDreamwalkerAbility("Dreamwatch")).toBe(true);
+				});
+
+				it("should detect Dreambend as a DW:C ability", () => {
+					state.addFeature({
+						name: "Dreambend",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "You learn the essential talent of a dreamwalker."
+					});
+
+					expect(state.hasDreamwalkerAbility("Dreambend")).toBe(true);
+				});
+			});
+
+			describe("Special Ability Detection (DW:S)", () => {
+				it("should detect Dreamjump as a DW:S ability", () => {
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "You can travel to any point in The Dreamtime."
+					});
+
+					expect(state.hasDreamwalkerAbility("Dreamjump")).toBe(true);
+				});
+
+				it("should detect Dreamforge as a DW:S ability", () => {
+					state.addFeature({
+						name: "Dreamforge",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "You can bring magical objects into existence."
+					});
+
+					expect(state.hasDreamwalkerAbility("Dreamforge")).toBe(true);
+				});
+			});
+
+			describe("getDreamwalkerAbilities()", () => {
+				it("should return array of abilities with parsed effects", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Allows you to enter the Dreamtime. Concentration check DC 15."
+					});
+
+					const abilities = state.getDreamwalkerAbilities();
+					expect(abilities.length).toBe(1);
+					expect(abilities[0].name).toBe("Dreamwalk");
+					expect(abilities[0].abilityType).toBe("core");
+				});
+
+				it("should correctly identify core vs special abilities", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+
+					const abilities = state.getDreamwalkerAbilities();
+					const dreamwalk = abilities.find(a => a.name === "Dreamwalk");
+					const dreamjump = abilities.find(a => a.name === "Dreamjump");
+
+					expect(dreamwalk.abilityType).toBe("core");
+					expect(dreamjump.abilityType).toBe("special");
+				});
+
+				it("should return empty array when no DW abilities", () => {
+					expect(state.getDreamwalkerAbilities()).toEqual([]);
+				});
+
+				it("should not include non-DW features", () => {
+					state.addFeature({
+						name: "Some Other Feature",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["BT"],
+						description: "Not a Dreamwalker ability."
+					});
+
+					expect(state.getDreamwalkerAbilities()).toEqual([]);
+				});
+			});
+
+			describe("Prerequisite Validation", () => {
+				it("should return no prerequisites for core abilities", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+
+					expect(state.meetsAbilityPrerequisite("Dreamwalk")).toBe(true);
+				});
+
+				it("should check Dreamjump requires Dreamwalk", () => {
+					// No Dreamwalk - should not meet prerequisite
+					expect(state.meetsAbilityPrerequisite("Dreamjump")).toBe(false);
+
+					// Add Dreamwalk
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+
+					expect(state.meetsAbilityPrerequisite("Dreamjump")).toBe(true);
+				});
+
+				it("should check Dreamake requires Dreambend AND Dreamforge", () => {
+					// Neither - should fail
+					expect(state.meetsAbilityPrerequisite("Dreamake")).toBe(false);
+
+					// Add Dreambend only
+					state.addFeature({
+						name: "Dreambend",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					expect(state.meetsAbilityPrerequisite("Dreamake")).toBe(false);
+
+					// Add Dreamforge - now should pass
+					state.addFeature({
+						name: "Dreamforge",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+					expect(state.meetsAbilityPrerequisite("Dreamake")).toBe(true);
+				});
+
+				it("should check Dreamveil requires Dreamwatch AND Dreamwalk", () => {
+					expect(state.meetsAbilityPrerequisite("Dreamveil")).toBe(false);
+
+					state.addFeature({
+						name: "Dreamwatch",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					expect(state.meetsAbilityPrerequisite("Dreamveil")).toBe(false);
+
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					expect(state.meetsAbilityPrerequisite("Dreamveil")).toBe(true);
+				});
+
+				it("should validate prerequisites and report errors", () => {
+					// Add Dreamjump without prerequisite Dreamwalk
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+
+					const errors = state.validateDreamwalkerPrerequisites();
+					expect(errors.length).toBe(1);
+					expect(errors[0].ability).toBe("Dreamjump");
+					expect(errors[0].missingPrerequisites).toContain("Dreamwalk");
+				});
+
+				it("should return empty errors when all prerequisites are met", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+
+					const errors = state.validateDreamwalkerPrerequisites();
+					expect(errors.length).toBe(0);
+				});
+			});
+
+			describe("Ability Counts", () => {
+				it("should count core and special abilities separately", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					state.addFeature({
+						name: "Dreambend",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+
+					const counts = state.getDreamwalkerAbilityCounts();
+					expect(counts.core).toBe(2);
+					expect(counts.special).toBe(1);
+					expect(counts.total).toBe(3);
+				});
+			});
+
+			describe("Max Abilities Calculation", () => {
+				it("should return 2 for Dreamer feat", () => {
+					state.addFeat({name: "Dreamer", source: "TGTT"});
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(2);
+				});
+
+				it("should return 2 for Nyuidj race", () => {
+					state.setRace({name: "Nyuidj", source: "TGTT"});
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(2);
+				});
+
+				it("should return 2 for Dreamwalker class level 1", () => {
+					state.addClass({name: "Dreamwalker", source: "TGTT", level: 1});
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(2);
+				});
+
+				it("should return 4 for Dreamwalker class level 4", () => {
+					state.addClass({name: "Dreamwalker", source: "TGTT", level: 4});
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(4);
+				});
+
+				it("should return 6 for Dreamwalker class level 7", () => {
+					state.addClass({name: "Dreamwalker", source: "TGTT", level: 7});
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(6);
+				});
+
+				it("should return 8 for Dreamwalker class level 9+", () => {
+					state.addClass({name: "Dreamwalker", source: "TGTT", level: 9});
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(8);
+				});
+
+				it("should combine sources (Dreamer + Nyuidj)", () => {
+					state.addFeat({name: "Dreamer", source: "TGTT"});
+					state.setRace({name: "Nyuidj", source: "TGTT"});
+					// 2 (Dreamer) + 2 (Nyuidj) = 4
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(4);
+				});
+
+				it("should combine sources (Dreamwalker class + Dreamer feat)", () => {
+					state.addClass({name: "Dreamwalker", source: "TGTT", level: 4});
+					state.addFeat({name: "Dreamer", source: "TGTT"});
+					// 4 (L4 Dreamwalker) + 2 (Dreamer) = 6
+					expect(state.getDreamwalkerAbilitiesMax()).toBe(6);
+				});
+			});
+
+			describe("Feature Calculations Integration", () => {
+				it("should set hasDreamwalkerAbilities flag", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasDreamwalkerAbilities).toBe(true);
+				});
+
+				it("should include abilities array in calculations", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.dreamwalkerAbilities.length).toBe(2);
+				});
+
+				it("should track specific ability flags", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					state.addFeature({
+						name: "Dreamwatch",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasDreamwalkAbility).toBe(true);
+					expect(calcs.hasDreamwatchAbility).toBe(true);
+					expect(calcs.hasDreamjumpAbility).toBe(true);
+					expect(calcs.hasDreambendAbility).toBe(false);
+				});
+
+				it("should include prerequisite errors in calculations", () => {
+					// Add Dreamjump without Dreamwalk
+					state.addFeature({
+						name: "Dreamjump",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:S"],
+						description: "Special ability."
+					});
+
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.dreamwalkerPrerequisiteErrors.length).toBe(1);
+					expect(calcs.dreamwalkerPrerequisiteErrors[0].ability).toBe("Dreamjump");
+				});
+			});
+
+			describe("Ability Effect Parsing", () => {
+				it("should detect concentration check requirement", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Make a Concentration check DC 15 to enter the Dreamtime."
+					});
+
+					const abilities = state.getDreamwalkerAbilities();
+					expect(abilities[0].usesConcentration).toBe(true);
+				});
+
+				it("should parse base DC from description", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "The exit DC 15 allows you to awaken."
+					});
+
+					const abilities = state.getDreamwalkerAbilities();
+					expect(abilities[0].baseDc).toBe(15);
+				});
+
+				it("should detect familiarity modifier", () => {
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "DC modified by familiarity with the location."
+					});
+
+					const abilities = state.getDreamwalkerAbilities();
+					expect(abilities[0].dcModifiers.some(m => m.type === "familiarity")).toBe(true);
+				});
+
+				it("should detect distance modifier", () => {
+					state.addFeature({
+						name: "Dreamwatch",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "DC modified by distance to the dreamer."
+					});
+
+					const abilities = state.getDreamwalkerAbilities();
+					expect(abilities[0].dcModifiers.some(m => m.type === "distance")).toBe(true);
+				});
+
+				it("should detect relationship modifier", () => {
+					state.addFeature({
+						name: "Dreamwatch",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "DC modified by relationship with the target."
+					});
+
+					const abilities = state.getDreamwalkerAbilities();
+					expect(abilities[0].dcModifiers.some(m => m.type === "relationship")).toBe(true);
+				});
+			});
+
+			describe("Integration with Dreamwalker Class", () => {
+				it("should work with Dreamwalker class Dream DC", () => {
+					state.addClass({name: "Dreamwalker", source: "TGTT", level: 5});
+					state.setAbilityBase("con", 16); // +3 CON
+
+					state.addFeature({
+						name: "Dreamwalk",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+
+					const calcs = state.getFeatureCalculations();
+
+					// Dream DC: 8 + prof (3) + CON mod (3) = 14
+					expect(calcs.dreamDc).toBe(14);
+					expect(calcs.hasDreamwalkAbility).toBe(true);
+				});
+
+				it("should work with Lucid Focus Die", () => {
+					state.addClass({name: "Dreamwalker", source: "TGTT", level: 10});
+					state.setAbilityBase("con", 16);
+
+					state.addFeature({
+						name: "Dreambend",
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["DW:C"],
+						description: "Core ability."
+					});
+
+					const calcs = state.getFeatureCalculations();
+
+					expect(calcs.lucidFocusDie).toBe("1d10"); // Level 9-13
+					expect(calcs.hasDreambendAbility).toBe(true);
+				});
 			});
 		});
 		
