@@ -8306,6 +8306,264 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(features.some(f => f.name === "Full Zodiac")).toBe(true);
 				});
 			});
+			
+			// ---------------------------------------------------------
+			// ZODIAC FORM CALCULATION TESTS
+			// ---------------------------------------------------------
+			describe("Zodiac Form Calculations (TGTT Circle of Stars)", () => {
+				beforeEach(() => {
+					state = new CharacterSheetState();
+					state.setAbilityBase("wis", 16); // +3 mod
+				});
+				
+				describe("Base Zodiac Form (Level 3)", () => {
+					it("should grant Zodiac Form for TGTT Stars druid", () => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 3,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasZodiacForm).toBe(true);
+						expect(calcs.hasStarryForm).toBeFalsy(); // NOT official version
+						expect(calcs.zodiacFormDuration).toBe(10);
+						expect(calcs.zodiacFormBrightLight).toBe(10);
+						expect(calcs.zodiacFormDimLight).toBe(20);
+					});
+					
+					it("should grant Starry Form for official Stars druid", () => {
+						state.addClass({
+							name: "Druid", source: "PHB", level: 3,
+							subclass: {name: "Circle of Stars", shortName: "Stars", source: "TCE"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasStarryForm).toBe(true);
+						expect(calcs.hasZodiacForm).toBeFalsy(); // NOT TGTT version
+					});
+				});
+				
+				describe("Month Constellations (Level 3)", () => {
+					beforeEach(() => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 6,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+					});
+					
+					it("should calculate Beaver damage reduction", () => {
+						// Level 6 = proficiency 3, so level + prof = 6 + 3 = 9
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.beaverDamageReduction).toBe(9);
+					});
+					
+					it("should calculate Aurochs STR bonus and size", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.aurochsStrBonus).toBe(3); // prof bonus at level 6
+						expect(calcs.aurochsSizeBonus).toBe(1); // +1 size category
+					});
+					
+					it("should calculate Horse speed multiplier", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.horseSpeedMultiplier).toBe(2);
+					});
+					
+					it("should calculate Octopus reach bonus", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.octopusReachBonus).toBe(5);
+					});
+					
+					it("should calculate Peacock targeting save DC", () => {
+						// DC = 8 + prof(3) + WIS(3) = 14
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.peacockSaveDc).toBe(14);
+					});
+					
+					it("should calculate Bee damage at low levels", () => {
+						const calcs = state.getFeatureCalculations();
+						// Level 6, before level 10 scaling
+						expect(calcs.beeDamage).toBe("1d8+3");
+						expect(calcs.beeRange).toBe(60);
+					});
+					
+					it("should calculate Hound mark range", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.houndMarkRange).toBe(60);
+					});
+					
+					it("should calculate Cat perception bonus", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.catPerceptionBonus).toBe("1d4");
+						expect(calcs.catMinRoll).toBe(8);
+					});
+					
+					it("should grant Griffon bonus attack", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.griffonBonusAttack).toBe(true);
+					});
+					
+					it("should calculate Bulette AC and burrow", () => {
+						// Prof 3 at level 6, ceil(3/2) = 2
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.buletteAcBonus).toBe(2);
+						expect(calcs.buletteBurrowDivisor).toBe(2);
+					});
+					
+					it("should calculate Phoenix stabilize heal", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.phoenixStabilizeHeal).toBe("2d8+3");
+					});
+				});
+				
+				describe("Bee Damage Scaling", () => {
+					it("should scale Bee damage to 2d8 at level 10", () => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 10,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.beeDamage).toBe("2d8+3");
+					});
+					
+					it("should scale Bee damage to 3d8 at level 14", () => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 14,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.beeDamage).toBe("3d8+3");
+					});
+				});
+				
+				describe("Star Week Constellations (Level 10)", () => {
+					beforeEach(() => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 10,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+					});
+					
+					it("should grant Star Week at level 10", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasStarWeek).toBe(true);
+					});
+					
+					it("should calculate Sequoia temp HP", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.sequoiaTempHp).toBe(10); // = level
+					});
+					
+					it("should calculate Unicorn heal bonus", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.unicornHealBonus).toBe("1d8+3");
+						expect(calcs.unicornHealRange).toBe(30);
+					});
+					
+					it("should calculate Raven reaction range", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.ravenReactionRange).toBe(30);
+					});
+					
+					it("should calculate Kitsune teleport distance", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.kitsuneTeleportDistance).toBe(15);
+					});
+					
+					it("should grant Hillstep Turtle CON advantage", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hillstepConAdvantage).toBe(true);
+					});
+					
+					it("should calculate Owlbear extra damage", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.owlbearExtraDamage).toBe(3); // WIS mod
+					});
+					
+					it("should calculate Almiraj recovery die", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.almirajRecoveryDie).toBe("1d4");
+					});
+					
+					it("should calculate Bat blindsight", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.batBlindsight).toBe(10);
+					});
+					
+					it("should calculate Pseudodragon min roll", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.pseudodragonMinRoll).toBe(10);
+					});
+					
+					it("should calculate Aurumvorax temp HP", () => {
+						// WIS mod (3) + prof (4) = 7 at level 10
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.aurumvoraxTempHp).toBe(7);
+					});
+					
+					it("should grant Salmon auto-succeed save", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.salmonAutoSucceedSave).toBe(true);
+					});
+					
+					it("should calculate Lizard heal bonus (same as Unicorn)", () => {
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.lizardHealBonus).toBe("1d8+3");
+					});
+				});
+				
+				describe("Star Week Not Available Before Level 10", () => {
+					it("should not have Star Week at level 9", () => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 9,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasStarWeek).toBeFalsy();
+						expect(calcs.sequoiaTempHp).toBeFalsy();
+					});
+				});
+				
+				describe("Full Zodiac (Level 14)", () => {
+					it("should grant Full Zodiac at level 14", () => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 14,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasFullZodiac).toBe(true);
+					});
+					
+					it("should not have Full Zodiac before level 14", () => {
+						state.addClass({
+							name: "Druid", source: "TGTT", level: 13,
+							subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasFullZodiac).toBeFalsy();
+					});
+				});
+				
+				describe("Bulette AC Scaling", () => {
+					it("should calculate AC bonus at various levels", () => {
+						// Test scaling of ceil(prof/2)
+						const testCases = [
+							{level: 3, prof: 2, expected: 1},   // ceil(2/2) = 1
+							{level: 5, prof: 3, expected: 2},   // ceil(3/2) = 2
+							{level: 9, prof: 4, expected: 2},   // ceil(4/2) = 2
+							{level: 13, prof: 5, expected: 3},  // ceil(5/2) = 3
+							{level: 17, prof: 6, expected: 3},  // ceil(6/2) = 3
+						];
+						
+						for (const tc of testCases) {
+							state = new CharacterSheetState();
+							state.addClass({
+								name: "Druid", source: "TGTT", level: tc.level,
+								subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}
+							});
+							const calcs = state.getFeatureCalculations();
+							expect(calcs.buletteAcBonus).toBe(tc.expected);
+						}
+					});
+				});
+			});
 		});
 	});
 	

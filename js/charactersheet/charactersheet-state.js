@@ -9883,40 +9883,169 @@ class CharacterSheetState {
 								}
 								break;
 							}
+							case "circle of the stars":
 							case "circle of stars":
 							case "stars": {
-								// Star Map (level 2) - free Guidance, Guiding Bolt uses
-								calculations.hasStarMap = true;
-								calculations.guidingBoltFreeUses = profBonus;
+								const isTGTTStars = cls.subclass?.source === "TGTT" || cls.source === "TGTT";
 
-								// Starry Form (level 2) - Archer, Chalice, or Dragon
-								calculations.hasStarryForm = true;
-								calculations.starryFormUses = 2; // Wild Shape uses
+								if (isTGTTStars) {
+									// =====================================================
+									// TGTT ZODIAC FORM SYSTEM (completely different from official)
+									// =====================================================
+									// Star Map (level 3) - from official, but TGTT references it
+									calculations.hasStarMap = true;
+									calculations.guidingBoltFreeUses = profBonus;
 
-								// Archer form: bonus action ranged attack
-								calculations.archerFormDamage = level >= 10 ? `1d8+${wisMod}` : `1d8+${wisMod}`;
+									// Zodiac Form (level 3) - replaces Starry Form
+									// Uses Wild Shape, lasts 10 minutes, sheds light
+									calculations.hasZodiacForm = true;
+									calculations.zodiacFormDuration = 10; // minutes
+									calculations.zodiacFormBrightLight = 10; // feet
+									calculations.zodiacFormDimLight = 20; // feet (10 + 10 additional)
 
-								// Chalice form: heal when casting spell
-								calculations.chaliceFormHealing = level >= 10 ? `1d8+${wisMod}` : `1d8+${wisMod}`;
+									// =====================================================
+									// MONTH CONSTELLATIONS (Level 3) - choose ONE when entering form
+									// =====================================================
 
-								// Dragon form: minimum 10 on concentration checks
-								calculations.dragonFormConcentrationMin = 10;
+									// Beaver: Reaction to reduce damage to ally within 30ft
+									calculations.beaverDamageReduction = level + profBonus;
 
-								// Cosmic Omen (level 6) - Weal or Woe, PB uses
-								if (level >= 6) {
-									calculations.hasCosmicOmen = true;
-									calculations.cosmicOmenUses = profBonus;
-									calculations.cosmicOmenDie = "1d6";
-								}
+									// Aurochs: Advantage on STR checks/saves, +prof to those rolls, 
+									// count as one size larger for carry/push/drag/lift
+									calculations.aurochsStrBonus = profBonus;
+									calculations.aurochsSizeBonus = 1;
 
-								// Twinkling Constellations (level 10) - change form as bonus action
-								if (level >= 10) {
-									calculations.hasTwinklingConstellations = true;
-								}
+									// Horse: Double walking speed, Dash as bonus action
+									calculations.horseSpeedMultiplier = 2;
 
-								// Full of Stars (level 14) - resistance to B/P/S in Starry Form
-								if (level >= 14) {
-									calculations.hasFullOfStars = true;
+									// Octopus: Underwater breathing, swim speed = walk speed, 
+									// no underwater penalties, +5ft melee reach underwater
+									calculations.octopusReachBonus = 5;
+
+									// Peacock: Creatures targeting you with attack/spell must 
+									// WIS save or choose new target (24hr immunity on success)
+									calculations.peacockSaveDc = this.getSpellSaveDC("Druid");
+
+									// Roc: Action to cast Gust of Wind or Warding Wind without slot
+									calculations.rocFreeWindSpells = true;
+
+									// Bee: Bonus action ranged spell attack, 60ft, radiant damage
+									// Scales: 1d8 at 3, 2d8 at 10, 3d8 at 14
+									const beeDice = level >= 14 ? 3 : level >= 10 ? 2 : 1;
+									calculations.beeDamage = `${beeDice}d8+${wisMod}`;
+									calculations.beeRange = 60;
+
+									// Hound: Bonus action to mark creature within 60ft
+									// Marked has disadvantage attacking you, you always know its location
+									calculations.houndMarkRange = 60;
+
+									// Cat: +1d4 passive Perception, treat 7 or lower as 8 on 
+									// Perception/Stealth/Acrobatics
+									calculations.catPerceptionBonus = "1d4";
+									calculations.catMinRoll = 8;
+
+									// Griffon: Advantage vs frightened, bonus action attack after melee hit
+									calculations.griffonBonusAttack = true;
+
+									// Bulette: +half prof (rounded up) to AC, burrow speed = half walk
+									calculations.buletteAcBonus = Math.ceil(profBonus / 2);
+									calculations.buletteBurrowDivisor = 2;
+
+									// Phoenix: When stabilized while in form, heal 2d8+WIS
+									calculations.phoenixStabilizeHeal = `2d8+${wisMod}`;
+
+									// =====================================================
+									// STAR WEEK CONSTELLATIONS (Level 10) - choose BOTH Month + Star Week
+									// =====================================================
+									if (level >= 10) {
+										calculations.hasStarWeek = true;
+
+										// Sequoia: Temp HP = druid level, resistance to first hit
+										calculations.sequoiaTempHp = level;
+
+										// Unicorn: When casting healing spell with slot, +1d8+WIS healing
+										// to you or creature within 30ft
+										calculations.unicornHealBonus = `1d8+${wisMod}`;
+										calculations.unicornHealRange = 30;
+
+										// Raven: Advantage on initiative, can't be surprised
+										// Reaction to impose disadvantage on attack within 30ft (1/turn)
+										calculations.ravenReactionRange = 30;
+
+										// Kitsune: Reaction teleport 15ft when missed by attack
+										calculations.kitsuneTeleportDistance = 15;
+
+										// Hillstep Turtle: Advantage on CON saves, immune to push/pull/prone
+										calculations.hillstepConAdvantage = true;
+
+										// Owlbear: Once per turn, +WIS damage on weapon/spell hit
+										calculations.owlbearExtraDamage = Math.max(0, wisMod);
+
+										// Almiraj: Once per turn on miss/fail, +1d4 to the roll
+										calculations.almirajRecoveryDie = "1d4";
+
+										// Bat: Blindsight 10ft, no disadvantage from dim/darkness on Perception
+										calculations.batBlindsight = 10;
+
+										// Pseudodragon: Treat 9 or lower as 10 on INT/WIS checks and 
+										// concentration saves
+										calculations.pseudodragonMinRoll = 10;
+
+										// Aurumvorax: Temp HP = WIS + prof, advantage on Persuasion/Investigation
+										// for wealth/trade/ancient lore
+										calculations.aurumvoraxTempHp = Math.max(0, wisMod) + profBonus;
+
+										// Salmon: Ignore difficult terrain, once per form can auto-succeed
+										// a failed save (ends form)
+										calculations.salmonAutoSucceedSave = true;
+
+										// Lizard: Same as Unicorn (healing bonus)
+										calculations.lizardHealBonus = `1d8+${wisMod}`;
+									}
+
+									// =====================================================
+									// FULL ZODIAC (Level 14) - change constellation as free action each turn
+									// =====================================================
+									if (level >= 14) {
+										calculations.hasFullZodiac = true;
+									}
+								} else {
+									// =====================================================
+									// OFFICIAL STARRY FORM (PHB/TCE/XPHB)
+									// =====================================================
+									// Star Map (level 2) - free Guidance, Guiding Bolt uses
+									calculations.hasStarMap = true;
+									calculations.guidingBoltFreeUses = profBonus;
+
+									// Starry Form (level 2) - Archer, Chalice, or Dragon
+									calculations.hasStarryForm = true;
+									calculations.starryFormUses = 2; // Wild Shape uses
+
+									// Archer form: bonus action ranged attack
+									calculations.archerFormDamage = `1d8+${wisMod}`;
+
+									// Chalice form: heal when casting spell
+									calculations.chaliceFormHealing = `1d8+${wisMod}`;
+
+									// Dragon form: minimum 10 on concentration checks
+									calculations.dragonFormConcentrationMin = 10;
+
+									// Cosmic Omen (level 6) - Weal or Woe, PB uses
+									if (level >= 6) {
+										calculations.hasCosmicOmen = true;
+										calculations.cosmicOmenUses = profBonus;
+										calculations.cosmicOmenDie = "1d6";
+									}
+
+									// Twinkling Constellations (level 10) - change form as bonus action
+									if (level >= 10) {
+										calculations.hasTwinklingConstellations = true;
+									}
+
+									// Full of Stars (level 14) - resistance to B/P/S in Starry Form
+									if (level >= 14) {
+										calculations.hasFullOfStars = true;
+									}
 								}
 								break;
 							}
