@@ -8046,47 +8046,78 @@ class CharacterSheetState {
 					// TGTT SUBCLASS: THE WARDER
 					// =========================================================
 					if (cls.subclass?.shortName === "Warder") {
-						const strMod = this.getAbilityMod("str");
-
-						// Guardian's Bond (level 3) - magical link to bonded creature
-						// Range starts at 30 feet, extends to 60 feet at level 7
+						// Level 3: Bonus Proficiency, Warder Bond, Bodyguard, Combat Methods
 						if (level >= 3) {
-							calculations.hasGuardiansBond = true;
+							// Bonus Proficiency: skill choice (Athletics/Nature/Insight/Investigation/Perception) or language
+							calculations.hasWarderBonusProficiency = true;
+
+							// Warder Bond: magical bond with willing creature
+							// Range for location sensing and CON save advantage
+							calculations.hasWarderBond = true;
+							// Range: 30ft at level 3, 60ft at level 7+
 							calculations.warderBondRange = level >= 7 ? 60 : 30;
-							// Advantage on CON saves while bonded
+							// Advantage on CON saves while within range of bondmate
 							calculations.hasConSaveAdvantageWhileBonded = true;
+							// Warder Bond DC for madness save on bondmate death
+							calculations.warderBondMadnessDc = 15;
+
+							// Bodyguard: reaction to intercept attacks on bondmate within 15ft
+							// Use STR or DEX save as bondmate's AC for that attack
+							calculations.hasBodyguard = true;
+							calculations.bodyguardRange = 15;
+
+							// Combat Methods (Warder): Tempered Iron + Gallant Heart traditions
+							calculations.hasWarderCombatMethods = true;
+							calculations.warderCombatTraditions = ["Tempered Iron", "Gallant Heart"];
 						}
 
-						// Warding Aura (level 3) - protective presence
-						if (level >= 3) {
-							calculations.hasWardingAura = true;
-						}
-
-						// Warding Senses (level 7) - detect threats to bonded creature
-						// Uses = proficiency bonus per long rest
+						// Level 7: Warding Senses, Warder Bond Improvement
 						if (level >= 7) {
+							// Warding Senses: bonus action to detect hostile creatures
+							// Uses = proficiency bonus per long rest
 							calculations.hasWardingSenses = true;
 							calculations.wardingSensesUses = profBonus;
+							calculations.wardingSensesRange = 60;
+
+							// Warder Bond Improvement (level 7):
+							// - Range increases to 60ft (handled above)
+							// - Shared initiative: both roll, use higher result
+							calculations.hasSharedInitiative = true;
 						}
 
-						// Unwavering Defense (level 10) - advantage on STR saves
+						// Level 10: Warding Blow, Warder Bond Improvement
 						if (level >= 10) {
-							calculations.hasUnwaveringDefense = true;
+							// Warding Blow: reaction OA when enemy targets bondmate
+							// Hit gives disadvantage on enemy's attack or advantage on bondmate's save
+							calculations.hasWardingBlow = true;
+
+							// Warder Bond Improvement (level 10):
+							// - STR and DEX saves with advantage (in addition to CON)
+							// - STR/DEX skill checks with advantage if proficient
 							calculations.hasStrSaveAdvantage = true;
-						}
-
-						// Guardian's Vengeance (level 15) - reaction strike when ward takes damage
-						if (level >= 15) {
-							calculations.hasGuardiansVengeance = true;
-							// Extra damage = STR modifier
-							calculations.guardiansVengeanceDamage = Math.max(0, strMod);
-						}
-
-						// Indomitable Guardian (level 18) - ultimate protector
-						// Advantage on DEX saves
-						if (level >= 18) {
-							calculations.hasIndomitableGuardian = true;
 							calculations.hasDexSaveAdvantage = true;
+							calculations.hasStrDexSkillAdvantageIfProficient = true;
+						}
+
+						// Level 15: Warder's Duty, Warder Bond Improvement
+						if (level >= 15) {
+							// Warder's Duty: reduced rest requirements
+							// only 2 hours for long rest, eat/drink once every 3 days
+							calculations.hasWardersDuty = true;
+							calculations.longRestHours = 2;
+							calculations.sustainedDays = 3;
+
+							// Warder Bond Improvement (level 15):
+							// - Telepathic communication within 60ft
+							calculations.hasTelepathicBond = true;
+							calculations.telepathicBondRange = 60;
+						}
+
+						// Level 18: Perfect Sync
+						if (level >= 18) {
+							// Perfect Sync: share saving throws
+							// When either bondmate rolls save, both roll and use higher result
+							calculations.hasPerfectSync = true;
 						}
 					}
 

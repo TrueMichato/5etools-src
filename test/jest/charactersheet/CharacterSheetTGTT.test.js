@@ -7629,19 +7629,34 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 		describe("Fighter Subclasses - Calculations", () => {
 			
 			describe("The Warder", () => {
-				it("should calculate Guardian's Bond range progression", () => {
+				it("should calculate Warder Bond range progression", () => {
 					state.addClass({
 						name: "Fighter", source: "TGTT", level: 3,
 						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
 					});
 					
 					let calcs = state.getFeatureCalculations();
-					expect(calcs.hasGuardiansBond).toBe(true);
+					expect(calcs.hasWarderBond).toBe(true);
 					expect(calcs.warderBondRange).toBe(30); // 30ft at level 3
 					
 					state.addClass({name: "Fighter", source: "TGTT", level: 7});
 					calcs = state.getFeatureCalculations();
 					expect(calcs.warderBondRange).toBe(60); // 60ft at level 7+
+				});
+				
+				it("should grant level 3 features (Bonus Proficiency, Bodyguard, Combat Methods)", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 3,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasWarderBonusProficiency).toBe(true);
+					expect(calcs.hasBodyguard).toBe(true);
+					expect(calcs.bodyguardRange).toBe(15);
+					expect(calcs.hasWarderCombatMethods).toBe(true);
+					expect(calcs.warderCombatTraditions).toContain("Tempered Iron");
+					expect(calcs.warderCombatTraditions).toContain("Gallant Heart");
 				});
 				
 				it("should calculate Warding Senses uses at level 7", () => {
@@ -7653,9 +7668,48 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasWardingSenses).toBe(true);
 					expect(calcs.wardingSensesUses).toBe(3); // Level 7 = prof +3
+					expect(calcs.wardingSensesRange).toBe(60);
+					expect(calcs.hasSharedInitiative).toBe(true);
 				});
 				
-				it("should grant saving throw advantages at appropriate levels", () => {
+				it("should grant Warding Blow and save advantages at level 10", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 10,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasWardingBlow).toBe(true);
+					expect(calcs.hasStrSaveAdvantage).toBe(true);
+					expect(calcs.hasDexSaveAdvantage).toBe(true);
+					expect(calcs.hasStrDexSkillAdvantageIfProficient).toBe(true);
+				});
+				
+				it("should grant Warder's Duty and telepathic bond at level 15", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 15,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasWardersDuty).toBe(true);
+					expect(calcs.longRestHours).toBe(2);
+					expect(calcs.sustainedDays).toBe(3);
+					expect(calcs.hasTelepathicBond).toBe(true);
+					expect(calcs.telepathicBondRange).toBe(60);
+				});
+				
+				it("should grant Perfect Sync at level 18", () => {
+					state.addClass({
+						name: "Fighter", source: "TGTT", level: 18,
+						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasPerfectSync).toBe(true);
+				});
+				
+				it("should grant saving throw advantages progressively", () => {
 					state.addClass({
 						name: "Fighter", source: "TGTT", level: 3,
 						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
@@ -7663,29 +7717,13 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					
 					let calcs = state.getFeatureCalculations();
 					expect(calcs.hasConSaveAdvantageWhileBonded).toBe(true); // Level 3
-					expect(calcs.hasStrSaveAdvantage).toBeFalsy(); // Level 10
+					expect(calcs.hasStrSaveAdvantage).toBeFalsy(); // Not until level 10
+					expect(calcs.hasDexSaveAdvantage).toBeFalsy(); // Not until level 10
 					
 					state.addClass({name: "Fighter", source: "TGTT", level: 10});
 					calcs = state.getFeatureCalculations();
-					expect(calcs.hasUnwaveringDefense).toBe(true);
 					expect(calcs.hasStrSaveAdvantage).toBe(true);
-					
-					state.addClass({name: "Fighter", source: "TGTT", level: 18});
-					calcs = state.getFeatureCalculations();
-					expect(calcs.hasIndomitableGuardian).toBe(true);
 					expect(calcs.hasDexSaveAdvantage).toBe(true);
-				});
-				
-				it("should calculate Guardian's Vengeance damage at level 15", () => {
-					state.addClass({
-						name: "Fighter", source: "TGTT", level: 15,
-						subclass: {name: "The Warder", shortName: "Warder", source: "TGTT"}
-					});
-					state.setAbilityBase("str", 18); // +4 mod
-					
-					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasGuardiansVengeance).toBe(true);
-					expect(calcs.guardiansVengeanceDamage).toBe(4);
 				});
 			});
 		});
