@@ -4035,8 +4035,9 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					});
 					
 					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasChainMastery).toBe(true);
+					expect(calcs.hasManifestChains).toBe(true);
 					expect(calcs.chainDamageDie).toBe("1d8");
+					expect(calcs.chainRange).toBe(15);
 				});
 				
 				it("should have 1d10 chain damage at level 6", () => {
@@ -4089,7 +4090,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			});
 			
 			describe("Chained Fury Subclass Features", () => {
-				it("should grant Chained Rage at level 6", () => {
+				it("should grant Chain Imprisonment at level 6", () => {
 					state.addClass({
 						name: "Barbarian",
 						source: "TGTT",
@@ -4102,11 +4103,12 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					});
 					
 					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasChainedRage).toBe(true);
-					expect(calcs.chainReach).toBe(15);
+					expect(calcs.hasChainImprisonment).toBe(true);
+					expect(calcs.chainsAreMagical).toBe(true);
+					expect(calcs.chainRange).toBe(20);
 				});
 				
-				it("should grant Furious Chains at level 10", () => {
+				it("should grant Chain Control at level 10", () => {
 					state.addClass({
 						name: "Barbarian",
 						source: "TGTT",
@@ -4119,10 +4121,12 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					});
 					
 					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasFuriousChains).toBe(true);
+					expect(calcs.hasChainControl).toBe(true);
+					expect(calcs.chainShoveDistance).toBe(10);
+					expect(calcs.chainRange).toBe(25);
 				});
 				
-				it("should grant Wrath of the Chained at level 14", () => {
+				it("should grant Unchained Fury at level 14", () => {
 					state.addClass({
 						name: "Barbarian",
 						source: "TGTT",
@@ -4135,8 +4139,10 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					});
 					
 					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasWrathOfTheChained).toBe(true);
-					expect(calcs.chainCritDamage).toBe("2d6");
+					expect(calcs.hasUnchainedFury).toBe(true);
+					expect(calcs.chainCount).toBe(4);
+					expect(calcs.chainExtraAttack).toBe(true);
+					expect(calcs.chainRange).toBe(30);
 				});
 			});
 		});
@@ -5232,6 +5238,32 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(acEffect.type).toBe("acBonus");
 					expect(acEffect.value).toBe(3);
 					expect(acEffect.enabled).toBe(false); // Conditional - must be toggled
+				});
+
+				it("should grant Tantalizing Shivers at level 9", () => {
+					state._data.classes[0].level = 9;
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasTantalizingShivers).toBe(true);
+				});
+
+				it("should grant Fluid Step at level 13", () => {
+					state._data.classes[0].level = 13;
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasFluidStep).toBe(true);
+					expect(calcs.freeDisengageWhileDancing).toBe(true);
+					expect(calcs.preventEnemyDisengage).toBe(true);
+				});
+
+				it("should calculate Percussive Strike DC at level 17", () => {
+					state._data.classes[0].level = 17;
+					state.setAbilityBase("cha", 18); // +4
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasPercussiveStrike).toBe(true);
+					// DC = 8 + prof (6 at level 17) + CHA (+4) = 18
+					expect(calcs.percussiveStrikeDc).toBe(18);
 				});
 			});
 			
@@ -6404,6 +6436,64 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(features.some(f => f.name === "Perfect Sync")).toBe(true);
 				});
 			});
+
+			describe("Arcane Archer TGTT", () => {
+				it("should use CON-based DC for TGTT Arcane Archer", () => {
+					state.addClass({
+						name: "Fighter",
+						source: "TGTT",
+						level: 3,
+						subclass: {name: "Arcane Archer", shortName: "Arcane Archer", source: "TGTT"}
+					});
+					state.setAbilityBase("con", 16); // +3
+					state.setAbilityBase("int", 10); // +0
+					
+					const calcs = state.getFeatureCalculations();
+					// DC = 8 + prof (2) + CON (3) = 13
+					expect(calcs.arcaneShotSaveDc).toBe(13);
+					expect(calcs.arcaneShotAbility).toBe("con");
+				});
+
+				it("should use INT-based DC for official Arcane Archer", () => {
+					state.addClass({
+						name: "Fighter",
+						source: "XGE",
+						level: 3,
+						subclass: {name: "Arcane Archer", shortName: "Arcane Archer", source: "XGE"}
+					});
+					state.setAbilityBase("con", 16); // +3
+					state.setAbilityBase("int", 14); // +2
+					
+					const calcs = state.getFeatureCalculations();
+					// DC = 8 + prof (2) + INT (2) = 12
+					expect(calcs.arcaneShotSaveDc).toBe(12);
+					expect(calcs.arcaneShotAbility).toBe("int");
+				});
+
+				it("should grant proficiency bonus uses for TGTT Arcane Archer", () => {
+					state.addClass({
+						name: "Fighter",
+						source: "TGTT",
+						level: 5, // prof +3
+						subclass: {name: "Arcane Archer", shortName: "Arcane Archer", source: "TGTT"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.arcaneShotUses).toBe(3);
+				});
+
+				it("should grant 2 uses for official Arcane Archer", () => {
+					state.addClass({
+						name: "Fighter",
+						source: "PHB",
+						level: 5,
+						subclass: {name: "Arcane Archer", shortName: "Arcane Archer", source: "XGE"}
+					});
+					
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.arcaneShotUses).toBe(2);
+				});
+			});
 		});
 		
 		// -----------------------------------------------------------------
@@ -6657,6 +6747,41 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					
 					const features = state.getFeatures();
 					expect(features.some(f => f.name === "Eternal Hero")).toBe(true);
+				});
+			});
+
+			describe("Sun Bloodline", () => {
+				beforeEach(() => {
+					state.addClass({
+						name: "Sorcerer",
+						source: "TGTT",
+						level: 3,
+						subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+					});
+				});
+
+				it("should have hasGlimpseOfTheSun flag", () => {
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasGlimpseOfTheSun).toBe(true);
+					expect(calcs.glimpseSunRange).toBe(20);
+				});
+
+				it("should have hasGlimpseBlind at level 3", () => {
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasGlimpseBlind).toBe(true);
+					expect(calcs.glimpseBlindCost).toBe(1);
+				});
+
+				it("should have hasSummersDefiantBlood at level 3", () => {
+					state.setAbilityBase("cha", 16);
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasSummersDefiantBlood).toBe(true);
+					expect(calcs.defiantBloodBonus).toBe(3); // +3 CHA
+				});
+
+				it("should have hasSunSpells at level 3", () => {
+					const calcs = state.getFeatureCalculations();
+					expect(calcs.hasSunSpells).toBe(true);
 				});
 			});
 		});
@@ -7461,17 +7586,15 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.danceAcBonus).toBe(1);
 				});
 				
-				it("should calculate Hypnotic Movement DC at level 9", () => {
+				it("should grant Tantalizing Shivers at level 9", () => {
 					state.addClass({
 						name: "Rogue", source: "TGTT", level: 9,
 						subclass: {name: "The Belly Dancer", shortName: "Belly Dancer", source: "TGTT"}
 					});
-					state.setAbilityBase("cha", 16); // +3 mod
 					
 					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasHypnoticMovement).toBe(true);
-					// DC = 8 + prof(4) + CHA(3) = 15
-					expect(calcs.hypnoticMovementDc).toBe(15);
+					expect(calcs.hasTantalizingShivers).toBe(true);
+					// Note: Tantalizing Shivers uses Performance vs Insight contest, not a save DC
 				});
 				
 				it("should calculate Percussive Strike DC at level 17", () => {
@@ -7494,7 +7617,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					});
 					
 					const calcs = state.getFeatureCalculations();
-					expect(calcs.hasHypnoticMovement).toBeFalsy();
+					expect(calcs.hasTantalizingShivers).toBeFalsy();
 					expect(calcs.hasPercussiveStrike).toBeFalsy();
 				});
 			});
