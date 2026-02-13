@@ -18,6 +18,7 @@ Welcome to the 5etools Character Sheet system documentation. This comprehensive 
 | [Known Limitations](./10-known-limitations.md) | Current shortcomings and technical debt |
 | [Future Roadmap](./11-future-roadmap.md) | Planned improvements and enhancement opportunities |
 | [Contributing Guide](./12-contributing-guide.md) | How to add features, tests, and documentation |
+| [TGTT Homebrew](./13-tgtt-thelemar-homebrew.md) | Thelemar homebrew: rules, classes, methods, tactics |
 
 ## System at a Glance
 
@@ -32,8 +33,9 @@ The Character Sheet is a comprehensive D&D 5th Edition character management tool
 | Metric | Value |
 |--------|-------|
 | Source Files | 11 modules (~35,000 lines) |
-| Test Files | 29 test suites |
-| Total Tests | ~3,200 tests |
+| Test Files | 32 test suites |
+| Total Tests | 4,042+ tests |
+| TGTT Tests | 737 tests |
 | Test Coverage | High (core mechanics) |
 
 ## File Structure

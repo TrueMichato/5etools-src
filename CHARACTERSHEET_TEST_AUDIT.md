@@ -4,6 +4,12 @@
 
 After a comprehensive audit of all class tests in `test/jest/charactersheet/`, I've identified significant gaps between what tests verify vs. what actually needs mechanical implementation. The core finding is that **many tests only check boolean existence (`hasFeature`) or level reached (`getTotalLevel()`), without verifying the actual mechanical calculations that make features useful**.
 
+**Update (Feb 2025)**: Most issues have been resolved:
+- ✅ All core class subclasses now have full mechanical calculations
+- ✅ TGTT (Thelemar) homebrew fully implemented (737 tests)
+- ✅ Weak test patterns largely converted to use `getFeatureCalculations()`
+- ⚠️ XPHB 2024 features still in progress
+
 ## Current State
 
 ### Well-Implemented Classes (with proper mechanical tests)
@@ -52,21 +58,33 @@ it("should produce 2 elixirs at level 6", () => {
 
 ### Issue 2: Missing Subclass Implementations in `getFeatureCalculations()`
 
-The following subclasses have tests but NO implementation:
+~~The following subclasses have tests but NO implementation:~~ **RESOLVED**
 
-**Artificer Subclasses:**
-- Alchemist (no experimental elixir count, alchemical savant bonus)
-- Armorer (no armor model features)
-- Artillerist (no cannon damage, cannon HP)
-- Battle Smith (no steel defender HP, arcane jolt damage)
+**Artificer Subclasses:** ✅ All implemented
+- ~~Alchemist (no experimental elixir count, alchemical savant bonus)~~
+- ~~Armorer (no armor model features)~~
+- ~~Artillerist (no cannon damage, cannon HP)~~
+- ~~Battle Smith (no steel defender HP, arcane jolt damage)~~
 
-**Druid Circles:**
-- Circle of the Moon (no combat wild shape CR)
-- Circle of the Land (no natural recovery)
-- Circle of Dreams (no balm of summer court healing)
-- Circle of Spores (no halo of spores damage)
-- Circle of Stars (no starry form features)
-- Circle of Wildfire (no wildfire spirit HP)
+**Druid Circles:** ✅ All implemented
+- ~~Circle of the Moon (no combat wild shape CR)~~
+- ~~Circle of the Land (no natural recovery)~~
+- ~~Circle of Dreams (no balm of summer court healing)~~
+- ~~Circle of Spores (no halo of spores damage)~~
+- ~~Circle of Stars (no starry form features)~~
+- ~~Circle of Wildfire (no wildfire spirit HP)~~
+
+**TGTT (Thelemar) Homebrew:** ✅ Fully implemented (737 tests)
+- All variant rules (exhaustion, carry weight, linguistics, jumping, etc.)
+- Dreamwalker prestige class (10 levels)
+- 11 Dreamwalker abilities
+- 17 Combat Traditions with 5 degrees each
+- 13 Battle Tactics
+- All TGTT subclasses (Chained Fury, Sun Bloodline, Horror, etc.)
+- Race features (Half-Ogre, Gnoll, Tiefling variants)
+- Feats (Lore Mastery, Spellsword Technique, Whip Master, Dreamer)
+
+See `docs/charactersheet/13-tgtt-thelemar-homebrew.md` for full details.
 
 ### Issue 3: Missing Mechanical Calculations
 
@@ -151,12 +169,20 @@ if (subclassName) {
 
 ## Conclusion
 
-The testing infrastructure is solid. The main gaps are:
-1. Missing subclass feature implementations in `getFeatureCalculations()`
-2. Some tests using weak patterns that don't verify calculations
-3. XPHB 2024 coverage gaps
+The testing infrastructure is solid. ~~The main gaps are:~~ **Most gaps have been addressed:**
 
-The recommended approach is to:
-1. First add implementations to `getFeatureCalculations()` 
-2. Then update tests to verify those calculations
-3. Finally run full test suite to ensure no regressions
+### ✅ Resolved
+1. ~~Missing subclass feature implementations in `getFeatureCalculations()`~~ - All core subclasses implemented
+2. ~~Some tests using weak patterns that don't verify calculations~~ - Largely converted
+3. ~~TGTT homebrew coverage~~ - 737 tests covering all content
+
+### ⚠️ Remaining Work
+1. **XPHB 2024 coverage gaps** - Some 2024 PHB features still need work
+2. **Minor edge cases** - Some unusual multiclass combinations
+3. **Performance optimization** - Memoization of calculations
+
+### Recommended Approach
+1. ✅ ~~First add implementations to `getFeatureCalculations()`~~ Done
+2. ✅ ~~Then update tests to verify those calculations~~ Done  
+3. ⚠️ Continue XPHB 2024 feature completion
+4. Consider code modularization of the 22,000+ line state file

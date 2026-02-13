@@ -1105,12 +1105,14 @@ class FeatureModifierParser {
 			{pattern: /advantage\s+on\s+(?:checks?\s+and\s+)?saving\s+throws?\s+to\s+avoid\s+drowning/gi, condition: "to avoid drowning"},
 			{pattern: /advantage\s+on\s+saving\s+throws?\s+against\s+being\s+(?:charmed|frightened|poisoned)/gi, condition: (m) => `against being ${m[0].match(/charmed|frightened|poisoned/i)[0].toLowerCase()}`},
 			{pattern: /advantage\s+on\s+saving\s+throws?\s+against\s+(?:poison|disease|magic|spells?)/gi, condition: (m) => `against ${m[0].match(/poison|disease|magic|spells?/i)[0].toLowerCase()}`},
+			// Concentration save advantage (War Caster, Eldritch Mind, etc.)
+			{pattern: /advantage\s+on\s+(?:constitution\s+)?(?:saving\s+throws?\s+)?(?:that\s+you\s+make\s+)?to\s+maintain\s+(?:your\s+)?concentration/gi, condition: null, target: "concentration"},
 		];
-		advantageSavePatterns.forEach(({pattern, condition}) => {
+		advantageSavePatterns.forEach(({pattern, condition, target}) => {
 			if (pattern.test(plainText)) {
 				const condText = typeof condition === "function" ? condition(plainText.match(pattern)) : condition;
 				modifiers.push({
-					type: "save:all",
+					type: target || "save:all",
 					value: 0,
 					note: sourceName,
 					advantage: true,
@@ -7722,6 +7724,10 @@ class CharacterSheetState {
 
 					// XPHB-exclusive features
 					if (is2024) {
+						// Weapon Mastery (level 1+)
+						calculations.hasWeaponMastery = true;
+						calculations.weaponMasterySlots = level >= 16 ? 6 : level >= 10 ? 5 : level >= 4 ? 4 : 3;
+
 						// Tactical Mind (level 2): Add Second Wind die to failed ability check
 						if (level >= 2) {
 							calculations.hasTacticalMind = true;
@@ -18151,6 +18157,158 @@ class CharacterSheetState {
 	// #region Active States (Rage, Concentration, Wild Shape, etc.)
 
 	/**
+	 * Weapon Mastery property definitions (XPHB 2024).
+	 * Each mastery defines its trigger, mechanical effect, and description.
+	 * Weapons reference these via their "mastery" array (e.g., ["Topple|XPHB"]).
+	 */
+	static WEAPON_MASTERY_EFFECTS = {
+		Cleave: {
+			trigger: "onHit",
+			effect: "extraMeleeAttack",
+			description: "On hit, make one more attack vs different creature within 5 ft (no ability mod to damage). Once per turn.",
+			limitPerTurn: 1,
+		},
+		Graze: {
+			trigger: "onMiss",
+			effect: "abilityModDamage",
+			description: "On miss with melee, deal ability modifier damage (same type). Minimum 0.",
+		},
+		Nick: {
+			trigger: "onAttack",
+			effect: "extraLightAttack",
+			description: "Light weapon extra attack as part of Attack action (not bonus action). Once per turn.",
+			requiresProperty: "L",
+			limitPerTurn: 1,
+		},
+		Push: {
+			trigger: "onHit",
+			effect: "pushTarget",
+			distance: 10,
+			sizeLimit: "Large",
+			description: "On hit, push target up to 10 ft away (Large or smaller).",
+		},
+		Sap: {
+			trigger: "onHit",
+			effect: "disadvantageNextAttack",
+			description: "On hit, target has disadvantage on its next attack before your next turn.",
+		},
+		Slow: {
+			trigger: "onHitDamage",
+			effect: "reduceSpeed",
+			amount: 10,
+			description: "On hit+damage, reduce target speed by 10 ft until start of your next turn.",
+		},
+		Topple: {
+			trigger: "onHit",
+			effect: "conSaveOrProne",
+			dcFormula: "8+abilityMod+proficiency",
+			description: "On hit, target makes CON save (DC 8 + ability mod + prof) or falls Prone.",
+		},
+		Vex: {
+			trigger: "onHitDamage",
+			effect: "advantageNextAttack",
+			description: "On hit+damage, gain advantage on next attack vs same target before end of next turn.",
+		},
+	};
+
+	/**
+	 * Get the mastery property name for a weapon.
+	 * @param {object} weapon - Weapon data (from item data) with mastery array
+	 * @returns {string|null} The mastery name (e.g., "Topple") or null
+	 */
+	static getWeaponMasteryName (weapon) {
+		if (!weapon?.mastery?.length) return null;
+		const masteryEntry = weapon.mastery[0];
+		if (typeof masteryEntry === "string") {
+			return masteryEntry.split("|")[0];
+		}
+		if (typeof masteryEntry === "object" && masteryEntry.uid) {
+			return masteryEntry.uid.split("|")[0];
+		}
+		return null;
+	}
+
+	/**
+	 * Get the mastery effect definition for a weapon.
+	 * @param {object} weapon - Weapon data with mastery array
+	 * @returns {object|null} The mastery effect definition from WEAPON_MASTERY_EFFECTS, or null
+	 */
+	static getWeaponMasteryEffect (weapon) {
+		const name = CharacterSheetState.getWeaponMasteryName(weapon);
+		if (!name) return null;
+		return CharacterSheetState.WEAPON_MASTERY_EFFECTS[name] || null;
+	}
+
+	/**
+	 * Get the Topple mastery save DC for a specific attack.
+	 * DC = 8 + ability modifier used for the attack + proficiency bonus
+	 * @param {string} abilityUsed - "str" or "dex" (ability used for the attack)
+	 * @returns {number} The Topple save DC
+	 */
+	getToppleDC (abilityUsed = "str") {
+		return 8 + this.getAbilityMod(abilityUsed) + this.getProficiencyBonus();
+	}
+
+	/**
+	 * Get mastery effects applicable to a specific attack.
+	 * Checks if the character has mastered the weapon and returns the mastery info.
+	 * @param {object} attack - Attack object with weapon data
+	 * @returns {object|null} {name, effect, description, dc?} or null if no mastery applies
+	 */
+	getMasteryEffectsForAttack (attack) {
+		if (!attack) return null;
+
+		// Check if character has weapon mastery feature at all
+		const calc = this.getFeatureCalculations();
+		if (!calc.hasWeaponMastery && !calc.weaponMasterySlots) return null;
+
+		// Get the weapon's mastery property
+		const weaponKey = attack.weaponKey || (attack.name && attack.source ? `${attack.name}|${attack.source}` : null);
+		if (!weaponKey) return null;
+
+		// Check if this weapon is in the character's mastered weapons list
+		const masteredName = weaponKey.split("|")[0];
+		if (!this.hasWeaponMastery(masteredName)) return null;
+
+		// Get the mastery effect from the weapon data
+		const masteryName = attack.masteryProperty || null;
+		if (!masteryName) return null;
+
+		const masteryDef = CharacterSheetState.WEAPON_MASTERY_EFFECTS[masteryName];
+		if (!masteryDef) return null;
+
+		// Build result with computed values
+		const result = {
+			name: masteryName,
+			...masteryDef,
+		};
+
+		// Compute Topple DC if applicable
+		if (masteryName === "Topple") {
+			const abilityUsed = attack.abilityMod === "dex" ? "dex"
+				: attack.abilityMod === "finesse" ? (this.getAbilityMod("str") >= this.getAbilityMod("dex") ? "str" : "dex")
+					: "str";
+			result.dc = this.getToppleDC(abilityUsed);
+		}
+
+		// Compute Graze damage if applicable
+		if (masteryName === "Graze") {
+			const abilityUsed = attack.abilityMod === "dex" ? "dex"
+				: attack.abilityMod === "finesse" ? (this.getAbilityMod("str") >= this.getAbilityMod("dex") ? "str" : "dex")
+					: "str";
+			result.grazeDamage = Math.max(0, this.getAbilityMod(abilityUsed));
+			result.damageType = attack.damageType || "slashing";
+		}
+
+		// Check Tactical Master (Fighter L9) — can swap mastery to Push, Sap, or Slow
+		if (calc.hasTacticalMaster) {
+			result.canSwapTo = ["Push", "Sap", "Slow"].filter(m => m !== masteryName);
+		}
+
+		return result;
+	}
+
+	/**
 	 * State type definitions with their effects
 	 * Each state defines what effects it provides when active
 	 */
@@ -20976,6 +21134,78 @@ class CharacterSheetState {
 		return this.getConcentrationSaveDC(damageTaken);
 	}
 
+	/**
+	 * Get the total concentration save bonus.
+	 * Includes CON save modifier, plus any concentration-specific bonuses
+	 * (e.g., Bladesong INT mod, War Caster advantage tracked separately).
+	 * @returns {number} Total bonus to concentration saves
+	 */
+	getConcentrationSaveBonus () {
+		// Base: CON save modifier (ability mod + proficiency if proficient + custom + state bonuses)
+		let bonus = this.getSaveMod("con");
+
+		// Add concentration-specific bonuses from named modifiers
+		// This catches Bladesong (+INT to concentration), and any feature that adds
+		// a bonus specifically to concentration saves
+		const concMods = this.aggregateModifiers("concentration");
+		bonus += concMods.bonus || 0;
+
+		return bonus;
+	}
+
+	/**
+	 * Check if the character has advantage on concentration saves.
+	 * Detects War Caster, Eldritch Mind, and any feature granting concentration advantage
+	 * via the generic named modifier system (target: "concentration" with advantage).
+	 * @returns {object} {advantage: bool, sources: string[]}
+	 */
+	getConcentrationAdvantage () {
+		// Check concentration-specific modifiers
+		const concMods = this.aggregateModifiers("concentration");
+		let hasAdvantage = concMods.advantage || false;
+		const sources = [...(concMods.sources || [])];
+
+		// Also check generic CON save advantage (applies to all CON saves including concentration)
+		const conSaveMods = this.aggregateModifiers("save:con");
+		if (conSaveMods.advantage) {
+			hasAdvantage = true;
+			sources.push(...(conSaveMods.sources || []));
+		}
+
+		// Check active state effects for save advantage on CON
+		const advState = this.getAdvantageState("save:con");
+		if (advState.advantage) {
+			hasAdvantage = true;
+			sources.push(...(advState.sources || []));
+		}
+
+		return {
+			advantage: hasAdvantage,
+			sources: [...new Set(sources)],
+		};
+	}
+
+	/**
+	 * Compute the full concentration check info for given damage.
+	 * Returns DC, total bonus, advantage status, and effective roll needed.
+	 * @param {number} damageTaken - Damage that triggers the concentration save
+	 * @returns {object} {dc, bonus, advantage, sources, rollNeeded}
+	 */
+	makeConcentrationCheck (damageTaken) {
+		const dc = this.getConcentrationSaveDC(damageTaken);
+		const bonus = this.getConcentrationSaveBonus();
+		const {advantage, sources} = this.getConcentrationAdvantage();
+		const rollNeeded = Math.max(1, dc - bonus);
+
+		return {
+			dc,
+			bonus,
+			advantage,
+			sources,
+			rollNeeded: Math.min(20, rollNeeded),
+		};
+	}
+
 	// --- Rest Integration for Active States ---
 
 	/**
@@ -21064,6 +21294,9 @@ class CharacterSheetState {
 		if (this._data.sorceryPoints && this._data.sorceryPoints.max > 0) {
 			this._data.sorceryPoints.current = this._data.sorceryPoints.max;
 		}
+
+		// Recover Mystic Arcanum (Warlock)
+		this.resetMysticArcanum();
 
 		// Recover all innate spells
 		this.restoreInnateSpells("long");
@@ -21325,6 +21558,218 @@ class CharacterSheetState {
 		this._data.sorceryPoints.current -= amount;
 		return true;
 	}
+
+	// #region Font of Magic (Sorcery Point ↔ Spell Slot Conversion)
+
+	/**
+	 * Cost in sorcery points to create a spell slot of a given level.
+	 * PHB 2014: L1=2, L2=3, L3=5, L4=6, L5=7 (max L5)
+	 * XPHB 2024: L1=2, L2=3, L3=5 (max L3)
+	 */
+	static SP_TO_SLOT_COST = {1: 2, 2: 3, 3: 5, 4: 6, 5: 7};
+
+	/**
+	 * Get the sorcery point cost to create a spell slot at the given level
+	 * @param {number} slotLevel - Spell slot level (1-5)
+	 * @returns {number|null} Cost in SP, or null if level is invalid
+	 */
+	getSpToSlotCost (slotLevel) {
+		return CharacterSheetState.SP_TO_SLOT_COST[slotLevel] ?? null;
+	}
+
+	/**
+	 * Get the sorcery points returned when converting a spell slot to SP
+	 * @param {number} slotLevel - Spell slot level (1-5 for PHB, higher slots also convert at 1:1 level)
+	 * @returns {number} Sorcery points gained (equal to slot level)
+	 */
+	getSlotToSpReturn (slotLevel) {
+		return slotLevel;
+	}
+
+	/**
+	 * Get the maximum spell slot level that can be created via Font of Magic
+	 * @returns {number} Max level (5 for PHB 2014, 3 for XPHB 2024)
+	 */
+	getMaxConvertibleSlotLevel () {
+		const sorcererClass = this._data.classes?.find(c => c.name?.toLowerCase() === "sorcerer");
+		const is2024 = sorcererClass?.source === "XPHB";
+		return is2024 ? 3 : 5;
+	}
+
+	/**
+	 * Check if the character has Font of Magic
+	 * @returns {boolean}
+	 */
+	hasFontOfMagic () {
+		const calc = this.getFeatureCalculations();
+		return calc.hasFontOfMagic === true;
+	}
+
+	/**
+	 * Convert a spell slot into sorcery points.
+	 * Expends one slot of the given level and gains SP equal to the slot level.
+	 * @param {number} slotLevel - The level of slot to convert (1-9)
+	 * @returns {boolean} True if successful
+	 */
+	convertSlotToSorceryPoints (slotLevel) {
+		if (!this.hasFontOfMagic()) return false;
+		if (slotLevel < 1 || slotLevel > 9) return false;
+
+		// Check slot availability
+		const slotCurrent = this.getSpellSlotsCurrent(slotLevel);
+		if (slotCurrent <= 0) return false;
+
+		// Expend the slot
+		const slots = this._data.spellcasting.spellSlots;
+		if (!slots[slotLevel]) return false;
+		slots[slotLevel].current--;
+
+		// Gain SP equal to slot level (capped at max)
+		const sp = this.getSorceryPoints();
+		const gained = this.getSlotToSpReturn(slotLevel);
+		this._data.sorceryPoints.current = Math.min(sp.max, sp.current + gained);
+
+		return true;
+	}
+
+	/**
+	 * Convert sorcery points into a spell slot.
+	 * Spends SP to create a bonus spell slot (cannot exceed max for that level).
+	 * @param {number} slotLevel - The level of slot to create (1-5 PHB, 1-3 XPHB)
+	 * @returns {boolean} True if successful
+	 */
+	convertSorceryPointsToSlot (slotLevel) {
+		if (!this.hasFontOfMagic()) return false;
+
+		// Validate slot level
+		const maxLevel = this.getMaxConvertibleSlotLevel();
+		if (slotLevel < 1 || slotLevel > maxLevel) return false;
+
+		// Get cost
+		const cost = this.getSpToSlotCost(slotLevel);
+		if (cost === null) return false;
+
+		// Check SP availability
+		const sp = this.getSorceryPoints();
+		if (sp.current < cost) return false;
+
+		// Ensure the slot level exists in data
+		if (!this._data.spellcasting.spellSlots[slotLevel]) {
+			this._data.spellcasting.spellSlots[slotLevel] = {current: 0, max: 0};
+		}
+
+		// Spend SP
+		this._data.sorceryPoints.current -= cost;
+
+		// Create the slot (add 1 current, even above max — it's a temporary bonus slot)
+		this._data.spellcasting.spellSlots[slotLevel].current++;
+
+		return true;
+	}
+
+	// #endregion
+
+	// #region Mystic Arcanum Usage Tracking
+
+	/**
+	 * Get Mystic Arcanum usage state
+	 * @returns {object} {6: bool, 7: bool, 8: bool, 9: bool} — true = used this long rest
+	 */
+	getMysticArcanumUsage () {
+		return this._data.mysticArcanumUsed || {6: false, 7: false, 8: false, 9: false};
+	}
+
+	/**
+	 * Check if a Mystic Arcanum of the given level is available (not yet used)
+	 * @param {number} level - Arcanum level (6-9)
+	 * @returns {boolean} True if available
+	 */
+	isMysticArcanumAvailable (level) {
+		if (level < 6 || level > 9) return false;
+
+		// Check the character actually has this arcanum
+		const calc = this.getFeatureCalculations();
+		const arcanumKey = `mysticArcanum${level === 6 ? "6th" : level === 7 ? "7th" : level === 8 ? "8th" : "9th"}`;
+		if (!calc[arcanumKey]) return false;
+
+		const usage = this.getMysticArcanumUsage();
+		return !usage[level];
+	}
+
+	/**
+	 * Use a Mystic Arcanum of the given level (once per long rest each)
+	 * @param {number} level - Arcanum level (6-9)
+	 * @returns {boolean} True if successful
+	 */
+	useMysticArcanum (level) {
+		if (!this.isMysticArcanumAvailable(level)) return false;
+
+		if (!this._data.mysticArcanumUsed) {
+			this._data.mysticArcanumUsed = {6: false, 7: false, 8: false, 9: false};
+		}
+		this._data.mysticArcanumUsed[level] = true;
+		return true;
+	}
+
+	/**
+	 * Reset Mystic Arcanum usage (called on long rest)
+	 */
+	resetMysticArcanum () {
+		this._data.mysticArcanumUsed = {6: false, 7: false, 8: false, 9: false};
+	}
+
+	// #endregion
+
+	// #region Natural Recovery (Circle of the Land Druid)
+
+	/**
+	 * Use Natural Recovery (Land Druid feature — mirrors Arcane Recovery)
+	 * @param {Array} slotsToRecover - Array of {level, amount} to recover
+	 * @returns {boolean} True if successful
+	 */
+	useNaturalRecovery (slotsToRecover) {
+		// Check if we have the feature
+		const calc = this.getFeatureCalculations();
+		if (!calc.hasNaturalRecovery) return false;
+
+		// Check feature charge (uses getFeature for charge tracking, same pattern as Arcane Recovery)
+		const feature = this.getFeature("Natural Recovery");
+		if (feature && feature.uses && feature.uses.current <= 0) {
+			return false;
+		}
+
+		// Validate: no 6th level or higher slots
+		if (slotsToRecover.some(s => s.level >= 6)) {
+			return false;
+		}
+
+		// Get druid level
+		const druidLevel = this.getClassLevel("Druid");
+		const maxLevels = Math.ceil(druidLevel / 2);
+
+		// Calculate total levels being recovered
+		const totalLevels = slotsToRecover.reduce((sum, s) => sum + (s.level * s.amount), 0);
+		if (totalLevels > maxLevels) {
+			return false;
+		}
+
+		// Recover the slots
+		const slots = this._data.spellcasting.spellSlots;
+		for (const {level, amount} of slotsToRecover) {
+			if (slots[level]) {
+				slots[level].current = Math.min(slots[level].max, slots[level].current + amount);
+			}
+		}
+
+		// Use the feature charge
+		if (feature && feature.uses) {
+			feature.uses.current--;
+		}
+
+		return true;
+	}
+
+	// #endregion
 
 	// #region TGTT Passive Metamagic System
 	/**

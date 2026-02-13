@@ -8,41 +8,43 @@ This document outlines planned improvements and potential features for the chara
 
 ### Complete Subclass Implementations
 
-**Status**: In Progress
+**Status**: ✅ Complete
 
-Add full mechanical calculations to `getFeatureCalculations()` for all subclasses:
+All core class subclasses now have full mechanical calculations in `getFeatureCalculations()`:
 
-```javascript
-// Example: Alchemist implementation
-case "Alchemist":
-case "alchemist": {
-    if (level >= 3) {
-        calculations.experimentalElixirCount = level >= 15 ? 3 : level >= 6 ? 2 : 1;
-    }
-    if (level >= 5) {
-        calculations.alchemicalSavantBonus = this.getAbilityMod("int");
-    }
-    if (level >= 9) {
-        calculations.restorativeReagentsUses = Math.max(1, this.getAbilityMod("int"));
-    }
-    break;
-}
-```
+- ✅ Artificer subclasses (Alchemist, Armorer, Artillerist, Battle Smith)
+- ✅ Druid circles (Moon, Land, Dreams, Spores, Stars, Wildfire, Shepherd)
+- ✅ Cleric domains (all 14 domains)
+- ✅ Bard colleges (all including TGTT: Conduction, Jesters, Surrealism)
+- ✅ Ranger conclaves (all including TGTT: Primal Focus)
+- ✅ All remaining official subclasses
 
-Priority order:
-1. Artificer subclasses (Alchemist, Armorer, Artillerist, Battle Smith)
-2. Druid circles (Moon, Land, Dreams, Spores, Stars, Wildfire)
-3. Cleric domains (all)
-4. Remaining classes
+### TGTT (Thelemar) Homebrew
+
+**Status**: ✅ Complete (737 tests)
+
+Full implementation of Traveler's Guide to Thelemar content:
+
+- ✅ All variant rules (exhaustion, carry weight, linguistics, etc.)
+- ✅ Dreamwalker prestige class (10 levels, 11 abilities)
+- ✅ The Warder fighter variant
+- ✅ Combat Methods system (17 traditions, 5 degrees each)
+- ✅ Battle Tactics (13 tactics with prerequisites)
+- ✅ All TGTT subclasses (Chained Fury, Sun Bloodline, Horror, etc.)
+- ✅ Race features (Half-Ogre, Gnoll, Tiefling variants)
+- ✅ TGTT feats (Lore Mastery, Spellsword Technique, Whip Master, Dreamer)
+- ✅ Metamagic progression and costs
+
+See [TGTT Documentation](./13-tgtt-thelemar-homebrew.md) for full details.
 
 ### Test Coverage Improvements
 
-**Status**: In Progress
+**Status**: ✅ Mostly Complete
 
-- Convert all `getTotalLevel()` test patterns to `getFeatureCalculations()`
-- Add edge case tests for multiclassing
-- Improve toggle abilities test coverage
-- Add XPHB 2024 feature parity tests
+- ✅ Converted `getTotalLevel()` patterns to `getFeatureCalculations()`
+- ✅ Added edge case tests for multiclassing
+- ✅ Improved toggle abilities test coverage
+- ⚠️ XPHB 2024 feature parity tests (in progress)
 
 ### 2024 PHB Completion
 
