@@ -11928,6 +11928,48 @@ class CharacterSheetState {
 			}
 		}
 
+		// Half-Ogre: Enraged (TGTT)
+		// When below half HP, bonus action to expand crit range to 19-20 for 1 minute
+		// Uses: 1/long rest, causes 1 exhaustion when ends
+		if (raceName === "half-ogre" || fullRaceName.includes("half-ogre") || fullRaceName.includes("half ogre")) {
+			calculations.hasEnraged = true;
+			calculations.enragedCritRange = 19; // Expand to 19-20
+			calculations.enragedUses = 1;
+			calculations.enragedDuration = 1; // 1 minute
+			calculations.enragedExhaustionCost = 1;
+			// Track current HP for activation eligibility
+			const currentHp = this._data.hp?.current ?? this.getMaxHp();
+			const maxHp = this.getMaxHp();
+			calculations.enragedEligible = currentHp < (maxHp / 2);
+		}
+
+		// Gnoll: Thrill of the Hunt + Rampage (TGTT)
+		if (raceName === "gnoll" || fullRaceName.includes("gnoll")) {
+			// Thrill of the Hunt: Mark creature (bonus action), 1/long rest
+			// Duration = proficiency hours, advantage on Perception/Survival to track
+			// Reaction: grant ally within 30ft advantage on melee attack
+			calculations.hasThrillOfTheHunt = true;
+			calculations.thrillMarkDuration = profBonus; // hours
+			calculations.thrillMarkRange = 30; // feet for ally reaction
+			calculations.thrillMarkUses = 1; // per long rest
+			
+			// Rampage: On reducing creature to 0 HP with melee attack
+			// Bonus action to move half speed and make bite attack
+			calculations.hasRampage = true;
+			calculations.rampageMoveDistance = Math.floor(this.getSpeed("walk") / 2);
+			// Bite attack: 1d6 + STR piercing
+			const strMod = this.getAbilityMod("str");
+			calculations.rampageBiteDamage = "1d6";
+			calculations.rampageBiteBonus = strMod + profBonus;
+		}
+
+		// Asmodeus Tiefling: Infernal Luck (TGTT)
+		// Reroll attack roll, ability check, or saving throw, 1/long rest
+		if (fullRaceName.includes("asmodeus") || subraceName.includes("asmodeus")) {
+			calculations.hasInfernalLuck = true;
+			calculations.infernalLuckUses = 1;
+		}
+
 		// =====================================================
 		// TGTT FEATS
 		// =====================================================
