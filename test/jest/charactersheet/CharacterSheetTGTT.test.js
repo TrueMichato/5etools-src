@@ -9199,6 +9199,36 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			});
 		});
 		
+		describe("Half-Ogre - Enraged", () => {
+			beforeEach(() => {
+				state.setRace({name: "Half-Ogre", source: "TGTT"});
+				state.addClass({name: "Fighter", source: "PHB", level: 5});
+			});
+			
+			it("should have Enraged feature with crit range expansion", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasEnraged).toBe(true);
+				expect(calcs.enragedCritRange).toBe(19); // 19-20
+			});
+			
+			it("should have 1 use per long rest", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.enragedUses).toBe(1);
+			});
+			
+			it("should last 1 minute and cost 1 exhaustion", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.enragedDuration).toBe(1);
+				expect(calcs.enragedExhaustionCost).toBe(1);
+			});
+			
+			it("should track HP eligibility state", () => {
+				const calcs = state.getFeatureCalculations();
+				// enragedEligible is calculated based on current HP vs max HP
+				expect(calcs.enragedEligible).toBeDefined();
+			});
+		});
+		
 		// ======= Nyuidj =======
 		describe("Nyuidj - Dual Mind", () => {
 			it("should grant advantage on Wisdom saving throws", () => {
@@ -9237,6 +9267,59 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					m.type?.includes("disease") && m.type?.includes("advantage")
 				);
 				expect(diseaseAdvMod).toBeDefined();
+			});
+		});
+		
+		describe("Gnoll - Thrill of the Hunt", () => {
+			beforeEach(() => {
+				state.setRace({name: "Gnoll", source: "TGTT"});
+				state.addClass({name: "Fighter", source: "PHB", level: 5}); // Prof +3
+			});
+			
+			it("should have Thrill of the Hunt feature", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasThrillOfTheHunt).toBe(true);
+			});
+			
+			it("should scale mark duration with proficiency bonus", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.thrillMarkDuration).toBe(3); // Prof +3 at level 5
+			});
+			
+			it("should have 30ft ally reaction range", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.thrillMarkRange).toBe(30);
+			});
+			
+			it("should have 1 use per long rest", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.thrillMarkUses).toBe(1);
+			});
+		});
+		
+		describe("Gnoll - Rampage", () => {
+			beforeEach(() => {
+				state.setRace({name: "Gnoll", source: "TGTT"});
+				state.addClass({name: "Fighter", source: "PHB", level: 5});
+				state.setAbilityBase("str", 16); // +3 mod
+			});
+			
+			it("should have Rampage feature", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasRampage).toBe(true);
+			});
+			
+			it("should calculate move distance as half speed", () => {
+				const calcs = state.getFeatureCalculations();
+				// Default speed 30, half = 15
+				expect(calcs.rampageMoveDistance).toBe(15);
+			});
+			
+			it("should calculate bite attack bonus", () => {
+				const calcs = state.getFeatureCalculations();
+				// STR +3 + Prof +3 = +6
+				expect(calcs.rampageBiteBonus).toBe(6);
+				expect(calcs.rampageBiteDamage).toBe("1d6");
 			});
 		});
 		
@@ -9287,6 +9370,24 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				// Check for expertise-level proficiency (getSkillProficiency returns 0, 1, or 2)
 				const profLevel = state.getSkillProficiency("persuasion");
 				expect(profLevel).toBe(2); // 2 = expertise
+			});
+		});
+		
+		describe("Asmodeus Tiefling - Infernal Luck", () => {
+			beforeEach(() => {
+				// Include "Asmodeus" in the full race name for detection
+				state.setRace({name: "Tiefling (Asmodeus)", source: "TGTT"});
+				state.addClass({name: "Fighter", source: "PHB", level: 1});
+			});
+			
+			it("should have Infernal Luck feature", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasInfernalLuck).toBe(true);
+			});
+			
+			it("should have 1 use per long rest", () => {
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.infernalLuckUses).toBe(1);
 			});
 		});
 		
