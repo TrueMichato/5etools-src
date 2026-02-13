@@ -8529,9 +8529,12 @@ class CharacterSheetState {
 									calculations.devastatingStrikePush = 15;
 								}
 
-								// Unarmored Defense (like Monk/Barb but unique to Horror)
-								// AC = 10 + DEX + CON when unarmored
-								calculations.horrorUnarmoredAc = 10 + dexMod + conMod;
+								// Temporary Unarmored Defense after Devastating Strike
+								// TGTT: "Until the start of your next turn, as long as you are
+								// not wearing any armor, your AC = 10 + DEX + CON"
+								// This is a TEMPORARY buff that only applies after using the ability
+								calculations.devastatingStrikeAc = 10 + dexMod + conMod;
+								calculations.hasDevastatingStrikeAc = true;
 
 								// Lone Survivor (level 6) - immune to frightened when alone
 								if (level >= 6) {
@@ -8994,31 +8997,57 @@ class CharacterSheetState {
 							}
 							case "Sun Bloodline":
 							case "Child of the Sun Bloodline": {
-								// Sun Bloodline (TGTT Sorcerer)
+								// Sun Bloodline (TGTT/Ar2 Sorcerer)
+								// L1 features from Ar2, L6/14/18 extend the subclass
 								const chaMod = this.getAbilityMod("cha");
 
-								// Glimpse of the Sun (level 3)
-								// - Free Light cantrip
-								// - Can choose who perceives the light within 20ft
-								// - At level 3: 1 SP to blind creature within 20ft who can't see it
+								// Level 1: Glimpse of the Sun
+								// - Free Light cantrip, choose who perceives it within 20ft
+								// - 1 SP to blind creature within 20ft who can't see source
 								calculations.hasGlimpseOfTheSun = true;
 								calculations.lightCantrip = true;
 								calculations.glimpseSunRange = 20;
-								if (level >= 3) {
-									calculations.hasGlimpseBlind = true;
-									calculations.glimpseBlindCost = 1; // Sorcery point
-								}
+								calculations.hasGlimpseBlind = true;
+								calculations.glimpseBlindCost = 1; // Sorcery point
 
-								// Summer's Defiant Blood (level 3)
+								// Level 1: Summer's Defiant Blood
 								// When attacked or forced to save: +CHA to next spell damage (1/round)
-								if (level >= 3) {
-									calculations.hasSummersDefiantBlood = true;
-									calculations.defiantBloodBonus = chaMod;
-								}
+								calculations.hasSummersDefiantBlood = true;
+								calculations.defiantBloodBonus = Math.max(0, chaMod);
 
-								// Sun Spells (level 3) - always prepared spells
-								if (level >= 3) {
-									calculations.hasSunSpells = true;
+								// Sun Spells - always prepared
+								calculations.hasSunSpells = true;
+								
+								// Level 6: Sunlit Path (Ar2)
+								// Walking speed +15ft, radiant resistance, overland travel bonus
+								if (level >= 6) {
+									calculations.hasSunlitPath = true;
+									calculations.sunlitPathSpeedBonus = 15;
+									calculations.hasRadiantResistance = true;
+									calculations.overlandTravelBonusMinute = 100; // feet per minute
+									calculations.overlandTravelBonusHour = 1; // miles per hour
+									calculations.overlandTravelBonusDay = 6; // miles per day
+									calculations.overlandTravelAllyRange = 30;
+								}
+								
+								// Level 14: Grasping the Sun (Ar2)
+								// Reaction: reduce damage by sorcerer level
+								// If melee attack, attacker takes radiant = sorcerer level
+								if (level >= 14) {
+									calculations.hasGraspingTheSun = true;
+									calculations.graspingDamageReduction = level;
+									calculations.graspingRadiantDamage = level;
+								}
+								
+								// Level 18: Bright Zenith (Ar2)
+								// 6 SP bonus action: 40ft AoE blind, 100ft blindsight, extended targeting
+								// Duration: 1 minute
+								if (level >= 18) {
+									calculations.hasBrightZenith = true;
+									calculations.brightZenithCost = 6; // Sorcery points
+									calculations.brightZenithBlindRange = 40;
+									calculations.brightZenithBlindsight = 100;
+									calculations.brightZenithDuration = 1; // minute
 								}
 								break;
 							}
@@ -11690,8 +11719,9 @@ class CharacterSheetState {
 					break;
 				}
 				// =========================================================
-				// DREAMWALKER (TGTT Custom Homebrew Class)
+				// DREAMWALKER (TGTT Custom Homebrew Prestige Class - 10 levels max)
 				// A unique class that manipulates dreams and reality
+				// Requirements: Level 4+, CON 15+, can sleep/dream, has Dreamwalk ability
 				// =========================================================
 				case "Dreamwalker": {
 					const conMod = this.getAbilityMod("con");
@@ -11699,14 +11729,15 @@ class CharacterSheetState {
 					// Dream DC: 8 + proficiency + CON modifier
 					calculations.dreamDc = 8 + profBonus + conMod - exhaustionPenalty;
 					
-					// Lucid Focus die scaling: d6 (L1-4) → d8 (L5-8) → d10 (L9-13) → d12 (L14+)
-					if (level >= 14) {
+					// Lucid Focus die scaling per TGTT:
+					// "d8 at 3rd level, d10 at 6th level, d12 at 10th level"
+					if (level >= 10) {
 						calculations.lucidFocusDie = "1d12";
 						calculations.lucidFocusDieSize = 12;
-					} else if (level >= 9) {
+					} else if (level >= 6) {
 						calculations.lucidFocusDie = "1d10";
 						calculations.lucidFocusDieSize = 10;
-					} else if (level >= 5) {
+					} else if (level >= 3) {
 						calculations.lucidFocusDie = "1d8";
 						calculations.lucidFocusDieSize = 8;
 					} else {
@@ -11714,46 +11745,71 @@ class CharacterSheetState {
 						calculations.lucidFocusDieSize = 6;
 					}
 					
-					// Focus Pool: CON mod + proficiency bonus uses per long rest (minimum 1)
-					calculations.focusPoolMax = Math.max(1, conMod + profBonus);
-					calculations.hasFocusPool = true;
-					
 					// Dreambend DC: same as Dream DC
 					calculations.dreambendDc = calculations.dreamDc;
 					
-					// Level 1 Features
+					// Lucid Focus uses per long rest: equals proficiency bonus
+					// TGTT: "You can grant yourself a Lucid Focus die a number of times equal to your proficiency bonus"
+					calculations.focusPoolMax = profBonus;
+					calculations.hasFocusPool = true;
+					
+					// Level 1 Features: Focus, Lucid Focus, Dreamwalk, Dreamer feat
 					if (level >= 1) {
-						calculations.hasFocus = true;
+						calculations.hasFocus = true; // Grants CON save proficiency
 						calculations.hasLucidFocus = true;
 						calculations.hasDreamwalk = true;
+						calculations.hasDreamerFeat = true;
 					}
 					
-					// Level 4: Focus Improvement (advantage on CON checks and saves)
+					// Level 2: Intuition + Control
+					if (level >= 2) {
+						calculations.hasIntuition = true; // Advantage on Insight in Dreamtime
+						calculations.hasControl = true; // Constant Effort check every 8 hours (vs 10 min)
+						calculations.constantEffortInterval = "8 hours";
+					}
+					
+					// Level 3: Lucid Awareness
+					if (level >= 3) {
+						calculations.hasLucidAwareness = true;
+					}
+					
+					// Level 4: Focus Improvement (advantage on CON checks and saves) + Dreamer feat
 					if (level >= 4) {
 						calculations.hasFocusImprovement = true;
-						calculations.focusImprovementLevel = 1;
+						calculations.hasConAdvantage = true;
 					}
 					
-					// Level 9: Focus Improvement Upgrade (expertise on CON saves)
+					// Level 5: Needful Search (find objects in Dreamtime by need)
+					if (level >= 5) {
+						calculations.hasNeedfulSearch = true;
+					}
+					
+					// Level 6: Dreamhaven (30ft aura: allies get +CON to Concentration checks)
+					if (level >= 6) {
+						calculations.hasDreamhaven = true;
+						calculations.dreamhavenRange = 30;
+						calculations.dreamhavenBonus = Math.max(1, conMod);
+					}
+					
+					// Level 7: Waking Dream (enter Dreamtime in the flesh, DC 30) + Dreamer feat
+					if (level >= 7) {
+						calculations.hasWakingDream = true;
+						calculations.wakingDreamDc = 30;
+					}
+					
+					// Level 8: Dream Supremacy (Push/Drag creatures into Dreamtime)
+					if (level >= 8) {
+						calculations.hasDreamSupremacy = true;
+					}
+					
+					// Level 9: Focus Improvement upgrade (expertise on CON) + Dreamer feat
 					if (level >= 9) {
-						calculations.focusImprovementLevel = 2;
 						calculations.hasConExpertise = true;
 					}
 					
-					// Level 13: Greater Focus (advantage on all concentration checks)
-					if (level >= 13) {
-						calculations.hasGreaterFocus = true;
-					}
-					
-					// Level 17: Master Focus (can maintain concentration while incapacitated)
-					if (level >= 17) {
-						calculations.hasMasterFocus = true;
-					}
-					
-					// Level 20: Dream Master (reality bending at will)
-					if (level >= 20) {
-						calculations.hasDreamMaster = true;
-						calculations.focusPoolMax = "Unlimited";
+					// Level 10: Just a Weave (replicate spell effects in Dreamtime)
+					if (level >= 10) {
+						calculations.hasJustAWeave = true;
 					}
 					
 					break;
@@ -12568,15 +12624,17 @@ class CharacterSheetState {
 
 		// ===== TGTT WARLOCK SUBCLASSES =====
 
-		// The Horror - Unarmored Defense: AC = 10 + DEX + CON
-		if (calculations.hasDevastatingStrike && calculations.horrorUnarmoredAc && !alreadyProcessed("Horror Unarmored Defense")) {
+		// The Horror - Devastating Strike AC (TEMPORARY: only after using Devastating Strike)
+		// TGTT: "Until the start of your next turn... AC = 10 + DEX + CON"
+		if (calculations.hasDevastatingStrikeAc && calculations.devastatingStrikeAc && !alreadyProcessed("Devastating Strike AC")) {
 			effects.push({
 				type: "acFormula",
 				base: 10,
 				addDex: true,
 				secondAbility: "con",
-				source: "Horror Unarmored Defense",
-				conditional: "while unarmored",
+				source: "Devastating Strike",
+				conditional: "until start of next turn, while unarmored (after using Devastating Strike)",
+				enabled: false, // Disabled by default since it requires active combat state
 			});
 		}
 

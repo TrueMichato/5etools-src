@@ -370,15 +370,16 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 	describe("Dreamwalker Mechanics", () => {
 		
 		describe("Lucid Focus Die Progression", () => {
+			// TGTT: "d8 at 3rd level, d10 at 6th level, d12 at 10th level"
+			// Dreamwalker is a 10-level prestige class
 			const levelToDie = [
 				{level: 1, expected: "1d6"},
-				{level: 4, expected: "1d6"},
+				{level: 2, expected: "1d6"},
+				{level: 3, expected: "1d8"},
 				{level: 5, expected: "1d8"},
-				{level: 8, expected: "1d8"},
+				{level: 6, expected: "1d10"},
 				{level: 9, expected: "1d10"},
-				{level: 13, expected: "1d10"},
-				{level: 14, expected: "1d12"},
-				{level: 20, expected: "1d12"}
+				{level: 10, expected: "1d12"}
 			];
 			
 			levelToDie.forEach(({level, expected}) => {
@@ -415,39 +416,39 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 		});
 		
 		describe("Focus Pool Max Calculation", () => {
-			it("should calculate Focus Pool max as CON mod + proficiency", () => {
+			// TGTT: "You can grant yourself a Lucid Focus die a number of times equal to your proficiency bonus"
+			it("should calculate Focus Pool max as proficiency bonus", () => {
 				state.addClass({name: "Dreamwalker", source: "TGTT", level: 5});
-				state.setAbilityBase("con", 14); // +2 CON mod
 				state.applyClassFeatureEffects();
 				
 				const calcs = state.getFeatureCalculations();
-				// Max = 2 (CON mod) + 3 (prof at level 5) = 5
-				expect(calcs.focusPoolMax).toBe(5);
+				// Max = 3 (prof at level 5)
+				expect(calcs.focusPoolMax).toBe(3);
 			});
 			
-			it("should have minimum 1 Focus Pool point", () => {
+			it("should scale Focus Pool max with level (proficiency)", () => {
+				state.addClass({name: "Dreamwalker", source: "TGTT", level: 9});
+				state.applyClassFeatureEffects();
+				
+				const calcs = state.getFeatureCalculations();
+				// Max = 4 (prof at level 9)
+				expect(calcs.focusPoolMax).toBe(4);
+			});
+			
+			it("should have minimum 2 Focus Pool at level 1", () => {
 				state.addClass({name: "Dreamwalker", source: "TGTT", level: 1});
-				state.setAbilityBase("con", 6); // -2 CON mod
 				state.applyClassFeatureEffects();
 				
 				const calcs = state.getFeatureCalculations();
-				// Max = max(1, -2 + 2) = 1
-				expect(calcs.focusPoolMax).toBe(1);
-			});
-			
-			it("should be Unlimited at level 20", () => {
-				state.addClass({name: "Dreamwalker", source: "TGTT", level: 20});
-				state.applyClassFeatureEffects();
-				
-				const calcs = state.getFeatureCalculations();
-				expect(calcs.focusPoolMax).toBe("Unlimited");
+				// Max = 2 (prof at level 1)
+				expect(calcs.focusPoolMax).toBe(2);
 			});
 		});
 		
 		describe("Focus Pool State Management", () => {
 			beforeEach(() => {
 				state.addClass({name: "Dreamwalker", source: "TGTT", level: 5});
-				state.setAbilityBase("con", 14); // +2 CON mod, so max = 5
+				// Focus Pool max = proficiency bonus (3 at level 5)
 				state.applyClassFeatureEffects();
 				state.initializeFocusPool(); // Initialize pool to max
 			});
@@ -457,15 +458,15 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			});
 			
 			it("should track Focus Pool current and max", () => {
-				expect(state.getFocusPoolMax()).toBe(5);
-				expect(state.getFocusPoolCurrent()).toBe(5); // Initialized to max
+				expect(state.getFocusPoolMax()).toBe(3); // Proficiency at level 5
+				expect(state.getFocusPoolCurrent()).toBe(3); // Initialized to max
 			});
 			
 			it("should spend focus points", () => {
 				const result = state.spendFocusPoint(2);
 				
 				expect(result).toBe(true);
-				expect(state.getFocusPoolCurrent()).toBe(3);
+				expect(state.getFocusPoolCurrent()).toBe(1);
 			});
 			
 			it("should prevent spending more than available", () => {
@@ -481,7 +482,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 		describe("Lucid Focus Activation", () => {
 			beforeEach(() => {
 				state.addClass({name: "Dreamwalker", source: "TGTT", level: 5});
-				state.setAbilityBase("con", 14);
+				// Focus Pool max = proficiency bonus (3 at level 5)
 				state.applyClassFeatureEffects();
 				state.initializeFocusPool(); // Initialize pool to max
 			});
@@ -521,13 +522,13 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 		describe("Focus Pool Restoration", () => {
 			beforeEach(() => {
 				state.addClass({name: "Dreamwalker", source: "TGTT", level: 5});
-				state.setAbilityBase("con", 14);
+				// Focus Pool max = proficiency bonus (3 at level 5)
 				state.applyClassFeatureEffects();
 				state.initializeFocusPool(); // Initialize pool to max
 			});
 			
 			it("should restore Focus Pool on long rest", () => {
-				state.spendFocusPoint(3);
+				state.spendFocusPoint(1);
 				state.activateLucidFocus();
 				
 				expect(state.getFocusPoolCurrent()).toBe(1);
@@ -535,7 +536,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				
 				state.restoreFocusPool();
 				
-				expect(state.getFocusPoolCurrent()).toBe(5);
+				expect(state.getFocusPoolCurrent()).toBe(3);
 				expect(state.isLucidFocusActive()).toBe(false);
 			});
 		});
@@ -557,26 +558,51 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 		});
 		
 		describe("Dreamwalker Feature Flags", () => {
-			it("should have correct features at various levels", () => {
-				state.addClass({name: "Dreamwalker", source: "TGTT", level: 17});
+			// Dreamwalker is a 10-level prestige class
+			it("should have correct features at max level (10)", () => {
+				state.addClass({name: "Dreamwalker", source: "TGTT", level: 10});
+				state.applyClassFeatureEffects();
+				
+				const calcs = state.getFeatureCalculations();
+				// Level 1 features
+				expect(calcs.hasFocus).toBe(true);
+				expect(calcs.hasLucidFocus).toBe(true);
+				expect(calcs.hasDreamwalk).toBe(true);
+				expect(calcs.hasDreamerFeat).toBe(true);
+				// Level 2 features
+				expect(calcs.hasIntuition).toBe(true);
+				expect(calcs.hasControl).toBe(true);
+				// Level 3-4 features
+				expect(calcs.hasLucidAwareness).toBe(true);
+				expect(calcs.hasFocusImprovement).toBe(true);
+				expect(calcs.hasConAdvantage).toBe(true);
+				// Level 5-6 features
+				expect(calcs.hasNeedfulSearch).toBe(true);
+				expect(calcs.hasDreamhaven).toBe(true);
+				// Level 7-8 features
+				expect(calcs.hasWakingDream).toBe(true);
+				expect(calcs.hasDreamSupremacy).toBe(true);
+				// Level 9 features
+				expect(calcs.hasConExpertise).toBe(true);
+				// Level 10 capstone
+				expect(calcs.hasJustAWeave).toBe(true);
+				expect(calcs.lucidFocusDie).toBe("1d12");
+			});
+			
+			it("should have only early features at level 5", () => {
+				state.addClass({name: "Dreamwalker", source: "TGTT", level: 5});
 				state.applyClassFeatureEffects();
 				
 				const calcs = state.getFeatureCalculations();
 				expect(calcs.hasFocus).toBe(true);
-				expect(calcs.hasLucidFocus).toBe(true);
-				expect(calcs.hasDreamwalk).toBe(true);
+				expect(calcs.hasIntuition).toBe(true);
+				expect(calcs.hasLucidAwareness).toBe(true);
 				expect(calcs.hasFocusImprovement).toBe(true);
-				expect(calcs.hasConExpertise).toBe(true);
-				expect(calcs.hasGreaterFocus).toBe(true);
-				expect(calcs.hasMasterFocus).toBe(true);
-			});
-			
-			it("should have Dream Master at level 20", () => {
-				state.addClass({name: "Dreamwalker", source: "TGTT", level: 20});
-				state.applyClassFeatureEffects();
-				
-				const calcs = state.getFeatureCalculations();
-				expect(calcs.hasDreamMaster).toBe(true);
+				expect(calcs.hasNeedfulSearch).toBe(true);
+				// Should NOT have high-level features
+				expect(calcs.hasDreamhaven).toBeUndefined();
+				expect(calcs.hasWakingDream).toBeUndefined();
+				expect(calcs.hasJustAWeave).toBeUndefined();
 			});
 		});
 	});
@@ -6829,33 +6855,167 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					state.addClass({
 						name: "Sorcerer",
 						source: "TGTT",
-						level: 3,
+						level: 1,
 						subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
 					});
 				});
 
-				it("should have hasGlimpseOfTheSun flag", () => {
+				it("should have hasGlimpseOfTheSun flag at level 1", () => {
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasGlimpseOfTheSun).toBe(true);
 					expect(calcs.glimpseSunRange).toBe(20);
 				});
 
-				it("should have hasGlimpseBlind at level 3", () => {
+				it("should have hasGlimpseBlind at level 1", () => {
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasGlimpseBlind).toBe(true);
 					expect(calcs.glimpseBlindCost).toBe(1);
 				});
 
-				it("should have hasSummersDefiantBlood at level 3", () => {
+				it("should have hasSummersDefiantBlood at level 1", () => {
 					state.setAbilityBase("cha", 16);
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasSummersDefiantBlood).toBe(true);
 					expect(calcs.defiantBloodBonus).toBe(3); // +3 CHA
 				});
 
-				it("should have hasSunSpells at level 3", () => {
+				it("should have hasSunSpells at level 1", () => {
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasSunSpells).toBe(true);
+				});
+				
+				// Level 6: Sunlit Path (Ar2)
+				describe("Sunlit Path (Level 6)", () => {
+					it("should have hasSunlitPath flag", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 6,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasSunlitPath).toBe(true);
+					});
+					
+					it("should grant +15 walking speed", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 6,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.sunlitPathSpeedBonus).toBe(15);
+					});
+					
+					it("should grant radiant resistance", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 6,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasRadiantResistance).toBe(true);
+					});
+					
+					it("should grant overland travel bonus", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 6,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.overlandTravelBonusMinute).toBe(100);
+						expect(calcs.overlandTravelBonusHour).toBe(1);
+						expect(calcs.overlandTravelBonusDay).toBe(6);
+						expect(calcs.overlandTravelAllyRange).toBe(30);
+					});
+				});
+				
+				// Level 14: Grasping the Sun (Ar2)
+				describe("Grasping the Sun (Level 14)", () => {
+					it("should have hasGraspingTheSun flag", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 14,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasGraspingTheSun).toBe(true);
+					});
+					
+					it("should reduce damage by sorcerer level", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 14,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.graspingDamageReduction).toBe(14);
+					});
+					
+					it("should deal radiant damage equal to sorcerer level", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 14,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.graspingRadiantDamage).toBe(14);
+					});
+				});
+				
+				// Level 18: Bright Zenith (Ar2)
+				describe("Bright Zenith (Level 18)", () => {
+					it("should have hasBrightZenith flag", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 18,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.hasBrightZenith).toBe(true);
+					});
+					
+					it("should cost 6 sorcery points", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 18,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.brightZenithCost).toBe(6);
+					});
+					
+					it("should have 40ft blind range and 100ft blindsight", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 18,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.brightZenithBlindRange).toBe(40);
+						expect(calcs.brightZenithBlindsight).toBe(100);
+					});
+					
+					it("should last 1 minute", () => {
+						state.addClass({
+							name: "Sorcerer",
+							source: "TGTT",
+							level: 18,
+							subclass: {name: "Child of the Sun Bloodline", shortName: "Sun Bloodline", source: "TGTT"}
+						});
+						const calcs = state.getFeatureCalculations();
+						expect(calcs.brightZenithDuration).toBe(1);
+					});
 				});
 			});
 		});
@@ -8068,7 +8228,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.devastatingStrikeUses).toBe(1);
 				});
 				
-				it("should calculate Horror Unarmored AC", () => {
+				it("should calculate Devastating Strike AC", () => {
 					state.addClass({
 						name: "Warlock", source: "TGTT", level: 3,
 						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
@@ -8078,7 +8238,8 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					
 					const calcs = state.getFeatureCalculations();
 					// AC = 10 + DEX(3) + CON(2) = 15
-					expect(calcs.horrorUnarmoredAc).toBe(15);
+					expect(calcs.devastatingStrikeAc).toBe(15);
+					expect(calcs.hasDevastatingStrikeAc).toBe(true);
 				});
 				
 				it("should grant level 6+ features at appropriate levels", () => {
@@ -8105,7 +8266,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(calcs.implodingInfestationRadius).toBe(30);
 				});
 
-				it("should include Horror Unarmored AC formula in getBonuses() effects", () => {
+				it("should include Devastating Strike AC formula in getBonuses() effects", () => {
 					state.addClass({
 						name: "Warlock", source: "TGTT", level: 3,
 						subclass: {name: "The Horror", shortName: "Horror", source: "TGTT"}
@@ -8114,13 +8275,14 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					state.setAbilityBase("con", 14);
 
 					const calcs = state.getFeatureCalculations();
-					const acEffect = calcs._effects.find(e => e.source === "Horror Unarmored Defense");
+					const acEffect = calcs._effects.find(e => e.source === "Devastating Strike");
 
 					expect(acEffect).toBeDefined();
 					expect(acEffect.type).toBe("acFormula");
 					expect(acEffect.base).toBe(10);
 					expect(acEffect.addDex).toBe(true);
 					expect(acEffect.secondAbility).toBe("con");
+					expect(acEffect.enabled).toBe(false); // Disabled by default, requires combat state
 				});
 
 				it("should include CON save proficiency in getBonuses() effects at level 6", () => {
@@ -10098,7 +10260,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 
 					const calcs = state.getFeatureCalculations();
 
-					expect(calcs.lucidFocusDie).toBe("1d10"); // Level 9-13
+					expect(calcs.lucidFocusDie).toBe("1d12"); // Level 10 = max die
 					expect(calcs.hasDreambendAbility).toBe(true);
 				});
 			});
