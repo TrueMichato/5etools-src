@@ -133,6 +133,10 @@ it("should produce 2 elixirs at level 6", () => {
 
 | Feature | Status | Notes |
 |---------|--------|-------|
+| **Font of Magic** | ✅ Implemented | SP ↔ slot conversion with 2014/2024 rules |
+| **Mystic Arcanum** | ✅ Implemented | Per-level usage tracking, long rest recovery |
+| **Natural Recovery** | ✅ Implemented | Land Druid slot recovery (mirrors Arcane Recovery) |
+| **Concentration saves** | ✅ Implemented | DC calc, bonus aggregation, advantage detection |
 | **Dawn/dusk recharge** | Partial | Items recharge, but timing not tracked |
 | **Per-encounter resources** | Missing | No concept of encounter-based recovery |
 | **Lair/Legendary actions** | Missing | Not applicable to PCs, but could be useful |
@@ -145,11 +149,13 @@ The 2024 revision introduced significant changes. Current coverage:
 
 ### Implemented
 
-- ✅ Weapon Mastery properties
+- ✅ Weapon Mastery slots and tracking
+- ✅ Weapon Mastery property effects (all 8: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex)
 - ✅ Updated class features (most)
 - ✅ New subclasses
 - ✅ Updated spell slot progression
 - ✅ Revised ability score improvements
+- ✅ Fighter XPHB Weapon Mastery slots + Tactical Master swap
 
 ### Partially Implemented
 
@@ -235,27 +241,32 @@ Homebrew content quality varies:
 - Feature parsing may fail on unusual text
 - Some homebrew sources incompatible
 
+**Well-Supported Homebrew:**
+- **TGTT (Thelemar)**: Comprehensive support - 737 tests, all variant rules, classes, subclasses, combat methods, and battle tactics. See [TGTT Documentation](./13-tgtt-thelemar-homebrew.md).
+
 ---
 
 ## Improvement Priorities
 
 ### High Priority
 
-1. **Complete subclass calculations** - Add missing mechanical values
-2. **Fix weak test patterns** - Convert `getTotalLevel()` tests
-3. **XPHB 2024 completion** - Full support for revised rules
+1. ~~**Complete subclass calculations**~~ ✅ Done - All core subclasses implemented
+2. ~~**Fix weak test patterns**~~ ✅ Mostly done - Converted to `getFeatureCalculations()`
+3. **XPHB 2024 completion** - Full support for revised rules (in progress)
+4. ~~**TGTT Homebrew**~~ ✅ Done - 737 tests, comprehensive coverage
 
 ### Medium Priority
 
-4. **Code modularization** - Break up large files
-5. **Performance optimization** - Cache computations
-6. **Mobile improvements** - Better touch experience
+5. **Code modularization** - Break up large files
+6. **Performance optimization** - Cache computations
+7. **Mobile improvements** - Better touch experience
+8. **Remaining XPHB species** - Complete 2024 species support
 
 ### Low Priority
 
-7. **PWA support** - Offline installation
-8. **Cloud sync** - Cross-device characters
-9. **Advanced combat** - Cover, flanking, etc.
+9. **PWA support** - Offline installation
+10. **Cloud sync** - Cross-device characters
+11. **Advanced combat** - Cover, flanking, etc.
 
 ---
 
