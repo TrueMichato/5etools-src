@@ -141,6 +141,13 @@ class CharacterSheetSpells {
 			this._castSpell(spellId);
 		});
 
+		// Cast as ritual button (for unprepared spells in spellbook)
+		$(document).on("click", ".charsheet__spell-cast-ritual", (e) => {
+			const $btn = $(e.currentTarget);
+			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+			this._castSpellAsRitual(spellId);
+		});
+
 		// Remove spell button
 		$(document).on("click", ".charsheet__spell-remove", (e) => {
 			const $btn = $(e.currentTarget);
@@ -1495,43 +1502,144 @@ class CharacterSheetSpells {
 			return;
 		}
 
-		// Check pact slots first (they recharge on short rest, so use them preferentially)
-		const pactSlots = this._state.getPactSlots();
-		if (pactSlots && pactSlots.current > 0 && spell.level <= pactSlots.level) {
-			this._state.setPactSlotsCurrent(pactSlots.current - 1);
-			this._showCastResult(spell, pactSlots.level, true);
-			// Set concentration if spell requires it
-			if (requiresConcentration) {
-				this._state.setConcentration?.(spell.name, pactSlots.level);
-				this._updateConcentrationUI();
+		// Check if spell can be cast as a ritual (no slot needed, +10 min casting time)
+		const canRitual = this._state.canCastAsRitual?.(spell);
+		if (canRitual) {
+			// Check if there ARE slots available — if so, offer choice
+			let hasSlots = false;
+			const pactSlots = this._state.getPactSlots();
+			if (pactSlots && pactSlots.current > 0 && spell.level <= pactSlots.level) hasSlots = true;
+			if (!hasSlots) {
+				for (let lvl = spell.level; lvl <= 9; lvl++) {
+					if (this._state.getSpellSlotsCurrent(lvl) > 0) { hasSlots = true; break; }
+				}
 			}
-			this.renderSlots();
-			this._page._renderQuickSpells(); // Update overview spell slots
-			this._page.saveCharacter();
-			return;
-		}
 
-		// Find available regular slot
-		let slotLevel = spell.level;
-		while (slotLevel <= 9) {
-			const current = this._state.getSpellSlotsCurrent(slotLevel);
-			if (current > 0) {
-				this._state.setSpellSlots(slotLevel, this._state.getSpellSlotsMax(slotLevel), current - 1);
-				this._showCastResult(spell, slotLevel);
-				// Set concentration if spell requires it
+			// If no slots available, auto-ritual; if slots available, ask
+			let castAsRitual = !hasSlots;
+			if (hasSlots) {
+				castAsRitual = await InputUiUtil.pGetUserBoolean({
+					title: "Cast as Ritual?",
+					htmlDescription: `<strong>${spell.name}</strong> has the ritual tag. You can cast it as a ritual (no spell slot used, but casting takes 10 extra minutes).`,
+					textYes: "🔮 Cast as Ritual (no slot)",
+					textNo: "⚡ Cast Normally (use slot)",
+				});
+			}
+
+			if (castAsRitual) {
+				// Ritual cast: no slot consumed
+				this._showCastResult(spell, spell.level, false, true); // ritual = true
 				if (requiresConcentration) {
-					this._state.setConcentration?.(spell.name, slotLevel);
+					this._state.setConcentration?.(spell.name, spell.level);
 					this._updateConcentrationUI();
 				}
-				this.renderSlots();
-				this._page._renderQuickSpells(); // Update overview spell slots
 				this._page.saveCharacter();
 				return;
 			}
-			slotLevel++;
+			// Otherwise fall through to normal slot-consuming cast
 		}
 
-		JqueryUtil.doToast({type: "warning", content: "No spell slots available!"});
+		// Check pact slots first (they recharge on short rest, so use them preferentially)
+		const pactSlots = this._state.getPactSlots();
+		const hasPactSlot = pactSlots && pactSlots.current > 0 && spell.level <= pactSlots.level;
+
+		// Collect all available slot levels for upcasting
+		const availableSlotLevels = [];
+		if (hasPactSlot) {
+			availableSlotLevels.push({level: pactSlots.level, isPact: true, label: `Level ${pactSlots.level} (Pact slot, ${pactSlots.current} remaining)`});
+		}
+		for (let lvl = spell.level; lvl <= 9; lvl++) {
+			const current = this._state.getSpellSlotsCurrent(lvl);
+			if (current > 0) {
+				// Don't duplicate pact slot level if already listed
+				const upcastLabel = lvl > spell.level ? " — upcast" : "";
+				availableSlotLevels.push({level: lvl, isPact: false, label: `Level ${lvl} (${current} remaining)${upcastLabel}`});
+			}
+		}
+
+		if (availableSlotLevels.length === 0) {
+			JqueryUtil.doToast({type: "warning", content: "No spell slots available!"});
+			return;
+		}
+
+		// If only one option (or only base-level), auto-select; otherwise show picker
+		let selectedSlot;
+		if (availableSlotLevels.length === 1) {
+			selectedSlot = availableSlotLevels[0];
+		} else {
+			const chosenIdx = await InputUiUtil.pGetUserEnum({
+				title: `Cast ${spell.name} — Choose Slot Level`,
+				htmlDescription: `<div><strong>${spell.name}</strong> is a level ${spell.level} spell. Choose which spell slot to use:</div>`,
+				values: availableSlotLevels.map(s => s.label),
+				fnDisplay: v => v,
+				isResolveItem: true,
+			});
+			if (chosenIdx == null) return; // User cancelled
+			selectedSlot = availableSlotLevels.find(s => s.label === chosenIdx);
+			if (!selectedSlot) return;
+		}
+
+		// Consume the selected slot
+		if (selectedSlot.isPact) {
+			this._state.setPactSlotsCurrent(pactSlots.current - 1);
+		} else {
+			const current = this._state.getSpellSlotsCurrent(selectedSlot.level);
+			this._state.setSpellSlots(selectedSlot.level, this._state.getSpellSlotsMax(selectedSlot.level), current - 1);
+		}
+
+		this._showCastResult(spell, selectedSlot.level, selectedSlot.isPact);
+
+		// Set concentration if spell requires it
+		if (requiresConcentration) {
+			this._state.setConcentration?.(spell.name, selectedSlot.level);
+			this._updateConcentrationUI();
+		}
+
+		this.renderSlots();
+		this._page._renderQuickSpells(); // Update overview spell slots
+		this._page.saveCharacter();
+	}
+
+	/**
+	 * Cast a spell as a ritual (no slot consumed, +10 min casting time).
+	 * Used for unprepared Wizard spellbook spells with ritual tag.
+	 * @param {string} spellId - The spell ID
+	 */
+	async _castSpellAsRitual (spellId) {
+		const spells = this._state.getSpells();
+		const spell = spells.find(s => s.id === spellId);
+		if (!spell) return;
+
+		if (!this._state.canCastAsRitual?.(spell)) {
+			JqueryUtil.doToast({type: "warning", content: "This spell cannot be cast as a ritual."});
+			return;
+		}
+
+		// Check concentration
+		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
+		const requiresConcentration = spell.concentration || spellData?.duration?.some?.(d => d.concentration);
+
+		if (requiresConcentration && this._state.isConcentrating?.()) {
+			const currentConc = this._state.getConcentration?.();
+			const confirmed = await InputUiUtil.pGetUserBoolean({
+				title: "Break Concentration?",
+				htmlDescription: `You are currently concentrating on <strong>${currentConc?.spellName || "a spell"}</strong>. Casting <strong>${spell.name}</strong> as a ritual will break that concentration.`,
+				textYes: "Cast and break concentration",
+				textNo: "Cancel",
+			});
+			if (!confirmed) return;
+			this._state.breakConcentration?.();
+		}
+
+		// Cast as ritual — no slot consumed
+		this._showCastResult(spell, spell.level, false, true);
+
+		if (requiresConcentration) {
+			this._state.setConcentration?.(spell.name, spell.level);
+			this._updateConcentrationUI();
+		}
+
+		this._page.saveCharacter();
 	}
 
 	/**
@@ -1611,17 +1719,17 @@ class CharacterSheetSpells {
 		return null;
 	}
 
-	_showCastResult (spell, slotLevel = null, isPactSlot = false) {
+	_showCastResult (spell, slotLevel = null, isPactSlot = false, isRitual = false) {
 		// Delegate to the enhanced spell effects handler
-		this._handleSpellEffects(spell, slotLevel, isPactSlot);
+		this._handleSpellEffects(spell, slotLevel, isPactSlot, isRitual);
 	}
 
 	/**
 	 * Enhanced spell effects handler with target selection and effect application
 	 */
-	async _handleSpellEffects (spell, slotLevel = null, isPactSlot = false) {
+	async _handleSpellEffects (spell, slotLevel = null, isPactSlot = false, isRitual = false) {
 		const upcast = slotLevel && slotLevel > spell.level ? ` (at level ${slotLevel})` : "";
-		const slotType = isPactSlot ? " [Pact Slot]" : "";
+		const slotType = isPactSlot ? " [Pact Slot]" : (isRitual ? " [Ritual]" : "");
 
 		// Check for spell attack or save DC
 		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
@@ -1840,31 +1948,71 @@ class CharacterSheetSpells {
 			});
 		}
 		// For buff spells that DON'T grant conditions, apply the parsed buff effects
-		else if ((effects.buffs?.length > 0 || effects.duration) && conditionsToApply.length === 0) {
+		else if ((effects.buffs?.length > 0 || effects.registryEffects?.length > 0 || effects.duration) && conditionsToApply.length === 0) {
+			// Prefer registry effects when available (more reliable); fall back to parsed buffs
+			let customEffects;
+			if (effects.registryEffects?.length > 0) {
+				customEffects = effects.registryEffects.map(re => ({...re}));
+			} else {
+				customEffects = (effects.buffs || []).map(buff => {
+					// Map parseBuffs output to proper effect format
+					if (buff.type === "rollBonus") {
+						return {type: "rollBonus", dice: buff.dice, target: buff.applies?.[0] || "attack"};
+					}
+					if (buff.type === "rollPenalty") {
+						return {type: "rollPenalty", dice: buff.dice, target: buff.applies?.[0] || "attack"};
+					}
+					if (buff.type === "extraDamage") {
+						return {type: "extraDamage", dice: buff.dice, damageType: buff.damageType || ""};
+					}
+					if (buff.type === "resistance") {
+						return {type: "resistance", target: `damage:${buff.damageType}`};
+					}
+					if (buff.type === "advantage") {
+						return {type: "advantage", target: buff.target};
+					}
+					if (buff.type === "formula") {
+						return {type: "setAc", baseAc: buff.baseAc, addDex: buff.addDex};
+					}
+					if (buff.type === "minimum") {
+						return {type: "minAc", value: buff.minAc};
+					}
+					if (buff.type === "multiplier" && buff.target === "speed") {
+						return {type: "speedMultiplier", value: buff.value};
+					}
+					if (buff.type === "bonus" && buff.target === "speed") {
+						return {type: "bonus", target: "speed", value: buff.value};
+					}
+					// Default: numeric bonus
+					return {type: "bonus", target: buff.target, value: buff.value};
+				});
+			}
+
 			const stateId = this._state.addActiveState("custom", {
 				name: spell.name,
 				icon: effects.concentration ? "🔮" : "✨",
 				description: `Spell effect: ${spell.name}`,
 				sourceFeatureId: `spell_${spell.name}_${Date.now()}`,
-				customEffects: effects.buffs?.map(buff => ({
-					type: "bonus",
-					target: buff.target,
-					value: buff.value,
-					dice: buff.dice,
-				})) || [],
+				customEffects,
 				isSpellEffect: true,
 				concentration: effects.concentration || false,
 				duration: effects.duration,
 			});
 
-			// Build description of buffs
+			// Build description of applied effects
 			const buffDescriptions = [];
-			for (const buff of (effects.buffs || [])) {
-				if (buff.target === "ac") {
-					buffDescriptions.push(`+${buff.value} AC`);
-				} else if (buff.type === "rollBonus") {
-					buffDescriptions.push(`+${buff.dice} to rolls`);
-				}
+			for (const eff of customEffects) {
+				if (eff.target === "ac" && eff.type === "bonus") buffDescriptions.push(`+${eff.value} AC`);
+				else if (eff.type === "setAc") buffDescriptions.push(`AC = ${eff.baseAc} + DEX`);
+				else if (eff.type === "minAc") buffDescriptions.push(`AC minimum ${eff.value}`);
+				else if (eff.type === "rollBonus") buffDescriptions.push(`+${eff.dice} to ${eff.target} rolls`);
+				else if (eff.type === "rollPenalty") buffDescriptions.push(`-${eff.dice} penalty`);
+				else if (eff.type === "extraDamage") buffDescriptions.push(`+${eff.dice} ${eff.damageType} damage`);
+				else if (eff.type === "resistance") buffDescriptions.push(`Resistance: ${eff.target.replace("damage:", "")}`);
+				else if (eff.type === "advantage") buffDescriptions.push(`Advantage on ${eff.target}`);
+				else if (eff.type === "speedMultiplier") buffDescriptions.push(`Speed ×${eff.value}`);
+				else if (eff.type === "bonus" && eff.target === "speed") buffDescriptions.push(`+${eff.value} ft speed`);
+				else if (eff.type === "bonus") buffDescriptions.push(`+${eff.value} ${eff.target}`);
 			}
 			if (buffDescriptions.length > 0) {
 				appliedEffects.push(buffDescriptions.join(", "));
@@ -2595,6 +2743,19 @@ class CharacterSheetSpells {
 			? `<span class="badge badge-warning charsheet__spell-source-badge" title="From: ${sourceFeature}">${this._truncateFeatureName(sourceFeature)}</span>`
 			: "";
 
+		// Determine if spell can be cast as ritual (show ritual button when not prepared but ritual-eligible)
+		let ritualButtonHtml = "";
+		if (!isCantrip && spell.ritual && !isPrepared && !isAlwaysPrepared) {
+			// Check if character can ritual-cast this spell (e.g., Wizard with unprepared spellbook ritual)
+			if (this._state.canCastAsRitual?.(spell)) {
+				ritualButtonHtml = `
+					<button class="ve-btn ve-btn-xs ve-btn-warning charsheet__spell-cast-ritual" title="Cast as Ritual (no slot, +10 min)">
+						<span class="mr-1">🔮</span>Ritual
+					</button>
+				`;
+			}
+		}
+
 		return $(`
 			<div class="charsheet__spell-item ${isPrepared || isAlwaysPrepared ? "prepared" : ""} ${isAlwaysPrepared ? "always-prepared" : ""}" data-spell-id="${spellId}">
 				<div class="charsheet__spell-item-main">
@@ -2611,6 +2772,7 @@ class CharacterSheetSpells {
 				</div>
 				<div class="charsheet__spell-item-actions">
 					${prepButtonHtml}
+					${ritualButtonHtml}
 					<button class="ve-btn ve-btn-xs ve-btn-success charsheet__spell-cast" title="Cast Spell">
 						<span class="glyphicon glyphicon-flash mr-1"></span>Cast
 					</button>

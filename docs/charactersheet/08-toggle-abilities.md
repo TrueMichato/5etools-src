@@ -300,14 +300,25 @@ static analyzeToggleability(text) {
 // In CharacterSheetState._data
 activeStates: [
     {
-        id: "rage-1234567890",       // Unique instance ID
+        id: "rage_1234567890",        // Unique instance ID (typeId + timestamp)
         stateTypeId: "rage",          // Type from ACTIVE_STATE_TYPES
-        featureName: "Rage",          // Source feature name
-        activatedAt: 1234567890,      // Timestamp
-        options: {                    // Type-specific options
-            totemSpirit: "bear",      // For totem barbarians
-        },
+        name: "Rage",                 // Display name
+        icon: "💢",                   // Display icon
+        description: null,            // Optional feature description
+        active: true,                 // Currently active?
+        activatedAt: 1234567890,      // Real-world timestamp (Date.now())
+        activatedAtRound: 1,          // Combat round when activated (null if outside combat)
+        sourceFeatureId: null,        // Link to source feature
+        resourceId: null,             // Link to resource spent
         customEffects: [],            // Additional effects from feature
+        spellName: null,              // For concentration states
+        spellLevel: null,             // For concentration states
+        concentration: false,         // Is concentration state?
+        isSpellEffect: false,         // From a spell?
+        duration: "1 minute",         // Display duration string
+        roundsRemaining: 10,          // Rounds left (null = indefinite, decremented by advanceRound)
+        grantsConditions: null,       // Conditions granted by this state
+        beastData: null,              // For Wild Shape beast form
     },
 ]
 ```
@@ -315,59 +326,69 @@ activeStates: [
 ### Activating a State
 
 ```javascript
-addActiveState(stateTypeId, options = {}) {
+activateState(stateTypeId, options = {}) {
     const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
-    if (!stateType) {
-        console.warn(`Unknown state type: ${stateTypeId}`);
-        return null;
-    }
-    
-    // Check if already active (for exclusive states)
-    if (this.isStateTypeActive(stateTypeId)) {
-        if (!stateType.allowMultiple) {
-            console.warn(`State ${stateTypeId} is already active`);
-            return null;
+
+    // Enforce mutual exclusivity (e.g., Rage vs Bladesong)
+    if (stateType?.exclusiveWith?.length) {
+        for (const exclusiveId of stateType.exclusiveWith) {
+            this.deactivateState(exclusiveId);
         }
     }
-    
-    // Consume resource if applicable
-    if (stateType.resourceName && stateType.resourceCost) {
-        const success = this._consumeResource(stateType.resourceName, stateType.resourceCost);
-        if (!success) {
-            JqueryUtil.doToast({
-                type: "warning",
-                content: `Not enough ${stateType.resourceName} to activate ${stateType.name}`,
-            });
-            return null;
-        }
+
+    // States that break concentration (e.g., Rage)
+    if (stateType?.breaksConcentration && this._data.concentrating) {
+        this.breakConcentration();
     }
-    
-    // Create state instance
-    const newState = {
-        id: `${stateTypeId}-${Date.now()}`,
-        stateTypeId,
-        featureName: options.featureName || stateType.name,
-        activatedAt: Date.now(),
-        options,
-        customEffects: options.customEffects || [],
-    };
-    
-    this._data.activeStates.push(newState);
-    this._emit("stateActivated", newState);
-    
-    return newState;
+
+    // Reactivate existing or create new
+    const existing = this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
+    if (existing) {
+        existing.active = true;
+        existing.activatedAt = Date.now();
+        existing.activatedAtRound = this._data.inCombat ? this._data.combatRound : null;
+        existing.roundsRemaining = this._data.inCombat
+            ? CharacterSheetState.parseDurationToRounds(existing.duration) : null;
+        return existing.id;
+    }
+    return this.addActiveState(stateTypeId, options);
 }
+```
+
+### Combat Round Tracking
+
+```javascript
+// Start/end combat lifecycle
+startCombat()              // Sets inCombat=true, combatRound=1, stamps activatedAtRound on active states
+endCombat()                // Clears inCombat, combatRound, and all roundsRemaining/activatedAtRound
+
+// Advance round — auto-deactivates expired states
+const expired = advanceRound();  // Returns array of expired state names
+// e.g. expired = ["Dodging"] after a 1-round Dodge expires
+
+// Parse duration string to rounds
+CharacterSheetState.parseDurationToRounds("1 minute")       // → 10
+CharacterSheetState.parseDurationToRounds("Concentration, up to 10 minutes") // → 100
+CharacterSheetState.parseDurationToRounds("Until ended")    // → null (indefinite)
 ```
 
 ### Deactivating States
 
 ```javascript
+deactivateState(stateTypeId) {
+    const state = this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
+    if (state) {
+        state.active = false;
+    }
+}
+
 removeActiveState(stateId) {
     const index = this._data.activeStates.findIndex(s => s.id === stateId);
-    if (index === -1) return false;
-    
-    const removed = this._data.activeStates.splice(index, 1)[0];
-    this._emit("stateDeactivated", removed);
+    if (index !== -1) {
+        this._data.activeStates.splice(index, 1);
+    }
+}
+```
     
     return true;
 }
@@ -403,7 +424,7 @@ getActiveStateEffects() {
         // Add base effects
         effects.push(...stateType.effects.map(e => ({
             ...e,
-            source: state.featureName,
+            source: state.name,
             stateId: state.id,
         })));
         
@@ -411,7 +432,7 @@ getActiveStateEffects() {
         if (state.customEffects) {
             effects.push(...state.customEffects.map(e => ({
                 ...e,
-                source: state.featureName,
+                source: state.name,
                 stateId: state.id,
             })));
         }
@@ -544,7 +565,7 @@ _renderActiveEffects() {
         const $effect = $(`
             <div class="charsheet__active-effect" data-state-id="${state.id}">
                 <span class="charsheet__effect-icon">${state.stateType.icon}</span>
-                <span class="charsheet__effect-name">${state.featureName}</span>
+                <span class="charsheet__effect-name">${state.name}</span>
                 <button class="charsheet__effect-remove" title="Deactivate">✕</button>
             </div>
         `);

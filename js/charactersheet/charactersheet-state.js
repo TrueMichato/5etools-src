@@ -1630,6 +1630,86 @@ class FeatureModifierParser {
 			}
 		});
 
+		// ===================
+		// DAMAGE IMMUNITY (Generic)
+		// ===================
+		// "immune to fire damage", "immunity to poison damage", "immune to fire and cold damage"
+		// "immune to fire, cold, and lightning damage"
+		const dmgTypeList = "acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder";
+		const damageImmunityPattern = new RegExp(`(?:immune|immunity)\\s+to\\s+((?:(?:${dmgTypeList})(?:\\s*(?:,\\s*(?:and\\s+)?|\\s+and\\s+))?)+)\\s*damage`, "gi");
+		let dimMatch;
+		while ((dimMatch = damageImmunityPattern.exec(plainText)) !== null) {
+			const types = dimMatch[1].split(/\s*(?:,\s*(?:and\s+)?|\s+and\s+)\s*/i).map(t => t.trim().toLowerCase()).filter(Boolean);
+			types.forEach(dmgType => {
+				if (dmgType.match(new RegExp(`^(?:${dmgTypeList})$`, "i"))) {
+					modifiers.push({
+						type: `immunity:${dmgType}`,
+						value: 0,
+						note: sourceName,
+						isImmunity: true,
+					});
+				}
+			});
+		}
+
+		// ===================
+		// CONDITION IMMUNITY (Generic)
+		// ===================
+		// "immune to the charmed condition", "immunity to being frightened"
+		// "can't be charmed", "cannot be frightened"
+		const condImmunityPatterns = [
+			/(?:immune|immunity)\s+to\s+(?:the\s+)?(?:being\s+)?(charmed|frightened|poisoned|paralyzed|stunned|petrified|blinded|deafened|prone|exhaustion|grappled|restrained|incapacitated)(?:\s+condition)?/gi,
+			/(?:can't|cannot)\s+be\s+(charmed|frightened|poisoned|paralyzed|stunned|petrified|blinded|deafened|prone|grappled|restrained|incapacitated)/gi,
+		];
+		condImmunityPatterns.forEach(pattern => {
+			let cimMatch;
+			while ((cimMatch = pattern.exec(plainText)) !== null) {
+				modifiers.push({
+					type: `conditionImmunity:${cimMatch[1].toLowerCase()}`,
+					value: 0,
+					note: sourceName,
+					isConditionImmunity: true,
+				});
+			}
+		});
+
+		// ===================
+		// TEMPORARY HIT POINTS (Generic)
+		// ===================
+		// "gain 5 temporary hit points", "gain temporary hit points equal to your Charisma modifier"
+		const tempHpPatterns = [
+			{pattern: /gain\s+(\d+)\s+temporary\s+hit\s+points/gi, type: "flat"},
+			{pattern: /gain\s+temporary\s+hit\s+points\s+equal\s+to\s+(?:your\s+)?(strength|dexterity|constitution|intelligence|wisdom|charisma|str|dex|con|int|wis|cha)(?:\s+modifier)?/gi, type: "abilityMod"},
+		];
+		tempHpPatterns.forEach(({pattern, type: thpType}) => {
+			let thpMatch;
+			while ((thpMatch = pattern.exec(plainText)) !== null) {
+				if (thpType === "flat") {
+					modifiers.push({type: "tempHp", value: parseInt(thpMatch[1]), note: sourceName});
+				} else if (thpType === "abilityMod") {
+					const abl = thpMatch[1].toLowerCase().substring(0, 3);
+					modifiers.push({type: "tempHp", value: 0, note: sourceName, abilityMod: abl});
+				}
+			}
+		});
+
+		// ===================
+		// EXTRA DAMAGE DICE (Generic)
+		// ===================
+		// "deal an extra 1d6 fire damage", "deals additional 2d8 radiant damage"
+		const extraDmgPattern = /deals?\s+(?:an?\s+)?(?:extra|additional)\s+(\d+d\d+)\s+(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)\s+damage/gi;
+		let edmMatch;
+		while ((edmMatch = extraDmgPattern.exec(plainText)) !== null) {
+			modifiers.push({
+				type: "damage",
+				value: 0,
+				note: sourceName,
+				bonusDie: edmMatch[1],
+				damageType: edmMatch[2].toLowerCase(),
+				conditional: this._extractCondition(plainText, edmMatch.index),
+			});
+		}
+
 		// Deduplicate modifiers of same type from same source
 		const unique = [];
 		const seen = new Set();
@@ -2715,8 +2795,12 @@ class CharacterSheetState {
 			namedModifiers: [],
 
 			// Active states (e.g., Rage, Concentration, Wild Shape, etc.)
-			// Each state: {id, name, active, sourceFeatureId, resourceId?, effects: [{type, value, ...}], duration?, icon?}
+			// Each state: {id, name, active, sourceFeatureId, resourceId?, effects: [{type, value, ...}], duration?, icon?, roundsRemaining?, activatedAtRound?}
 			activeStates: [],
+
+			// Combat round tracking
+			inCombat: false,
+			combatRound: 0,
 
 			// Concentration tracking
 			concentrating: null, // {spellName, spellLevel, startTime?} or null
@@ -3051,7 +3135,15 @@ class CharacterSheetState {
 	getSubrace () { return this._data.subrace; }
 
 	setSize (size) { this._data.size = size?.toLowerCase() || "medium"; }
-	getSize () { return this._data.size || "medium"; }
+	getSize () {
+		const baseSize = this._data.size || "medium";
+		const increase = this.getSizeIncreaseFromStates();
+		if (increase <= 0) return baseSize;
+		const sizeOrder = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
+		const idx = sizeOrder.indexOf(baseSize);
+		if (idx < 0) return baseSize;
+		return sizeOrder[Math.min(idx + increase, sizeOrder.length - 1)];
+	}
 
 	getRaceName () {
 		if (!this._data.race) return null;
@@ -3321,11 +3413,11 @@ class CharacterSheetState {
 	 * Apply an Ability Score Improvement
 	 * @param {string} ability - The ability to increase
 	 * @param {number} amount - The amount to increase (1 or 2)
+	 * @param {number} [maxScore=20] - Maximum ability score cap (30 for Epic Boons)
 	 */
-	applyASI (ability, amount = 1) {
+	applyASI (ability, amount = 1, maxScore = 20) {
 		const currentBase = this._data.abilities[ability] || 10;
-		// Cap at 20
-		this._data.abilities[ability] = Math.min(20, currentBase + amount);
+		this._data.abilities[ability] = Math.min(maxScore, currentBase + amount);
 	}
 	// #endregion
 
@@ -3337,7 +3429,7 @@ class CharacterSheetState {
 	getSenses () {
 		const senseMods = this._data.customModifiers.senses || {};
 		const baseSenses = this._data.senses || {};
-		
+
 		// Also check named modifiers for sense bonuses
 		const getNamedModifierBonus = (senseType) => {
 			return this._data.namedModifiers
@@ -3350,12 +3442,12 @@ class CharacterSheetState {
 					return total + (m.value || 0);
 				}, 0) || 0;
 		};
-		
+
 		return {
-			darkvision: Math.max(baseSenses.darkvision || 0, senseMods.darkvision || 0) + getNamedModifierBonus("darkvision"),
-			blindsight: Math.max(baseSenses.blindsight || 0, senseMods.blindsight || 0) + getNamedModifierBonus("blindsight"),
-			tremorsense: Math.max(baseSenses.tremorsense || 0, senseMods.tremorsense || 0) + getNamedModifierBonus("tremorsense"),
-			truesight: Math.max(baseSenses.truesight || 0, senseMods.truesight || 0) + getNamedModifierBonus("truesight"),
+			darkvision: Math.max(baseSenses.darkvision || 0, senseMods.darkvision || 0, this.getSenseBonusFromStates("darkvision")) + getNamedModifierBonus("darkvision"),
+			blindsight: Math.max(baseSenses.blindsight || 0, senseMods.blindsight || 0, this.getSenseBonusFromStates("blindsight")) + getNamedModifierBonus("blindsight"),
+			tremorsense: Math.max(baseSenses.tremorsense || 0, senseMods.tremorsense || 0, this.getSenseBonusFromStates("tremorsense")) + getNamedModifierBonus("tremorsense"),
+			truesight: Math.max(baseSenses.truesight || 0, senseMods.truesight || 0, this.getSenseBonusFromStates("truesight")) + getNamedModifierBonus("truesight"),
 		};
 	}
 
@@ -3470,13 +3562,14 @@ class CharacterSheetState {
 	}
 
 	/**
-	 * Increase an ability score through ASI, capping at 20
+	 * Increase an ability score through ASI, capping at a max score
 	 * @param {string} ability - The ability name
 	 * @param {number} amount - Amount to increase
+	 * @param {number} [maxScore=20] - Maximum ability score cap (30 for Epic Boons)
 	 */
-	increaseAbility (ability, amount) {
+	increaseAbility (ability, amount, maxScore = 20) {
 		const currentBase = this.getAbilityBase(ability);
-		const newBase = Math.min(20, currentBase + amount);
+		const newBase = Math.min(maxScore, currentBase + amount);
 		this.setAbilityBase(ability, newBase);
 	}
 	// #endregion
@@ -4596,11 +4689,15 @@ class CharacterSheetState {
 			return this.getSpeedByType(type);
 		}
 
+		// Apply condition-based speed multiplier (Grappled/Restrained → 0, Slowed → ×0.5)
+		const speedMultiplier = this.getSpeedMultiplierFromConditions();
+
 		// Otherwise return the formatted string for display
 		const speedMods = this._data.customModifiers.speed || {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
 		const unarmoredBonus = this.getUnarmoredMovementBonus();
-		const walk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
+		const rawWalk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
+		const walk = Math.floor(rawWalk * speedMultiplier);
 		const parts = [`${walk} ft.`];
 
 		// Check for "equal to walk" modifiers for each speed type
@@ -4609,15 +4706,15 @@ class CharacterSheetState {
 				m.type === `speed:${speedType}` && m.equalToWalk && m.enabled,
 			);
 			if (equalToWalkMod) {
-				return Math.max(base + bonus, walk);
+				return Math.max(base + bonus, rawWalk);
 			}
 			return base + bonus;
 		};
 
-		const fly = getSpeedWithEqualToWalk("fly", this._data.speed.fly || 0, speedMods.fly || 0);
-		const swim = getSpeedWithEqualToWalk("swim", this._data.speed.swim || 0, speedMods.swim || 0);
-		const climb = getSpeedWithEqualToWalk("climb", this._data.speed.climb || 0, speedMods.climb || 0);
-		const burrow = getSpeedWithEqualToWalk("burrow", this._data.speed.burrow || 0, speedMods.burrow || 0);
+		const fly = Math.floor(getSpeedWithEqualToWalk("fly", this._data.speed.fly || 0, speedMods.fly || 0) * speedMultiplier);
+		const swim = Math.floor(getSpeedWithEqualToWalk("swim", this._data.speed.swim || 0, speedMods.swim || 0) * speedMultiplier);
+		const climb = Math.floor(getSpeedWithEqualToWalk("climb", this._data.speed.climb || 0, speedMods.climb || 0) * speedMultiplier);
+		const burrow = Math.floor(getSpeedWithEqualToWalk("burrow", this._data.speed.burrow || 0, speedMods.burrow || 0) * speedMultiplier);
 
 		if (fly > 0) parts.push(`fly ${fly} ft.`);
 		if (swim > 0) parts.push(`swim ${swim} ft.`);
@@ -4635,7 +4732,8 @@ class CharacterSheetState {
 		const speedMods = this._data.customModifiers.speed || {walk: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
 		const unarmoredBonus = this.getUnarmoredMovementBonus();
-		return (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
+		const raw = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
+		return Math.floor(raw * this.getSpeedMultiplierFromConditions());
 	}
 
 	getSpeedByType (type) {
@@ -4652,7 +4750,7 @@ class CharacterSheetState {
 			base = Math.max(base, this.getWalkSpeed());
 		}
 
-		return base + bonus;
+		return Math.floor((base + bonus) * this.getSpeedMultiplierFromConditions());
 	}
 	// #endregion
 
@@ -5342,6 +5440,210 @@ class CharacterSheetState {
 
 		return Math.max(1, level + abilityMod);
 	}
+
+	// #region Subclass Spell Auto-Population
+
+	/**
+	 * Get the list of always-prepared spells from a subclass's additionalSpells data.
+	 * This handles domain spells (Cleric), oath spells (Paladin), circle spells (Druid),
+	 * expanded spell lists (Warlock), etc.
+	 * @param {object} cls - The class object from state (with subclass)
+	 * @returns {Array} Array of {name, source, level, alwaysPrepared} spell objects
+	 */
+	getSubclassAlwaysPreparedSpells (cls) {
+		if (!cls?.subclass) return [];
+
+		const subclassData = cls.subclass;
+		const characterLevel = cls.level || 0;
+		const result = [];
+
+		// Check additionalSpells on the subclass object
+		const additionalSpells = subclassData.additionalSpells;
+		if (!additionalSpells?.length) return [];
+
+		for (const spellBlock of additionalSpells) {
+			// Process "prepared" entries (level-keyed, always prepared)
+			if (spellBlock.prepared) {
+				for (const [levelKey, spells] of Object.entries(spellBlock.prepared)) {
+					const reqLevel = parseInt(levelKey);
+					if (isNaN(reqLevel) || characterLevel < reqLevel) continue;
+
+					for (const spellRef of spells) {
+						const parsed = this._parseSpellReference(spellRef);
+						if (parsed) {
+							result.push({...parsed, alwaysPrepared: true, prepared: true, sourceFeature: `${subclassData.name} Spells`});
+						}
+					}
+				}
+			}
+
+			// Process "known" entries (level-keyed, added to known list)
+			if (spellBlock.known) {
+				for (const [levelKey, spells] of Object.entries(spellBlock.known)) {
+					const reqLevel = parseInt(levelKey);
+					if (isNaN(reqLevel) || characterLevel < reqLevel) continue;
+
+					for (const spellRef of spells) {
+						const parsed = this._parseSpellReference(spellRef);
+						if (parsed) {
+							result.push({...parsed, alwaysPrepared: true, prepared: true, sourceFeature: `${subclassData.name} Spells`});
+						}
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Parse a spell reference from additionalSpells data.
+	 * Handles string references like "bless" and "bless|PHB", and object references.
+	 * @param {string|object} spellRef - The spell reference
+	 * @returns {object|null} {name, source, level} or null
+	 */
+	_parseSpellReference (spellRef) {
+		if (!spellRef) return null;
+		if (typeof spellRef === "string") {
+			const [name, source] = spellRef.split("|");
+			return {name: name.trim(), source: source || "PHB", level: null};
+		}
+		if (typeof spellRef === "object" && spellRef.name) {
+			return {name: spellRef.name, source: spellRef.source || "PHB", level: spellRef.level ?? null};
+		}
+		return null;
+	}
+
+	/**
+	 * Populate subclass spells as always-prepared for all classes.
+	 * Call this after class/subclass changes to ensure domain/oath/circle spells are populated.
+	 * @returns {number} Number of spells added
+	 */
+	populateSubclassSpells () {
+		let totalAdded = 0;
+
+		for (const cls of (this._data.classes || [])) {
+			const spells = this.getSubclassAlwaysPreparedSpells(cls);
+
+			for (const spell of spells) {
+				// Check if already exists
+				const existing = this._data.spellcasting.spellsKnown.find(
+					s => s.name.toLowerCase() === spell.name.toLowerCase()
+						&& (s.source === spell.source || !spell.source),
+				);
+
+				if (existing) {
+					// Mark as always prepared if not already
+					if (!existing.alwaysPrepared) {
+						existing.alwaysPrepared = true;
+						existing.prepared = true;
+						existing.sourceFeature = spell.sourceFeature;
+						totalAdded++;
+					}
+				} else {
+					// Add the spell
+					this.addSpell({
+						...spell,
+						alwaysPrepared: true,
+					}, true); // prepared = true
+					totalAdded++;
+				}
+			}
+		}
+
+		return totalAdded;
+	}
+
+	/**
+	 * Remove subclass-granted always-prepared spells (for when subclass changes).
+	 * Only removes spells that were added by a specific subclass feature.
+	 * @param {string} sourceFeature - The source feature name (e.g., "Life Domain Spells")
+	 */
+	removeSubclassSpells (sourceFeature) {
+		if (!sourceFeature) return;
+		this._data.spellcasting.spellsKnown = this._data.spellcasting.spellsKnown.filter(s => {
+			// Keep if not from this source, or if player also manually added it
+			if (s.sourceFeature !== sourceFeature) return true;
+			if (!s.alwaysPrepared) return true;
+			return false;
+		});
+	}
+
+	/**
+	 * Get all always-prepared spells (from subclass, race, feats, etc.)
+	 * @returns {Array} All spells marked as alwaysPrepared
+	 */
+	getAlwaysPreparedSpells () {
+		return this._data.spellcasting.spellsKnown.filter(s => s.alwaysPrepared);
+	}
+
+	// #endregion
+
+	// #region Ritual Casting
+
+	/**
+	 * Check if a spell can be cast as a ritual by this character.
+	 * Ritual casting requires no spell slot and adds 10 minutes to casting time.
+	 *
+	 * Rules per class:
+	 * - Wizard ("spellbook" mode): spell has ritual tag AND is in spellbook (need not be prepared)
+	 * - Cleric, Druid, Artificer ("prepared" mode): spell has ritual tag AND is prepared
+	 * - Bard PHB ("known" mode): spell has ritual tag AND is known (all known ritual spells qualify)
+	 *
+	 * @param {object} spell - Spell object with {ritual, prepared, alwaysPrepared, inSpellbook, level}
+	 * @returns {boolean} True if the character can cast this spell as a ritual
+	 */
+	canCastAsRitual (spell) {
+		if (!spell) return false;
+		if (!spell.ritual) return false;
+		if (spell.level === 0) return false; // Cantrips can't be rituals
+
+		// Check each class individually for multiclass support
+		const classes = this._data.classes || [];
+		for (const cls of classes) {
+			const className = cls.name;
+			const source = cls.source || "PHB";
+			const is2024 = source === "XPHB" || source === "TGTT";
+
+			switch (className) {
+				case "Wizard":
+					// Wizard: ritual spell in spellbook (doesn't need to be prepared)
+					if (spell.inSpellbook || spell.prepared || spell.alwaysPrepared) return true;
+					break;
+
+				case "Cleric":
+				case "Druid":
+				case "Artificer":
+					// Prepared casters: must be prepared + ritual tag
+					if (spell.prepared || spell.alwaysPrepared) return true;
+					break;
+
+				case "Bard":
+					// PHB Bard: any known spell with ritual tag. XPHB 2024 Bard lost this.
+					if (!is2024) return true;
+					break;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Get all spells the character can currently cast as rituals.
+	 * @returns {Array} Spell objects that can be ritual-cast
+	 */
+	getAvailableRitualSpells () {
+		const calc = this.getFeatureCalculations();
+		if (!calc.hasRitualCasting) return [];
+
+		const allSpells = [
+			...this._data.spellcasting.spellsKnown,
+		];
+
+		return allSpells.filter(s => this.canCastAsRitual(s));
+	}
+
+	// #endregion
 
 	addSpell (spell, prepared = false) {
 		// Check if it's a cantrip
@@ -6175,6 +6477,12 @@ class CharacterSheetState {
 				case "Monk": {
 					const source = cls.source || "PHB";
 					const is2024 = source === "XPHB" || source === "TGTT";
+
+					// Weapon Mastery (XPHB level 1+): 2 mastery choices
+					if (is2024) {
+						calculations.hasWeaponMastery = true;
+						calculations.weaponMasteryCount = 2;
+					}
 
 					// Ki/Focus points = monk level
 					const kiPoints = level;
@@ -7116,6 +7424,12 @@ class CharacterSheetState {
 					const source = cls.source || "PHB";
 					const is2024 = source === "XPHB" || source === "TGTT";
 					const chaMod = this.getAbilityMod("cha");
+
+					// Weapon Mastery (XPHB level 1+): 2 mastery choices
+					if (is2024) {
+						calculations.hasWeaponMastery = true;
+						calculations.weaponMasteryCount = 2;
+					}
 
 					// =========================================================
 					// CORE PALADIN FEATURES
@@ -9065,6 +9379,10 @@ class CharacterSheetState {
 					const source = cls.source || "PHB";
 					const is2024 = source === "XPHB" || source === "TGTT";
 
+					// Ritual Casting — Clerics can ritual-cast prepared spells with ritual tag
+					calculations.hasRitualCasting = true;
+					calculations.ritualCastingMode = "prepared";
+
 					// Channel Divinity DC is spell save DC
 					calculations.channelDivinityDc = this.getSpellSaveDc();
 
@@ -9756,6 +10074,10 @@ class CharacterSheetState {
 					const source = cls.source || "PHB";
 					const isXPHB = source === "XPHB" || source === "TGTT";
 
+					// Ritual Casting — Druids can ritual-cast prepared spells with ritual tag
+					calculations.hasRitualCasting = true;
+					calculations.ritualCastingMode = "prepared";
+
 					// Wild Shape DC is spell save DC
 					calculations.wildShapeDc = this.getSpellSaveDc();
 
@@ -10215,6 +10537,13 @@ class CharacterSheetState {
 					const source = cls.source || "PHB";
 					const isXPHB = source === "XPHB" || source === "TGTT";
 
+					// Ritual Casting — PHB Bard can ritual-cast any known spell with ritual tag
+					// XPHB 2024 Bard lost Ritual Casting
+					if (!isXPHB) {
+						calculations.hasRitualCasting = true;
+						calculations.ritualCastingMode = "known";
+					}
+
 					// Bardic Inspiration die
 					const inspirationDie = level >= 15 ? "1d12" : level >= 10 ? "1d10" : level >= 5 ? "1d8" : "1d6";
 					calculations.bardicInspirationDie = inspirationDie;
@@ -10627,6 +10956,12 @@ class CharacterSheetState {
 					const isXPHB = source === "XPHB";
 					const is2024Style = isXPHB || isTGTT; // Both share some 2024 mechanics
 					const wisMod = this.getAbilityMod("wis");
+
+					// Weapon Mastery (XPHB level 1+): 2 mastery choices
+					if (isXPHB) {
+						calculations.hasWeaponMastery = true;
+						calculations.weaponMasteryCount = 2;
+					}
 
 					// =====================================================================
 					// TGTT Ranger: Primal Focus (replaces Favored Enemy entirely)
@@ -11093,7 +11428,10 @@ class CharacterSheetState {
 					calculations.hasArcaneRecovery = true;
 					calculations.arcaneRecoverySlotLevels = Math.ceil(level / 2); // Half wizard level (rounded up)
 
-					// Ritual Adept (XPHB level 1) - can cast rituals without preparing
+					// Ritual Casting — all Wizards can cast ritual spells from spellbook without preparing
+					calculations.hasRitualCasting = true;
+					calculations.ritualCastingMode = "spellbook";
+					// Ritual Adept (XPHB level 1) - explicit label for the feature
 					if (is2024) {
 						calculations.hasRitualAdept = true;
 					}
@@ -11536,6 +11874,10 @@ class CharacterSheetState {
 				}
 				case "Artificer": {
 					const intMod = this.getAbilityMod("int");
+
+					// Ritual Casting — Artificers can ritual-cast prepared spells with ritual tag
+					calculations.hasRitualCasting = true;
+					calculations.ritualCastingMode = "prepared";
 
 					// Tool Expertise (level 6+): double proficiency with all tools
 					if (level >= 6) {
@@ -16084,9 +16426,13 @@ class CharacterSheetState {
 			critRange = calcs.criticalRange;
 		}
 
-		// Battle Tactics with crit expansion (when activated)
-		// Note: These are conditional - the UI should track activation state
-		// Here we just return the base crit range from class features
+		// Check active state effects for expanded crit range (e.g., Hexblade's Curse, homebrew)
+		const effects = this.getActiveStateEffects();
+		for (const e of effects) {
+			if (e.type === "critRange" && typeof e.value === "number" && e.value < critRange) {
+				critRange = e.value;
+			}
+		}
 
 		return critRange;
 	}
@@ -18060,17 +18406,23 @@ class CharacterSheetState {
 		// Also check active states for advantage/disadvantage
 		const activeStates = this.getActiveStates() || [];
 		activeStates.forEach(state => {
-			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.type];
-			if (!stateType?.effects) return;
+			// Check built-in effects from ACTIVE_STATE_TYPES
+			const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
+			const builtInEffects = stateType?.effects || [];
+			// Also check custom effects on the state instance
+			const customEffects = state.customEffects || [];
+			const allEffects = [...builtInEffects, ...customEffects];
+			if (allEffects.length === 0) return;
 
-			stateType.effects.forEach(effect => {
+			const stateName = state.name || stateType?.name || state.stateTypeId;
+			allEffects.forEach(effect => {
 				if (effect.type === "advantage" && this._effectMatchesType(effect.target, type)) {
 					hasAdvantage = true;
-					if (!agg.sources.includes(stateType.name)) agg.sources.push(stateType.name);
+					if (!agg.sources.includes(stateName)) agg.sources.push(stateName);
 				}
 				if (effect.type === "disadvantage" && this._effectMatchesType(effect.target, type)) {
 					hasDisadvantage = true;
-					if (!agg.sources.includes(stateType.name)) agg.sources.push(stateType.name);
+					if (!agg.sources.includes(stateName)) agg.sources.push(stateName);
 				}
 			});
 		});
@@ -18332,6 +18684,8 @@ class CharacterSheetState {
 			resourceCost: 1,
 			detectPatterns: ["^rage$", "enter.*rage", "you can.*rage"],
 			activationAction: "bonus",
+			exclusiveWith: ["bladesong"], // Cannot rage and bladesong simultaneously
+			breaksConcentration: true, // Rage prevents maintaining concentration
 		},
 		concentration: {
 			id: "concentration",
@@ -18406,6 +18760,7 @@ class CharacterSheetState {
 			resourceName: "Bladesong",
 			detectPatterns: ["bladesong", "invoke.*bladesong"],
 			activationAction: "bonus",
+			exclusiveWith: ["rage"], // Cannot bladesong and rage simultaneously
 		},
 		combatStance: {
 			id: "combatStance",
@@ -20716,10 +21071,14 @@ class CharacterSheetState {
 			// Reactivate existing state and update any provided options
 			existing.active = true;
 			existing.activatedAt = Date.now();
+			existing.activatedAtRound = this._data.inCombat ? this._data.combatRound : null;
 			if (options.name) existing.name = options.name;
 			if (options.description) existing.description = options.description;
 			if (options.sourceFeatureId) existing.sourceFeatureId = options.sourceFeatureId;
 			if (options.customEffects) existing.customEffects = options.customEffects;
+			// Re-parse duration on reactivation
+			const dur = options.duration || existing.duration;
+			existing.roundsRemaining = this._data.inCombat ? CharacterSheetState.parseDurationToRounds(dur) : null;
 			return existing.id;
 		}
 
@@ -20731,6 +21090,7 @@ class CharacterSheetState {
 			description: options.description || null, // Store feature description for display
 			active: true,
 			activatedAt: Date.now(),
+			activatedAtRound: this._data.inCombat ? this._data.combatRound : null,
 			sourceFeatureId: options.sourceFeatureId || null,
 			resourceId: options.resourceId || stateType?.resourceId,
 			// For states with variable effects (like Wild Shape with beast stats)
@@ -20741,7 +21101,9 @@ class CharacterSheetState {
 			concentration: options.concentration || false,
 			// For spell effects
 			isSpellEffect: options.isSpellEffect || false,
-			duration: options.duration || null,
+			duration: options.duration || stateType?.duration || null,
+			// Duration tracking (round-based)
+			roundsRemaining: this._data.inCombat ? CharacterSheetState.parseDurationToRounds(options.duration || stateType?.duration || null) : null,
 			// For spell effects that grant conditions
 			grantsConditions: options.grantsConditions || null,
 			// For Wild Shape
@@ -20763,6 +21125,8 @@ class CharacterSheetState {
 			state.active = !state.active;
 			if (state.active) {
 				state.activatedAt = Date.now();
+				state.activatedAtRound = this._data.inCombat ? this._data.combatRound : null;
+				state.roundsRemaining = this._data.inCombat ? CharacterSheetState.parseDurationToRounds(state.duration) : null;
 			}
 			return state.active;
 		}
@@ -20776,18 +21140,69 @@ class CharacterSheetState {
 	 * @returns {string} The state instance ID
 	 */
 	activateState (stateTypeId, options = {}) {
+		// Look up state type definition for side-effect handling
+		const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
+
+		// Enforce mutual exclusivity: deactivate any exclusive states
+		if (stateType?.exclusiveWith?.length) {
+			for (const exclusiveId of stateType.exclusiveWith) {
+				this.deactivateState(exclusiveId);
+			}
+		}
+
+		// States that break concentration (e.g., Rage prevents spellcasting)
+		if (stateType?.breaksConcentration && this._data.concentrating) {
+			this.breakConcentration();
+		}
+
 		const existing = this._data.activeStates.find(s => s.stateTypeId === stateTypeId);
 		if (existing) {
 			existing.active = true;
 			existing.activatedAt = Date.now();
+			existing.activatedAtRound = this._data.inCombat ? this._data.combatRound : null;
 			// Update name, description, and effects if provided (for combat stances with different features)
 			if (options.name) existing.name = options.name;
 			if (options.description) existing.description = options.description;
 			if (options.sourceFeatureId) existing.sourceFeatureId = options.sourceFeatureId;
 			if (options.customEffects) existing.customEffects = options.customEffects;
+			// Re-parse duration on reactivation
+			const dur = options.duration || existing.duration;
+			existing.roundsRemaining = this._data.inCombat ? CharacterSheetState.parseDurationToRounds(dur) : null;
+
+			// Apply tempHp effects on reactivation
+			this._applyTempHpFromState(existing);
+
 			return existing.id;
 		}
-		return this.addActiveState(stateTypeId, options);
+		const stateId = this.addActiveState(stateTypeId, options);
+
+		// Apply tempHp effects on initial activation
+		const newState = this._data.activeStates.find(s => s.id === stateId);
+		if (newState) this._applyTempHpFromState(newState);
+
+		return stateId;
+	}
+
+	/**
+	 * Apply temporary HP from a state's effects when it activates.
+	 * Temp HP doesn't stack — only take the higher value.
+	 * @param {object} state - The active state object
+	 * @private
+	 */
+	_applyTempHpFromState (state) {
+		const effects = state.customEffects
+			|| CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId]?.effects
+			|| [];
+		for (const effect of effects) {
+			if (effect.type === "tempHp") {
+				const value = effect.value || 0;
+				const currentTemp = this.getTempHp();
+				// Temp HP doesn't stack — take the higher value (5e rules)
+				if (value > currentTemp) {
+					this.setTempHp(value);
+				}
+			}
+		}
 	}
 
 	/**
@@ -20811,6 +21226,119 @@ class CharacterSheetState {
 			this._data.activeStates.splice(index, 1);
 		}
 	}
+
+	// #region Combat Round Tracking & Duration Management
+
+	/**
+	 * Parse a duration display string into a number of combat rounds.
+	 * @param {string|null} durationStr - e.g. "1 minute", "Concentration, up to 10 minutes", "Until end of next turn"
+	 * @returns {number|null} Number of rounds, or null if duration is indefinite/manual
+	 */
+	static parseDurationToRounds (durationStr) {
+		if (!durationStr) return null;
+		const s = durationStr.trim().toLowerCase();
+
+		// Instant / no duration
+		if (s === "instantaneous" || s === "instant") return 0;
+
+		// Turn-scoped durations
+		if (/\bthis turn\b/.test(s) || /\buntil the end of your turn\b/.test(s)) return 1;
+		if (/\buntil (?:the )?start of (?:your )?next turn\b/.test(s)) return 1;
+		if (/\buntil (?:the )?end of (?:your )?next turn\b/.test(s)) return 1;
+
+		// Indefinite / manual
+		if (/\buntil\b/.test(s) || /\bpermanent\b/.test(s) || /\bdispelled\b/.test(s)) return null;
+		if (/\bincapacitated\b/.test(s)) return null;
+		if (/\bvaries\b/.test(s)) return null;
+
+		// Strip concentration prefix
+		const cleaned = s.replace(/^concentration,?\s*(up to\s*)?/i, "");
+
+		// Numeric time: "N minute(s)", "N hour(s)", "N round(s)"
+		const timeMatch = cleaned.match(/(\d+)\s*(minute|hour|round|second)s?/);
+		if (timeMatch) {
+			const amount = parseInt(timeMatch[1]);
+			switch (timeMatch[2]) {
+				case "round": return amount;
+				case "minute": return amount * 10;
+				case "hour": return amount * 600;
+				case "second": return Math.max(1, Math.round(amount / 6));
+			}
+		}
+
+		// Fallback: unknown pattern → indefinite
+		return null;
+	}
+
+	/**
+	 * Start combat — initialise the round counter at round 1.
+	 */
+	startCombat () {
+		this._data.inCombat = true;
+		this._data.combatRound = 1;
+
+		// Stamp activatedAtRound on any already-active states that didn't have one
+		for (const state of this._data.activeStates) {
+			if (state.active && state.activatedAtRound == null) {
+				state.activatedAtRound = 1;
+				if (state.roundsRemaining == null && state.duration) {
+					state.roundsRemaining = CharacterSheetState.parseDurationToRounds(state.duration);
+				}
+			}
+		}
+	}
+
+	/**
+	 * End combat — clear round counter and all transient round-tracking data.
+	 */
+	endCombat () {
+		this._data.inCombat = false;
+		this._data.combatRound = 0;
+
+		for (const state of this._data.activeStates) {
+			state.roundsRemaining = null;
+			state.activatedAtRound = null;
+		}
+	}
+
+	/**
+	 * Advance to the next combat round.
+	 * Decrements roundsRemaining on every active state that has one,
+	 * and auto-deactivates any that reach 0.
+	 * @returns {Array<string>} Names of states that expired this round
+	 */
+	advanceRound () {
+		if (!this._data.inCombat) return [];
+
+		this._data.combatRound++;
+		const expired = [];
+
+		for (const state of this._data.activeStates) {
+			if (!state.active) continue;
+			if (state.roundsRemaining == null) continue;
+
+			state.roundsRemaining--;
+			if (state.roundsRemaining <= 0) {
+				state.active = false;
+				state.roundsRemaining = 0;
+				expired.push(state.name || state.stateTypeId);
+			}
+		}
+
+		return expired;
+	}
+
+	/**
+	 * Get current combat round (0 if not in combat)
+	 */
+	getCombatRound () { return this._data.combatRound || 0; }
+
+	/**
+	 * Check if currently in combat
+	 */
+	isInCombat () { return !!this._data.inCombat; }
+
+	// #endregion
 
 	/**
 	 * Get all effects from currently active states
@@ -21007,6 +21535,78 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Get extra damage dice from active states (e.g., "1d6 fire" from Hex, Flame Tongue, etc.)
+	 * @returns {Array<{dice: string, damageType: string, source: string}>} Extra damage entries
+	 */
+	getExtraDamageFromStates () {
+		const effects = this.getActiveStateEffects();
+		return effects
+			.filter(e => e.type === "extraDamage")
+			.map(e => ({
+				dice: e.value || e.dice || "1d6",
+				damageType: e.damageType || "",
+				source: e.stateName || "state effect",
+			}));
+	}
+
+	/**
+	 * Get sense bonuses from active states (e.g., darkvision from a spell)
+	 * @param {string} senseType - The sense type ("darkvision", "blindsight", etc.)
+	 * @returns {number} Maximum sense range bonus from active states
+	 */
+	getSenseBonusFromStates (senseType) {
+		const effects = this.getActiveStateEffects();
+		let best = 0;
+		for (const e of effects) {
+			if (e.type === "sense" && e.target === senseType && (e.value || 0) > best) {
+				best = e.value;
+			}
+		}
+		return best;
+	}
+
+	/**
+	 * Get size increase steps from active states
+	 * @returns {number} Total size increase steps (e.g., 1 = one size larger)
+	 */
+	getSizeIncreaseFromStates () {
+		const effects = this.getActiveStateEffects();
+		let increase = 0;
+		for (const e of effects) {
+			if (e.type === "sizeIncrease") {
+				increase += e.value || 1;
+			}
+		}
+		return increase;
+	}
+
+	/**
+	 * Convenience: check advantage/disadvantage state for a saving throw
+	 * @param {string} ability - The ability (e.g., "str", "dex")
+	 * @returns {{advantage: boolean, disadvantage: boolean}}
+	 */
+	getSaveAdvantageState (ability) {
+		const adv = this.hasAdvantageFromStates(`save:${ability}`);
+		const dis = this.hasDisadvantageFromStates(`save:${ability}`);
+		return {advantage: adv && !dis, disadvantage: dis && !adv};
+	}
+
+	/**
+	 * Convenience: check advantage/disadvantage state for a skill check
+	 * @param {string} skill - The skill key (e.g., "stealth", "athletics")
+	 * @returns {{advantage: boolean, disadvantage: boolean}}
+	 */
+	getSkillAdvantageState (skill) {
+		const state = this.getAdvantageState?.(`skill:${skill}`);
+		if (state) return {advantage: state.advantage, disadvantage: state.disadvantage};
+		// Fallback: query hasAdvantage/hasDisadvantage directly
+		const ability = this._getSkillAbility(skill);
+		const adv = this.hasAdvantageFromStates(`check:${ability}`);
+		const dis = this.hasDisadvantageFromStates(`check:${ability}`);
+		return {advantage: adv && !dis, disadvantage: dis && !adv};
+	}
+
+	/**
 	 * Check if Rage damage bonus applies to this attack
 	 * @param {boolean} isMelee - Whether this is a melee attack
 	 * @param {string} abilityUsed - The ability used for the attack
@@ -21094,6 +21694,20 @@ class CharacterSheetState {
 		const concState = this._data.activeStates.find(s => s.stateTypeId === "concentration");
 		if (concState) {
 			this.removeActiveState(concState.id);
+		}
+
+		// Also remove any spell-effect active states that require concentration
+		const concSpellStates = this._data.activeStates.filter(s =>
+			s.isSpellEffect && s.concentration,
+		);
+		for (const state of concSpellStates) {
+			// If the state granted conditions, also remove those conditions
+			if (state.grantsConditions?.length > 0) {
+				for (const condName of state.grantsConditions) {
+					this.removeCondition?.(condName);
+				}
+			}
+			this.removeActiveState(state.id);
 		}
 	}
 
@@ -21258,6 +21872,9 @@ class CharacterSheetState {
 
 		// Recover exertion (Thelemar: recovers on short rest)
 		this.restoreExertion();
+
+		// Sorcerous Restoration: recover SP on short rest
+		this.applySorcerousRestoration();
 	}
 
 	onLongRest (options = {}) {
@@ -21557,6 +22174,27 @@ class CharacterSheetState {
 		if (this._data.sorceryPoints.current < amount) return false;
 		this._data.sorceryPoints.current -= amount;
 		return true;
+	}
+
+	/**
+	 * Apply Sorcerous Restoration on short rest.
+	 * PHB L20: regain 4 SP. XPHB L5+: regain proficiency bonus SP.
+	 * @returns {number} Amount of SP recovered (0 if not applicable)
+	 */
+	applySorcerousRestoration () {
+		const calc = this.getFeatureCalculations();
+		if (!calc.hasSorcerousRestoration) return 0;
+		const amount = calc.sorcerousRestorationAmount || 0;
+		if (amount <= 0) return 0;
+
+		const sp = this.getSorceryPoints();
+		if (!sp.max) return 0;
+
+		const recovered = Math.min(amount, sp.max - sp.current);
+		if (recovered <= 0) return 0;
+
+		this._data.sorceryPoints.current += recovered;
+		return recovered;
 	}
 
 	// #region Font of Magic (Sorcery Point ↔ Spell Slot Conversion)
@@ -22046,6 +22684,141 @@ class CharacterSheetState {
 	// #endregion
 
 	// #region Spell Effects
+
+	/**
+	 * Known spell effect registry — provides reliable effect data for common spells
+	 * where text parsing may be unreliable. Keyed by lowercase spell name.
+	 * Each entry provides an array of effects that can be applied as active state effects.
+	 */
+	static SPELL_BUFF_REGISTRY = {
+		"shield of faith": {
+			concentration: true,
+			selfEffects: [{type: "bonus", target: "ac", value: 2}],
+		},
+		"bless": {
+			concentration: true,
+			selfEffects: [{type: "rollBonus", dice: "1d4", target: "attack"}, {type: "rollBonus", dice: "1d4", target: "save"}],
+		},
+		"bane": {
+			concentration: true,
+			enemyEffects: [{type: "rollPenalty", dice: "1d4", target: "attack"}, {type: "rollPenalty", dice: "1d4", target: "save"}],
+		},
+		"mage armor": {
+			selfEffects: [{type: "setAc", baseAc: 13, addDex: true}],
+			duration: {amount: 8, unit: "hour"},
+		},
+		"barkskin": {
+			concentration: true,
+			selfEffects: [{type: "minAc", value: 16}],
+		},
+		"shield": {
+			selfEffects: [{type: "bonus", target: "ac", value: 5}],
+			duration: {amount: 1, unit: "round"},
+		},
+		"haste": {
+			concentration: true,
+			selfEffects: [
+				{type: "bonus", target: "ac", value: 2},
+				{type: "speedMultiplier", value: 2},
+				{type: "advantage", target: "save:dex"},
+			],
+		},
+		"heroism": {
+			concentration: true,
+			selfEffects: [{type: "perTurnTempHp", useCasterMod: true}],
+		},
+		"longstrider": {
+			selfEffects: [{type: "bonus", target: "speed", value: 10}],
+			duration: {amount: 1, unit: "hour"},
+		},
+		"protection from evil and good": {
+			concentration: true,
+			selfEffects: [{type: "disadvantage", target: "attacksAgainst"}, {type: "immunity", target: "frightened"}, {type: "immunity", target: "charmed"}],
+		},
+		"stoneskin": {
+			concentration: true,
+			selfEffects: [{type: "resistance", target: "damage:bludgeoning"}, {type: "resistance", target: "damage:piercing"}, {type: "resistance", target: "damage:slashing"}],
+		},
+		"fire shield": {
+			selfEffects: [{type: "resistance", target: "damage:cold"}, {type: "extraDamage", dice: "2d8", damageType: "fire", trigger: "onHitByMelee"}],
+			duration: {amount: 10, unit: "minute"},
+		},
+		"aid": {
+			selfEffects: [{type: "hpMaxIncrease", value: 5}],
+			duration: {amount: 8, unit: "hour"},
+			upcastPerLevel: {hpMaxIncrease: 5},
+		},
+		"darkvision": {
+			selfEffects: [{type: "sense", target: "darkvision", value: 60}],
+			duration: {amount: 8, unit: "hour"},
+		},
+		"enlarge/reduce": {
+			concentration: true,
+			selfEffects: [
+				{type: "sizeIncrease", value: 1},
+				{type: "extraDamage", dice: "1d4", damageType: ""},
+				{type: "advantage", target: "check:str"},
+			],
+		},
+		"fly": {
+			concentration: true,
+			selfEffects: [{type: "flySpeed", value: 60}],
+		},
+		"freedom of movement": {
+			selfEffects: [
+				{type: "immunity", target: "restrained"},
+				{type: "immunity", target: "paralyzed"},
+			],
+			duration: {amount: 1, unit: "hour"},
+		},
+		"greater invisibility": {
+			concentration: true,
+			selfEffects: [
+				{type: "advantage", target: "attack"},
+				{type: "disadvantage", target: "attacksAgainst"},
+			],
+		},
+		"blur": {
+			concentration: true,
+			selfEffects: [{type: "disadvantage", target: "attacksAgainst"}],
+		},
+		"mirror image": {
+			selfEffects: [{type: "mirrorImage", charges: 3}],
+			duration: {amount: 1, unit: "minute"},
+		},
+		"hex": {
+			concentration: true,
+			selfEffects: [{type: "extraDamage", dice: "1d6", damageType: "necrotic"}],
+		},
+		"hunter's mark": {
+			concentration: true,
+			selfEffects: [{type: "extraDamage", dice: "1d6", damageType: ""}],
+		},
+		"divine favor": {
+			concentration: true,
+			selfEffects: [{type: "extraDamage", dice: "1d4", damageType: "radiant"}],
+		},
+		"spirit shroud": {
+			concentration: true,
+			selfEffects: [{type: "extraDamage", dice: "1d8", damageType: "radiant"}],
+			upcastPerLevel: {extraDamageDice: "1d8"},
+		},
+		"holy weapon": {
+			concentration: true,
+			selfEffects: [{type: "extraDamage", dice: "2d8", damageType: "radiant"}],
+		},
+	};
+
+	/**
+	 * Get known buff effects for a spell from the registry
+	 * @param {string} spellName - The spell name
+	 * @returns {object|null} Registry entry or null
+	 */
+	static getSpellFromRegistry (spellName) {
+		if (!spellName) return null;
+		return CharacterSheetState.SPELL_BUFF_REGISTRY[spellName.toLowerCase()] || null;
+	}
+
 	/**
 	 * Parse spell effects from a spell's structured data
 	 * @param {object} spell - The spell data object
@@ -22147,6 +22920,18 @@ class CharacterSheetState {
 		const tempHp = CharacterSheetState._parseTempHp(spell);
 		if (tempHp) {
 			effects.tempHp = tempHp;
+		}
+
+		// Enrich with spell-buff registry data (known reliable effects for common spells)
+		const registryEntry = CharacterSheetState.getSpellFromRegistry(spell.name);
+		if (registryEntry) {
+			effects.registryMatch = true;
+			if (registryEntry.selfEffects) {
+				effects.registryEffects = registryEntry.selfEffects;
+			}
+			if (registryEntry.upcastPerLevel) {
+				effects.upcastPerLevel = registryEntry.upcastPerLevel;
+			}
 		}
 
 		return effects;
@@ -22295,7 +23080,7 @@ class CharacterSheetState {
 		const buffs = [];
 		const text = JSON.stringify(spell.entries || []).toLowerCase();
 
-		// AC bonus
+		// AC bonus (e.g., Shield of Faith: "+2 bonus to AC")
 		const acMatch = text.match(/\+(\d+)\s*bonus\s*to\s*ac/);
 		if (acMatch) {
 			buffs.push({
@@ -22304,13 +23089,156 @@ class CharacterSheetState {
 			});
 		}
 
-		// Roll bonus (like Bless)
+		// AC formula replacement (e.g., Mage Armor: "base AC becomes 13 + Dex modifier")
+		const acFormulaMatch = text.match(/(?:base\s*)?ac\s*(?:becomes|equals|is)\s*(\d+)\s*\+\s*(?:your\s+)?dex(?:terity)?\s*modifier/);
+		if (acFormulaMatch) {
+			buffs.push({
+				target: "ac",
+				type: "formula",
+				baseAc: parseInt(acFormulaMatch[1]),
+				addDex: true,
+			});
+		}
+
+		// AC minimum (e.g., Barkskin: "AC can't be less than 16")
+		const acMinMatch = text.match(/ac\s*(?:can(?:'t|not)\s*be\s*(?:less|lower)\s*than|is\s*at\s*least)\s*(\d+)/);
+		if (acMinMatch) {
+			buffs.push({
+				target: "ac",
+				type: "minimum",
+				minAc: parseInt(acMinMatch[1]),
+			});
+		}
+
+		// Roll bonus (like Bless: "add a d4 to attack rolls and saving throws")
 		const rollBonusMatch = text.match(/{@dice\s+(\d+d\d+)}\s*to\s*the\s*roll/);
 		if (rollBonusMatch) {
 			buffs.push({
 				type: "rollBonus",
 				dice: rollBonusMatch[1],
 				applies: ["attack", "save"],
+			});
+		}
+
+		// Roll bonus variant patterns (add {@dice 1d4} to attack rolls and saving throws)
+		if (!rollBonusMatch) {
+			const rollBonusAlt = text.match(/add\s*(?:a\s*)?{@dice\s+(\d+d\d+)}\s*to\s*(.*?)(?:\.|$)/);
+			if (rollBonusAlt) {
+				const applies = [];
+				const targetStr = rollBonusAlt[2];
+				if (targetStr.includes("attack")) applies.push("attack");
+				if (targetStr.includes("sav")) applies.push("save");
+				if (targetStr.includes("ability check") || targetStr.includes("skill check")) applies.push("check");
+				if (applies.length > 0) {
+					buffs.push({
+						type: "rollBonus",
+						dice: rollBonusAlt[1],
+						applies,
+					});
+				}
+			}
+		}
+
+		// Roll penalty / debuff dice (Bane: "subtract {@dice 1d4} from attack roll or saving throw")
+		const debuffMatch = text.match(/subtract\s*(?:a\s*)?{@dice\s+(\d+d\d+)}\s*from\s*(.*?)(?:\.|$)/);
+		if (debuffMatch) {
+			const applies = [];
+			const targetStr = debuffMatch[2];
+			if (targetStr.includes("attack")) applies.push("attack");
+			if (targetStr.includes("sav")) applies.push("save");
+			buffs.push({
+				type: "rollPenalty",
+				dice: debuffMatch[1],
+				applies: applies.length > 0 ? applies : ["attack", "save"],
+			});
+		}
+
+		// Speed bonus (e.g., Haste: "speed is doubled", Longstrider: "speed increases by 10")
+		const speedDoubleMatch = text.match(/speed\s*(?:is\s*)?doubled/);
+		if (speedDoubleMatch) {
+			buffs.push({
+				target: "speed",
+				type: "multiplier",
+				value: 2,
+			});
+		}
+
+		const speedBonusMatch = text.match(/speed\s*increases?\s*by\s*(\d+)/);
+		if (speedBonusMatch) {
+			buffs.push({
+				target: "speed",
+				type: "bonus",
+				value: parseInt(speedBonusMatch[1]),
+			});
+		}
+
+		// Save bonus (e.g., "bonus to saving throws")
+		const saveBonusMatch = text.match(/\+(\d+)\s*(?:bonus\s*)?to\s*(?:all\s*)?saving\s*throws?/);
+		if (saveBonusMatch) {
+			buffs.push({
+				target: "save",
+				value: parseInt(saveBonusMatch[1]),
+			});
+		}
+
+		// Attack bonus (e.g., "+N bonus to attack rolls")
+		const attackBonusMatch = text.match(/\+(\d+)\s*(?:bonus\s*)?to\s*(?:all\s*)?attack\s*rolls?/);
+		if (attackBonusMatch) {
+			buffs.push({
+				target: "attack",
+				value: parseInt(attackBonusMatch[1]),
+			});
+		}
+
+		// Damage bonus (e.g., "deal an extra {@damage 1d6 fire} damage")
+		const extraDamageMatch = text.match(/(?:extra|additional)\s*{@(?:damage|dice)\s+(\d+d\d+)}\s*(\w+)?\s*damage/);
+		if (extraDamageMatch) {
+			buffs.push({
+				type: "extraDamage",
+				dice: extraDamageMatch[1],
+				damageType: extraDamageMatch[2] || "",
+			});
+		}
+
+		// Resistance (e.g., "resistance to X damage")
+		const resistMatch = text.match(/resistance\s*to\s*(\w+)\s*damage/);
+		if (resistMatch) {
+			buffs.push({
+				type: "resistance",
+				damageType: resistMatch[1],
+			});
+		}
+
+		// Advantage on specific checks (e.g., "advantage on Strength checks")
+		const advCheckMatch = text.match(/advantage\s*on\s*(\w+)\s*(?:ability\s*)?checks?/);
+		if (advCheckMatch) {
+			const ability = advCheckMatch[1].toLowerCase().slice(0, 3);
+			if (["str", "dex", "con", "int", "wis", "cha"].includes(ability)) {
+				buffs.push({
+					type: "advantage",
+					target: `check:${ability}`,
+				});
+			}
+		}
+
+		// Advantage on saving throws (e.g., "advantage on Wisdom saving throws")
+		const advSaveMatch = text.match(/advantage\s*on\s*(\w+)\s*saving\s*throws?/);
+		if (advSaveMatch) {
+			const ability = advSaveMatch[1].toLowerCase().slice(0, 3);
+			if (["str", "dex", "con", "int", "wis", "cha"].includes(ability)) {
+				buffs.push({
+					type: "advantage",
+					target: `save:${ability}`,
+				});
+			}
+		}
+
+		// Per-turn temp HP (e.g., Heroism: "gains N temporary hit points at the start of each of its turns")
+		const perTurnTempHpMatch = text.match(/(\d+)\s*temporary\s*hit\s*points?\s*(?:at\s*the\s*start\s*of\s*(?:each|every)\s*(?:of\s*)?(?:its|your)\s*turns?|each\s*turn)/);
+		if (perTurnTempHpMatch) {
+			buffs.push({
+				type: "perTurnTempHp",
+				value: parseInt(perTurnTempHpMatch[1]),
 			});
 		}
 

@@ -859,6 +859,12 @@
 						<!-- Active States in Combat (quick access) -->
 						<div class="charsheet__section">
 							<h4 class="charsheet__section-title">Active States</h4>
+							<!-- Combat Round Tracker -->
+							<div class="charsheet__combat-tracker ve-flex-v-center mb-2" id="charsheet-combat-tracker">
+								<button class="ve-btn ve-btn-xs ve-btn-success mr-2" id="charsheet-combat-start" title="Start / End Combat">⚔️ Start Combat</button>
+								<span class="ve-bold mr-2" id="charsheet-combat-round-display" style="display: none;">Round <span id="charsheet-combat-round-num">1</span></span>
+								<button class="ve-btn ve-btn-xs ve-btn-primary" id="charsheet-combat-next-round" style="display: none;" title="Advance to next round">Next Round ▶</button>
+							</div>
 							<div class="charsheet__combat-states-list" id="charsheet-combat-states">
 								<div class="ve-muted ve-text-center py-2">No active states</div>
 							</div>

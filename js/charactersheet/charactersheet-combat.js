@@ -804,9 +804,10 @@ class CharacterSheetCombat {
 		const total = rollResult.roll + totalBonus;
 
 		// Check for crit/fumble
+		const critRange = this._state.getCriticalRange?.() || 20;
 		let resultClass = "";
 		let resultNote = "";
-		if (rollResult.roll === 20) {
+		if (rollResult.roll >= critRange) {
 			resultClass = "charsheet__dice-result-total--crit";
 			resultNote = "Critical Hit!";
 		} else if (rollResult.roll === 1) {
@@ -882,7 +883,17 @@ class CharacterSheetCombat {
 
 		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus + stateDamageBonus;
 
-		const total = damageRoll.total + totalBonus + sneakAttackDamage;
+		// Get extra damage dice from active states (e.g., Hex, Flame Tongue)
+		const extraDamageEntries = this._state.getExtraDamageFromStates?.() || [];
+		let extraDamageTotal = 0;
+		const extraDamageParts = [];
+		for (const entry of extraDamageEntries) {
+			const extraRoll = this._parseDamage(entry.dice, isCrit);
+			extraDamageTotal += extraRoll.total;
+			extraDamageParts.push({dice: entry.dice, total: extraRoll.total, type: entry.damageType, source: entry.source});
+		}
+
+		const total = damageRoll.total + totalBonus + sneakAttackDamage + extraDamageTotal;
 
 		// Build subtitle with breakdown
 		let subtitle = `${attack.damage}${isCrit ? " (crit)" : ""} + ${abilityMod} (${attack.abilityMod || "STR"})`;
@@ -891,6 +902,9 @@ class CharacterSheetCombat {
 		if (rageBonus) subtitle += ` + ${rageBonus} (rage)`;
 		if (stateDamageBonus) subtitle += ` + ${stateDamageBonus} (states)`;
 		if (sneakAttackDamage) subtitle += ` + ${sneakAttackDamage} (sneak attack ${sneakAttackDice})`;
+		for (const ep of extraDamageParts) {
+			subtitle += ` + ${ep.total} (${ep.source}${ep.type ? " " + ep.type : ""})`;
+		}
 		subtitle += ` ${attack.damageType}`;
 
 		// Show result
@@ -2333,6 +2347,9 @@ class CharacterSheetCombat {
 		// Refresh state reference in case called independently (not via render())
 		this._state = this._page.getState();
 
+		// Update combat tracker controls
+		this._updateCombatTrackerUI();
+
 		$container.empty();
 
 		const allStates = this._state?.getActiveStates?.() || [];
@@ -2395,9 +2412,19 @@ class CharacterSheetCombat {
 				// Check if this state can be manually ended
 				const isEndable = this._isStateEndable(state, stateType);
 
+				// Round-remaining indicator
+				let roundsLabel = "";
+				if (this._state.isInCombat?.() && state.roundsRemaining != null) {
+					if (state.roundsRemaining <= 1) {
+						roundsLabel = ` <span class="ve-small text-warning" title="${state.roundsRemaining} round(s) left">(${state.roundsRemaining}r!)</span>`;
+					} else {
+						roundsLabel = ` <span class="ve-small ve-muted" title="${state.roundsRemaining} rounds left">(${state.roundsRemaining}r)</span>`;
+					}
+				}
+
 				const $state = $(`
 					<div class="charsheet__combat-state-item badge ${this._getStateBadgeClass(state.stateTypeId)} mr-1 mb-1" data-state-id="${state.id}" title="${tooltip}">
-						${state.icon || stateType?.icon || "⚡"} <span class="charsheet__state-name-link">${stateNameHtml}</span>
+						${state.icon || stateType?.icon || "⚡"} <span class="charsheet__state-name-link">${stateNameHtml}</span>${roundsLabel}
 						${isEndable ? `<span class="charsheet__state-remove ml-1" title="End">&times;</span>` : ""}
 					</div>
 				`);
@@ -2488,6 +2515,9 @@ class CharacterSheetCombat {
 
 		// Set up quick activation buttons
 		this._initQuickStateButtons();
+
+		// Set up combat tracker buttons (idempotent)
+		this._initCombatTracker();
 	}
 
 	/**
@@ -2822,6 +2852,69 @@ class CharacterSheetCombat {
 		// Show/hide concentration save button based on whether concentrating
 		const $concSaveBtn = $("#charsheet-combat-conc-save");
 		$concSaveBtn.toggle(concentrating);
+	}
+
+	/**
+	 * Update combat tracker UI (Start/End button, round display, Next Round button)
+	 */
+	_updateCombatTrackerUI () {
+		const inCombat = this._state?.isInCombat?.() || false;
+		const round = this._state?.getCombatRound?.() || 0;
+
+		const $startBtn = $("#charsheet-combat-start");
+		const $roundDisplay = $("#charsheet-combat-round-display");
+		const $roundNum = $("#charsheet-combat-round-num");
+		const $nextBtn = $("#charsheet-combat-next-round");
+
+		if (inCombat) {
+			$startBtn.text("🏁 End Combat").removeClass("ve-btn-success").addClass("ve-btn-danger");
+			$roundDisplay.show();
+			$roundNum.text(round);
+			$nextBtn.show();
+		} else {
+			$startBtn.text("⚔️ Start Combat").removeClass("ve-btn-danger").addClass("ve-btn-success");
+			$roundDisplay.hide();
+			$nextBtn.hide();
+		}
+	}
+
+	/**
+	 * Initialise combat tracker button handlers (called once on first render)
+	 */
+	_initCombatTracker () {
+		if (this._combatTrackerInitialised) return;
+		this._combatTrackerInitialised = true;
+
+		$("#charsheet-combat-start").off("click").on("click", () => {
+			if (this._state.isInCombat?.()) {
+				this._state.endCombat();
+				JqueryUtil.doToast({type: "info", content: "Combat ended."});
+			} else {
+				this._state.startCombat();
+				JqueryUtil.doToast({type: "success", content: "Combat started — Round 1!"});
+			}
+			this.renderCombatStates();
+			this._page._saveCurrentCharacter?.();
+		});
+
+		$("#charsheet-combat-next-round").off("click").on("click", () => {
+			const expired = this._state.advanceRound?.() || [];
+			const round = this._state.getCombatRound?.() || 0;
+
+			if (expired.length) {
+				JqueryUtil.doToast({type: "warning", content: `Round ${round} — expired: ${expired.join(", ")}`});
+			} else {
+				JqueryUtil.doToast({type: "info", content: `Round ${round}`});
+			}
+
+			this.renderCombatStates();
+			this.renderCombatDefenses();
+			this.renderCombatEffects();
+			this._page._renderActiveStates?.();
+			this._page._saveCurrentCharacter?.();
+			this._page._renderCharacter?.();
+			this._updateQuickButtonStates();
+		});
 	}
 
 	/**

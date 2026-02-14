@@ -563,6 +563,10 @@ class CharacterSheetLevelUp {
 			const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
 			const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
 
+			// Detect Epic Boon eligibility: XPHB (or TGTT) class at level 19
+			const isEpicBoonLevel = newLevel === 19
+				&& (classEntry.source === "XPHB" || classEntry.source === "TGTT");
+
 			const $asiSection = this._renderAsiSelection(
 				(ability, delta) => {
 					asiChoices[ability] = (asiChoices[ability] || 0) + delta;
@@ -571,6 +575,7 @@ class CharacterSheetLevelUp {
 					selectedFeat = feat;
 				},
 				isBothAsiAndFeat, // Pass flag to show both
+				isEpicBoonLevel, // Pass Epic Boon context
 			);
 			$content.append($asiSection);
 		}
@@ -813,11 +818,13 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	_renderAsiSelection (onAsiChange, onFeatSelect, isBothAsiAndFeat = false) {
+	_renderAsiSelection (onAsiChange, onFeatSelect, isBothAsiAndFeat = false, isEpicBoonLevel = false) {
 		// When Thelemar rules give both ASI and Feat at level 4
-		const sectionTitle = isBothAsiAndFeat
-			? "📈 Ability Score Improvement + Feat (Thelemar)"
-			: "📈 Ability Score Improvement";
+		const sectionTitle = isEpicBoonLevel
+			? "📈 Ability Score Improvement / Epic Boon"
+			: isBothAsiAndFeat
+				? "📈 Ability Score Improvement + Feat (Thelemar)"
+				: "📈 Ability Score Improvement";
 
 		const $section = $(`
 			<div class="charsheet__levelup-section">
@@ -925,6 +932,61 @@ class CharacterSheetLevelUp {
 
 		// Feats list - filtered by allowed sources
 		const feats = this._page.filterByAllowedSources(this._page.getFeats() || []);
+
+		// === Epic Boon section (level 19 for XPHB / TGTT classes) ===
+		if (isEpicBoonLevel) {
+			const epicBoons = feats.filter(f => f.category === "EB");
+			if (epicBoons.length) {
+				const $epicSection = $(`<div class="charsheet__levelup-epic-boons mb-3">
+					<h6 class="ve-bold mb-2">🌟 Epic Boons <span class="ve-muted ve-small">(Recommended at level 19)</span></h6>
+				</div>`);
+
+				const $epicList = $(`<div class="charsheet__levelup-feats-list" style="max-height: 200px; overflow-y: auto;"></div>`);
+
+				epicBoons.forEach(boon => {
+					// Ability bonus description
+					let abilityHint = "";
+					if (boon.ability?.length) {
+						const ab = boon.ability[0];
+						if (ab.choose) {
+							abilityHint = ` — +1 to ${ab.choose.from?.map(a => a.toUpperCase()).join("/") || "ability"} (max 30)`;
+						} else {
+							const entries = Object.entries(ab).filter(([k]) => Parser.ABIL_ABVS.includes(k));
+							if (entries.length) {
+								abilityHint = ` — +${entries[0][1]} ${entries[0][0].toUpperCase()}`;
+							}
+						}
+					}
+
+					const $boon = $(`
+						<div class="charsheet__levelup-feat-option" data-feat="${boon.name}">
+							<input type="radio" name="feat-choice" value="${boon.name}">
+							<strong>${boon.name}</strong>
+							<span class="ve-muted">(${Parser.sourceJsonToAbv(boon.source)})</span>
+							${abilityHint ? `<span class="ve-small text-info">${abilityHint}</span>` : ""}
+						</div>
+					`);
+
+					$boon.on("click", () => {
+						// Deselect from both lists
+						$featsContainer.find(".charsheet__levelup-feat-option").removeClass("selected");
+						$boon.addClass("selected");
+						$boon.find("input").prop("checked", true);
+						onFeatSelect(boon);
+
+						// Show ability choice UI if boon has choose
+						this._renderEpicBoonAbilityChoice(boon, $epicSection);
+					});
+
+					$epicList.append($boon);
+				});
+
+				$epicSection.append($epicList);
+				$featsContainer.append($epicSection);
+				$featsContainer.append(`<div class="ve-muted ve-text-center mb-2">— or choose another feat —</div>`);
+			}
+		}
+
 		const $featSearch = $(`<input type="text" class="form-control mb-2" placeholder="Search feats...">`);
 		const $featList = $(`<div class="charsheet__levelup-feats-list"></div>`);
 
@@ -944,7 +1006,8 @@ class CharacterSheetLevelUp {
 				`);
 
 				$feat.on("click", () => {
-					$featList.find(".charsheet__levelup-feat-option").removeClass("selected");
+					// Deselect from all feat lists (including epic boons)
+					$featsContainer.find(".charsheet__levelup-feat-option").removeClass("selected");
 					$feat.addClass("selected");
 					$feat.find("input").prop("checked", true);
 					onFeatSelect(feat);
@@ -960,6 +1023,42 @@ class CharacterSheetLevelUp {
 		$featsContainer.append($featSearch, $featList);
 
 		return $section;
+	}
+
+	/**
+	 * Render ability score choice UI for Epic Boons with { choose: { from: [...] } }
+	 */
+	_renderEpicBoonAbilityChoice (boon, $parentSection) {
+		// Remove any existing ability choice UI
+		$parentSection.find(".charsheet__epic-boon-ability-choice").remove();
+
+		if (!boon.ability?.length) return;
+
+		const ablEntry = boon.ability[0];
+		if (!ablEntry.choose) return;
+
+		const options = ablEntry.choose.from || Parser.ABIL_ABVS;
+		const amount = ablEntry.choose.amount || 1;
+		const max = ablEntry.max || 20;
+
+		const $choiceContainer = $(`<div class="charsheet__epic-boon-ability-choice mt-2 p-2 rounded" style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b));">
+			<span class="ve-small ve-bold">Choose ability to increase by +${amount} (max ${max}):</span>
+		</div>`);
+
+		const $select = $(`<select class="form-control form-control-sm mt-1" style="max-width: 200px;"></select>`);
+		options.forEach(abl => {
+			const currentScore = this._state.getAbilityScore(abl);
+			$select.append(`<option value="${abl}">${Parser.attAbvToFull(abl)} (currently ${currentScore})</option>`);
+		});
+
+		// Store the choice on the boon object so _applyFeatBonuses can use it
+		boon._epicBoonAbilityChoice = {ability: options[0], amount, max};
+		$select.on("change", (e) => {
+			boon._epicBoonAbilityChoice = {ability: e.target.value, amount, max};
+		});
+
+		$choiceContainer.append($select);
+		$parentSection.append($choiceContainer);
 	}
 
 	_renderNewFeatures (features) {
@@ -2830,13 +2929,22 @@ class CharacterSheetLevelUp {
 		if (feat.ability) {
 			// Feats that grant ability score increases
 			feat.ability.forEach(ablChoice => {
+				const max = ablChoice.max || 20;
+
 				if (ablChoice.choose) {
-					// Would need UI for this, skip for now
+					// Epic Boon ability choice (set via _renderEpicBoonAbilityChoice)
+					if (feat._epicBoonAbilityChoice) {
+						const {ability, amount} = feat._epicBoonAbilityChoice;
+						const current = this._state.getAbilityBase(ability);
+						this._state.setAbilityBase(ability, Math.min(max, current + amount));
+					}
+					// Otherwise skip — no UI was shown for the choice
 				} else {
 					Object.entries(ablChoice).forEach(([abl, bonus]) => {
+						if (abl === "max") return; // Skip the max property itself
 						if (Parser.ABIL_ABVS.includes(abl)) {
 							const current = this._state.getAbilityBase(abl);
-							this._state.setAbilityBase(abl, Math.min(20, current + bonus));
+							this._state.setAbilityBase(abl, Math.min(max, current + bonus));
 						}
 					});
 				}

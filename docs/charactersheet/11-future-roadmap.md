@@ -61,7 +61,7 @@ See [TGTT Documentation](./13-tgtt-thelemar-homebrew.md) for full details.
 
 ### Code Modularization
 
-Split `charactersheet-state.js` (~16,000 lines) into focused modules:
+Split `charactersheet-state.js` (~23,400 lines) into focused modules:
 
 ```
 js/charactersheet/
@@ -169,7 +169,8 @@ Integration with initiative tracker:
 
 - Import character to combat
 - Real-time HP/resource sync
-- Condition tracking with countdown
+- ✅ Active state duration tracking with round counter and auto-expire
+- ~~Condition tracking with countdown~~ ✅ Implemented (states auto-deactivate when rounds expire)
 - Turn order integration
 
 ### Character Generation Wizard

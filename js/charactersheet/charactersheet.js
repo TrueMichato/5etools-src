@@ -3900,13 +3900,26 @@ class CharacterSheetPage {
 	}
 
 	_rollSavingThrow (ability, event) {
+		// Check for auto-fail from conditions (e.g., Paralyzed/Stunned → auto-fail STR/DEX saves)
+		if (this._state.hasAutoFailFromConditions?.(`save:${ability}`)) {
+			this._showDiceResult(
+				`${Parser.attAbvToFull(ability)} Save [Auto-Fail]`,
+				"FAIL",
+				"Automatically failed due to condition",
+				"charsheet__dice-result-total--fumble",
+				"Auto-failed from active condition",
+			);
+			return;
+		}
+
 		const mod = this._state.getSaveMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
 		
 		// Check for advantage/disadvantage from active states (e.g., Rage gives advantage on STR saves)
 		let mode;
-		const hasAdvantage = this._state.hasAdvantageFromStates(`save:${ability}`);
-		const hasDisadvantage = this._state.hasDisadvantageFromStates(`save:${ability}`);
+		const advState = this._state.getAdvantageState?.(`save:${ability}`);
+		const hasAdvantage = advState?.advantage || this._state.hasAdvantageFromStates(`save:${ability}`);
+		const hasDisadvantage = advState?.disadvantage || this._state.hasDisadvantageFromStates(`save:${ability}`);
 		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
 		// If both, they cancel out - use normal (event can still override)
@@ -3941,7 +3954,16 @@ class CharacterSheetPage {
 			? this._state.getSkillModWithAbility(skillKey, overrideAbility)
 			: this._state.getSkillMod(skillKey);
 		const exhaustionPenalty = this._getExhaustionPenalty();
-		const rollResult = this._rollD20({event});
+
+		// Check for advantage/disadvantage from active states and modifiers
+		let mode;
+		const advState = this._state.getAdvantageState?.(`skill:${skillKey}`);
+		const hasAdvantage = advState?.advantage || false;
+		const hasDisadvantage = advState?.disadvantage || false;
+		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
+		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
+
+		const rollResult = this._rollD20({event, mode});
 		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
 
 		// Thelemar crit visual cues
@@ -3957,8 +3979,9 @@ class CharacterSheetPage {
 
 		const abilityLabel = overrideAbility ? ` (${overrideAbility.toUpperCase()})` : "";
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
+		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
 		this._showDiceResult(
-			`${skillName}${abilityLabel} Check${this._getModeLabel(rollResult.mode)}`,
+			`${skillName}${abilityLabel} Check${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
 			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
 			resultClass,
