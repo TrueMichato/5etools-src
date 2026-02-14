@@ -115,10 +115,11 @@ it("should produce 2 elixirs at level 6", () => {
 | Feature | Status | Notes |
 |---------|--------|-------|
 | **Multiclass spell slots UI** | Partial | Calculation exists, UI incomplete |
-| **Ritual spell book** | Missing | Wizard ritual-only spells not tracked separately |
+| **Ritual casting** | ✅ Implemented | Full system: class-specific modes (spellbook/prepared/known), filter + cast-as-ritual UI |
 | **Optional class features** | Partial | Not all TCE optional features supported |
 | **Custom lineages** | Missing | Tasha's custom lineage not fully supported |
 | **Sidekick classes** | Missing | Warrior/Expert/Spellcaster sidekick classes |
+| **Epic Boon picker** | ✅ Implemented | XPHB level 19 Epic Boon section with ability score max 30 |
 
 ### Combat Features
 
@@ -137,6 +138,8 @@ it("should produce 2 elixirs at level 6", () => {
 | **Mystic Arcanum** | ✅ Implemented | Per-level usage tracking, long rest recovery |
 | **Natural Recovery** | ✅ Implemented | Land Druid slot recovery (mirrors Arcane Recovery) |
 | **Concentration saves** | ✅ Implemented | DC calc, bonus aggregation, advantage detection |
+| **Sorcerous Restoration** | ✅ Implemented | SP recovery on short rest at level 20 |
+| **Combat round tracking** | ✅ Implemented | Start/end combat, round counter, auto-expire states |
 | **Dawn/dusk recharge** | Partial | Items recharge, but timing not tracked |
 | **Per-encounter resources** | Missing | No concept of encounter-based recovery |
 | **Lair/Legendary actions** | Missing | Not applicable to PCs, but could be useful |
@@ -151,11 +154,16 @@ The 2024 revision introduced significant changes. Current coverage:
 
 - ✅ Weapon Mastery slots and tracking
 - ✅ Weapon Mastery property effects (all 8: Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex)
+- ✅ Weapon Mastery for all XPHB classes (Fighter, Barbarian, Rogue, Monk, Paladin, Ranger)
 - ✅ Updated class features (most)
 - ✅ New subclasses
 - ✅ Updated spell slot progression
 - ✅ Revised ability score improvements
 - ✅ Fighter XPHB Weapon Mastery slots + Tactical Master swap
+- ✅ Active state mutual exclusivity (Rage/Bladesong)
+- ✅ Rage breaks concentration on activation
+- ✅ Active state duration tracking with round counter + auto-expire
+- ✅ Epic Boon picker at level 19 with ability score max 30 override
 
 ### Partially Implemented
 
@@ -178,7 +186,7 @@ The 2024 revision introduced significant changes. Current coverage:
 
 | Issue | Impact | Suggested Fix |
 |-------|--------|---------------|
-| **16,000+ line state file** | Hard to navigate | Split into focused modules |
+| **23,000+ line state file** | Hard to navigate | Split into focused modules |
 | **Inconsistent naming** | Confusing | Establish naming conventions |
 | **Magic numbers** | Fragile | Extract to constants |
 | **Limited JSDoc** | Learning curve | Add comprehensive documentation |

@@ -161,6 +161,96 @@ class CharacterSheetRest {
 		// Footer buttons
 		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
 			.on("click", () => doClose(false));
+
+		// --- Spell Slot Recovery Features (Arcane Recovery / Natural Recovery) ---
+		const calc = this._state.getFeatureCalculations();
+		const hasSlotRecovery = calc.hasArcaneRecovery || calc.hasNaturalRecovery;
+		let slotRecoverySelections = {}; // {level: amount}
+		let slotRecoveryMaxLevels = 0;
+		let slotRecoveryFeatureName = "";
+
+		if (hasSlotRecovery) {
+			slotRecoveryMaxLevels = calc.hasArcaneRecovery
+				? calc.arcaneRecoverySlotLevels
+				: calc.naturalRecoverySlots;
+			slotRecoveryFeatureName = calc.hasArcaneRecovery ? "Arcane Recovery" : "Natural Recovery";
+
+			const $recoverySection = $(`<div class="charsheet__rest-section">
+				<div class="charsheet__rest-section-title">✨ ${slotRecoveryFeatureName}</div>
+				<p class="ve-muted ve-small mb-2">Recover spell slots (max combined levels: ${slotRecoveryMaxLevels}, no 6th+ slots)</p>
+				<div id="short-rest-slot-recovery-container"></div>
+				<div class="charsheet__rest-healing-display">
+					<span class="charsheet__rest-healing-label">Slot levels selected:</span>
+					<span id="short-rest-slot-recovery-total">0</span>
+					<span class="charsheet__rest-healing-label"> / ${slotRecoveryMaxLevels}</span>
+				</div>
+			</div>`);
+			$recoverySection.insertBefore($modalInner.find(".charsheet__modal-footer").length
+				? $modalInner.find(".charsheet__modal-footer")
+				: $btnCancel.parent());
+
+			const $slotContainer = $recoverySection.find("#short-rest-slot-recovery-container");
+			const $slotTotal = $recoverySection.find("#short-rest-slot-recovery-total");
+
+			const slots = this._state.getSpellSlots();
+			for (let lvl = 1; lvl <= 5; lvl++) {
+				const slot = slots[lvl];
+				if (!slot || slot.max <= 0) continue;
+				const missing = slot.max - slot.current;
+				if (missing <= 0) continue;
+
+				slotRecoverySelections[lvl] = 0;
+				const $count = $(`<span>0</span>`);
+				const $btnAdd = $(`<button class="ve-btn ve-btn-xs ve-btn-primary">+</button>`);
+				const $btnRemove = $(`<button class="ve-btn ve-btn-xs ve-btn-default" disabled>−</button>`);
+
+				const updateTotal = () => {
+					const total = Object.values(slotRecoverySelections).reduce((sum, v) => sum + v, 0);
+					$slotTotal.text(total);
+				};
+
+				$btnAdd.on("click", () => {
+					const currentTotal = Object.entries(slotRecoverySelections).reduce((sum, [l, a]) => sum + (parseInt(l) * a), 0);
+					if (currentTotal + lvl > slotRecoveryMaxLevels) return;
+					if (slotRecoverySelections[lvl] >= missing) return;
+					slotRecoverySelections[lvl]++;
+					$count.text(slotRecoverySelections[lvl]);
+					$btnRemove.prop("disabled", false);
+					updateTotal();
+				});
+
+				$btnRemove.on("click", () => {
+					if (slotRecoverySelections[lvl] <= 0) return;
+					slotRecoverySelections[lvl]--;
+					$count.text(slotRecoverySelections[lvl]);
+					if (slotRecoverySelections[lvl] <= 0) $btnRemove.prop("disabled", true);
+					updateTotal();
+				});
+
+				$$`<div class="charsheet__hit-die-row">
+					<span>Level ${lvl} (${slot.current}/${slot.max})</span>
+					<span>Missing: ${missing}</span>
+					${$btnRemove} ${$count} ${$btnAdd}
+				</div>`.appendTo($slotContainer);
+			}
+		}
+
+		// --- Sorcerous Restoration display ---
+		const hasSorcRestore = calc.hasSorcerousRestoration;
+		if (hasSorcRestore) {
+			const sp = this._state.getSorceryPoints();
+			const restoreAmt = calc.sorcerousRestorationAmount || 0;
+			const willRecover = Math.min(restoreAmt, sp.max - sp.current);
+			if (willRecover > 0) {
+				$$`<div class="charsheet__rest-section">
+					<div class="charsheet__rest-section-title">⚡ Sorcerous Restoration</div>
+					<p class="ve-muted ve-small mb-0">Will recover ${willRecover} sorcery point(s) (${sp.current}/${sp.max} → ${sp.current + willRecover}/${sp.max})</p>
+				</div>`.insertBefore($modalInner.find(".charsheet__modal-footer").length
+					? $modalInner.find(".charsheet__modal-footer")
+					: $btnCancel.parent());
+			}
+		}
+
 		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">✓ Finish Short Rest</button>`)
 			.on("click", () => {
 				// Apply hit dice spending using spentDice tracker
@@ -191,12 +281,34 @@ class CharacterSheetRest {
 					this._state.breakConcentration?.();
 				}
 
+				// Apply Arcane/Natural Recovery slot selections
+				let slotsRecovered = 0;
+				if (hasSlotRecovery && slotRecoverySelections) {
+					const slotsToRecover = Object.entries(slotRecoverySelections)
+						.filter(([_, amount]) => amount > 0)
+						.map(([level, amount]) => ({level: parseInt(level), amount}));
+
+					if (slotsToRecover.length > 0) {
+						const method = calc.hasArcaneRecovery
+							? "useArcaneRecovery"
+							: "useNaturalRecovery";
+						if (this._state[method](slotsToRecover)) {
+							slotsRecovered = slotsToRecover.reduce((s, r) => s + r.amount, 0);
+						}
+					}
+				}
+
+				// Sorcerous Restoration is auto-applied via onShortRest → applySorcerousRestoration
+				const spRecovered = this._state.applySorcerousRestoration();
+
 				this._page.saveCharacter();
 				this._page.renderCharacter();
 				doClose(true);
 
 				let message = `😴 Short rest complete!`;
 				if (totalHealing > 0) message += ` Recovered ${totalHealing} HP.`;
+				if (slotsRecovered > 0) message += ` Recovered ${slotsRecovered} spell slot(s) via ${slotRecoveryFeatureName}.`;
+				if (spRecovered > 0) message += ` Recovered ${spRecovered} sorcery point(s).`;
 				if (conditionsToRemove.size > 0) message += ` Removed ${conditionsToRemove.size} condition(s).`;
 				if (shouldBreakConcentration) message += ` Broke concentration.`;
 

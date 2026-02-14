@@ -32,9 +32,9 @@ The Character Sheet is a comprehensive D&D 5th Edition character management tool
 
 | Metric | Value |
 |--------|-------|
-| Source Files | 11 modules (~35,000 lines) |
-| Test Files | 32 test suites |
-| Total Tests | 4,042+ tests |
+| Source Files | 11 modules (~53,000 lines) |
+| Test Files | 37 test suites |
+| Total Tests | 4,175+ tests |
 | TGTT Tests | 737 tests |
 | Test Coverage | High (core mechanics) |
 
@@ -43,23 +43,23 @@ The Character Sheet is a comprehensive D&D 5th Edition character management tool
 ```
 5etools-src/
 ├── js/charactersheet/
-│   ├── charactersheet.js           # Main controller (5,861 lines)
-│   ├── charactersheet-state.js     # State management (16,315 lines)
-│   ├── charactersheet-builder.js   # Character creation wizard (5,783 lines)
-│   ├── charactersheet-combat.js    # Combat mechanics (3,028 lines)
-│   ├── charactersheet-spells.js    # Spellcasting (2,661 lines)
-│   ├── charactersheet-inventory.js # Items & equipment (2,008 lines)
-│   ├── charactersheet-features.js  # Features & feats (1,585 lines)
-│   ├── charactersheet-levelup.js   # Level progression (3,628 lines)
-│   ├── charactersheet-rest.js      # Short/long rest (391 lines)
-│   ├── charactersheet-export.js    # Import/export (322 lines)
-│   └── charactersheet-layout.js    # UI customization (618 lines)
+│   ├── charactersheet.js           # Main controller (6,528 lines)
+│   ├── charactersheet-state.js     # State management (23,436 lines)
+│   ├── charactersheet-builder.js   # Character creation wizard (6,487 lines)
+│   ├── charactersheet-combat.js    # Combat mechanics (3,934 lines)
+│   ├── charactersheet-spells.js    # Spellcasting (3,288 lines)
+│   ├── charactersheet-inventory.js # Items & equipment (2,315 lines)
+│   ├── charactersheet-features.js  # Features & feats (1,586 lines)
+│   ├── charactersheet-levelup.js   # Level progression (3,994 lines)
+│   ├── charactersheet-rest.js      # Short/long rest (630 lines)
+│   ├── charactersheet-export.js    # Import/export (321 lines)
+│   └── charactersheet-layout.js    # UI customization (617 lines)
 ├── test/jest/charactersheet/
 │   ├── CharacterSheetState.test.js
 │   ├── CharacterSheet[Class].test.js  # Per-class tests
 │   ├── CharacterSheetCombat.test.js
 │   ├── CharacterSheetSpells.test.js
-│   └── ... (29 test files total)
+│   └── ... (37 test files total)
 ├── charactersheet.html             # Entry point
 └── docs/charactersheet/            # This documentation
 ```
@@ -100,4 +100,4 @@ NODE_OPTIONS='--experimental-vm-modules' npx jest CharacterSheetBarbarian --no-c
 
 ---
 
-*This documentation is maintained alongside the codebase. Last updated: January 2026*
+*This documentation is maintained alongside the codebase. Last updated: February 2026*

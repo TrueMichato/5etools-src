@@ -518,10 +518,12 @@ class CharacterSheetFeatures {
 		// Apply ability score increases
 		if (feat.ability) {
 			feat.ability.forEach(abiSet => {
+				const max = abiSet.max || 20;
 				Object.entries(abiSet).forEach(([abi, bonus]) => {
+					if (abi === "max") return; // Skip the max property itself
 					if (Parser.ABIL_ABVS.includes(abi) && typeof bonus === "number") {
 						const current = this._state.getAbilityBase(abi);
-						this._state.setAbilityBase(abi, Math.min(20, current + bonus));
+						this._state.setAbilityBase(abi, Math.min(max, current + bonus));
 					}
 				});
 			});
