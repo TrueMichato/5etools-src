@@ -1924,6 +1924,7 @@ const FeatureEffectRegistry = {
 		this._registerClassFeatures();
 		this._registerSubclassFeatures();
 		this._registerRaceFeatures();
+		this._registerFeatEffects();
 	},
 
 	/**
@@ -2341,6 +2342,358 @@ const FeatureEffectRegistry = {
 		]);
 	},
 
+	// =========================================================================
+	// FEAT EFFECTS
+	// Registers mechanical effects from standard feats (PHB 2014 + XPHB 2024).
+	// Feats with different effects between 2014/2024 are registered with
+	// "name|source" keys (e.g. "Alert|PHB", "Alert|XPHB") to differentiate.
+	// A fallback name-only key is registered for the most common version.
+	// =========================================================================
+
+	/**
+	 * Register feat effects in the registry.
+	 * Uses "name|source" keys for source-specific effects, and plain "name" for generic fallbacks.
+	 */
+	_registerFeatEffects () {
+		// ===================================================================
+		// TOUGH (PHB + XPHB) — +2 HP per character level
+		// ===================================================================
+		this.register("Tough", [
+			{type: "hpBonus", value: 2, perLevel: true},
+		]);
+
+		// ===================================================================
+		// ALERT — Initiative bonuses (different between 2014 and 2024)
+		// ===================================================================
+		// PHB 2014: +5 to initiative, can't be surprised
+		this.register("Alert|PHB", [
+			{type: "modifier", modType: "initiative", value: 5},
+		]);
+		// XPHB 2024: Add proficiency bonus to initiative, swap initiative rolls
+		this.register("Alert|XPHB", [
+			{type: "modifier", modType: "initiative", value: "proficiency"},
+		]);
+		// Fallback: use 2014 version (more commonly referenced)
+		this.register("Alert", [
+			{type: "modifier", modType: "initiative", value: 5},
+		]);
+
+		// ===================================================================
+		// WAR CASTER (PHB + XPHB) — Advantage on concentration saves
+		// ===================================================================
+		this.register("War Caster", [
+			{type: "modifier", modType: "concentration", advantage: true, value: 0},
+		]);
+
+		// ===================================================================
+		// OBSERVANT — +5 to passive Perception (and Investigation in 2014)
+		// ===================================================================
+		// PHB 2014: +5 passive Perception AND passive Investigation
+		this.register("Observant|PHB", [
+			{type: "modifier", modType: "passive:perception", value: 5},
+			{type: "modifier", modType: "passive:investigation", value: 5},
+		]);
+		// XPHB 2024: +5 passive Perception only (structured skill prof handled separately)
+		this.register("Observant|XPHB", [
+			{type: "modifier", modType: "passive:perception", value: 5},
+		]);
+		// Fallback: 2014 version
+		this.register("Observant", [
+			{type: "modifier", modType: "passive:perception", value: 5},
+			{type: "modifier", modType: "passive:investigation", value: 5},
+		]);
+
+		// ===================================================================
+		// MOBILE (PHB + XPHB) — +10 walking speed
+		// ===================================================================
+		this.register("Mobile", [
+			{type: "speed", speedType: "walk", value: 10},
+		]);
+
+		// ===================================================================
+		// DUAL WIELDER (PHB 2014) — +1 AC while dual wielding
+		// ===================================================================
+		this.register("Dual Wielder|PHB", [
+			{type: "modifier", modType: "ac", value: 1, conditional: "while dual wielding two melee weapons"},
+		]);
+		// XPHB 2024: +1 STR/DEX (handled by ability), bonus action attack after Attack action
+		this.register("Dual Wielder|XPHB", [
+			// Mechanical effects handled by ability bonus + Attack action rule
+		]);
+		this.register("Dual Wielder", [
+			{type: "modifier", modType: "ac", value: 1, conditional: "while dual wielding two melee weapons"},
+		]);
+
+		// ===================================================================
+		// SAVAGE ATTACKER (PHB + XPHB) — Reroll melee weapon damage once per turn
+		// ===================================================================
+		this.register("Savage Attacker", [
+			{type: "modifier", modType: "damage:reroll:melee", value: 1},
+		]);
+
+		// ===================================================================
+		// HEAVY ARMOR MASTER — Damage reduction for nonmagical BPS
+		// ===================================================================
+		// PHB 2014: Reduce nonmagical B/P/S damage by 3
+		this.register("Heavy Armor Master|PHB", [
+			{type: "damageReduction", value: 3, damageTypes: ["bludgeoning", "piercing", "slashing"], condition: "nonmagical, while wearing heavy armor"},
+		]);
+		// XPHB 2024: Reduce B/P/S damage by prof bonus (not limited to nonmagical)
+		this.register("Heavy Armor Master|XPHB", [
+			{type: "damageReduction", value: "proficiency", damageTypes: ["bludgeoning", "piercing", "slashing"], condition: "while wearing heavy armor"},
+		]);
+		this.register("Heavy Armor Master", [
+			{type: "damageReduction", value: 3, damageTypes: ["bludgeoning", "piercing", "slashing"], condition: "nonmagical, while wearing heavy armor"},
+		]);
+
+		// ===================================================================
+		// SHIELD MASTER (PHB + XPHB) — Add shield AC bonus to DEX saves vs area effects
+		// ===================================================================
+		this.register("Shield Master", [
+			{type: "modifier", modType: "save:dex:shield", value: 1, conditional: "against effects targeting only you"},
+		]);
+
+		// ===================================================================
+		// DURABLE — Hit dice healing bonus
+		// ===================================================================
+		// PHB 2014: Min HP from hit dice = 2x CON mod
+		this.register("Durable|PHB", [
+			{type: "modifier", modType: "hitDice:minimumRoll", value: "conModx2"},
+		]);
+		// XPHB 2024: Regain all spent hit dice on long rest (instead of half)
+		this.register("Durable|XPHB", [
+			{type: "modifier", modType: "hitDice:longRestRecovery", value: "all"},
+		]);
+		this.register("Durable", [
+			{type: "modifier", modType: "hitDice:minimumRoll", value: "conModx2"},
+		]);
+
+		// ===================================================================
+		// SKULKER (XPHB 2024) — Blindsight 10 ft
+		// ===================================================================
+		this.register("Skulker|XPHB", [
+			{type: "sense", senseType: "blindsight", value: 10},
+		]);
+		// PHB 2014: No quantifiable passive bonus (dim light concealment, no disadvantage on ranged in dim)
+		this.register("Skulker|PHB", [
+			// Narrative: hide when lightly obscured, no penalty for missing ranged in dim
+		]);
+		this.register("Skulker", [
+			{type: "sense", senseType: "blindsight", value: 10},
+		]);
+
+		// ===================================================================
+		// SENTINEL — Reduce speed to 0 on opportunity attack hit
+		// ===================================================================
+		this.register("Sentinel", [
+			// Combat mechanic: opportunity attack on Disengage, reduce speed to 0 on hit
+		]);
+
+		// ===================================================================
+		// POLEARM MASTER — Bonus action attack + opportunity attack on enter reach
+		// ===================================================================
+		this.register("Polearm Master", [
+			{type: "bonusAction", action: "polearmStrike", damage: "1d4+mod", note: "butt-end attack with polearm"},
+		]);
+
+		// ===================================================================
+		// CROSSBOW EXPERT — No loading penalty, no disadvantage in melee
+		// ===================================================================
+		this.register("Crossbow Expert", [
+			{type: "modifier", modType: "ranged:noDisdvantageInMelee", value: 1},
+		]);
+
+		// ===================================================================
+		// GREAT WEAPON MASTER — Different between 2014 and 2024
+		// ===================================================================
+		// PHB 2014: -5 attack/+10 damage on heavy weapons, bonus action attack on crit/kill
+		this.register("Great Weapon Master|PHB", [
+			{type: "modifier", modType: "attack:heavy", value: -5, optional: true, note: "GWM power attack"},
+			{type: "modifier", modType: "damage:heavy", value: 10, optional: true, note: "GWM power attack"},
+		]);
+		// XPHB 2024: Extra damage = STR mod on heavy weapon crit/reduce to 0
+		this.register("Great Weapon Master|XPHB", [
+			{type: "modifier", modType: "damage:heavy:bonusOnCritOrKill", value: "strMod"},
+		]);
+		this.register("Great Weapon Master", [
+			{type: "modifier", modType: "attack:heavy", value: -5, optional: true, note: "GWM power attack"},
+			{type: "modifier", modType: "damage:heavy", value: 10, optional: true, note: "GWM power attack"},
+		]);
+
+		// ===================================================================
+		// SHARPSHOOTER — Different between 2014 and 2024
+		// ===================================================================
+		// PHB 2014: -5 attack/+10 damage on ranged, ignore cover, no long range disadvantage
+		this.register("Sharpshooter|PHB", [
+			{type: "modifier", modType: "attack:ranged", value: -5, optional: true, note: "Sharpshooter power attack"},
+			{type: "modifier", modType: "damage:ranged", value: 10, optional: true, note: "Sharpshooter power attack"},
+			{type: "modifier", modType: "ranged:ignoreCover", value: 1},
+			{type: "modifier", modType: "ranged:noLongRangeDisadvantage", value: 1},
+		]);
+		// XPHB 2024: No long range disadvantage, ignore half/3/4 cover
+		this.register("Sharpshooter|XPHB", [
+			{type: "modifier", modType: "ranged:ignoreCover", value: 1},
+			{type: "modifier", modType: "ranged:noLongRangeDisadvantage", value: 1},
+		]);
+		this.register("Sharpshooter", [
+			{type: "modifier", modType: "attack:ranged", value: -5, optional: true, note: "Sharpshooter power attack"},
+			{type: "modifier", modType: "damage:ranged", value: 10, optional: true, note: "Sharpshooter power attack"},
+			{type: "modifier", modType: "ranged:ignoreCover", value: 1},
+			{type: "modifier", modType: "ranged:noLongRangeDisadvantage", value: 1},
+		]);
+
+		// ===================================================================
+		// LUCKY — Luck points resource (tracked separately)
+		// NOTE: Plain "Lucky" key is reserved for Halfling race feature (reroll 1s).
+		// Feat versions use source-specific keys only.
+		// ===================================================================
+		// PHB 2014: 3 luck points
+		this.register("Lucky|PHB", [
+			{type: "resource", name: "Luck Points", max: 3, recharge: "long"},
+		]);
+		// XPHB 2024: Prof bonus luck points
+		this.register("Lucky|XPHB", [
+			{type: "resource", name: "Luck Points", max: "proficiency", recharge: "long"},
+		]);
+
+		// ===================================================================
+		// MAGE SLAYER — Advantage on saves vs. spells from adjacent creatures
+		// ===================================================================
+		this.register("Mage Slayer", [
+			{type: "modifier", modType: "save:advantage:spell:adjacent", value: 1, conditional: "against spells cast by creatures within 5 feet"},
+		]);
+
+		// ===================================================================
+		// RESILIENT — Save proficiency (the specific save is chosen on feat selection)
+		// ===================================================================
+		this.register("Resilient", [
+			{type: "saveProficiency", save: "chosen"},
+		]);
+
+		// ===================================================================
+		// HEAVILY ARMORED — Heavy armor proficiency
+		// ===================================================================
+		this.register("Heavily Armored", [
+			{type: "armorProficiency", armor: "heavy"},
+		]);
+
+		// ===================================================================
+		// MEDIUM ARMOR MASTER — Remove stealth disadvantage, +3 DEX to medium armor
+		// ===================================================================
+		this.register("Medium Armor Master", [
+			{type: "modifier", modType: "ac:mediumArmorMaxDex", value: 3},
+			{type: "modifier", modType: "armor:medium:noStealthDisadvantage", value: 1},
+		]);
+
+		// ===================================================================
+		// DEFENSIVE DUELIST — Add prof bonus to AC as reaction (requires finesse weapon)
+		// ===================================================================
+		this.register("Defensive Duelist", [
+			{type: "modifier", modType: "ac", value: "proficiency", conditional: "reaction, while wielding finesse weapon"},
+		]);
+
+		// ===================================================================
+		// RITUAL CASTER — Ritual casting from written spells
+		// ===================================================================
+		this.register("Ritual Caster", [
+			{type: "modifier", modType: "spellcasting:ritual", value: 1},
+		]);
+
+		// ===================================================================
+		// ATHLETE — Climbing cost reduction, running jump after 5ft
+		// ===================================================================
+		this.register("Athlete", [
+			{type: "speed", speedType: "climb", value: "walk"}, // Climb speed = walk speed
+		]);
+
+		// ===================================================================
+		// ACTOR — Advantage on Deception/Performance for impersonation
+		// ===================================================================
+		this.register("Actor", [
+			{type: "modifier", modType: "check:advantage:deception:impersonation", value: 1, conditional: "while impersonating"},
+			{type: "modifier", modType: "check:advantage:performance:impersonation", value: 1, conditional: "while impersonating"},
+		]);
+
+		// ===================================================================
+		// CHARGER — Bonus damage on charge
+		// ===================================================================
+		this.register("Charger|PHB", [
+			{type: "modifier", modType: "damage:charge", value: 5, conditional: "after Dash + bonus action attack"},
+		]);
+		this.register("Charger|XPHB", [
+			{type: "modifier", modType: "damage:charge", value: "1d8", conditional: "after moving 10+ ft in a straight line"},
+		]);
+		this.register("Charger", [
+			{type: "modifier", modType: "damage:charge", value: 5, conditional: "after Dash + bonus action attack"},
+		]);
+
+		// ===================================================================
+		// HEALER — Bonus healing with healer's kit
+		// ===================================================================
+		this.register("Healer", [
+			{type: "modifier", modType: "healing:healerKit", value: 1},
+		]);
+
+		// ===================================================================
+		// GRAPPLER — Advantage on attack rolls against grappled creatures
+		// ===================================================================
+		this.register("Grappler", [
+			{type: "modifier", modType: "attack:advantage:grappled", value: 1, conditional: "against creatures you are grappling"},
+		]);
+
+		// ===================================================================
+		// SPELL SNIPER — Double spell attack range
+		// ===================================================================
+		this.register("Spell Sniper", [
+			{type: "modifier", modType: "spell:rangeDouble", value: 1},
+			{type: "modifier", modType: "spell:ignoreCover", value: 1},
+		]);
+
+		// ===================================================================
+		// TAVERN BRAWLER — Proficiency with improvised weapons, unarmed strike = 1d4
+		// ===================================================================
+		this.register("Tavern Brawler|PHB", [
+			{type: "modifier", modType: "unarmed:damage", value: "1d4"},
+			{type: "weaponProficiency", weapon: "improvised"},
+		]);
+		this.register("Tavern Brawler|XPHB", [
+			{type: "weaponProficiency", weapon: "improvised"},
+		]);
+		this.register("Tavern Brawler", [
+			{type: "modifier", modType: "unarmed:damage", value: "1d4"},
+			{type: "weaponProficiency", weapon: "improvised"},
+		]);
+
+		// ===================================================================
+		// KEEN MIND — perfect memory, always know time/direction (2014); +1 INT, skill (2024)
+		// ===================================================================
+		this.register("Keen Mind", [
+			// Narrative: always know direction, hours until sunrise/sunset, days since event
+		]);
+
+		// ===================================================================
+		// FIGHTING STYLE FEATS (XPHB 2024)
+		// ===================================================================
+		this.register("Archery", [
+			{type: "modifier", modType: "attack:ranged", value: 2},
+		]);
+		this.register("Defense", [
+			{type: "modifier", modType: "ac", value: 1, conditional: "while wearing armor"},
+		]);
+		this.register("Dueling", [
+			{type: "modifier", modType: "damage:melee:oneHanded", value: 2, conditional: "wielding one melee weapon and no other weapons"},
+		]);
+		this.register("Great Weapon Fighting", [
+			{type: "modifier", modType: "damage:reroll:twoHanded:1or2", value: 1},
+		]);
+		this.register("Protection", [
+			{type: "modifier", modType: "ac:ally:reaction", value: 1, conditional: "impose disadvantage on attack against adjacent ally using shield"},
+		]);
+		this.register("Two-Weapon Fighting", [
+			{type: "modifier", modType: "damage:offhand:addAbility", value: 1},
+		]);
+	},
+
 	/**
 	 * Register a feature's effects in the registry
 	 * @param {string} featureName - The name of the feature
@@ -2359,6 +2712,23 @@ const FeatureEffectRegistry = {
 	getEffects (featureName) {
 		const key = this._normalizeKey(featureName);
 		return this._registry[key] || [];
+	},
+
+	/**
+	 * Get effects for a feat, trying source-specific key first, then falling back to name-only.
+	 * E.g., getFeatEffects("Alert", "PHB") tries "alert|phb" first, then "alert".
+	 * @param {string} featName - The feat name
+	 * @param {string} [source] - The source book abbreviation (e.g., "PHB", "XPHB")
+	 * @returns {Array} Array of effect objects, or empty array if not found
+	 */
+	getFeatEffects (featName, source) {
+		if (source) {
+			const sourceKey = this._normalizeKey(`${featName}|${source}`);
+			if (this._registry[sourceKey] && this._registry[sourceKey].length > 0) {
+				return this._registry[sourceKey];
+			}
+		}
+		return this.getEffects(featName);
 	},
 
 	/**
@@ -2798,6 +3168,19 @@ class CharacterSheetState {
 			// Each state: {id, name, active, sourceFeatureId, resourceId?, effects: [{type, value, ...}], duration?, icon?, roundsRemaining?, activatedAtRound?}
 			activeStates: [],
 
+			// Companions (beast companions, familiars, summons, steel defenders, drakes, wild shape forms)
+			// Each companion: { id, name, source, type, origin, customName,
+			//   abilities: {str, dex, con, int, wis, cha},
+			//   hp: {max, current, temp}, ac, speed: {walk, fly, swim, climb, burrow},
+			//   senses: [], passive, languages: [],
+			//   traits: [], actions: [], reactions: [], bonusActions: [],
+			//   profBonus, saveProficiencies: [], skillProficiencies: {},
+			//   resistances: [], immunities: [], conditionImmunities: [],
+			//   size, creatureType, alignment,
+			//   concentrationLinked: false, sourceFeatureId,
+			//   active: true, conditions: [], exhaustion: 0 }
+			companions: [],
+
 			// Combat round tracking
 			inCombat: false,
 			combatRound: 0,
@@ -3160,6 +3543,114 @@ class CharacterSheetState {
 	getBackground () { return this._data.background; }
 	getBackgroundName () { return this._data.background?.name || null; }
 
+	/**
+	 * Get the origin feat granted by the current background (2024 XPHB backgrounds).
+	 * @returns {object|null} The feat object from _data.feats, or null
+	 */
+	getOriginFeat () {
+		return this._data.feats.find(f => f.isOriginFeat) || null;
+	}
+
+	/**
+	 * Apply feats from the background's `feats` array (2024 XPHB origin feats).
+	 * Parses the 5etools background data format and calls addFeat() for each.
+	 * @param {object} [backgroundOverride] - Optional background object; uses stored background if omitted
+	 * @returns {number} Number of origin feats added
+	 */
+	applyBackgroundFeats (backgroundOverride) {
+		const bg = backgroundOverride || this._data.background;
+		if (!bg?.feats?.length) return 0;
+
+		let added = 0;
+
+		for (const featEntry of bg.feats) {
+			// Background feats come as: {"feat name|source": true}
+			// or {"feat name; subtype|source": true}
+			const keys = Object.keys(featEntry);
+			for (const key of keys) {
+				if (!featEntry[key]) continue;
+
+				const parsed = this._parseBackgroundFeatKey(key);
+				if (!parsed) continue;
+
+				// Skip duplicates
+				if (this._data.feats.find(f =>
+					f.name.toLowerCase() === parsed.name.toLowerCase()
+					&& (f.source || "").toUpperCase() === parsed.source.toUpperCase(),
+				)) continue;
+
+				const success = this.addFeat({
+					name: parsed.name,
+					source: parsed.source,
+					isOriginFeat: true,
+					backgroundName: bg.name,
+				});
+
+				if (success !== false) {
+					// Mark the newly added feat as an origin feat
+					const addedFeat = this._data.feats.find(f =>
+						f.name.toLowerCase() === parsed.name.toLowerCase()
+						&& (f.source || "").toUpperCase() === parsed.source.toUpperCase(),
+					);
+					if (addedFeat) {
+						addedFeat.isOriginFeat = true;
+						addedFeat.backgroundName = bg.name;
+					}
+					added++;
+				}
+			}
+		}
+
+		return added;
+	}
+
+	/**
+	 * Parse a background feat key like "magic initiate; cleric|xphb" or "crafter|xphb".
+	 * @param {string} key - The feat key from background data
+	 * @returns {{name: string, source: string, subtype: string|null}|null}
+	 * @private
+	 */
+	_parseBackgroundFeatKey (key) {
+		if (!key || typeof key !== "string") return null;
+
+		const pipeIdx = key.indexOf("|");
+		const nameRaw = pipeIdx >= 0 ? key.substring(0, pipeIdx) : key;
+		const source = pipeIdx >= 0 ? key.substring(pipeIdx + 1) : "PHB";
+		if (!nameRaw) return null;
+
+		let name, subtype;
+		if (nameRaw.includes(";")) {
+			const parts = nameRaw.split(";").map(s => s.trim());
+			name = this._toTitleCase(parts[0]);
+			subtype = this._toTitleCase(parts[1]);
+		} else {
+			name = this._toTitleCase(nameRaw.trim());
+			subtype = null;
+		}
+
+		return {
+			name: subtype ? `${name} (${subtype})` : name,
+			source: source.toUpperCase(),
+			subtype,
+		};
+	}
+
+	/** @private */
+	_toTitleCase (str) {
+		if (!str) return "";
+		return str.replace(/\b\w/g, c => c.toUpperCase());
+	}
+
+	/**
+	 * Remove origin feats (called when background changes).
+	 * @returns {number} Number of feats removed
+	 */
+	removeOriginFeats () {
+		const before = this._data.feats.length;
+		this._data.feats = this._data.feats.filter(f => !f.isOriginFeat);
+		return before - this._data.feats.length;
+	}
+
 	addClass (classData) {
 		// Check if already at level cap
 		if (this.getTotalLevel() >= 20) {
@@ -3184,6 +3675,8 @@ class CharacterSheetState {
 		this.calculateSpellSlots();
 		// Apply class feature effects (resistances, immunities, proficiencies, etc.)
 		this.applyClassFeatureEffects();
+		// Recalculate companion stats (HP, AC, etc. may scale with level/PB)
+		this.recalculateAllCompanions();
 	}
 
 	/**
@@ -3484,27 +3977,30 @@ class CharacterSheetState {
 	}
 
 	/**
-	 * Get passive perception (10 + perception modifier)
+	 * Get passive perception (10 + perception modifier + passive bonuses)
 	 * @returns {number} Passive perception score
 	 */
 	getPassivePerception () {
-		return 10 + this.getSkillMod("perception");
+		const passiveBonus = this._data.customModifiers.passives?.perception || 0;
+		return 10 + this.getSkillMod("perception") + passiveBonus;
 	}
 
 	/**
-	 * Get passive investigation (10 + investigation modifier)
+	 * Get passive investigation (10 + investigation modifier + passive bonuses)
 	 * @returns {number} Passive investigation score
 	 */
 	getPassiveInvestigation () {
-		return 10 + this.getSkillMod("investigation");
+		const passiveBonus = this._data.customModifiers.passives?.investigation || 0;
+		return 10 + this.getSkillMod("investigation") + passiveBonus;
 	}
 
 	/**
-	 * Get passive insight (10 + insight modifier)
+	 * Get passive insight (10 + insight modifier + passive bonuses)
 	 * @returns {number} Passive insight score
 	 */
 	getPassiveInsight () {
-		return 10 + this.getSkillMod("insight");
+		const passiveBonus = this._data.customModifiers.passives?.insight || 0;
+		return 10 + this.getSkillMod("insight") + passiveBonus;
 	}
 	// #endregion
 
@@ -3518,10 +4014,20 @@ class CharacterSheetState {
 	}
 
 	getAbilityScore (ability) {
+		// Wild Shape: replace physical stats (STR/DEX/CON) with beast's scores
+		const wildShapeState = this._getActiveWildShapeState();
+		if (wildShapeState?.beastData?.abilities) {
+			const physicalStats = ["str", "dex", "con"];
+			if (physicalStats.includes(ability)) {
+				return wildShapeState.beastData.abilities[ability] || 10;
+			}
+		}
+
 		const base = this._data.abilities[ability] || 10;
 		const racialBonus = this._data.abilityBonuses[ability] || 0;
 		const featureBonus = this._data.customModifiers.abilityScores?.[ability] || 0;
-		return base + racialBonus + featureBonus;
+		const directBonus = this._data.directAbilityBonuses?.[ability] || 0;
+		return base + racialBonus + featureBonus + directBonus;
 	}
 
 	// Alias for compatibility
@@ -3545,7 +4051,8 @@ class CharacterSheetState {
 	getAbilityBonus (ability) {
 		const racialBonus = this._data.abilityBonuses[ability] || 0;
 		const featureBonus = this._data.customModifiers.abilityScores?.[ability] || 0;
-		return racialBonus + featureBonus;
+		const directBonus = this._data.directAbilityBonuses?.[ability] || 0;
+		return racialBonus + featureBonus + directBonus;
 	}
 
 	/**
@@ -3553,12 +4060,19 @@ class CharacterSheetState {
 	 * @param {string} ability - The ability name (str, dex, con, int, wis, cha)
 	 * @param {number} bonus - The bonus to add
 	 */
+	/**
+	 * Add a bonus to an ability score (from feats, features, etc.)
+	 * Uses _data.directAbilityBonuses for bonuses applied directly (not via namedModifiers),
+	 * so they survive _recalculateCustomModifiers resets.
+	 * @param {string} ability - The ability name (str, dex, con, int, wis, cha)
+	 * @param {number} bonus - The bonus to add
+	 */
 	addAbilityBonus (ability, bonus) {
-		if (!this._data.customModifiers.abilityScores) {
-			this._data.customModifiers.abilityScores = {};
+		if (!this._data.directAbilityBonuses) {
+			this._data.directAbilityBonuses = {};
 		}
-		this._data.customModifiers.abilityScores[ability] =
-			(this._data.customModifiers.abilityScores[ability] || 0) + bonus;
+		this._data.directAbilityBonuses[ability] =
+			(this._data.directAbilityBonuses[ability] || 0) + bonus;
 	}
 
 	/**
@@ -3698,8 +4212,10 @@ class CharacterSheetState {
 	 * @returns {boolean} True if dead
 	 */
 	isDead () {
-		// Death from exhaustion level 6 (2014 rules)
-		if (this._data.exhaustion >= 6 && this._data.settings?.exhaustionRules !== "2024") {
+		// Death from exhaustion — uses max for the active rule set
+		// 2014/2024: death at level 6; Thelemar: death if exceeds 10
+		const maxExhaustion = this.getMaxExhaustion();
+		if (this._data.exhaustion >= maxExhaustion) {
 			return true;
 		}
 		return this._data.deathSaves.failures >= 3 || this._data.massiveDamageDeath === true;
@@ -4024,7 +4540,9 @@ class CharacterSheetState {
 		const itemBonus = this._data.itemBonuses?.savingThrow || this._data.itemBonuses?.saves || 0;
 		// Add bonus from active states (e.g., Bless spell, Paladin's Aura)
 		const stateBonus = this.getSaveBonusFromStates(ability);
-		return mod + prof + custom + itemBonus + stateBonus;
+		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
+		const exhaustionPenalty = this._getExhaustionD20Penalty();
+		return mod + prof + custom + itemBonus + stateBonus - exhaustionPenalty;
 	}
 
 	// Alias for test compatibility
@@ -4161,7 +4679,10 @@ class CharacterSheetState {
 		// Get feature modifiers from named modifiers (from features like "Mark of the Wilderness")
 		const featureBonus = this._getSkillFeatureBonus(skill);
 
-		return mod + profBonus + custom + itemBonus + featureBonus;
+		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
+		const exhaustionPenalty = this._getExhaustionD20Penalty();
+
+		return mod + profBonus + custom + itemBonus + featureBonus - exhaustionPenalty;
 	}
 
 	/**
@@ -4308,6 +4829,15 @@ class CharacterSheetState {
 
 	// #region AC
 	getAc () {
+		// Wild Shape: use beast's AC (replaces all armor/formula calculations)
+		const wildShapeState = this._getActiveWildShapeState();
+		if (wildShapeState?.beastData) {
+			let ac = wildShapeState.beastData.ac || 10;
+			// Active state bonuses still layered on top (e.g., Shield spell, Warding Bond)
+			ac += this.getBonusFromStates("ac");
+			return ac;
+		}
+
 		let ac = this._data.ac.base;
 		const dexMod = this.getAbilityMod("dex");
 
@@ -4697,7 +5227,8 @@ class CharacterSheetState {
 		const stateBonus = this.getSpeedBonusFromStates();
 		const unarmoredBonus = this.getUnarmoredMovementBonus();
 		const rawWalk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
-		const walk = Math.floor(rawWalk * speedMultiplier);
+		const exhaustionSpeedPenalty = this._getExhaustionSpeedPenalty();
+		const walk = Math.max(0, Math.floor(rawWalk * speedMultiplier) - exhaustionSpeedPenalty);
 		const parts = [`${walk} ft.`];
 
 		// Check for "equal to walk" modifiers for each speed type
@@ -4711,10 +5242,10 @@ class CharacterSheetState {
 			return base + bonus;
 		};
 
-		const fly = Math.floor(getSpeedWithEqualToWalk("fly", this._data.speed.fly || 0, speedMods.fly || 0) * speedMultiplier);
-		const swim = Math.floor(getSpeedWithEqualToWalk("swim", this._data.speed.swim || 0, speedMods.swim || 0) * speedMultiplier);
-		const climb = Math.floor(getSpeedWithEqualToWalk("climb", this._data.speed.climb || 0, speedMods.climb || 0) * speedMultiplier);
-		const burrow = Math.floor(getSpeedWithEqualToWalk("burrow", this._data.speed.burrow || 0, speedMods.burrow || 0) * speedMultiplier);
+		const fly = Math.max(0, Math.floor(getSpeedWithEqualToWalk("fly", this._data.speed.fly || 0, (speedMods.fly || 0) + this.getSpeedBonusFromStates("fly")) * speedMultiplier) - exhaustionSpeedPenalty);
+		const swim = Math.max(0, Math.floor(getSpeedWithEqualToWalk("swim", this._data.speed.swim || 0, (speedMods.swim || 0) + this.getSpeedBonusFromStates("swim")) * speedMultiplier) - exhaustionSpeedPenalty);
+		const climb = Math.max(0, Math.floor(getSpeedWithEqualToWalk("climb", this._data.speed.climb || 0, (speedMods.climb || 0) + this.getSpeedBonusFromStates("climb")) * speedMultiplier) - exhaustionSpeedPenalty);
+		const burrow = Math.max(0, Math.floor(getSpeedWithEqualToWalk("burrow", this._data.speed.burrow || 0, (speedMods.burrow || 0) + this.getSpeedBonusFromStates("burrow")) * speedMultiplier) - exhaustionSpeedPenalty);
 
 		if (fly > 0) parts.push(`fly ${fly} ft.`);
 		if (swim > 0) parts.push(`swim ${swim} ft.`);
@@ -4733,13 +5264,13 @@ class CharacterSheetState {
 		const stateBonus = this.getSpeedBonusFromStates();
 		const unarmoredBonus = this.getUnarmoredMovementBonus();
 		const raw = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
-		return Math.floor(raw * this.getSpeedMultiplierFromConditions());
+		return Math.max(0, Math.floor(raw * this.getSpeedMultiplierFromConditions()) - this._getExhaustionSpeedPenalty());
 	}
 
 	getSpeedByType (type) {
 		const speedMods = this._data.customModifiers.speed || {};
 		let base = this._data.speed[type] || 0;
-		const bonus = speedMods[type] || 0;
+		const bonus = (speedMods[type] || 0) + this.getSpeedBonusFromStates(type);
 
 		// Check for "equal to walk" modifiers (e.g., "swimming speed equal to your walking speed")
 		const equalToWalkMod = this._data.namedModifiers?.find(m =>
@@ -4750,7 +5281,7 @@ class CharacterSheetState {
 			base = Math.max(base, this.getWalkSpeed());
 		}
 
-		return Math.floor((base + bonus) * this.getSpeedMultiplierFromConditions());
+		return Math.max(0, Math.floor((base + bonus) * this.getSpeedMultiplierFromConditions()) - this._getExhaustionSpeedPenalty());
 	}
 	// #endregion
 
@@ -4762,6 +5293,9 @@ class CharacterSheetState {
 		if (this.hasJackOfAllTrades()) {
 			initiative += Math.floor(this.getProficiencyBonus() / 2);
 		}
+
+		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
+		initiative -= this._getExhaustionD20Penalty();
 
 		return initiative;
 	}
@@ -4912,6 +5446,9 @@ class CharacterSheetState {
 	}
 
 	getSpellAttackBonus (className) {
+		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
+		const exhaustionPenalty = this._getExhaustionD20Penalty();
+
 		// If className specified, use that class's spellcasting ability
 		if (className) {
 			const spellcastingAbilities = {
@@ -4928,14 +5465,13 @@ class CharacterSheetState {
 			const ability = spellcastingAbilities[className];
 			if (ability) {
 				const itemBonus = this._data.itemBonuses?.spellAttack || 0;
-				return this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellAttack || 0) + itemBonus;
+				return this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellAttack || 0) + itemBonus - exhaustionPenalty;
 			}
 		}
 		const ability = this._data.spellcasting.ability;
 		if (!ability) return null;
-		// Add item bonuses (spell attack bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.spellAttack || 0;
-		return this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellAttack || 0) + itemBonus;
+		return this.getProficiencyBonus() + this.getAbilityMod(ability) + (this._data.customModifiers.spellAttack || 0) + itemBonus - exhaustionPenalty;
 	}
 
 	/**
@@ -5407,6 +5943,67 @@ class CharacterSheetState {
 		return this._data.spellcasting.spellsKnown.filter(s => s.prepared || s.alwaysPrepared);
 	}
 
+	// --- Multiclass Spell Isolation ---
+
+	/**
+	 * Get all spells (known + cantrips) belonging to a specific class.
+	 * @param {string} className - The class name (case-insensitive)
+	 * @returns {Array} Filtered spell objects
+	 */
+	getSpellsByClass (className) {
+		const lc = className.toLowerCase();
+		return this.getSpells().filter(s => s.sourceClass?.toLowerCase() === lc);
+	}
+
+	/**
+	 * Get cantrips belonging to a specific class.
+	 * @param {string} className - The class name (case-insensitive)
+	 * @returns {Array} Filtered cantrip objects
+	 */
+	getCantripsByClass (className) {
+		const lc = className.toLowerCase();
+		return this.getCantripsKnown().filter(c => c.sourceClass?.toLowerCase() === lc);
+	}
+
+	/**
+	 * Get prepared spells belonging to a specific class.
+	 * @param {string} className - The class name (case-insensitive)
+	 * @returns {Array} Filtered prepared spell objects
+	 */
+	getPreparedSpellsByClass (className) {
+		const lc = className.toLowerCase();
+		return this.getPreparedSpells().filter(s => s.sourceClass?.toLowerCase() === lc);
+	}
+
+	/**
+	 * Get spells of a specific level (0 = cantrips, 1-9 = leveled)
+	 * @param {number} level - The spell level
+	 * @returns {Array} Filtered spell objects
+	 */
+	getSpellsByLevel (level) {
+		return this.getSpells().filter(s => s.level === level);
+	}
+
+	/**
+	 * Get a breakdown of spell counts per class.
+	 * @returns {Object} Map of className → {spells: count, cantrips: count, prepared: count}
+	 */
+	getSpellCountByClass () {
+		const counts = {};
+		for (const spell of this._data.spellcasting.spellsKnown) {
+			const cls = spell.sourceClass || "Unknown";
+			if (!counts[cls]) counts[cls] = {spells: 0, cantrips: 0, prepared: 0};
+			counts[cls].spells++;
+			if (spell.prepared || spell.alwaysPrepared) counts[cls].prepared++;
+		}
+		for (const cantrip of this._data.spellcasting.cantripsKnown) {
+			const cls = cantrip.sourceClass || "Unknown";
+			if (!counts[cls]) counts[cls] = {spells: 0, cantrips: 0, prepared: 0};
+			counts[cls].cantrips++;
+		}
+		return counts;
+	}
+
 	/**
 	 * Get the maximum number of prepared spells for a class
 	 * @param {string} className - The class name
@@ -5471,7 +6068,7 @@ class CharacterSheetState {
 					for (const spellRef of spells) {
 						const parsed = this._parseSpellReference(spellRef);
 						if (parsed) {
-							result.push({...parsed, alwaysPrepared: true, prepared: true, sourceFeature: `${subclassData.name} Spells`});
+							result.push({...parsed, alwaysPrepared: true, prepared: true, sourceFeature: `${subclassData.name} Spells`, sourceClass: cls.name});
 						}
 					}
 				}
@@ -5486,7 +6083,7 @@ class CharacterSheetState {
 					for (const spellRef of spells) {
 						const parsed = this._parseSpellReference(spellRef);
 						if (parsed) {
-							result.push({...parsed, alwaysPrepared: true, prepared: true, sourceFeature: `${subclassData.name} Spells`});
+							result.push({...parsed, alwaysPrepared: true, prepared: true, sourceFeature: `${subclassData.name} Spells`, sourceClass: cls.name});
 						}
 					}
 				}
@@ -5538,6 +6135,7 @@ class CharacterSheetState {
 						existing.alwaysPrepared = true;
 						existing.prepared = true;
 						existing.sourceFeature = spell.sourceFeature;
+						existing.sourceClass = spell.sourceClass || cls.name;
 						totalAdded++;
 					}
 				} else {
@@ -5661,6 +6259,9 @@ class CharacterSheetState {
 			if (spell.sourceFeature && !existing.sourceFeature) {
 				existing.sourceFeature = spell.sourceFeature;
 			}
+			if (spell.sourceClass && !existing.sourceClass) {
+				existing.sourceClass = spell.sourceClass;
+			}
 			if (spell.alwaysPrepared && !existing.alwaysPrepared) {
 				existing.alwaysPrepared = true;
 				existing.prepared = true;
@@ -5682,6 +6283,7 @@ class CharacterSheetState {
 				duration: spell.duration || "",
 				components: spell.components || "",
 				sourceFeature: spell.sourceFeature || null,
+				sourceClass: spell.sourceClass || null,
 				subschools: spell.subschools || [],
 			});
 		}
@@ -5697,6 +6299,9 @@ class CharacterSheetState {
 			if (spell.sourceFeature && !existing.sourceFeature) {
 				existing.sourceFeature = spell.sourceFeature;
 			}
+			if (spell.sourceClass && !existing.sourceClass) {
+				existing.sourceClass = spell.sourceClass;
+			}
 		} else {
 			this._data.spellcasting.cantripsKnown.push({
 				id: CryptUtil.uid(),
@@ -5709,6 +6314,7 @@ class CharacterSheetState {
 				concentration: spell.concentration || false,
 				components: spell.components || "",
 				sourceFeature: spell.sourceFeature || null,
+				sourceClass: spell.sourceClass || null,
 				subschools: spell.subschools || [],
 			});
 		}
@@ -5755,6 +6361,7 @@ class CharacterSheetState {
 			level: spell.level,
 			atWill: spell.atWill || false,
 			sourceFeature: spell.sourceFeature,
+			sourceClass: spell.sourceClass || null,
 			subschools: spell.subschools || [],
 		};
 
@@ -5871,6 +6478,7 @@ class CharacterSheetState {
 				uses: choice.uses,
 				recharge: choice.recharge || "long",
 				sourceFeature: choice.featureName,
+				sourceClass: choice.sourceClass || null,
 			});
 		} else {
 			this.addSpell({
@@ -5881,6 +6489,7 @@ class CharacterSheetState {
 				prepared: choice.prepared,
 				ritual: spell.ritual || false,
 				concentration: spell.concentration || false,
+				sourceClass: choice.sourceClass || null,
 			});
 		}
 
@@ -12583,7 +13192,28 @@ class CharacterSheetState {
 		}
 
 		// =========================================================
-		// PHASE 2: Process calculation flags (backward compatibility)
+		// PHASE 2: Process stored feats from _data.feats
+		// Uses source-aware lookup via getFeatEffects for 2014/2024 differentiation
+		// =========================================================
+		if (this._data.feats?.length) {
+			this._data.feats.forEach(feat => {
+				if (!feat.name) return;
+
+				// Skip if already processed (e.g., a feature with the same name)
+				if (processedFeatures.has(feat.name.toLowerCase())) return;
+
+				const registryEffects = FeatureEffectRegistry.getFeatEffects(feat.name, feat.source);
+				if (registryEffects.length > 0) {
+					// Mark effects as feat-sourced so _applyAggregatedEffect can skip
+					// types already handled by _processFeatRegistryEffects via addNamedModifier
+					effects.push(...registryEffects.map(e => ({...e, _fromFeatRegistry: true})));
+					processedFeatures.add(feat.name.toLowerCase());
+				}
+			});
+		}
+
+		// =========================================================
+		// PHASE 3: Process calculation flags (backward compatibility)
 		// Only process if not already handled via stored features
 		// =========================================================
 		this._aggregateCalculationBasedEffects(calculations, effects, processedFeatures);
@@ -13393,6 +14023,18 @@ class CharacterSheetState {
 	 * @returns {string|null} Description of what was applied, or null if nothing
 	 */
 	_applyFeatureEffect (effect) {
+		// Effects from the feat registry that are types already handled by
+		// _processFeatRegistryEffects (via addNamedModifier at addFeat time)
+		// should not be re-applied here — that would double-count them.
+		if (effect._fromFeatRegistry) {
+			const FEAT_NAMEDMOD_TYPES = new Set([
+				"hpBonus", "modifier", "speed", "sense", "damageReduction",
+				"armorProficiency", "weaponProficiency", "saveProficiency",
+				"bonusAction", "resource",
+			]);
+			if (FEAT_NAMEDMOD_TYPES.has(effect.type)) return null;
+		}
+
 		switch (effect.type) {
 			// ===== RESISTANCES & IMMUNITIES =====
 			case "resistance": {
@@ -14743,15 +15385,27 @@ class CharacterSheetState {
 	}
 
 	/**
-	 * Get flat speed bonus from active states (like combat stances)
+	 * Get flat speed bonus from active states (like combat stances, Bladesong).
+	 * Matches both generic "speed" effects and typed "speed:walk"/"speed:fly"/etc. effects.
+	 * @param {string} [speedType="walk"] - The speed type ("walk", "fly", "swim", "climb", "burrow")
 	 * @returns {number} Total speed bonus from active states
 	 */
-	getSpeedBonusFromStates () {
+	getSpeedBonusFromStates (speedType = "walk") {
 		const effects = this.getActiveStateEffects();
 		let bonus = 0;
-		effects.filter(e => e.type === "bonus" && e.target === "speed").forEach(e => {
-			bonus += e.value || 0;
-		});
+		for (const e of effects) {
+			if (e.type !== "bonus") continue;
+			// Match generic "speed" (applies to all speed types) or specific "speed:walk" etc.
+			if (e.target === "speed" || e.target === `speed:${speedType}`) {
+				if (e.abilityMod) {
+					bonus += this.getAbilityMod(e.abilityMod);
+				} else if (e.useProficiency) {
+					bonus += this.getProficiencyBonus();
+				} else {
+					bonus += e.value || 0;
+				}
+			}
+		}
 		return bonus;
 	}
 
@@ -14826,6 +15480,37 @@ class CharacterSheetState {
 		if (rules === "thelemar") {
 			return exhaustion; // -1 per level in Thelemar rules
 		}
+		return 0;
+	}
+
+	/**
+	 * Get exhaustion penalty for d20 rolls (ability checks, attack rolls, saving throws).
+	 * 2024 XPHB: -N per level (where N = exhaustion level)
+	 * Thelemar: -N per level (same mechanic as 2024, but up to 10 levels)
+	 * 2014: No flat d20 penalty (uses tiered disadvantage instead — not modeled as flat penalty)
+	 * @returns {number} Penalty to subtract from d20 rolls (always >= 0)
+	 */
+	_getExhaustionD20Penalty () {
+		const exhaustion = this.getExhaustion();
+		if (exhaustion <= 0) return 0;
+		const rules = this.getExhaustionRules();
+		if (rules === "2024" || rules === "thelemar") return exhaustion;
+		return 0; // 2014 uses tiered disadvantage, not flat penalty
+	}
+
+	/**
+	 * Get exhaustion speed penalty in feet.
+	 * 2024 XPHB: -5 ft per exhaustion level
+	 * Thelemar: no speed penalty (not in TGTT rules text)
+	 * 2014: speed halved at level 2, speed 0 at level 5 (handled via condition multiplier)
+	 * @returns {number} Speed reduction in feet (always >= 0)
+	 */
+	_getExhaustionSpeedPenalty () {
+		const exhaustion = this.getExhaustion();
+		if (exhaustion <= 0) return 0;
+		const rules = this.getExhaustionRules();
+		if (rules === "2024") return exhaustion * 5;
+		// Thelemar: no speed penalty; 2014: uses multiplier not flat reduction
 		return 0;
 	}
 
@@ -15191,6 +15876,209 @@ class CharacterSheetState {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Process effects from the FeatureEffectRegistry for a feat.
+	 * Converts registry effects into namedModifiers for quantifiable bonuses.
+	 * @param {object} featData - The stored feat data (id, name, source)
+	 */
+	_processFeatRegistryEffects (featData) {
+		const effects = FeatureEffectRegistry.getFeatEffects(featData.name, featData.source);
+		if (!effects.length) return;
+
+		let addedCount = 0;
+		for (const effect of effects) {
+			switch (effect.type) {
+				// ---- HP Bonus (e.g., Tough: +2 HP per level) ----
+				case "hpBonus": {
+					this.addNamedModifier({
+						name: `${featData.name} (HP)`,
+						type: "hp",
+						value: effect.value,
+						perLevel: !!effect.perLevel,
+						sourceFeatureId: featData.id,
+						sourceType: "feat",
+						note: effect.perLevel ? `+${effect.value} HP per level` : `+${effect.value} HP`,
+					});
+					addedCount++;
+					break;
+				}
+
+				// ---- Generic modifier (initiative, AC, concentration, passive, etc.) ----
+				case "modifier": {
+					const modValue = effect.value === "proficiency" ? 0 : (effect.value || 0);
+					const mod = {
+						name: `${featData.name}`,
+						type: effect.modType,
+						value: modValue,
+						sourceFeatureId: featData.id,
+						sourceType: "feat",
+					};
+					if (effect.value === "proficiency") mod.proficiencyBonus = true;
+					if (effect.advantage) mod.advantage = true;
+					if (effect.disadvantage) mod.disadvantage = true;
+					if (effect.conditional) {
+						mod.conditional = effect.conditional;
+						mod.note = effect.conditional;
+					}
+					if (effect.note) mod.note = effect.note;
+					if (effect.optional) mod.enabled = false; // Optional modifiers start disabled
+
+					this.addNamedModifier(mod);
+					addedCount++;
+					break;
+				}
+
+				// ---- Speed bonus (e.g., Mobile: +10 walk) ----
+				case "speed": {
+					if (effect.value === "walk") {
+						// Climb/swim speed equals walking speed — handled in calculations
+						this.addNamedModifier({
+							name: `${featData.name} (${effect.speedType})`,
+							type: `speed:${effect.speedType}`,
+							value: 0,
+							equalToWalk: true,
+							sourceFeatureId: featData.id,
+							sourceType: "feat",
+							note: `${effect.speedType} speed equals walking speed`,
+						});
+					} else {
+						this.addNamedModifier({
+							name: `${featData.name} (Speed)`,
+							type: `speed:${effect.speedType}`,
+							value: effect.value,
+							sourceFeatureId: featData.id,
+							sourceType: "feat",
+							note: `+${effect.value} ft ${effect.speedType} speed`,
+						});
+					}
+					addedCount++;
+					break;
+				}
+
+				// ---- Sense bonus (e.g., Skulker: blindsight 10) ----
+				case "sense": {
+					this.addNamedModifier({
+						name: `${featData.name} (${effect.senseType})`,
+						type: `sense:${effect.senseType}`,
+						value: effect.value,
+						sourceFeatureId: featData.id,
+						sourceType: "feat",
+						note: `${effect.senseType} ${effect.value} ft`,
+					});
+					addedCount++;
+					break;
+				}
+
+				// ---- Damage reduction (e.g., Heavy Armor Master: -3 BPS) ----
+				case "damageReduction": {
+					const drValue = effect.value === "proficiency" ? 0 : effect.value;
+					this.addNamedModifier({
+						name: `${featData.name} (DR)`,
+						type: "damageReduction",
+						value: drValue,
+						proficiencyBonus: effect.value === "proficiency",
+						sourceFeatureId: featData.id,
+						sourceType: "feat",
+						conditional: effect.condition,
+						note: `Reduce ${effect.damageTypes?.join("/") || "damage"} by ${effect.value === "proficiency" ? "prof bonus" : effect.value}`,
+					});
+					addedCount++;
+					break;
+				}
+
+				// ---- Armor proficiency (e.g., Heavily Armored: heavy armor) ----
+				case "armorProficiency": {
+					const armorName = effect.armor === "heavy" ? "Heavy Armor"
+						: effect.armor === "medium" ? "Medium Armor"
+							: effect.armor === "light" ? "Light Armor"
+								: effect.armor === "shields" ? "Shields"
+									: effect.armor;
+					if (!this._data.armorProficiencies.some(a => a.toLowerCase() === armorName.toLowerCase())) {
+						this.addArmorProficiency(armorName);
+					}
+					addedCount++;
+					break;
+				}
+
+				// ---- Weapon proficiency (e.g., Tavern Brawler: improvised) ----
+				case "weaponProficiency": {
+					const weaponName = effect.weapon === "improvised" ? "Improvised Weapons"
+						: effect.weapon === "martial" ? "Martial Weapons"
+							: effect.weapon === "simple" ? "Simple Weapons"
+								: effect.weapon;
+					if (!this._data.weaponProficiencies.some(w => w.toLowerCase() === weaponName.toLowerCase())) {
+						this.addWeaponProficiency(weaponName);
+					}
+					addedCount++;
+					break;
+				}
+
+				// ---- Save proficiency (e.g., Resilient: chosen save) ----
+				case "saveProficiency": {
+					// Only auto-apply if a specific save is set (not "chosen")
+					if (effect.save && effect.save !== "chosen") {
+						if (!this._data.saveProficiencies.includes(effect.save)) {
+							this.addSaveProficiency(effect.save);
+						}
+						addedCount++;
+					}
+					break;
+				}
+
+				// ---- Bonus action (e.g., Polearm Master: butt-end attack) ----
+				case "bonusAction": {
+					// Track as a resource/note rather than modifier
+					this.addNamedModifier({
+						name: `${featData.name} (Bonus Action)`,
+						type: "bonusAction",
+						value: 0,
+						sourceFeatureId: featData.id,
+						sourceType: "feat",
+						note: effect.note || effect.action,
+					});
+					addedCount++;
+					break;
+				}
+
+				// ---- Resource (e.g., Lucky: luck points) ----
+				case "resource": {
+					const max = effect.max === "proficiency" ? this.getProficiencyBonus() : effect.max;
+					const existingResource = this._data.resources.find(r => r.name === effect.name);
+					if (!existingResource) {
+						this.addResource({
+							name: effect.name,
+							max: max,
+							recharge: effect.recharge,
+							featId: featData.id,
+						});
+					}
+					addedCount++;
+					break;
+				}
+
+				// ---- Resistance/Immunity/Condition effects ----
+				// These are handled by _aggregateFeatureEffects (A3), not modifiers
+				case "resistance":
+				case "immunity":
+				case "conditionImmunity":
+				case "savingThrowProperty":
+				case "attackCount":
+				case "acFormula":
+				case "skillProficiency":
+					// Processed through the feature effect pipeline, not as namedModifiers
+					break;
+
+				default:
+					// Unknown effect type — skip silently
+					break;
+			}
+		}
+
+		if (addedCount > 0) {
+			console.log(`[CharSheet State] Applied ${addedCount} registry effect(s) for feat "${featData.name}"`);
+		}
 	}
 
 	/**
@@ -15565,6 +16453,8 @@ class CharacterSheetState {
 			source: feat.source,
 			description: feat.description,
 			additionalSpells: feat.additionalSpells, // Preserve for spell processing
+			isOriginFeat: feat.isOriginFeat || false,
+			backgroundName: feat.backgroundName || null,
 		};
 
 		// Add uses if detected
@@ -15602,6 +16492,9 @@ class CharacterSheetState {
 
 		// Process modifiers granted by this feat
 		this._processFeatureModifiers(featData, featData.id);
+
+		// Process registry-defined effects for this feat (HP bonuses, speed, senses, etc.)
+		this._processFeatRegistryEffects(featData);
 
 		// ====================
 		// TGTT Feat: Lore Mastery
@@ -17700,10 +18593,99 @@ class CharacterSheetState {
 	// #endregion
 
 	// #region Defenses
-	getResistances () { return [...this._data.resistances]; }
-	getImmunities () { return [...this._data.immunities]; }
-	getVulnerabilities () { return [...this._data.vulnerabilities]; }
-	getConditionImmunities () { return [...this._data.conditionImmunities]; }
+
+	/**
+	 * Get all effective resistances, combining base resistances with active state resistances.
+	 * Deduplicates results since resistance is binary per RAW.
+	 * @returns {string[]} Combined unique resistance types
+	 */
+	getResistances () {
+		const base = [...this._data.resistances];
+		// Merge in resistances from active states (e.g., Rage, Stoneskin)
+		const stateResistances = this._getResistancesFromStates();
+		const combined = new Set([...base, ...stateResistances]);
+		return [...combined];
+	}
+
+	/**
+	 * Get all effective immunities, combining base immunities with active state immunities.
+	 * @returns {string[]} Combined unique immunity types
+	 */
+	getImmunities () {
+		const base = [...this._data.immunities];
+		const stateImmunities = this._getImmunitiesFromStates();
+		const combined = new Set([...base, ...stateImmunities]);
+		return [...combined];
+	}
+
+	/**
+	 * Get all effective vulnerabilities, combining base vulnerabilities with active state vulnerabilities.
+	 * @returns {string[]} Combined unique vulnerability types
+	 */
+	getVulnerabilities () {
+		const base = [...this._data.vulnerabilities];
+		const stateVulnerabilities = this._getVulnerabilitiesFromStates();
+		const combined = new Set([...base, ...stateVulnerabilities]);
+		return [...combined];
+	}
+
+	/**
+	 * Get all effective condition immunities, combining base with active state condition immunities.
+	 * @returns {string[]} Combined unique condition immunity names
+	 */
+	getConditionImmunities () {
+		const base = [...this._data.conditionImmunities];
+		const stateConditionImmunities = this._getConditionImmunitiesFromStates();
+		const combined = new Set([...base, ...stateConditionImmunities]);
+		return [...combined];
+	}
+
+	/**
+	 * Get the complete effective defenses summary combining all sources.
+	 * @returns {{resistances: string[], immunities: string[], vulnerabilities: string[], conditionImmunities: string[]}}
+	 */
+	getEffectiveDefenses () {
+		return {
+			resistances: this.getResistances(),
+			immunities: this.getImmunities(),
+			vulnerabilities: this.getVulnerabilities(),
+			conditionImmunities: this.getConditionImmunities(),
+		};
+	}
+
+	// --- Internal state defense extractors ---
+
+	/** @private */
+	_getResistancesFromStates () {
+		const effects = this.getActiveStateEffects();
+		return effects
+			.filter(e => e.type === "resistance" && e.target?.startsWith("damage:"))
+			.map(e => e.target.replace("damage:", ""));
+	}
+
+	/** @private */
+	_getImmunitiesFromStates () {
+		const effects = this.getActiveStateEffects();
+		return effects
+			.filter(e => e.type === "immunity" && e.target?.startsWith("damage:"))
+			.map(e => e.target.replace("damage:", ""));
+	}
+
+	/** @private */
+	_getVulnerabilitiesFromStates () {
+		const effects = this.getActiveStateEffects();
+		return effects
+			.filter(e => e.type === "vulnerability" && e.target?.startsWith("damage:"))
+			.map(e => e.target.replace("damage:", ""));
+	}
+
+	/** @private */
+	_getConditionImmunitiesFromStates () {
+		const effects = this.getActiveStateEffects();
+		return effects
+			.filter(e => e.type === "conditionImmunity")
+			.map(e => e.target || e.condition);
+	}
 
 	addResistance (type) {
 		if (!this._data.resistances.includes(type)) {
@@ -17730,39 +18712,39 @@ class CharacterSheetState {
 	}
 
 	/**
-	 * Check if character has resistance to a damage type
+	 * Check if character has resistance to a damage type (base + active states)
 	 * @param {string} type - Damage type
 	 * @returns {boolean} True if resistant
 	 */
 	hasResistance (type) {
-		return this._data.resistances.includes(type);
+		return this._data.resistances.includes(type) || this.hasResistanceFromStates(type);
 	}
 
 	/**
-	 * Check if character has immunity to a damage type
+	 * Check if character has immunity to a damage type (base + active states)
 	 * @param {string} type - Damage type
 	 * @returns {boolean} True if immune
 	 */
 	hasImmunity (type) {
-		return this._data.immunities.includes(type);
+		return this._data.immunities.includes(type) || this.hasImmunityFromStates(type);
 	}
 
 	/**
-	 * Check if character has vulnerability to a damage type
+	 * Check if character has vulnerability to a damage type (base + active states)
 	 * @param {string} type - Damage type
 	 * @returns {boolean} True if vulnerable
 	 */
 	hasVulnerability (type) {
-		return this._data.vulnerabilities.includes(type);
+		return this._data.vulnerabilities.includes(type) || this.hasVulnerabilityFromStates(type);
 	}
 
 	/**
-	 * Check if character is immune to a condition
+	 * Check if character is immune to a condition (base + active states)
 	 * @param {string} condition - Condition name
 	 * @returns {boolean} True if immune
 	 */
 	isImmuneToCondition (condition) {
-		return this._data.conditionImmunities.includes(condition);
+		return this._data.conditionImmunities.includes(condition) || this.hasConditionImmunityFromStates(condition);
 	}
 	// #endregion
 
@@ -17980,6 +18962,7 @@ class CharacterSheetState {
 		cm.hpPerLevel = 0;
 		cm.proficiencyBonus = 0;
 		cm.senses = {darkvision: 0, blindsight: 0, tremorsense: 0, truesight: 0};
+		cm.passives = {};
 		cm.carryCapacity = 0;
 		cm.carryCapacityMultiplier = 1;
 
@@ -17993,6 +18976,11 @@ class CharacterSheetState {
 			if (mod.perLevel) {
 				const totalLevel = this.getTotalLevel() || 1;
 				value = value * totalLevel;
+			}
+
+			// Handle proficiency-bonus-as-value modifiers (e.g., XPHB Alert: +prof to initiative)
+			if (mod.proficiencyBonus) {
+				value += this.getProficiencyBonus();
 			}
 
 			switch (mod.type) {
@@ -21076,6 +22064,7 @@ class CharacterSheetState {
 			if (options.description) existing.description = options.description;
 			if (options.sourceFeatureId) existing.sourceFeatureId = options.sourceFeatureId;
 			if (options.customEffects) existing.customEffects = options.customEffects;
+			if (options.beastData !== undefined) existing.beastData = options.beastData;
 			// Re-parse duration on reactivation
 			const dur = options.duration || existing.duration;
 			existing.roundsRemaining = this._data.inCombat ? CharacterSheetState.parseDurationToRounds(dur) : null;
@@ -21165,6 +22154,7 @@ class CharacterSheetState {
 			if (options.description) existing.description = options.description;
 			if (options.sourceFeatureId) existing.sourceFeatureId = options.sourceFeatureId;
 			if (options.customEffects) existing.customEffects = options.customEffects;
+			if (options.beastData !== undefined) existing.beastData = options.beastData;
 			// Re-parse duration on reactivation
 			const dur = options.duration || existing.duration;
 			existing.roundsRemaining = this._data.inCombat ? CharacterSheetState.parseDurationToRounds(dur) : null;
@@ -21535,6 +22525,36 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Check if character has immunity to a damage type from active states
+	 * @param {string} damageType - The damage type (e.g., "fire", "poison")
+	 * @returns {boolean} True if immune
+	 */
+	hasImmunityFromStates (damageType) {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => e.type === "immunity" && e.target === `damage:${damageType}`);
+	}
+
+	/**
+	 * Check if character has vulnerability to a damage type from active states
+	 * @param {string} damageType - The damage type
+	 * @returns {boolean} True if vulnerable
+	 */
+	hasVulnerabilityFromStates (damageType) {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => e.type === "vulnerability" && e.target === `damage:${damageType}`);
+	}
+
+	/**
+	 * Check if character has condition immunity from active states
+	 * @param {string} condition - The condition name (e.g., "frightened", "poisoned")
+	 * @returns {boolean} True if immune
+	 */
+	hasConditionImmunityFromStates (condition) {
+		const effects = this.getActiveStateEffects();
+		return effects.some(e => e.type === "conditionImmunity" && (e.target === condition || e.condition === condition));
+	}
+
+	/**
 	 * Get extra damage dice from active states (e.g., "1d6 fire" from Hex, Flame Tongue, etc.)
 	 * @returns {Array<{dice: string, damageType: string, source: string}>} Extra damage entries
 	 */
@@ -21630,6 +22650,284 @@ class CharacterSheetState {
 		return 0;
 	}
 
+	// --- Wild Shape System ---
+
+	/**
+	 * Check if the character is currently in Wild Shape
+	 * @returns {boolean} True if in an active Wild Shape state with beast data
+	 */
+	isInWildShape () {
+		return !!this._getActiveWildShapeState();
+	}
+
+	/**
+	 * Get the active Wild Shape state object if one exists
+	 * @returns {object|null} The active wild shape state, or null
+	 * @private
+	 */
+	_getActiveWildShapeState () {
+		return this._data.activeStates.find(
+			s => s.stateTypeId === "wildShape" && s.active && s.beastData,
+		) || null;
+	}
+
+	/**
+	 * Get the current Wild Shape beast data
+	 * @returns {object|null} The beast data, or null if not in Wild Shape
+	 */
+	getWildShapeBeastData () {
+		const state = this._getActiveWildShapeState();
+		return state?.beastData || null;
+	}
+
+	/**
+	 * Get the Wild Shape HP pool (for 2014 PHB wild shape with separate HP)
+	 * @returns {{current: number, max: number}|null} Wild shape HP, or null if not applicable
+	 */
+	getWildShapeHp () {
+		const state = this._getActiveWildShapeState();
+		if (!state?.wildShapeHp) return null;
+		return {...state.wildShapeHp};
+	}
+
+	/**
+	 * Determine whether this druid uses 2024 wild shape (temp HP model) or 2014 (HP pool model).
+	 * @returns {string} "2024" or "2014"
+	 */
+	getWildShapeRulesEdition () {
+		const classes = this._data.classes || [];
+		const druid = classes.find(c => c.name?.toLowerCase() === "druid");
+		if (!druid) return "2014";
+		const source = (druid.source || "").toUpperCase();
+		return source === "XPHB" ? "2024" : "2014";
+	}
+
+	/**
+	 * Activate Wild Shape with beast data.
+	 * For 2024 (XPHB): applies temp HP equal to wildShapeTempHp (4 × druid level).
+	 * For 2014 (PHB): creates a separate HP pool from the beast's HP.
+	 *
+	 * @param {object} beastData - Beast stat block data:
+	 *   {name, ac, hp: {max}, abilities: {str, dex, con, int, wis, cha},
+	 *    speed: {walk, fly, swim, climb, burrow}, senses, size, creatureType,
+	 *    traits, actions, saveProficiencies, skillProficiencies}
+	 * @param {object} [options={}] - Additional options:
+	 *   {duration, customEffects, source}
+	 * @returns {string} The active state ID
+	 */
+	activateWildShape (beastData, options = {}) {
+		// Deactivate existing wild shape first
+		if (this.isInWildShape()) {
+			this.deactivateWildShape();
+		}
+
+		const edition = this.getWildShapeRulesEdition();
+		const stateOptions = {
+			name: `Wild Shape: ${beastData.name || "Beast"}`,
+			description: `Transformed into ${beastData.name || "a beast"}`,
+			beastData,
+			duration: options.duration || "1 hour",
+			...options,
+		};
+
+		// Activate the state
+		const stateId = this.activateState("wildShape", stateOptions);
+		const state = this._data.activeStates.find(s => s.id === stateId);
+
+		if (edition === "2024") {
+			// XPHB: Wild Shape grants temp HP = 4 × druid level (already computed by getFeatureCalculations)
+			const calc = this.getFeatureCalculations();
+			const tempHp = calc.wildShapeTempHp || 0;
+			if (tempHp > 0) {
+				const currentTemp = this.getTempHp();
+				if (tempHp > currentTemp) {
+					this.setTempHp(tempHp);
+				}
+			}
+		} else {
+			// PHB 2014: Beast has its own HP pool, separate from character's
+			if (state) {
+				state.wildShapeHp = {
+					current: beastData.hp?.max || beastData.hp?.average || 1,
+					max: beastData.hp?.max || beastData.hp?.average || 1,
+				};
+			}
+		}
+
+		return stateId;
+	}
+
+	/**
+	 * Deactivate Wild Shape, cleaning up HP and beast data.
+	 * For 2014: Excess damage carries over to character's HP.
+	 * For 2024: Temp HP is simply removed.
+	 * @param {number} [overflowDamage=0] - For 2014 rules: damage that exceeded the beast's HP
+	 */
+	deactivateWildShape (overflowDamage = 0) {
+		const state = this._getActiveWildShapeState();
+		if (!state) return;
+
+		const edition = this.getWildShapeRulesEdition();
+
+		if (edition === "2014" && overflowDamage > 0) {
+			// PHB 2014: Excess damage carries over to character form
+			const currentHp = this.getCurrentHp();
+			this.setHp(Math.max(0, currentHp - overflowDamage));
+		}
+
+		// Clear wild shape specific data
+		state.wildShapeHp = null;
+		state.beastData = null;
+		this.deactivateState("wildShape");
+	}
+
+	/**
+	 * Apply damage to Wild Shape beast form (2014 rules).
+	 * If beast HP hits 0, excess damage overflows to character.
+	 * @param {number} damage - Amount of damage to apply
+	 * @returns {{beastHpLost: number, overflowed: boolean, overflowDamage: number, beastDropped: boolean}}
+	 */
+	damageWildShape (damage) {
+		const state = this._getActiveWildShapeState();
+		if (!state?.wildShapeHp) {
+			return {beastHpLost: 0, overflowed: false, overflowDamage: 0, beastDropped: false};
+		}
+
+		const beastHp = state.wildShapeHp;
+		const actualDamage = Math.min(damage, beastHp.current);
+		const overflow = Math.max(0, damage - beastHp.current);
+		beastHp.current = Math.max(0, beastHp.current - damage);
+
+		const dropped = beastHp.current <= 0;
+
+		if (dropped) {
+			// Beast form drops → revert to character with overflow damage
+			this.deactivateWildShape(overflow);
+		}
+
+		return {
+			beastHpLost: actualDamage,
+			overflowed: overflow > 0,
+			overflowDamage: overflow,
+			beastDropped: dropped,
+		};
+	}
+
+	/**
+	 * Heal the Wild Shape beast form (2014 rules).
+	 * @param {number} amount - Amount of healing
+	 * @returns {number} Amount actually healed
+	 */
+	healWildShape (amount) {
+		const state = this._getActiveWildShapeState();
+		if (!state?.wildShapeHp) return 0;
+
+		const beastHp = state.wildShapeHp;
+		const actualHeal = Math.min(amount, beastHp.max - beastHp.current);
+		beastHp.current += actualHeal;
+		return actualHeal;
+	}
+
+	/**
+	 * Activate Wild Shape from a 5etools bestiary creature entry.
+	 * Parses the creature data and activates wild shape with the extracted beast data.
+	 * @param {object} creature - 5etools bestiary creature JSON
+	 * @param {object} [options={}] - Additional options for activation
+	 * @returns {string} The active state ID
+	 */
+	activateWildShapeFromBestiary (creature, options = {}) {
+		const beastData = this._parseBestiaryForWildShape(creature);
+		return this.activateWildShape(beastData, options);
+	}
+
+	/**
+	 * Parse a 5etools bestiary creature into wild shape beast data.
+	 * Extracts abilities, AC, HP, speed, senses, size, and features.
+	 * @param {object} creature - 5etools bestiary creature JSON
+	 * @returns {object} Parsed beast data suitable for activateWildShape
+	 * @private
+	 */
+	_parseBestiaryForWildShape (creature) {
+		const beastData = {
+			name: creature.name || "Beast",
+			source: creature.source || "",
+			abilities: {
+				str: creature.str || 10,
+				dex: creature.dex || 10,
+				con: creature.con || 10,
+				int: creature.int || 10,
+				wis: creature.wis || 10,
+				cha: creature.cha || 10,
+			},
+			size: Array.isArray(creature.size) ? creature.size[0] : (creature.size || "M"),
+			creatureType: typeof creature.type === "string" ? creature.type : creature.type?.type || "beast",
+		};
+
+		// Parse AC (handles number, array of objects, special strings)
+		if (typeof creature.ac === "number") {
+			beastData.ac = creature.ac;
+		} else if (Array.isArray(creature.ac)) {
+			const first = creature.ac[0];
+			if (typeof first === "number") {
+				beastData.ac = first;
+			} else if (first?.ac != null) {
+				beastData.ac = first.ac;
+			} else {
+				beastData.ac = 10;
+			}
+		} else {
+			beastData.ac = 10;
+		}
+
+		// Parse HP
+		if (creature.hp) {
+			if (typeof creature.hp === "number") {
+				beastData.hp = {max: creature.hp};
+			} else {
+				beastData.hp = {max: creature.hp.average || creature.hp.max || 1};
+			}
+		} else {
+			beastData.hp = {max: 1};
+		}
+
+		// Parse speed
+		beastData.speed = {};
+		if (creature.speed) {
+			for (const [type, val] of Object.entries(creature.speed)) {
+				if (type === "canHover") continue;
+				beastData.speed[type] = typeof val === "number" ? val : (val?.number || 0);
+			}
+		}
+
+		// Parse senses
+		beastData.senses = creature.senses || [];
+		beastData.passive = creature.passive || 10;
+
+		// Parse save proficiencies
+		beastData.saveProficiencies = [];
+		if (creature.save) {
+			beastData.saveProficiencies = Object.keys(creature.save);
+		}
+
+		// Parse skill proficiencies
+		beastData.skillProficiencies = {};
+		if (creature.skill) {
+			for (const [skill, bonus] of Object.entries(creature.skill)) {
+				beastData.skillProficiencies[skill] = 1; // proficient
+			}
+		}
+
+		// Parse traits and actions
+		beastData.traits = creature.trait || [];
+		beastData.actions = creature.action || [];
+		beastData.reactions = creature.reaction || [];
+
+		// Parse languages
+		beastData.languages = creature.languages || [];
+
+		return beastData;
+	}
+
 	// --- Concentration Management ---
 
 	/**
@@ -21689,6 +22987,9 @@ class CharacterSheetState {
 	 */
 	breakConcentration () {
 		this._data.concentrating = null;
+
+		// Dismiss concentration-linked companions (summons, etc.)
+		this.dismissConcentrationCompanions();
 
 		// Remove concentration active state
 		const concState = this._data.activeStates.find(s => s.stateTypeId === "concentration");
@@ -21849,6 +23150,719 @@ class CharacterSheetState {
 
 	// #endregion
 
+	// #region Companions (Beast Companions, Familiars, Summons, Steel Defenders, Drakes)
+
+	// =========================================================================
+	// COMPANION TYPES — Categorizes companions by origin mechanic
+	// =========================================================================
+	static COMPANION_TYPES = {
+		BEAST_COMPANION: "beast_companion",  // Beast Master ranger
+		DRAKE: "drake",                      // Drakewarden ranger
+		STEEL_DEFENDER: "steel_defender",     // Battle Smith artificer
+		FAMILIAR: "familiar",                // Find Familiar / Pact of the Chain / Animal Accomplice
+		WILD_SHAPE: "wild_shape",            // Druid wild shape forms
+		SUMMON: "summon",                    // Conjure/Summon spells (concentration-linked)
+		MOUNT: "mount",                      // Find Steed / Find Greater Steed
+		INFERNAL: "infernal",                // TGTT Fiendish Bloodline summons
+		CUSTOM: "custom",                    // User-created companions
+	};
+
+	/**
+	 * Get all companions
+	 * @returns {Array} Copy of the companions array
+	 */
+	getCompanions () {
+		return [...(this._data.companions || [])];
+	}
+
+	/**
+	 * Get active companions (not dismissed/inactive)
+	 * @returns {Array} Active companions
+	 */
+	getActiveCompanions () {
+		return (this._data.companions || []).filter(c => c.active !== false);
+	}
+
+	/**
+	 * Get a companion by ID
+	 * @param {string} companionId - The companion ID
+	 * @returns {object|null} The companion data, or null
+	 */
+	getCompanion (companionId) {
+		return (this._data.companions || []).find(c => c.id === companionId) || null;
+	}
+
+	/**
+	 * Get companions by type
+	 * @param {string} type - The companion type (from COMPANION_TYPES)
+	 * @returns {Array} Matching companions
+	 */
+	getCompanionsByType (type) {
+		return (this._data.companions || []).filter(c => c.type === type);
+	}
+
+	/**
+	 * Add a companion to the character.
+	 * @param {object} companionData - The companion data
+	 * @param {string} companionData.name - Creature name (e.g., "Wolf", "Steel Defender")
+	 * @param {string} [companionData.source] - Source book (e.g., "MM", "TCE")
+	 * @param {string} companionData.type - Companion type (from COMPANION_TYPES)
+	 * @param {string} [companionData.origin] - Origin feature (e.g., "Beast Master", "Find Familiar")
+	 * @param {string} [companionData.customName] - Player-given name
+	 * @param {object} [companionData.abilities] - {str,dex,con,int,wis,cha}
+	 * @param {object} [companionData.hp] - {max, current, temp}
+	 * @param {number} [companionData.ac] - Armor Class
+	 * @param {object} [companionData.speed] - {walk, fly, swim, climb, burrow}
+	 * @param {Array} [companionData.senses] - Sense strings (e.g., ["darkvision 60 ft."])
+	 * @param {number} [companionData.passive] - Passive perception
+	 * @param {Array} [companionData.traits] - Trait entries [{name, entries}]
+	 * @param {Array} [companionData.actions] - Action entries [{name, entries}]
+	 * @param {Array} [companionData.reactions] - Reaction entries [{name, entries}]
+	 * @param {Array} [companionData.bonusActions] - Bonus action entries [{name, entries}]
+	 * @param {string[]} [companionData.saveProficiencies] - Abilities with save prof
+	 * @param {object} [companionData.skillProficiencies] - {perception: 1, stealth: 2, ...} (1=prof, 2=expert)
+	 * @param {string[]} [companionData.resistances] - Damage resistances
+	 * @param {string[]} [companionData.immunities] - Damage immunities
+	 * @param {string[]} [companionData.conditionImmunities] - Condition immunities
+	 * @param {string[]} [companionData.languages] - Languages understood/spoken
+	 * @param {string} [companionData.size] - Size category ("T","S","M","L","H","G")
+	 * @param {string} [companionData.creatureType] - Creature type (e.g., "beast", "construct")
+	 * @param {boolean} [companionData.concentrationLinked] - If true, dismissed when concentration breaks
+	 * @param {string} [companionData.sourceFeatureId] - Feature that granted this companion
+	 * @returns {string} The new companion's ID
+	 */
+	addCompanion (companionData) {
+		if (!this._data.companions) this._data.companions = [];
+
+		const id = CryptUtil.uid();
+		const companion = {
+			id,
+			name: companionData.name,
+			source: companionData.source || null,
+			type: companionData.type || CharacterSheetState.COMPANION_TYPES.CUSTOM,
+			origin: companionData.origin || null,
+			customName: companionData.customName || null,
+
+			// Ability scores
+			abilities: {
+				str: companionData.abilities?.str || 10,
+				dex: companionData.abilities?.dex || 10,
+				con: companionData.abilities?.con || 10,
+				int: companionData.abilities?.int || 10,
+				wis: companionData.abilities?.wis || 10,
+				cha: companionData.abilities?.cha || 10,
+			},
+
+			// Hit points
+			hp: {
+				max: companionData.hp?.max || 1,
+				current: companionData.hp?.current ?? companionData.hp?.max ?? 1,
+				temp: companionData.hp?.temp || 0,
+			},
+
+			// Combat stats
+			ac: companionData.ac || 10,
+			speed: {
+				walk: companionData.speed?.walk ?? 30,
+				fly: companionData.speed?.fly || 0,
+				swim: companionData.speed?.swim || 0,
+				climb: companionData.speed?.climb || 0,
+				burrow: companionData.speed?.burrow || 0,
+			},
+
+			// Senses & detection
+			senses: companionData.senses || [],
+			passive: companionData.passive || 10,
+			languages: companionData.languages || [],
+
+			// Stat block entries
+			traits: companionData.traits || [],
+			actions: companionData.actions || [],
+			reactions: companionData.reactions || [],
+			bonusActions: companionData.bonusActions || [],
+
+			// Proficiencies
+			profBonus: companionData.profBonus ?? this.getProficiencyBonus(),
+			saveProficiencies: companionData.saveProficiencies || [],
+			skillProficiencies: companionData.skillProficiencies || {},
+
+			// Defenses
+			resistances: companionData.resistances || [],
+			immunities: companionData.immunities || [],
+			conditionImmunities: companionData.conditionImmunities || [],
+
+			// Metadata
+			size: companionData.size || "M",
+			creatureType: companionData.creatureType || "beast",
+			alignment: companionData.alignment || null,
+
+			// State tracking
+			concentrationLinked: companionData.concentrationLinked || false,
+			sourceFeatureId: companionData.sourceFeatureId || null,
+			active: companionData.active !== false,
+			conditions: [],
+			exhaustion: 0,
+
+			// Attack data (for quick reference)
+			attacks: companionData.attacks || [],
+		};
+
+		this._data.companions.push(companion);
+		console.log(`[CharSheet State] Added companion "${companion.customName || companion.name}" (${companion.type})`);
+		return id;
+	}
+
+	/**
+	 * Remove a companion by ID
+	 * @param {string} companionId - The companion ID to remove
+	 * @returns {boolean} True if removed
+	 */
+	removeCompanion (companionId) {
+		const before = this._data.companions.length;
+		this._data.companions = this._data.companions.filter(c => c.id !== companionId);
+		return this._data.companions.length < before;
+	}
+
+	/**
+	 * Remove all companions of a specific type
+	 * @param {string} type - The companion type to remove
+	 * @returns {number} Number of companions removed
+	 */
+	removeCompanionsByType (type) {
+		const before = this._data.companions.length;
+		this._data.companions = this._data.companions.filter(c => c.type !== type);
+		return before - this._data.companions.length;
+	}
+
+	/**
+	 * Update a companion's data
+	 * @param {string} companionId - The companion ID
+	 * @param {object} updates - Fields to update
+	 * @returns {boolean} True if companion was found and updated
+	 */
+	updateCompanion (companionId, updates) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return false;
+
+		// Apply updates (shallow merge for top-level, deep merge for nested objects)
+		for (const [key, value] of Object.entries(updates)) {
+			if (key === "id") continue; // Never change ID
+			if (key === "abilities" || key === "hp" || key === "speed") {
+				companion[key] = {...companion[key], ...value};
+			} else {
+				companion[key] = value;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Set a companion's custom name
+	 * @param {string} companionId - The companion ID
+	 * @param {string} name - The new name
+	 */
+	setCompanionName (companionId, name) {
+		const companion = this.getCompanion(companionId);
+		if (companion) companion.customName = name;
+	}
+
+	/**
+	 * Get the display name for a companion (customName if set, otherwise name)
+	 * @param {string} companionId - The companion ID
+	 * @returns {string} The display name
+	 */
+	getCompanionDisplayName (companionId) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return "";
+		return companion.customName || companion.name;
+	}
+
+	// ---- Companion HP Management ----
+
+	/**
+	 * Set companion's current HP
+	 * @param {string} companionId - The companion ID
+	 * @param {number} hp - New current HP
+	 */
+	setCompanionHp (companionId, hp) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return;
+		companion.hp.current = Math.max(0, Math.min(hp, companion.hp.max));
+	}
+
+	/**
+	 * Damage a companion (reduces HP, temp HP first)
+	 * @param {string} companionId - The companion ID
+	 * @param {number} amount - Damage amount
+	 * @returns {object} {remaining, tempAbsorbed, hpLost, droppedToZero}
+	 */
+	damageCompanion (companionId, amount) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return {remaining: 0, tempAbsorbed: 0, hpLost: 0, droppedToZero: false};
+
+		let remaining = amount;
+		let tempAbsorbed = 0;
+
+		// Temp HP absorbs damage first
+		if (companion.hp.temp > 0) {
+			tempAbsorbed = Math.min(companion.hp.temp, remaining);
+			companion.hp.temp -= tempAbsorbed;
+			remaining -= tempAbsorbed;
+		}
+
+		// Apply remaining to current HP
+		const hpBefore = companion.hp.current;
+		companion.hp.current = Math.max(0, companion.hp.current - remaining);
+		const hpLost = hpBefore - companion.hp.current;
+
+		return {
+			remaining: Math.max(0, remaining - hpBefore),
+			tempAbsorbed,
+			hpLost,
+			droppedToZero: companion.hp.current === 0,
+		};
+	}
+
+	/**
+	 * Heal a companion
+	 * @param {string} companionId - The companion ID
+	 * @param {number} amount - Healing amount
+	 * @returns {number} Amount actually healed
+	 */
+	healCompanion (companionId, amount) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return 0;
+
+		const before = companion.hp.current;
+		companion.hp.current = Math.min(companion.hp.max, companion.hp.current + amount);
+		return companion.hp.current - before;
+	}
+
+	/**
+	 * Set companion's temp HP (takes the higher value, per RAW)
+	 * @param {string} companionId - The companion ID
+	 * @param {number} amount - Temp HP amount
+	 */
+	setCompanionTempHp (companionId, amount) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return;
+		companion.hp.temp = Math.max(companion.hp.temp, amount);
+	}
+
+	/**
+	 * Restore companion to full HP (e.g., after long rest or re-summoning)
+	 * @param {string} companionId - The companion ID
+	 */
+	fullHealCompanion (companionId) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return;
+		companion.hp.current = companion.hp.max;
+		companion.hp.temp = 0;
+		companion.conditions = [];
+	}
+
+	// ---- Companion Conditions ----
+
+	/**
+	 * Add a condition to a companion
+	 * @param {string} companionId - The companion ID
+	 * @param {string} condition - The condition name
+	 */
+	addCompanionCondition (companionId, condition) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return;
+		if (!companion.conditions.includes(condition)) {
+			companion.conditions.push(condition);
+		}
+	}
+
+	/**
+	 * Remove a condition from a companion
+	 * @param {string} companionId - The companion ID
+	 * @param {string} condition - The condition name
+	 */
+	removeCompanionCondition (companionId, condition) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return;
+		companion.conditions = companion.conditions.filter(c => c !== condition);
+	}
+
+	/**
+	 * Get a companion's conditions
+	 * @param {string} companionId - The companion ID
+	 * @returns {Array} Conditions array
+	 */
+	getCompanionConditions (companionId) {
+		const companion = this.getCompanion(companionId);
+		return companion ? [...companion.conditions] : [];
+	}
+
+	// ---- Companion Active/Dismiss ----
+
+	/**
+	 * Toggle a companion's active state (summon/dismiss)
+	 * @param {string} companionId - The companion ID
+	 * @returns {boolean} New active state
+	 */
+	toggleCompanion (companionId) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return false;
+		companion.active = !companion.active;
+		return companion.active;
+	}
+
+	/**
+	 * Dismiss all concentration-linked companions (called when concentration breaks)
+	 * @returns {number} Number of companions dismissed
+	 */
+	dismissConcentrationCompanions () {
+		let count = 0;
+		(this._data.companions || []).forEach(c => {
+			if (c.concentrationLinked && c.active) {
+				c.active = false;
+				count++;
+			}
+		});
+		if (count > 0) {
+			console.log(`[CharSheet State] Dismissed ${count} concentration-linked companion(s)`);
+		}
+		return count;
+	}
+
+	// ---- Companion Stat Calculation ----
+
+	/**
+	 * Get a companion's ability modifier
+	 * @param {string} companionId - The companion ID
+	 * @param {string} ability - The ability abbreviation (str, dex, etc.)
+	 * @returns {number} The ability modifier
+	 */
+	getCompanionAbilityMod (companionId, ability) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return 0;
+		return Math.floor((companion.abilities[ability] - 10) / 2);
+	}
+
+	/**
+	 * Get a companion's save modifier
+	 * @param {string} companionId - The companion ID
+	 * @param {string} ability - The ability abbreviation
+	 * @returns {number} The save modifier
+	 */
+	getCompanionSaveMod (companionId, ability) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return 0;
+		const abilMod = Math.floor((companion.abilities[ability] - 10) / 2);
+		const proficient = companion.saveProficiencies.includes(ability);
+		return abilMod + (proficient ? companion.profBonus : 0);
+	}
+
+	/**
+	 * Get a companion's skill modifier
+	 * @param {string} companionId - The companion ID
+	 * @param {string} skill - The skill name
+	 * @returns {number} The skill modifier
+	 */
+	getCompanionSkillMod (companionId, skill) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return 0;
+
+		const skillAbilities = {
+			acrobatics: "dex", animalhandling: "wis", arcana: "int", athletics: "str",
+			deception: "cha", history: "int", insight: "wis", intimidation: "cha",
+			investigation: "int", medicine: "wis", nature: "int", perception: "wis",
+			performance: "cha", persuasion: "cha", religion: "int", sleightofhand: "dex",
+			stealth: "dex", survival: "wis",
+		};
+
+		const ability = skillAbilities[skill.toLowerCase().replace(/\s+/g, "")] || "int";
+		const abilMod = Math.floor((companion.abilities[ability] - 10) / 2);
+		const profLevel = companion.skillProficiencies[skill] || 0;
+		return abilMod + (profLevel * companion.profBonus);
+	}
+
+	// ---- Companion Stat Resolution (from bestiary/feature data) ----
+
+	/**
+	 * Resolve a companion's computed stats based on character level and ability scores.
+	 * Handles PB-scaling AC, level-scaling HP, and other dynamic formulas.
+	 * Called when the character levels up or stats change.
+	 * @param {string} companionId - The companion to recalculate
+	 */
+	recalculateCompanion (companionId) {
+		const companion = this.getCompanion(companionId);
+		if (!companion) return;
+
+		const calculations = this.getFeatureCalculations();
+		const profBonus = this.getProficiencyBonus();
+
+		switch (companion.type) {
+			case CharacterSheetState.COMPANION_TYPES.STEEL_DEFENDER: {
+				const intMod = this.getAbilityMod("int");
+				const artificerLevel = this._getClassLevel("Artificer");
+				companion.hp.max = 2 + intMod + (5 * artificerLevel);
+				companion.ac = calculations.steelDefenderAc || 15;
+				companion.profBonus = profBonus;
+				// Don't reduce current HP below max if max decreased
+				companion.hp.current = Math.min(companion.hp.current, companion.hp.max);
+				break;
+			}
+
+			case CharacterSheetState.COMPANION_TYPES.BEAST_COMPANION: {
+				// Primal Companion (TCE) stats scale with PB and ranger level
+				companion.profBonus = profBonus;
+				// HP = 5 + five times your ranger level
+				const rangerLevel = this._getClassLevel("Ranger");
+				if (rangerLevel > 0) {
+					companion.hp.max = 5 + (5 * rangerLevel);
+					companion.hp.current = Math.min(companion.hp.current, companion.hp.max);
+				}
+				break;
+			}
+
+			case CharacterSheetState.COMPANION_TYPES.DRAKE: {
+				companion.profBonus = profBonus;
+				// Drake HP = 5 + five times ranger level
+				const rangerLevel = this._getClassLevel("Ranger");
+				if (rangerLevel > 0) {
+					companion.hp.max = 5 + (5 * rangerLevel);
+					companion.hp.current = Math.min(companion.hp.current, companion.hp.max);
+				}
+				// At level 15, drake becomes Large
+				if (calculations.hasPerfectedBond) {
+					companion.size = "L";
+				}
+				// At level 7, drake gains fly speed
+				if (calculations.hasBondOfFangAndScale) {
+					companion.speed.fly = 40;
+				}
+				break;
+			}
+
+			case CharacterSheetState.COMPANION_TYPES.FAMILIAR: {
+				// Animal Accomplice familiar
+				if (calculations.hasImprovedFamiliar) {
+					companion.profBonus = profBonus;
+					const wizardLevel = this._getClassLevel("Wizard");
+					companion.hp.max = calculations.familiarMaxHp || (3 * wizardLevel);
+					companion.abilities.int = calculations.familiarIntelligence || (8 + profBonus);
+					companion.hp.current = Math.min(companion.hp.current, companion.hp.max);
+				}
+				break;
+			}
+
+			default:
+				// Custom/summon companions don't auto-scale
+				companion.profBonus = profBonus;
+				break;
+		}
+	}
+
+	/**
+	 * Recalculate all companions' stats (called on level up, ability score change, etc.)
+	 */
+	recalculateAllCompanions () {
+		(this._data.companions || []).forEach(c => this.recalculateCompanion(c.id));
+	}
+
+	/**
+	 * Get the character's class level for a specific class
+	 * @param {string} className - The class name
+	 * @returns {number} The class level, or 0
+	 * @private
+	 */
+	_getClassLevel (className) {
+		const cls = this._data.classes.find(c =>
+			c.name.toLowerCase() === className.toLowerCase(),
+		);
+		return cls?.level || 0;
+	}
+
+	/**
+	 * Create a companion from a bestiary creature stat block.
+	 * Converts the 5etools bestiary JSON format into our companion schema.
+	 * @param {object} creature - The bestiary creature data
+	 * @param {string} type - The companion type (from COMPANION_TYPES)
+	 * @param {string} [origin] - Origin feature name
+	 * @param {object} [options] - Additional options
+	 * @param {boolean} [options.concentrationLinked=false] - Link to concentration
+	 * @param {string} [options.customName] - Custom name
+	 * @param {string} [options.sourceFeatureId] - Source feature ID
+	 * @returns {string} The new companion's ID
+	 */
+	addCompanionFromBestiary (creature, type, origin, options = {}) {
+		// Parse AC (can be number, array of objects, or special formula)
+		let ac = 10;
+		if (creature.ac) {
+			if (typeof creature.ac === "number") {
+				ac = creature.ac;
+			} else if (Array.isArray(creature.ac) && creature.ac.length > 0) {
+				const firstAc = creature.ac[0];
+				ac = typeof firstAc === "number" ? firstAc : (firstAc.ac || 10);
+			}
+		}
+
+		// Parse HP
+		let hpMax = 1;
+		if (creature.hp) {
+			if (typeof creature.hp === "number") {
+				hpMax = creature.hp;
+			} else if (creature.hp.average) {
+				hpMax = creature.hp.average;
+			} else if (creature.hp.special) {
+				// Special formula (e.g., "5 + five times your ranger level")
+				// Try to extract a base number, will be recalculated later
+				const match = creature.hp.special.match(/(\d+)/);
+				hpMax = match ? parseInt(match[1]) : 1;
+			}
+		}
+
+		// Parse speed
+		const speed = {walk: 30, fly: 0, swim: 0, climb: 0, burrow: 0};
+		if (creature.speed) {
+			if (typeof creature.speed === "number") {
+				speed.walk = creature.speed;
+			} else {
+				speed.walk = creature.speed.walk || 0;
+				speed.fly = creature.speed.fly || 0;
+				speed.swim = creature.speed.swim || 0;
+				speed.climb = creature.speed.climb || 0;
+				speed.burrow = creature.speed.burrow || 0;
+			}
+		}
+
+		// Parse size
+		let size = "M";
+		if (creature.size) {
+			size = Array.isArray(creature.size) ? creature.size[0] : creature.size;
+		}
+
+		// Parse creature type
+		let creatureType = "beast";
+		if (creature.type) {
+			creatureType = typeof creature.type === "string" ? creature.type : (creature.type.type || "beast");
+		}
+
+		// Parse saves
+		const saveProficiencies = [];
+		if (creature.save) {
+			for (const ability of Object.keys(creature.save)) {
+				saveProficiencies.push(ability);
+			}
+		}
+
+		// Parse skills
+		const skillProficiencies = {};
+		if (creature.skill) {
+			for (const [skill, _mod] of Object.entries(creature.skill)) {
+				// Simple: mark as proficient (level 1)
+				skillProficiencies[skill.toLowerCase().replace(/\s+/g, "")] = 1;
+			}
+		}
+
+		// Parse senses
+		const senses = creature.senses || [];
+
+		// Parse languages
+		const languages = creature.languages || [];
+
+		// Parse immunities/resistances
+		const resistances = [];
+		const immunities = [];
+		const conditionImmunities = [];
+
+		if (creature.resist) {
+			creature.resist.forEach(r => {
+				if (typeof r === "string") resistances.push(r);
+			});
+		}
+		if (creature.immune) {
+			creature.immune.forEach(r => {
+				if (typeof r === "string") immunities.push(r);
+			});
+		}
+		if (creature.conditionImmune) {
+			creature.conditionImmune.forEach(r => {
+				if (typeof r === "string") conditionImmunities.push(r);
+			});
+		}
+
+		// Parse attacks from actions
+		const attacks = [];
+		if (creature.action) {
+			creature.action.forEach(action => {
+				if (action.entries?.some(e => typeof e === "string" && /\{@atk/.test(e))) {
+					attacks.push({
+						name: action.name,
+						entries: action.entries,
+					});
+				}
+			});
+		}
+
+		const companionId = this.addCompanion({
+			name: creature.name,
+			source: creature.source,
+			type,
+			origin,
+			customName: options.customName || null,
+			abilities: {
+				str: creature.str || 10,
+				dex: creature.dex || 10,
+				con: creature.con || 10,
+				int: creature.int || 10,
+				wis: creature.wis || 10,
+				cha: creature.cha || 10,
+			},
+			hp: {max: hpMax, current: hpMax, temp: 0},
+			ac,
+			speed,
+			senses,
+			passive: creature.passive || 10,
+			languages,
+			traits: creature.trait || [],
+			actions: creature.action || [],
+			reactions: creature.reaction || [],
+			bonusActions: creature.bonus || [],
+			saveProficiencies,
+			skillProficiencies,
+			resistances,
+			immunities,
+			conditionImmunities,
+			size,
+			creatureType,
+			concentrationLinked: options.concentrationLinked || false,
+			sourceFeatureId: options.sourceFeatureId || null,
+			attacks,
+		});
+
+		// Recalculate if it's a scaling companion
+		this.recalculateCompanion(companionId);
+
+		return companionId;
+	}
+
+	/**
+	 * Handle companions during rest.
+	 * - Long rest: Restore all companion HP, clear conditions
+	 * - Short rest: Only clear temp conditions
+	 * @param {string} restType - "short" or "long"
+	 */
+	restCompanions (restType) {
+		(this._data.companions || []).forEach(companion => {
+			if (restType === "long") {
+				// Full heal on long rest
+				companion.hp.current = companion.hp.max;
+				companion.hp.temp = 0;
+				companion.conditions = [];
+				companion.exhaustion = Math.max(0, companion.exhaustion - 1);
+			}
+			// Short rest: companions don't auto-heal unless specific feature allows it
+		});
+	}
+
+	// #endregion
+
 	// #region Rest
 	onShortRest () {
 		// Clear active states that end on rest
@@ -21931,6 +23945,9 @@ class CharacterSheetState {
 
 		// Track time for rest restrictions
 		this._data.lastLongRestTime = 0; // Reset to 0 hours since last long rest
+
+		// Restore companions on long rest
+		this.restCompanions("long");
 	}
 
 	/**
@@ -22806,6 +24823,82 @@ class CharacterSheetState {
 		"holy weapon": {
 			concentration: true,
 			selfEffects: [{type: "extraDamage", dice: "2d8", damageType: "radiant"}],
+		},
+		// --- Additional common buff spells ---
+		"guidance": {
+			concentration: true,
+			selfEffects: [{type: "rollBonus", dice: "1d4", target: "check"}],
+		},
+		"resistance": {
+			concentration: true,
+			selfEffects: [{type: "rollBonus", dice: "1d4", target: "save"}],
+		},
+		"pass without trace": {
+			concentration: true,
+			selfEffects: [{type: "bonus", target: "skill:stealth", value: 10}],
+		},
+		"armor of agathys": {
+			selfEffects: [{type: "tempHp", value: 5}],
+			upcastPerLevel: {tempHp: 5},
+			duration: {amount: 1, unit: "hour"},
+		},
+		"false life": {
+			selfEffects: [{type: "tempHp", value: 8}], // 1d4+4 average
+			upcastPerLevel: {tempHp: 5},
+			duration: {amount: 1, unit: "hour"},
+		},
+		"warding bond": {
+			selfEffects: [
+				{type: "bonus", target: "ac", value: 1},
+				{type: "bonus", target: "save", value: 1},
+				{type: "resistance", target: "damage:all"},
+			],
+			duration: {amount: 1, unit: "hour"},
+		},
+		"beacon of hope": {
+			concentration: true,
+			selfEffects: [
+				{type: "advantage", target: "save:wis"},
+				{type: "advantage", target: "deathSave"},
+				{type: "maxHealing"},
+			],
+		},
+		"magic weapon": {
+			concentration: true,
+			selfEffects: [{type: "bonus", target: "attack", value: 1}, {type: "bonus", target: "damage", value: 1}],
+			upcastScaling: {4: {value: 2}, 6: {value: 3}},
+			duration: {amount: 1, unit: "hour"},
+		},
+		"elemental weapon": {
+			concentration: true,
+			selfEffects: [{type: "bonus", target: "attack", value: 1}, {type: "extraDamage", dice: "1d4", damageType: ""}],
+			upcastScaling: {5: {attackBonus: 2, dice: "2d4"}, 7: {attackBonus: 3, dice: "3d4"}},
+			duration: {amount: 1, unit: "hour"},
+		},
+		"crusader's mantle": {
+			concentration: true,
+			selfEffects: [{type: "extraDamage", dice: "1d4", damageType: "radiant"}],
+		},
+		"death ward": {
+			selfEffects: [{type: "deathWard"}],
+			duration: {amount: 8, unit: "hour"},
+		},
+		"gift of alacrity": {
+			selfEffects: [{type: "rollBonus", dice: "1d8", target: "initiative"}],
+			duration: {amount: 8, unit: "hour"},
+		},
+		"foresight": {
+			selfEffects: [
+				{type: "advantage", target: "attack"},
+				{type: "advantage", target: "check"},
+				{type: "advantage", target: "save"},
+				{type: "disadvantage", target: "attacksAgainst"},
+			],
+			duration: {amount: 8, unit: "hour"},
+		},
+		"sanctuary": {
+			selfEffects: [{type: "sanctuaryProtection"}],
+			duration: {amount: 1, unit: "minute"},
 		},
 	};
 
