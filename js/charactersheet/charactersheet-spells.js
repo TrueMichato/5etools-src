@@ -1863,7 +1863,529 @@ class CharacterSheetSpells {
 		// Find Familiar - show familiar picker
 		if (spellNameLower === "find familiar") {
 			await this._pShowFamiliarPicker();
+			return;
 		}
+
+		// Find Steed - show mount picker
+		if (spellNameLower === "find steed") {
+			if (this._page?._onFindSteed) {
+				await this._page._onFindSteed(false);
+			}
+			return;
+		}
+
+		// Find Greater Steed - show greater mount picker
+		if (spellNameLower === "find greater steed") {
+			if (this._page?._onFindSteed) {
+				await this._page._onFindSteed(true);
+			}
+			return;
+		}
+
+		// Summon spells - create concentration-linked summon
+		const summonSpells = {
+			"summon beast": {type: "beast", forms: ["Bestial Spirit (Land)", "Bestial Spirit (Sea)", "Bestial Spirit (Sky)"]},
+			"summon celestial": {type: "celestial", forms: ["Celestial Spirit (Avenger)", "Celestial Spirit (Defender)"]},
+			"summon construct": {type: "construct", forms: ["Construct Spirit (Clay)", "Construct Spirit (Metal)", "Construct Spirit (Stone)"]},
+			"summon elemental": {type: "elemental", forms: ["Elemental Spirit (Air)", "Elemental Spirit (Earth)", "Elemental Spirit (Fire)", "Elemental Spirit (Water)"]},
+			"summon fey": {type: "fey", forms: ["Fey Spirit (Fuming)", "Fey Spirit (Mirthful)", "Fey Spirit (Tricksy)"]},
+			"summon fiend": {type: "fiend", forms: ["Fiendish Spirit (Demon)", "Fiendish Spirit (Devil)", "Fiendish Spirit (Yugoloth)"]},
+			"summon shadowspawn": {type: "undead", forms: ["Shadow Spirit (Fear)", "Shadow Spirit (Despair)", "Shadow Spirit (Fury)"]},
+			"summon undead": {type: "undead", forms: ["Undead Spirit (Ghostly)", "Undead Spirit (Putrid)", "Undead Spirit (Skeletal)"]},
+			"summon aberration": {type: "aberration", forms: ["Aberrant Spirit (Beholderkin)", "Aberrant Spirit (Slaad)", "Aberrant Spirit (Star Spawn)"]},
+			"summon draconic spirit": {type: "dragon", forms: ["Draconic Spirit (Chromatic)", "Draconic Spirit (Metallic)", "Draconic Spirit (Gem)"]},
+		};
+
+		const summonInfo = summonSpells[spellNameLower];
+		if (summonInfo) {
+			await this._pShowSummonPicker(spell, summonInfo);
+			return;
+		}
+
+		// Conjure spells (PHB 2014 versions summon actual creatures from bestiary)
+		// Note: XPHB 2024 versions are effect-based spells, not creature summons
+		const conjureSpellConfig = {
+			"conjure animals": {type: "beast", level: 3, multiCreature: true},
+			"conjure minor elementals": {type: "elemental", level: 4, multiCreature: true},
+			"conjure woodland beings": {type: "fey", level: 4, multiCreature: true},
+			"conjure fey": {type: ["fey", "beast"], level: 6, multiCreature: false, crBase: 6},
+			"conjure elemental": {type: "elemental", level: 5, multiCreature: false, crBase: 5},
+			"conjure celestial": {type: "celestial", level: 7, multiCreature: false, crBase: 4},
+		};
+
+		const conjureConfig = conjureSpellConfig[spellNameLower];
+		if (conjureConfig) {
+			// Only show picker for PHB (2014) versions - XPHB versions are effect spells
+			if (spell.source === "PHB") {
+				await this._pShowConjurePicker(spell, conjureConfig);
+			} else {
+				// XPHB versions are effect-based spells, not creature summons
+				// No special handling needed - concentration tracking already works
+			}
+		}
+	}
+
+	/**
+	 * Show summon spell picker (for Summon Beast, Summon Celestial, etc.)
+	 */
+	async _pShowSummonPicker (spell, summonInfo) {
+		const slotLevel = spell.level || 2; // Minimum level for summon spells
+		const pb = this._state.getProficiencyBonus?.() || 2;
+		const spellMod = this._state.getAbilityMod?.(this._state.getSpellcastingAbility?.() || "int") || 0;
+
+		// Choose form
+		const chosenForm = await InputUiUtil.pGetUserEnum({
+			title: `${spell.name} - Choose Form`,
+			htmlDescription: `<div>Select the spirit form to summon:</div>`,
+			values: summonInfo.forms,
+			isResolveItem: true,
+		});
+		if (!chosenForm) return;
+
+		// Base stats scale with spell level
+		const hp = 30 + (10 * (slotLevel - 2)); // Scales by 10 HP per level above 2nd
+		const ac = 11 + slotLevel;
+		const attackBonus = pb + spellMod;
+		const damage = `1d8 + ${3 + slotLevel}`;
+
+		// Dismiss any existing concentration-linked companions
+		const existingSummons = this._state.getActiveCompanions?.()?.filter(c => c.concentrationLinked) || [];
+		for (const summon of existingSummons) {
+			this._state.removeCompanion?.(summon.id);
+		}
+
+		// Create the summon
+		this._state.addCompanion?.({
+			name: chosenForm,
+			type: CharacterSheetState.COMPANION_TYPES.SUMMON,
+			origin: spell.name,
+			creatureType: summonInfo.type,
+			size: "M",
+			ac,
+			hp: {max: hp, current: hp},
+			speed: this._getSummonSpeed(summonInfo.type, chosenForm),
+			abilities: {str: 14, dex: 14, con: 14, int: 14, wis: 14, cha: 14},
+			senses: ["darkvision 60 ft."],
+			passive: 10 + pb,
+			actions: [
+				{name: "Multiattack", entries: [`The spirit makes a number of attacks equal to half this spell's level (rounded down).`]},
+				{name: "Attack", entries: [`Melee/Ranged Attack: +${attackBonus} to hit, reach 5 ft. or range 60 ft. Hit: ${damage} damage of a type matching the spirit.`]},
+			],
+			profBonus: pb,
+			concentrationLinked: true, // IMPORTANT: Will be dismissed when concentration breaks
+		});
+
+		this._page?._saveCurrentCharacter?.();
+		this._page?._renderCompanions?.();
+		JqueryUtil.doToast({type: "success", content: `Summoned ${chosenForm}! (HP: ${hp}, AC: ${ac}) - Requires concentration.`});
+	}
+
+	/**
+	 * Get speed for summoned spirits by type
+	 */
+	_getSummonSpeed (type, form) {
+		const speeds = {walk: 30};
+
+		// Add fly speed for certain types/forms
+		if (type === "celestial" || form.includes("Sky") || form.includes("Air")) {
+			speeds.fly = 40;
+		}
+		// Add swim speed for aquatic forms
+		if (form.includes("Sea") || form.includes("Water")) {
+			speeds.swim = 40;
+		}
+		// Ghostly undead fly
+		if (form.includes("Ghostly")) {
+			speeds.fly = 40;
+			speeds.walk = 0;
+		}
+
+		return speeds;
+	}
+
+	/**
+	 * Show conjure spell picker for PHB 2014 conjure spells
+	 * @param {object} spell - The spell being cast
+	 * @param {object} config - Configuration for the spell {type, level, multiCreature, crBase}
+	 */
+	async _pShowConjurePicker (spell, config) {
+		const slotLevel = spell.level || config.level;
+
+		// Dismiss any existing concentration-linked companions
+		const existingSummons = this._state.getActiveCompanions?.()?.filter(c => c.concentrationLinked) || [];
+		for (const summon of existingSummons) {
+			this._state.removeCompanion?.(summon.id);
+		}
+
+		if (config.multiCreature) {
+			// Multi-creature conjure spells (Conjure Animals, Minor Elementals, Woodland Beings)
+			await this._pShowMultiConjurePicker(spell, config, slotLevel);
+		} else {
+			// Single-creature conjure spells (Conjure Fey, Elemental, Celestial)
+			await this._pShowSingleConjurePicker(spell, config, slotLevel);
+		}
+	}
+
+	/**
+	 * Show picker for multi-creature conjure spells (Conjure Animals, etc.)
+	 */
+	async _pShowMultiConjurePicker (spell, config, slotLevel) {
+		// Calculate slot multiplier for scaling
+		let slotMultiplier = 1;
+		if (config.level === 3) {
+			// Conjure Animals: 5th=2×, 7th=3×, 9th=4×
+			if (slotLevel >= 9) slotMultiplier = 4;
+			else if (slotLevel >= 7) slotMultiplier = 3;
+			else if (slotLevel >= 5) slotMultiplier = 2;
+		} else if (config.level === 4) {
+			// Conjure Minor Elementals / Woodland Beings: 6th=2×, 8th=3×
+			if (slotLevel >= 8) slotMultiplier = 3;
+			else if (slotLevel >= 6) slotMultiplier = 2;
+		}
+
+		// Options: 1×CR2, 2×CR1, 4×CR½, 8×CR¼
+		const options = [
+			{count: 1 * slotMultiplier, maxCR: 2, label: `${1 * slotMultiplier}× CR 2 or lower`},
+			{count: 2 * slotMultiplier, maxCR: 1, label: `${2 * slotMultiplier}× CR 1 or lower`},
+			{count: 4 * slotMultiplier, maxCR: 0.5, label: `${4 * slotMultiplier}× CR ½ or lower`},
+			{count: 8 * slotMultiplier, maxCR: 0.25, label: `${8 * slotMultiplier}× CR ¼ or lower`},
+		];
+
+		// Choose option
+		const chosenOption = await InputUiUtil.pGetUserEnum({
+			title: `${spell.name}`,
+			htmlDescription: `<div>Select how many creatures to conjure:</div>`,
+			values: options.map(o => o.label),
+			isResolveItem: true,
+		});
+		if (chosenOption == null) return;
+
+		const option = options.find(o => o.label === chosenOption);
+		if (!option) return;
+
+		// Show creature picker
+		await this._pShowConjureCreaturePicker(spell, config.type, option.maxCR, option.count);
+	}
+
+	/**
+	 * Show picker for single-creature conjure spells (Conjure Fey, Elemental, Celestial)
+	 */
+	async _pShowSingleConjurePicker (spell, config, slotLevel) {
+		// Calculate max CR based on spell level
+		let maxCR = config.crBase;
+
+		// Conjure Fey/Elemental: +1 CR per slot level above base
+		if (spell.name.toLowerCase() === "conjure fey" || spell.name.toLowerCase() === "conjure elemental") {
+			maxCR = config.crBase + (slotLevel - config.level);
+		}
+		// Conjure Celestial: CR 4 at 7th, CR 5 at 9th
+		else if (spell.name.toLowerCase() === "conjure celestial") {
+			maxCR = slotLevel >= 9 ? 5 : 4;
+		}
+
+		// Show creature picker
+		await this._pShowConjureCreaturePicker(spell, config.type, maxCR, 1);
+	}
+
+	/**
+	 * Show creature picker for conjure spells
+	 * @param {object} spell - The spell being cast
+	 * @param {string|string[]} creatureType - Type(s) to filter for
+	 * @param {number} maxCR - Maximum CR allowed
+	 * @param {number} count - Number of creatures to conjure
+	 */
+	async _pShowConjureCreaturePicker (spell, creatureType, maxCR, count) {
+		// Load bestiary data
+		const bestiaryData = await DataLoader.pCacheAndGetAllSite(UrlUtil.PG_BESTIARY);
+
+		// Normalize creature type to array
+		const types = Array.isArray(creatureType) ? creatureType : [creatureType];
+
+		// Helper to parse CR value
+		const parseCR = (cr) => {
+			if (cr == null) return null;
+			if (typeof cr === "number") return cr;
+			if (typeof cr === "string") {
+				if (cr === "1/8") return 0.125;
+				if (cr === "1/4") return 0.25;
+				if (cr === "1/2") return 0.5;
+				return parseFloat(cr);
+			}
+			if (cr.cr != null) return parseCR(cr.cr);
+			return null;
+		};
+
+		// Filter creatures by type and CR
+		const validCreatures = bestiaryData.filter(creature => {
+			// Check type
+			const cType = typeof creature.type === "string" ? creature.type : creature.type?.type;
+			if (!types.includes(cType)) return false;
+
+			// Check CR
+			const cr = parseCR(creature.cr);
+			if (cr == null || cr > maxCR) return false;
+
+			// Exclude swarms
+			if (creature.type?.swarmSize || creature.name?.toLowerCase().includes("swarm")) return false;
+
+			return true;
+		});
+
+		// Sort by CR (descending) then name
+		validCreatures.sort((a, b) => {
+			const crA = parseCR(a.cr) || 0;
+			const crB = parseCR(b.cr) || 0;
+			if (crA !== crB) return crB - crA;
+			return a.name.localeCompare(b.name);
+		});
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `✨ ${spell.name} - Choose Creature`,
+			isMinHeight0: true,
+			isWidth100: true,
+		});
+
+		const typeLabel = types.join("/");
+		const crLabel = maxCR === 0.25 ? "¼" : maxCR === 0.5 ? "½" : maxCR;
+
+		$modalInner.append(`
+			<div class="charsheet__conjure-picker-header mb-3" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1)); border-radius: 8px; padding: 12px;">
+				<div class="ve-flex ve-flex-v-center" style="gap: 10px;">
+					<span style="font-size: 2em;">✨</span>
+					<div>
+						<div class="bold" style="font-size: 1.1em;">Conjure ${count}× ${typeLabel} (CR ${crLabel} or lower)</div>
+						<div class="ve-muted ve-small">Select a creature to conjure. ${count > 1 ? `All ${count} will be the same type.` : ""}</div>
+					</div>
+				</div>
+			</div>
+		`);
+
+		// Search filter
+		const $searchContainer = $(`<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`).appendTo($modalInner);
+		$searchContainer.append(`<span style="font-size: 1.2em;">🔍</span>`);
+		const $search = $(`<input type="text" class="form-control" placeholder="Search creatures..." style="flex: 1;">`).appendTo($searchContainer);
+
+		// Creatures grid
+		const $list = $(`<div class="charsheet__conjure-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; max-height: 450px; overflow-y: auto; padding: 4px;"></div>`).appendTo($modalInner);
+
+		const renderList = (filter = "") => {
+			$list.empty();
+			const filteredCreatures = validCreatures.filter(c =>
+				c.name.toLowerCase().includes(filter.toLowerCase()),
+			);
+
+			if (filteredCreatures.length === 0) {
+				$list.append(`<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No creatures match your search</div>`);
+				return;
+			}
+
+			filteredCreatures.forEach(creature => {
+				const hp = creature.hp?.average || creature.hp || "?";
+				const ac = Array.isArray(creature.ac) ? creature.ac[0]?.ac || creature.ac[0] : creature.ac;
+				const cr = creature.cr?.cr || creature.cr;
+				const crDisplay = cr === 0.125 ? "⅛" : cr === 0.25 ? "¼" : cr === 0.5 ? "½" : cr;
+				const speeds = this._formatCreatureSpeeds(creature.speed);
+
+				// Get emoji based on creature type/name
+				const emoji = this._getCreatureEmoji(creature);
+
+				// Build hover link
+				let nameDisplay;
+				try {
+					const hash = UrlUtil.encodeForHash([creature.name, creature.source].join(HASH_LIST_SEP));
+					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BESTIARY, source: creature.source, hash});
+					nameDisplay = `<a href="${UrlUtil.PG_BESTIARY}#${hash}" ${hoverAttrs} class="charsheet__conjure-name">${creature.name}</a>`;
+				} catch (e) {
+					nameDisplay = `<span class="charsheet__conjure-name">${creature.name}</span>`;
+				}
+
+				const $card = $(`
+					<div class="charsheet__conjure-card" style="
+						border: 2px solid var(--rgb-border-grey-muted);
+						border-radius: 10px;
+						padding: 12px;
+						cursor: pointer;
+						transition: all 0.2s ease;
+						background: rgba(var(--rgb-bg-text), 0.02);
+						position: relative;
+					">
+						<div class="ve-flex ve-flex-v-center mb-2" style="gap: 8px;">
+							<span style="font-size: 1.8em;">${emoji}</span>
+							<div class="ve-flex-col" style="flex: 1;">
+								<div class="bold" style="font-size: 1.05em;">${nameDisplay}</div>
+								<span class="ve-muted ve-small">CR ${crDisplay}</span>
+							</div>
+						</div>
+						<div class="charsheet__conjure-stats" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.85em;">
+							<div class="ve-flex ve-flex-v-center" style="gap: 4px;">
+								<span style="opacity: 0.7;">🛡️</span>
+								<span>AC ${ac}</span>
+							</div>
+							<div class="ve-flex ve-flex-v-center" style="gap: 4px;">
+								<span style="opacity: 0.7;">❤️</span>
+								<span>${hp} HP</span>
+							</div>
+							<div class="ve-flex ve-flex-v-center" style="gap: 4px; grid-column: 1 / -1;">
+								<span style="opacity: 0.7;">👟</span>
+								<span class="ve-small">${speeds}</span>
+							</div>
+						</div>
+						<button class="ve-btn ve-btn-xs ve-btn-primary btn-select-conjure" style="
+							position: absolute;
+							bottom: 8px;
+							right: 8px;
+							opacity: 0;
+							transition: opacity 0.2s;
+						">Summon</button>
+					</div>
+				`).appendTo($list);
+
+				// Hover effects
+				$card.on("mouseenter", function () {
+					$(this).css({
+						"border-color": "var(--rgb-link)",
+						"background": "rgba(var(--rgb-link-rgb), 0.08)",
+						"transform": "translateY(-2px)",
+						"box-shadow": "0 4px 12px rgba(0, 0, 0, 0.15)",
+					});
+					$(this).find(".btn-select-conjure").css("opacity", "1");
+				}).on("mouseleave", function () {
+					$(this).css({
+						"border-color": "var(--rgb-border-grey-muted)",
+						"background": "rgba(var(--rgb-bg-text), 0.02)",
+						"transform": "translateY(0)",
+						"box-shadow": "none",
+					});
+					$(this).find(".btn-select-conjure").css("opacity", "0");
+				});
+
+				const selectCreature = async () => {
+					await this._createConjuredCreatures(creature, count, spell);
+					doClose();
+				};
+
+				$card.find(".btn-select-conjure").on("click", async (evt) => {
+					evt.stopPropagation();
+					await selectCreature();
+				});
+
+				$card.on("click", async (evt) => {
+					if ($(evt.target).closest("a").length) return;
+					await selectCreature();
+				});
+			});
+		};
+
+		$search.on("input", () => renderList($search.val()));
+		renderList();
+	}
+
+	/**
+	 * Get emoji for a creature based on its type/name
+	 */
+	_getCreatureEmoji (creature) {
+		const name = creature.name.toLowerCase();
+		const type = typeof creature.type === "string" ? creature.type : creature.type?.type;
+
+		const nameEmojis = {
+			wolf: "🐺", bear: "🐻", elk: "🦌", boar: "🐗", lion: "🦁", tiger: "🐅",
+			panther: "🐆", ape: "🦍", eagle: "🦅", hawk: "🦅", owl: "🦉", raven: "🐦‍⬛",
+			bat: "🦇", snake: "🐍", spider: "🕷️", scorpion: "🦂", rat: "🐀",
+			cat: "🐱", dog: "🐕", horse: "🐴", deer: "🦌", frog: "🐸", toad: "🐸",
+			crocodile: "🐊", shark: "🦈", octopus: "🐙", crab: "🦀", fish: "🐟",
+			pixie: "🧚", sprite: "🧚", dryad: "🌳", satyr: "🐐", unicorn: "🦄",
+			fire: "🔥", air: "💨", water: "💧", earth: "🗿", ice: "❄️", magma: "🌋",
+			angel: "👼", celestial: "✨", couatl: "🐍", pegasus: "🐴",
+		};
+
+		for (const [key, emoji] of Object.entries(nameEmojis)) {
+			if (name.includes(key)) return emoji;
+		}
+
+		// Fallback by type
+		const typeEmojis = {
+			beast: "🐾", fey: "🧚", elemental: "✨", celestial: "👼",
+		};
+		return typeEmojis[type] || "🐾";
+	}
+
+	/**
+	 * Create conjured creatures and add them as a grouped companion
+	 */
+	async _createConjuredCreatures (creature, count, spell) {
+		const hp = creature.hp?.average || creature.hp || 1;
+		const ac = Array.isArray(creature.ac) ? creature.ac[0]?.ac || creature.ac[0] : creature.ac;
+		const cr = creature.cr?.cr || creature.cr;
+		const crDisplay = cr === 0.125 ? "⅛" : cr === 0.25 ? "¼" : cr === 0.5 ? "½" : cr;
+
+		// Create HP array for individual tracking
+		const hpArray = [];
+		for (let i = 0; i < count; i++) {
+			hpArray.push({current: hp, max: hp});
+		}
+
+		// Parse speed
+		const speed = {walk: 30, fly: 0, swim: 0, climb: 0, burrow: 0};
+		if (creature.speed) {
+			if (typeof creature.speed === "number") {
+				speed.walk = creature.speed;
+			} else {
+				speed.walk = creature.speed.walk || 0;
+				speed.fly = creature.speed.fly || 0;
+				speed.swim = creature.speed.swim || 0;
+				speed.climb = creature.speed.climb || 0;
+				speed.burrow = creature.speed.burrow || 0;
+			}
+		}
+
+		// Parse creature type
+		const creatureType = typeof creature.type === "string" ? creature.type : (creature.type?.type || "beast");
+
+		// Parse size
+		const size = Array.isArray(creature.size) ? creature.size[0] : creature.size || "M";
+
+		// Generate group ID
+		const groupId = `conjure_${CryptUtil.uid()}`;
+
+		// Add as grouped companion
+		this._state.addCompanion?.({
+			name: creature.name,
+			source: creature.source,
+			type: CharacterSheetState.COMPANION_TYPES.SUMMON,
+			origin: spell.name,
+			creatureType,
+			size,
+			ac,
+			hp: {max: hp, current: hp}, // Base HP for display
+			hpArray, // Individual HP tracking
+			count,
+			groupId,
+			speed,
+			abilities: {
+				str: creature.str || 10,
+				dex: creature.dex || 10,
+				con: creature.con || 10,
+				int: creature.int || 10,
+				wis: creature.wis || 10,
+				cha: creature.cha || 10,
+			},
+			senses: creature.senses || [],
+			passive: creature.passive || 10,
+			traits: creature.trait || [],
+			actions: creature.action || [],
+			reactions: creature.reaction || [],
+			profBonus: this._state.getProficiencyBonus?.() || 2,
+			concentrationLinked: true,
+		});
+
+		this._page?._saveCurrentCharacter?.();
+		this._page?._renderCompanions?.();
+
+		const creatureLabel = count > 1 ? `${count}× ${creature.name}` : creature.name;
+		JqueryUtil.doToast({
+			type: "success",
+			content: `✨ Conjured ${creatureLabel} (CR ${crDisplay})! Requires concentration.`,
+		});
 	}
 
 	/**
