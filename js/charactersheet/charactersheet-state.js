@@ -3371,16 +3371,44 @@ class CharacterSheetState {
 			});
 		}
 
-		// Check cantrips (some concentration cantrips exist)
-		const concentrationCantrips = new Set(["true strike", "blade ward"]);
+		// Check cantrips (some concentration cantrips exist - only XPHB versions)
+		// Note: Blade Ward in PHB 2014 does NOT require concentration (1 round duration)
+		// Only XPHB 2024 version requires concentration. The migration now only applies
+		// to spells from XPHB source to avoid incorrectly marking 2014 spells.
+		const concentrationCantrips2024 = {
+			"true strike": [Parser.SRC_XPHB],
+			"blade ward": [Parser.SRC_XPHB],
+		};
 		if (this._data.spellcasting?.cantripsKnown?.length) {
 			this._data.spellcasting.cantripsKnown.forEach(spell => {
 				const spellNameLower = spell.name?.toLowerCase();
-				if (!spell.concentration && concentrationCantrips.has(spellNameLower)) {
+				const validSources = concentrationCantrips2024[spellNameLower];
+				if (!spell.concentration && validSources && validSources.includes(spell.source)) {
 					spell.concentration = true;
 					migratedCount++;
 				}
 			});
+		}
+
+		// Cleanup: Remove incorrectly-set concentration from non-XPHB versions of spells
+		// This fixes characters that were migrated before the source check was added
+		let cleanedCount = 0;
+		const nonConcentrationBySource = {
+			"blade ward": [Parser.SRC_PHB], // PHB 2014 Blade Ward is NOT concentration
+			"true strike": [Parser.SRC_PHB], // PHB 2014 True Strike is NOT concentration
+		};
+		if (this._data.spellcasting?.cantripsKnown?.length) {
+			this._data.spellcasting.cantripsKnown.forEach(spell => {
+				const spellNameLower = spell.name?.toLowerCase();
+				const nonConcSources = nonConcentrationBySource[spellNameLower];
+				if (spell.concentration && nonConcSources && nonConcSources.includes(spell.source)) {
+					spell.concentration = false;
+					cleanedCount++;
+				}
+			});
+		}
+		if (cleanedCount > 0) {
+			console.log(`[CharSheet State] Cleaned ${cleanedCount} incorrectly-marked concentration spells`);
 		}
 
 		if (migratedCount > 0) {
@@ -22342,12 +22370,34 @@ class CharacterSheetState {
 	// #region Combat Round Tracking & Duration Management
 
 	/**
-	 * Parse a duration display string into a number of combat rounds.
-	 * @param {string|null} durationStr - e.g. "1 minute", "Concentration, up to 10 minutes", "Until end of next turn"
+	 * Parse a duration display string or object into a number of combat rounds.
+	 * @param {string|object|null} durationStr - e.g. "1 minute", "Concentration, up to 10 minutes", 
+	 *   OR an object like {amount: 1, unit: "minute"} or {type: "instant"}
 	 * @returns {number|null} Number of rounds, or null if duration is indefinite/manual
 	 */
 	static parseDurationToRounds (durationStr) {
 		if (!durationStr) return null;
+
+		// Handle object duration format from parseSpellEffects
+		if (typeof durationStr === "object") {
+			if (durationStr.type === "instant") return 0;
+			if (durationStr.amount && durationStr.unit) {
+				const amount = durationStr.amount;
+				const unit = durationStr.unit.toLowerCase();
+				switch (unit) {
+					case "round": case "rounds": return amount;
+					case "minute": case "minutes": return amount * 10;
+					case "hour": case "hours": return amount * 600;
+					case "second": case "seconds": return Math.max(1, Math.round(amount / 6));
+					case "turn": return 1;
+					default: return null;
+				}
+			}
+			return null;
+		}
+
+		// Handle string duration format
+		if (typeof durationStr !== "string") return null;
 		const s = durationStr.trim().toLowerCase();
 
 		// Instant / no duration
@@ -22416,7 +22466,7 @@ class CharacterSheetState {
 	/**
 	 * Advance to the next combat round.
 	 * Decrements roundsRemaining on every active state that has one,
-	 * and auto-deactivates any that reach 0.
+	 * and auto-deactivates any that reach 0 (including cleanup of granted conditions).
 	 * @returns {Array<string>} Names of states that expired this round
 	 */
 	advanceRound () {
@@ -22434,6 +22484,22 @@ class CharacterSheetState {
 				state.active = false;
 				state.roundsRemaining = 0;
 				expired.push(state.name || state.stateTypeId);
+
+				// Cleanup: remove any conditions this state granted
+				if (state.grantsConditions?.length > 0) {
+					for (const condName of state.grantsConditions) {
+						this.removeCondition?.(condName);
+					}
+				}
+
+				// If this was a spell effect that matches the concentrated spell, do full cleanup
+				if (state.isSpellEffect && this._data.concentrating?.spellName === state.name) {
+					this._data.concentrating = null;
+					this.dismissConcentrationCompanions();
+					// Also remove legacy "concentration" state type if exists
+					const concState = this._data.activeStates.find(s => s.stateTypeId === "concentration");
+					if (concState) this.removeActiveState(concState.id);
+				}
 			}
 		}
 
@@ -23105,20 +23171,24 @@ class CharacterSheetState {
 	 * Break concentration (spell ends)
 	 */
 	breakConcentration () {
+		// Save the spell name BEFORE clearing, so we can match by name as fallback
+		const concSpellName = this._data.concentrating?.spellName;
 		this._data.concentrating = null;
 
 		// Dismiss concentration-linked companions (summons, etc.)
 		this.dismissConcentrationCompanions();
 
-		// Remove concentration active state
+		// Remove concentration active state (legacy)
 		const concState = this._data.activeStates.find(s => s.stateTypeId === "concentration");
 		if (concState) {
 			this.removeActiveState(concState.id);
 		}
 
-		// Also remove any spell-effect active states that require concentration
+		// Remove any spell-effect active states that require concentration
+		// Match by EITHER the concentration flag OR by name (fallback for states
+		// where the concentration flag wasn't set correctly)
 		const concSpellStates = this._data.activeStates.filter(s =>
-			s.isSpellEffect && s.concentration,
+			s.isSpellEffect && (s.concentration || s.name === concSpellName),
 		);
 		for (const state of concSpellStates) {
 			// If the state granted conditions, also remove those conditions

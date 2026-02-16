@@ -1475,8 +1475,10 @@ class CharacterSheetSpells {
 			return;
 		}
 
-		// Check if spell requires concentration
-		const requiresConcentration = spell.concentration || spellData?.duration?.some?.(d => d.concentration);
+		// Check if spell requires concentration - use spellData (authoritative source)
+		// Do NOT use spell.concentration as it may have been set incorrectly by migrations
+		// that didn't account for different spell versions (e.g., PHB vs XPHB)
+		const requiresConcentration = spellData?.duration?.some?.(d => d.concentration);
 
 		// If concentrating on another spell, ask to break concentration first
 		if (requiresConcentration && this._state.isConcentrating?.()) {
