@@ -1736,6 +1736,33 @@ class CharacterSheetSpells {
 		let attackInfo = "";
 		let damageInfo = "";
 		let effectsApplied = [];
+		let deliveredViaFamiliar = false;
+
+		// Check for touch spell delivery via familiar
+		if (spellData) {
+			const isTouchSpell = spellData.range?.distance?.type === "touch";
+			if (isTouchSpell) {
+				const activeFamiliar = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.FAMILIAR)
+					?.find(f => f.active !== false);
+
+				if (activeFamiliar && !activeFamiliar.usedReaction) {
+					const deliverViaFamiliar = await InputUiUtil.pGetUserBoolean({
+						title: "Touch Spell Delivery",
+						htmlDescription: `<strong>${spell.name}</strong> is a touch spell. Your familiar <strong>${activeFamiliar.customName || activeFamiliar.name}</strong> can deliver the touch for you (using its Reaction).`,
+						textYes: "🐾 Deliver via Familiar",
+						textNo: "✋ Touch Directly",
+					});
+
+					if (deliverViaFamiliar) {
+						deliveredViaFamiliar = true;
+						// Use familiar's reaction
+						this._state.updateCompanion?.(activeFamiliar.id, {usedReaction: true});
+						this._page._saveCurrentCharacter?.();
+						this._page._renderCompanions?.();
+					}
+				}
+			}
+		}
 
 		if (spellData) {
 			const spellcastingMod = this._state.getAbilityMod(this._state.getSpellcastingAbility() || "int");
@@ -1797,7 +1824,13 @@ class CharacterSheetSpells {
 		}
 
 		// Build the toast message
-		let toastContent = `Cast ${spell.name}${upcast}${slotType}${attackInfo}${damageInfo}`;
+		let toastContent = `Cast ${spell.name}${upcast}${slotType}`;
+
+		if (deliveredViaFamiliar) {
+			toastContent += `<br><span class="text-info">🐾 Delivered via familiar (used familiar's Reaction)</span>`;
+		}
+
+		toastContent += `${attackInfo}${damageInfo}`;
 
 		if (effectsApplied.length > 0) {
 			toastContent += `<br><span class="text-success">✓ Applied: ${effectsApplied.join(", ")}</span>`;
