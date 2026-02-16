@@ -5576,6 +5576,7 @@ class CharacterSheetPage {
 				{type: "damage", label: "Damage", icon: "💥"},
 				{type: "spellDc", label: "Spell DC", icon: "🎯"},
 				{type: "spellAttack", label: "Spell Attack", icon: "✨"},
+				{type: "hp", label: "Max HP", icon: "❤️"},
 			];
 
 			let hasAny = false;
@@ -5605,6 +5606,52 @@ class CharacterSheetPage {
 							<span class="charsheet__modifier-summary-icon">💪</span>
 							<span class="charsheet__modifier-summary-label">${Parser.attAbvToFull(abl)} Save</span>
 							<span class="charsheet__modifier-summary-value ${value >= 0 ? "charsheet__modifier-summary-value--positive" : "charsheet__modifier-summary-value--negative"}">${valueStr}</span>
+						</div>
+					`);
+				}
+			});
+
+			// Show passive skill bonuses (from named modifiers)
+			const passiveBonuses = this._state.aggregateModifiersByPrefix("passive:");
+			Object.entries(passiveBonuses).forEach(([skill, total]) => {
+				if (total !== 0) {
+					hasAny = true;
+					const valueStr = total >= 0 ? `+${total}` : total;
+					const skillName = skill.charAt(0).toUpperCase() + skill.slice(1);
+					$summary.append(`
+						<div class="charsheet__modifier-summary-item">
+							<span class="charsheet__modifier-summary-icon">👁️</span>
+							<span class="charsheet__modifier-summary-label">Passive ${skillName}</span>
+							<span class="charsheet__modifier-summary-value ${total >= 0 ? "charsheet__modifier-summary-value--positive" : "charsheet__modifier-summary-value--negative"}">${valueStr}</span>
+						</div>
+					`);
+				}
+			});
+
+			// Show skill bonuses (from named modifiers)
+			const skillBonuses = this._state.aggregateModifiersByPrefix("skill:");
+			Object.entries(skillBonuses).forEach(([skill, total]) => {
+				if (total !== 0 && typeof total === "number") {
+					hasAny = true;
+					const valueStr = total >= 0 ? `+${total}` : total;
+					const skillName = skill.charAt(0).toUpperCase() + skill.slice(1);
+					$summary.append(`
+						<div class="charsheet__modifier-summary-item">
+							<span class="charsheet__modifier-summary-icon">📚</span>
+							<span class="charsheet__modifier-summary-label">${skillName} Checks</span>
+							<span class="charsheet__modifier-summary-value ${total >= 0 ? "charsheet__modifier-summary-value--positive" : "charsheet__modifier-summary-value--negative"}">${valueStr}</span>
+						</div>
+					`);
+				} else if (total === "proficiency") {
+					// Handle proficiency-based bonuses
+					hasAny = true;
+					const pb = this._state.getProficiencyBonus();
+					const skillName = skill.charAt(0).toUpperCase() + skill.slice(1);
+					$summary.append(`
+						<div class="charsheet__modifier-summary-item">
+							<span class="charsheet__modifier-summary-icon">📚</span>
+							<span class="charsheet__modifier-summary-label">${skillName} Checks</span>
+							<span class="charsheet__modifier-summary-value charsheet__modifier-summary-value--positive">+PB (+${pb})</span>
 						</div>
 					`);
 				}

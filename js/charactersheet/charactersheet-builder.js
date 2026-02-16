@@ -1427,6 +1427,19 @@ class CharacterSheetBuilder {
 							});
 						}
 					}
+
+					// Apply auto-effects (passive bonuses, etc.) that don't require user choices
+					const autoEffects = this._parseFeatureAutoEffects(opt);
+					autoEffects.forEach(effect => {
+						this._state.addNamedModifier({
+							name: opt.name,
+							type: effect.type,
+							value: effect.value,
+							note: effect.note || `From ${opt.name}`,
+							enabled: true,
+						});
+						console.log(`[CharSheet Builder] Applied auto-effect ${effect.type}: ${effect.value} from "${opt.name}"`);
+					});
 				} else if (opt.type === "subclassFeature" && opt.ref) {
 					// Handle subclass feature options
 					this._state.addFeature({
@@ -4319,6 +4332,85 @@ class CharacterSheetBuilder {
 		}
 
 		return [...new Set(found)];
+	}
+
+	/**
+	 * Parse automatic effects from a specialty/feature that don't require user choices.
+	 * Examples: "passive Perception increases by 3", "bonus equal to proficiency bonus"
+	 * @param {Object} opt - The option object with ref, name, type
+	 * @returns {Array} Array of effect objects: [{type, value, note}]
+	 */
+	_parseFeatureAutoEffects (opt) {
+		if (opt.type !== "classFeature" || !opt.ref) return [];
+
+		const fullOpt = this._getClassFeatureDataFromRef(opt.ref);
+		if (!fullOpt?.entries) return [];
+
+		const text = JSON.stringify(fullOpt.entries);
+		const effects = [];
+
+		// Pattern: "passive [Ability] ({@skill SkillName}) score increases by X"
+		// e.g., "your passive Wisdom ({@skill Perception}) score increases by 3"
+		const passiveIncreaseMatch = text.match(/passive\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*(?:score\s+)?increases?\s+by\s+(\d+)/i);
+		if (passiveIncreaseMatch) {
+			const skill = passiveIncreaseMatch[1].toLowerCase().replace(/\s+/g, "");
+			const value = parseInt(passiveIncreaseMatch[2]);
+			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveIncreaseMatch[1]}`});
+		}
+
+		// Pattern: "bonus to [Ability] ({@skill SkillName}) checks equal to your proficiency bonus"
+		// e.g., "You gain a bonus to Wisdom ({@skill Perception}) checks equal to your proficiency bonus"
+		const skillBonusProfMatch = text.match(/bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?\s+equal\s+to\s+(?:your\s+)?proficiency\s+bonus/i);
+		if (skillBonusProfMatch) {
+			const skill = skillBonusProfMatch[1].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `skill:${skill}`, value: "proficiency", note: `+PB to ${skillBonusProfMatch[1]} checks`});
+		}
+
+		// Pattern: "gain a +X bonus to [Ability] ({@skill SkillName}) checks"
+		const skillBonusFixedMatch = text.match(/gain\s+a?\s*\+?(\d+)\s*bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?/i);
+		if (skillBonusFixedMatch) {
+			const value = parseInt(skillBonusFixedMatch[1]);
+			const skill = skillBonusFixedMatch[2].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `skill:${skill}`, value, note: `+${value} to ${skillBonusFixedMatch[2]} checks`});
+		}
+
+		// Pattern: "Speed increases by X feet" or "your speed increases by X"
+		const speedIncreaseMatch = text.match(/(?:your\s+)?speed\s+increases?\s+by\s+(\d+)\s*(?:feet|ft)?/i);
+		if (speedIncreaseMatch) {
+			const value = parseInt(speedIncreaseMatch[1]);
+			effects.push({type: "speed", value, note: `+${value} ft. speed`});
+		}
+
+		// Pattern: "+X to passive {@skill SkillName}" or "passive {@skill SkillName} +X"
+		const passiveSimpleMatch = text.match(/\+(\d+)\s*(?:bonus\s+)?(?:to\s+)?(?:your\s+)?passive\s+\{@skill\s+([^}]+)\}/i);
+		if (passiveSimpleMatch) {
+			const value = parseInt(passiveSimpleMatch[1]);
+			const skill = passiveSimpleMatch[2].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveSimpleMatch[2]}`});
+		}
+
+		// Pattern: "darkvision increases by X feet" or "gain darkvision out to X feet"
+		const darkvisionIncreaseMatch = text.match(/darkvision\s+(?:increases?\s+by|out\s+to)\s+(\d+)\s*(?:feet|ft)?/i);
+		if (darkvisionIncreaseMatch) {
+			const value = parseInt(darkvisionIncreaseMatch[1]);
+			effects.push({type: "sense:darkvision", value, note: `Darkvision ${value} ft.`});
+		}
+
+		// Pattern: "AC increases by X" or "+X to AC"
+		const acMatch = text.match(/(?:AC|armor\s+class)\s+increases?\s+by\s+(\d+)|\+(\d+)\s+(?:to\s+)?(?:AC|armor\s+class)/i);
+		if (acMatch) {
+			const value = parseInt(acMatch[1] || acMatch[2]);
+			effects.push({type: "ac", value, note: `+${value} AC`});
+		}
+
+		// Pattern: "+X to initiative" or "initiative bonus of +X"
+		const initMatch = text.match(/\+(\d+)\s+(?:to\s+)?initiative|initiative\s+(?:bonus\s+(?:of\s+)?|increases?\s+by\s+)\+?(\d+)/i);
+		if (initMatch) {
+			const value = parseInt(initMatch[1] || initMatch[2]);
+			effects.push({type: "initiative", value, note: `+${value} initiative`});
+		}
+
+		return effects;
 	}
 
 	/**

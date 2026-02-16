@@ -7104,6 +7104,287 @@
 	border-top: 1px dashed var(--cs-border, var(--rgb-border-grey));
 }
 
+/* Level Up Modal - Wizard-Style Layout */
+.charsheet__levelup-wizard {
+	display: flex;
+	gap: var(--cs-space-lg, 1.25rem);
+	min-height: 60vh;
+	max-height: calc(90vh - 100px);
+	overflow: hidden;
+}
+
+/* Summary Sidebar */
+.charsheet__levelup-sidebar {
+	flex: 0 0 260px;
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-md, 0.75rem);
+	padding: var(--cs-space-md, 0.75rem);
+	background: var(--cs-bg-elevated, var(--rgb-bg));
+	border: 1px solid var(--cs-border, var(--rgb-border-grey));
+	border-radius: var(--cs-radius-lg, 12px);
+	overflow-y: auto;
+}
+
+.charsheet__levelup-sidebar-header {
+	text-align: center;
+	padding-bottom: var(--cs-space-sm, 0.5rem);
+	border-bottom: 1px solid var(--cs-border, var(--rgb-border-grey));
+}
+
+.charsheet__levelup-sidebar-header h4 {
+	margin: 0;
+	font-size: var(--cs-text-base, 1rem);
+	color: var(--cs-text-muted, var(--rgb-text-muted));
+}
+
+.charsheet__levelup-sidebar-header .level-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	font-size: 1.5rem;
+	font-weight: 700;
+	background: linear-gradient(135deg, var(--cs-primary, #6366f1), var(--cs-accent-purple, #8b5cf6));
+	color: white;
+	border-radius: 50%;
+	margin-bottom: var(--cs-space-xs, 0.25rem);
+}
+
+/* Progress Bar */
+.charsheet__levelup-progress {
+	padding: var(--cs-space-sm, 0.5rem);
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+	border-radius: var(--cs-radius-md, 8px);
+}
+
+.charsheet__levelup-progress-bar {
+	height: 8px;
+	background: var(--cs-border, var(--rgb-border-grey));
+	border-radius: 4px;
+	overflow: hidden;
+	margin-bottom: var(--cs-space-xs, 0.25rem);
+}
+
+.charsheet__levelup-progress-fill {
+	height: 100%;
+	background: linear-gradient(90deg, var(--cs-success, #10b981), var(--cs-accent-green, #22c55e));
+	transition: width 0.3s ease;
+	border-radius: 4px;
+}
+
+.charsheet__levelup-progress-text {
+	font-size: var(--cs-text-xs, 0.75rem);
+	color: var(--cs-text-muted, var(--rgb-text-muted));
+	text-align: center;
+}
+
+/* Summary Items */
+.charsheet__levelup-summary-item {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	padding: var(--cs-space-sm, 0.5rem) var(--cs-space-md, 0.75rem);
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+	border-radius: var(--cs-radius-md, 8px);
+	cursor: pointer;
+	transition: all var(--cs-transition-fast, 0.15s ease);
+	border: 2px solid transparent;
+}
+
+.charsheet__levelup-summary-item:hover {
+	background: var(--cs-bg-base, var(--rgb-bg));
+	border-color: var(--cs-border, var(--rgb-border-grey));
+}
+
+.charsheet__levelup-summary-item.active {
+	border-color: var(--cs-primary, #6366f1);
+	background: rgba(99, 102, 241, 0.08);
+}
+
+.charsheet__levelup-summary-item.completed {
+	border-color: var(--cs-success, #10b981);
+}
+
+.charsheet__levelup-summary-item.warning {
+	border-color: var(--cs-warning, #f59e0b);
+}
+
+.charsheet__levelup-summary-icon {
+	font-size: 1.1rem;
+	width: 24px;
+	text-align: center;
+}
+
+.charsheet__levelup-summary-icon.status-complete {
+	color: var(--cs-success, #10b981);
+}
+
+.charsheet__levelup-summary-icon.status-pending {
+	color: var(--cs-warning, #f59e0b);
+}
+
+.charsheet__levelup-summary-icon.status-info {
+	color: var(--cs-text-muted, var(--rgb-text-muted));
+}
+
+.charsheet__levelup-summary-content {
+	flex: 1;
+	min-width: 0;
+}
+
+.charsheet__levelup-summary-label {
+	font-size: var(--cs-text-sm, 0.875rem);
+	font-weight: 600;
+	color: var(--cs-text-primary, var(--rgb-text));
+}
+
+.charsheet__levelup-summary-value {
+	font-size: var(--cs-text-xs, 0.75rem);
+	color: var(--cs-text-muted, var(--rgb-text-muted));
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Main Content Area */
+.charsheet__levelup-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-sm, 0.5rem);
+	overflow-y: auto;
+	padding-right: var(--cs-space-xs, 0.25rem);
+	min-width: 0;
+}
+
+/* Accordion Sections */
+.charsheet__levelup-accordion {
+	background: var(--cs-bg-elevated, var(--rgb-bg));
+	border: 1px solid var(--cs-border, var(--rgb-border-grey));
+	border-radius: var(--cs-radius-lg, 12px);
+	overflow: hidden;
+	transition: all var(--cs-transition-fast, 0.15s ease);
+}
+
+.charsheet__levelup-accordion.expanded {
+	box-shadow: var(--cs-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+}
+
+.charsheet__levelup-accordion.completed:not(.expanded) {
+	opacity: 0.8;
+}
+
+.charsheet__levelup-accordion-header {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	padding: var(--cs-space-md, 0.75rem) var(--cs-space-lg, 1.25rem);
+	cursor: pointer;
+	transition: background var(--cs-transition-fast, 0.15s ease);
+	user-select: none;
+}
+
+.charsheet__levelup-accordion-header:hover {
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+}
+
+.charsheet__levelup-accordion-icon {
+	font-size: 1.2rem;
+	width: 28px;
+	text-align: center;
+}
+
+.charsheet__levelup-accordion-title {
+	flex: 1;
+	font-weight: 600;
+	font-size: var(--cs-text-base, 1rem);
+	color: var(--cs-text-primary, var(--rgb-text));
+}
+
+.charsheet__levelup-accordion-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--cs-space-xs, 0.25rem);
+	padding: var(--cs-space-xs, 0.25rem) var(--cs-space-sm, 0.5rem);
+	font-size: var(--cs-text-xs, 0.75rem);
+	font-weight: 600;
+	border-radius: var(--cs-radius-sm, 4px);
+}
+
+.charsheet__levelup-accordion-badge.badge-complete {
+	background: rgba(16, 185, 129, 0.15);
+	color: var(--cs-success, #10b981);
+}
+
+.charsheet__levelup-accordion-badge.badge-pending {
+	background: rgba(245, 158, 11, 0.15);
+	color: var(--cs-warning, #f59e0b);
+}
+
+.charsheet__levelup-accordion-badge.badge-info {
+	background: rgba(99, 102, 241, 0.15);
+	color: var(--cs-primary, #6366f1);
+}
+
+.charsheet__levelup-accordion-chevron {
+	font-size: 0.9rem;
+	color: var(--cs-text-muted, var(--rgb-text-muted));
+	transition: transform 0.2s ease;
+}
+
+.charsheet__levelup-accordion.expanded .charsheet__levelup-accordion-chevron {
+	transform: rotate(180deg);
+}
+
+.charsheet__levelup-accordion-body {
+	display: none;
+	padding: var(--cs-space-md, 0.75rem) var(--cs-space-lg, 1.25rem) var(--cs-space-lg, 1.25rem);
+	border-top: 1px solid var(--cs-border, var(--rgb-border-grey));
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+	max-height: 55vh;
+	overflow-y: auto;
+}
+
+.charsheet__levelup-accordion.expanded .charsheet__levelup-accordion-body {
+	display: block;
+}
+
+/* Responsive: Stack on mobile */
+@media (max-width: 768px) {
+	.charsheet__levelup-wizard {
+		flex-direction: column;
+		max-height: 85vh;
+	}
+	
+	.charsheet__levelup-sidebar {
+		flex: 0 0 auto;
+		max-height: 150px;
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+	
+	.charsheet__levelup-sidebar-header {
+		flex: 0 0 100%;
+		padding-bottom: var(--cs-space-xs, 0.25rem);
+	}
+	
+	.charsheet__levelup-summary-item {
+		flex: 0 0 auto;
+		padding: var(--cs-space-xs, 0.25rem) var(--cs-space-sm, 0.5rem);
+	}
+	
+	.charsheet__levelup-summary-content {
+		display: none;
+	}
+	
+	.charsheet__levelup-progress {
+		display: none;
+	}
+}
+
 /* Optional Features (invocations, metamagic, maneuvers, etc.) */
 .charsheet__levelup-opt-features {
 	display: flex;
@@ -8758,6 +9039,25 @@ body:has(.charactersheet) .ui-modal__inner:has(.charsheet__spell-list),
 body:has(.charactersheet) .ui-modal__inner:has(.charsheet__item-list) {
 	max-width: 900px;
 	min-height: 500px;
+}
+
+/* Level-up wizard modal - much larger */
+body:has(.charactersheet) .ui-modal__inner:has(.charsheet__levelup-wizard) {
+	max-width: 95vw !important;
+	width: 95vw !important;
+	max-height: 90vh !important;
+	min-height: 70vh;
+	height: auto;
+	padding: var(--cs-space-lg, 1.25rem);
+}
+
+/* Fix hover windows appearing behind level-up modal */
+body:has(.charsheet__levelup-wizard) .hwin {
+	z-index: 2000 !important;
+}
+
+body:has(.charsheet__levelup-wizard) .hwin .hoverborder {
+	z-index: 2001 !important;
 }
 
 /* Ensure modal scroller allows overflow for dropdowns */

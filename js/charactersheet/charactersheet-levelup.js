@@ -469,311 +469,751 @@ class CharacterSheetLevelUp {
 			title: `🎉 Level Up: ${classEntry.name} → Level ${newLevel}`,
 			isMinHeight0: true,
 			isWidth100: true,
+			isUncappedWidth: true,
+			isUncappedHeight: true,
 		});
 
+		// ========== STATE TRACKING ==========
 		let asiChoices = {str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0};
 		let selectedFeat = null;
 		let selectedSubclass = null;
 		let hpMethod = "average";
-		let currentFeatures = newFeatures; // Track current features
-		let selectedOptionalFeatures = {}; // Track optional feature selections by type
+		let currentFeatures = newFeatures;
+		let selectedOptionalFeatures = {};
+		let selectedFeatureOptions = {};
+		let featureOptionGroups = [];
+		this._selectedFeatureSkillChoices = {};
+		let selectedExpertise = {};
+		let expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
+		let selectedLanguages = {};
+		let languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
+		let selectedScholarSkill = null;
+		let selectedSpellbookSpells = [];
 
-		const $content = $(`<div class="charsheet__levelup-body"></div>`).appendTo($modalInner);
-		let $featuresSection = null; // Reference to features section for updates
+		// ========== DETERMINE WHAT SECTIONS ARE NEEDED ==========
+		const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
+		const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
+		const isEpicBoonLevel = newLevel === 19 && (classEntry.source === "XPHB" || classEntry.source === "TGTT");
+		const optionalFeatureGains = this._getOptionalFeatureGains(classData, classEntry.level, newLevel);
+		featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
 
-		// Filter out ASI-related features if ASI is being handled separately
+		// Scholar expertise (Wizard XPHB level 2)
+		const existingScholarExpertise = this._state.getScholarExpertise();
+		const isWizard2024 = classEntry.name === "Wizard" && classEntry.source === "XPHB";
+		const needsScholarChoice = isWizard2024 && newLevel === 2 && !existingScholarExpertise;
+
+		// Wizard spellbook
+		const isWizard = classEntry.name === "Wizard";
+		const wizardSpellCount = 2;
+		const maxSpellLevel = Math.min(9, Math.ceil(newLevel / 2));
+
+		// ========== FILTER ASI FEATURES ==========
 		const filterAsiFeatures = (features) => {
 			if (!hasAsi) return features;
-			// Filter out features whose names indicate they are ASI/Feat choices
-			const asiFeatureNames = [
-				"ability score improvement",
-				"ability score increase",
-				"asi",
-				"feat",
-			];
+			const asiFeatureNames = ["ability score improvement", "ability score increase", "asi", "feat"];
 			return features.filter(f => {
 				const nameLower = f.name.toLowerCase();
 				return !asiFeatureNames.some(asi => nameLower.includes(asi));
 			});
 		};
 
-		// Helper to update features display
-		const updateFeaturesDisplay = () => {
-			if ($featuresSection) {
-				$featuresSection.remove();
-			}
-			const filteredFeatures = filterAsiFeatures(currentFeatures);
-			if (filteredFeatures.length) {
-				$featuresSection = this._renderNewFeatures(filteredFeatures);
-				// Insert before HP section (or at end if no HP section)
-				const $hpSection = $content.find(".charsheet__levelup-section").last();
-				if ($hpSection.length) {
-					$featuresSection.insertBefore($hpSection);
-				} else {
-					$content.append($featuresSection);
-				}
-			}
-		};
+		// ========== BUILD WIZARD LAYOUT ==========
+		const $wizard = $(`<div class="charsheet__levelup-wizard"></div>`).appendTo($modalInner);
 
-		// Feature options tracking - defined early for use in subclass callback
-		let selectedFeatureOptions = {};
-		let featureOptionGroups = [];
-		this._selectedFeatureSkillChoices = {}; // Reset skill sub-choices for new level-up
-		let $featOptSection = null;
+		// ========== SIDEBAR ==========
+		const $sidebar = $(`<div class="charsheet__levelup-sidebar"></div>`).appendTo($wizard);
 
-		const updateFeatureOptionsDisplay = () => {
-			if ($featOptSection) {
-				$featOptSection.remove();
-				$featOptSection = null;
-			}
-			selectedFeatureOptions = {}; // Reset selections when features change
-			featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
-			if (featureOptionGroups.length) {
-				$featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
-					selectedFeatureOptions[featureKey] = options;
-				});
-				// Insert after optional features section or before HP section
-				const $hpSection = $content.find(".charsheet__levelup-section").last();
-				if ($hpSection.length) {
-					$featOptSection.insertBefore($hpSection);
-				} else {
-					$content.append($featOptSection);
-				}
-			}
-		};
+		// Sidebar Header
+		$$`<div class="charsheet__levelup-sidebar-header">
+			<div class="level-badge">${newLevel}</div>
+			<h4>${classEntry.name}</h4>
+		</div>`.appendTo($sidebar);
 
-		// Subclass selection
-		if (needsSubclass) {
-			const $subclassSection = this._renderSubclassSelection(classData, (subclass) => {
-				selectedSubclass = subclass;
-				// Update features to include subclass features and filter out placeholders
-				currentFeatures = this._getLevelFeatures(classData, newLevel, subclass);
-				updateFeaturesDisplay();
-				updateFeatureOptionsDisplay();
-				// Note: updateExpertiseDisplay and updateLanguageDisplay are defined after this block
-				// They will be called on initial render, but subclass selection at levels with
-				// expertise/language grants is uncommon (usually level 3 when these features come at 6+)
+		// Progress Bar
+		const $progress = $(`
+			<div class="charsheet__levelup-progress">
+				<div class="charsheet__levelup-progress-bar">
+					<div class="charsheet__levelup-progress-fill" style="width: 0%"></div>
+				</div>
+				<div class="charsheet__levelup-progress-text">0% complete</div>
+			</div>
+		`).appendTo($sidebar);
+
+		// Summary items container
+		const $summaryItems = $(`<div class="charsheet__levelup-summary-items"></div>`).appendTo($sidebar);
+
+		// ========== MAIN CONTENT ==========
+		const $main = $(`<div class="charsheet__levelup-main"></div>`).appendTo($wizard);
+
+		// ========== ACCORDION HELPER ==========
+		const accordions = {};
+		const createAccordion = (id, icon, title, $content, {required = false, startExpanded = false} = {}) => {
+			const $accordion = $(`
+				<div class="charsheet__levelup-accordion ${startExpanded ? "expanded" : ""}" data-accordion-id="${id}">
+					<div class="charsheet__levelup-accordion-header">
+						<span class="charsheet__levelup-accordion-icon">${icon}</span>
+						<span class="charsheet__levelup-accordion-title">${title}</span>
+						<span class="charsheet__levelup-accordion-badge ${required ? "badge-pending" : "badge-info"}">
+							${required ? "⚠️ Required" : "ℹ️ Info"}
+						</span>
+						<span class="charsheet__levelup-accordion-chevron glyphicon glyphicon-chevron-down"></span>
+					</div>
+					<div class="charsheet__levelup-accordion-body"></div>
+				</div>
+			`);
+
+			$accordion.find(".charsheet__levelup-accordion-body").append($content);
+			$accordion.find(".charsheet__levelup-accordion-header").on("click", () => {
+				const isExpanded = $accordion.hasClass("expanded");
+				// Collapse all others
+				$main.find(".charsheet__levelup-accordion").removeClass("expanded");
+				// Toggle this one
+				if (!isExpanded) $accordion.addClass("expanded");
+				updateActiveSummary(isExpanded ? null : id);
 			});
-			$content.append($subclassSection);
+
+			accordions[id] = {
+				$el: $accordion,
+				required,
+				setComplete: (complete, summary = "") => {
+					const $badge = $accordion.find(".charsheet__levelup-accordion-badge");
+					if (complete) {
+						$badge.removeClass("badge-pending badge-info").addClass("badge-complete")
+							.html(`✓ ${summary || "Done"}`);
+						$accordion.addClass("completed");
+					} else if (required) {
+						$badge.removeClass("badge-complete badge-info").addClass("badge-pending")
+							.html("⚠️ Required");
+						$accordion.removeClass("completed");
+					} else {
+						$badge.removeClass("badge-complete badge-pending").addClass("badge-info")
+							.html(`ℹ️ ${summary || "Info"}`);
+						$accordion.removeClass("completed");
+					}
+					updateProgress();
+				},
+			};
+
+			return $accordion;
+		};
+
+		// ========== SUMMARY ITEM HELPER ==========
+		const summaryItems = {};
+		const createSummaryItem = (id, icon, label, {required = false} = {}) => {
+			const $item = $(`
+				<div class="charsheet__levelup-summary-item ${required ? "warning" : ""}" data-summary-id="${id}">
+					<span class="charsheet__levelup-summary-icon ${required ? "status-pending" : "status-info"}">${icon}</span>
+					<div class="charsheet__levelup-summary-content">
+						<div class="charsheet__levelup-summary-label">${label}</div>
+						<div class="charsheet__levelup-summary-value">Not selected</div>
+					</div>
+				</div>
+			`);
+
+			$item.on("click", () => {
+				// Expand corresponding accordion
+				const $accordion = $main.find(`[data-accordion-id="${id}"]`);
+				if ($accordion.length) {
+					$main.find(".charsheet__levelup-accordion").removeClass("expanded");
+					$accordion.addClass("expanded");
+					$accordion[0].scrollIntoView({behavior: "smooth", block: "start"});
+					updateActiveSummary(id);
+				}
+			});
+
+			summaryItems[id] = {
+				$el: $item,
+				required,
+				setStatus: (complete, value = "") => {
+					const $icon = $item.find(".charsheet__levelup-summary-icon");
+					const $value = $item.find(".charsheet__levelup-summary-value");
+
+					if (complete) {
+						$item.removeClass("warning").addClass("completed");
+						$icon.removeClass("status-pending status-info").addClass("status-complete").text("✓");
+						$value.text(value || "Done");
+					} else if (required) {
+						$item.removeClass("completed").addClass("warning");
+						$icon.removeClass("status-complete status-info").addClass("status-pending").text("⚠️");
+						$value.text("Not selected");
+					} else {
+						$item.removeClass("completed warning");
+						$icon.removeClass("status-complete status-pending").addClass("status-info").text(icon);
+						$value.text(value || "—");
+					}
+				},
+			};
+
+			return $item;
+		};
+
+		const updateActiveSummary = (activeId) => {
+			$summaryItems.find(".charsheet__levelup-summary-item").removeClass("active");
+			if (activeId) {
+				$summaryItems.find(`[data-summary-id="${activeId}"]`).addClass("active");
+			}
+		};
+
+		const updateProgress = () => {
+			const requiredIds = Object.keys(summaryItems).filter(id => summaryItems[id].required);
+			const completedCount = requiredIds.filter(id => summaryItems[id].$el.hasClass("completed")).length;
+			const totalRequired = requiredIds.length;
+			const percent = totalRequired > 0 ? Math.round((completedCount / totalRequired) * 100) : 100;
+
+			$progress.find(".charsheet__levelup-progress-fill").css("width", `${percent}%`);
+			$progress.find(".charsheet__levelup-progress-text").text(
+				percent === 100 ? "✓ Ready to level up!" : `${percent}% complete`,
+			);
+		};
+
+		// ========== 1. SUBCLASS SECTION ==========
+		if (needsSubclass) {
+			$summaryItems.append(createSummaryItem("subclass", "📚", classData.subclassTitle || "Subclass", {required: true}));
+
+			const $subclassContent = this._renderSubclassSelectionCompact(classData, (subclass) => {
+				selectedSubclass = subclass;
+				currentFeatures = this._getLevelFeatures(classData, newLevel, subclass);
+
+				// Update dependent sections
+				featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
+				expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
+				languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
+
+				// Update summary & accordion
+				summaryItems.subclass.setStatus(true, subclass.name);
+				accordions.subclass.setComplete(true, subclass.shortName || subclass.name);
+
+				// Update features accordion
+				if (accordions.features) {
+					const filtered = filterAsiFeatures(currentFeatures);
+					accordions.features.$el.find(".charsheet__levelup-accordion-body").empty()
+						.append(this._renderFeaturesCompact(filtered));
+					accordions.features.setComplete(true, `${filtered.length} feature${filtered.length !== 1 ? "s" : ""}`);
+				}
+
+				// Auto-expand next incomplete section
+				expandNextIncomplete();
+			});
+
+			$main.append(createAccordion("subclass", "📚", `Choose ${classData.subclassTitle || "Subclass"}`, $subclassContent, {required: true, startExpanded: true}));
 		}
 
-		// ASI / Feat selection
+		// ========== 2. ASI / FEAT SECTION ==========
 		if (hasAsi) {
-			// Check if Thelemar ASI+Feat rule is enabled and this is level 4
-			const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
-			const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
+			const asiLabel = isBothAsiAndFeat ? "ASI + Feat" : isEpicBoonLevel ? "ASI / Epic Boon" : "ASI / Feat";
+			$summaryItems.append(createSummaryItem("asi", "📈", asiLabel, {required: true}));
 
-			// Detect Epic Boon eligibility: XPHB (or TGTT) class at level 19
-			const isEpicBoonLevel = newLevel === 19
-				&& (classEntry.source === "XPHB" || classEntry.source === "TGTT");
-
-			const $asiSection = this._renderAsiSelection(
+			const $asiContent = this._renderAsiSelectionCompact(
 				(ability, delta) => {
 					asiChoices[ability] = (asiChoices[ability] || 0) + delta;
+					updateAsiStatus();
 				},
 				(feat) => {
 					selectedFeat = feat;
+					updateAsiStatus();
 				},
-				isBothAsiAndFeat, // Pass flag to show both
-				isEpicBoonLevel, // Pass Epic Boon context
+				isBothAsiAndFeat,
+				isEpicBoonLevel,
 			);
-			$content.append($asiSection);
+
+			const updateAsiStatus = () => {
+				const totalAsi = Object.values(asiChoices).reduce((sum, v) => sum + v, 0);
+				const asiComplete = totalAsi === 2;
+				const featComplete = selectedFeat != null;
+
+				let complete = false;
+				let summary = "";
+
+				if (isBothAsiAndFeat) {
+					complete = asiComplete && featComplete;
+					const asiParts = Object.entries(asiChoices).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
+					summary = asiComplete && featComplete
+						? `${asiParts.join(", ")} + ${selectedFeat.name}`
+						: asiComplete ? `${asiParts.join(", ")} (+feat)`
+							: featComplete ? `+${selectedFeat.name} (+ASI)` : "Incomplete";
+				} else if (featComplete) {
+					complete = true;
+					summary = selectedFeat.name;
+				} else if (asiComplete) {
+					complete = true;
+					const parts = Object.entries(asiChoices).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
+					summary = parts.join(", ");
+				}
+
+				summaryItems.asi.setStatus(complete, summary);
+				accordions.asi.setComplete(complete, summary);
+			};
+
+			$main.append(createAccordion("asi", "📈", asiLabel, $asiContent, {required: true, startExpanded: !needsSubclass}));
 		}
 
-		// Optional features (metamagic, invocations, maneuvers, etc.)
-		const optionalFeatureGains = this._getOptionalFeatureGains(classData, classEntry.level, newLevel);
+		// ========== 3. OPTIONAL FEATURES (Metamagic, Invocations, etc.) ==========
 		if (optionalFeatureGains.length) {
-			const $optSection = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features) => {
+			$summaryItems.append(createSummaryItem("optfeatures", "✨", "Class Options", {required: true}));
+
+			const $optContent = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features) => {
 				selectedOptionalFeatures[featureType] = features;
+				updateOptFeaturesStatus();
 			}, newLevel);
-			$content.append($optSection);
-		}
 
-		// Feature options (features with embedded type: "options", like Specialties)
-		// Initial render (updateFeatureOptionsDisplay is defined above for subclass callback use)
-		featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
-		if (featureOptionGroups.length) {
-			$featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
-				selectedFeatureOptions[featureKey] = options;
-			});
-			$content.append($featOptSection);
-		}
+			const updateOptFeaturesStatus = () => {
+				let allComplete = true;
+				const summaries = [];
 
-		// Expertise grants from features like Deft Explorer Improvement
-		let selectedExpertise = {};
-		let expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
-		let $expertiseSection = null;
-
-		const updateExpertiseDisplay = () => {
-			if ($expertiseSection) {
-				$expertiseSection.remove();
-				$expertiseSection = null;
-			}
-			selectedExpertise = {}; // Reset selections when features change
-			expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
-			if (expertiseGrants.length) {
-				$expertiseSection = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
-					selectedExpertise[featureKey] = skills;
-				});
-				// Insert before HP section
-				const $hpSection = $content.find(".charsheet__levelup-section").last();
-				if ($hpSection.length) {
-					$expertiseSection.insertBefore($hpSection);
-				} else {
-					$content.append($expertiseSection);
-				}
-			}
-		};
-
-		if (expertiseGrants.length) {
-			$expertiseSection = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
-				selectedExpertise[featureKey] = skills;
-			});
-			$content.append($expertiseSection);
-		}
-
-		// Language grants from features like Deft Explorer Improvement
-		let selectedLanguages = {};
-		let languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
-		let $languageSection = null;
-
-		const updateLanguageDisplay = () => {
-			if ($languageSection) {
-				$languageSection.remove();
-				$languageSection = null;
-			}
-			selectedLanguages = {}; // Reset selections when features change
-			languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
-			if (languageGrants.length) {
-				$languageSection = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
-					selectedLanguages[featureKey] = languages;
-				});
-				// Insert before HP section
-				const $hpSection = $content.find(".charsheet__levelup-section").last();
-				if ($hpSection.length) {
-					$languageSection.insertBefore($hpSection);
-				} else {
-					$content.append($languageSection);
-				}
-			}
-		};
-
-		if (languageGrants.length) {
-			$languageSection = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
-				selectedLanguages[featureKey] = languages;
-			});
-			$content.append($languageSection);
-		}
-
-		// New features (initial render with ASI features filtered)
-		const filteredFeatures = filterAsiFeatures(currentFeatures);
-		if (filteredFeatures.length) {
-			$featuresSection = this._renderNewFeatures(filteredFeatures);
-			$content.append($featuresSection);
-		}
-
-		// HP increase section
-		const $hpSection = this._renderHpIncrease(classData, newLevel, (method) => { hpMethod = method; });
-		$content.append($hpSection);
-
-		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose(false));
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary"><span class="glyphicon glyphicon-arrow-up"></span> Level Up</button>`)
-			.on("click", async () => {
-				// Validate subclass if needed
-				if (needsSubclass && !selectedSubclass) {
-					JqueryUtil.doToast({type: "warning", content: "Please select a subclass."});
-					return;
-				}
-
-				// Validate ASI if applicable
-				if (hasAsi) {
-					const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
-					const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
-
-					const totalAsi = Object.values(asiChoices).reduce((sum, v) => sum + v, 0);
-
-					if (isBothAsiAndFeat) {
-						// Need both ASI points spent AND a feat selected
-						if (totalAsi !== 2) {
-							JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points (2 total)."});
-							return;
-						}
-						if (!selectedFeat) {
-							JqueryUtil.doToast({type: "warning", content: "Please also select a feat (Thelemar rules: ASI + Feat at level 4)."});
-							return;
-						}
-					} else if (!selectedFeat) {
-						// Normal rules: either ASI or Feat
-						if (totalAsi !== 2) {
-							JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points (2 total)."});
-							return;
-						}
-					}
-				}
-
-				// Validate optional features if applicable
 				for (const gain of optionalFeatureGains) {
 					const featureKey = gain.featureTypes.join("_");
 					const selected = selectedOptionalFeatures[featureKey] || [];
 					if (selected.length < gain.newCount) {
-						JqueryUtil.doToast({type: "warning", content: `Please select ${gain.newCount} ${gain.name}.`});
-						return;
+						allComplete = false;
+					} else {
+						summaries.push(`${selected.length} ${gain.name}`);
 					}
 				}
 
-				// Validate feature options if applicable
+				summaryItems.optfeatures.setStatus(allComplete, summaries.join(", ") || "Select options");
+				accordions.optfeatures.setComplete(allComplete, summaries.join(", "));
+			};
+
+			$main.append(createAccordion("optfeatures", "✨", "Class Options", $optContent, {required: true}));
+		}
+
+		// ========== 4. FEATURE OPTIONS (Specialties, etc.) ==========
+		if (featureOptionGroups.length) {
+			$summaryItems.append(createSummaryItem("featoptions", "🎯", "Feature Choices", {required: true}));
+
+			const $featOptContent = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
+				selectedFeatureOptions[featureKey] = options;
+				updateFeatOptionsStatus();
+			});
+
+			const updateFeatOptionsStatus = () => {
+				let allComplete = true;
+				const summaries = [];
+
+				// Count available options (not already chosen)
+				const existingFeatures = this._state.getFeatures?.() || [];
+				const existingFeatureNames = new Set(existingFeatures.map(f => f.name));
+
 				for (const optGroup of featureOptionGroups) {
 					const featureKey = `${optGroup.featureName}_${optGroup.featureSource || ""}`;
 					const selected = selectedFeatureOptions[featureKey] || [];
-					if (selected.length < optGroup.count) {
-						JqueryUtil.doToast({type: "warning", content: `Please select ${optGroup.count} option(s) for ${optGroup.featureName}.`});
-						return;
+
+					const availableCount = optGroup.options.filter(opt => {
+						if (!existingFeatureNames.has(opt.name)) return true;
+						if (opt.type === "classFeature" && opt.ref) {
+							const parts = opt.ref.split("|");
+							const classFeatures = this._page.getClassFeatures();
+							const fullOpt = classFeatures.find(f => f.name === parts[0] && f.className === parts[1] && f.source === parts[2]);
+							if (fullOpt?.entries) {
+								const text = JSON.stringify(fullOpt.entries).toLowerCase();
+								return text.includes("multiple times") || text.includes("chosen again");
+							}
+						}
+						return false;
+					}).length;
+
+					const requiredCount = Math.min(optGroup.count, availableCount);
+					if (requiredCount > 0 && selected.length < requiredCount) {
+						allComplete = false;
+					} else if (selected.length > 0) {
+						summaries.push(selected.map(o => o.name).join(", "));
 					}
 				}
 
-				// Validate expertise selections if applicable
-				for (const grant of expertiseGrants) {
-					const selected = selectedExpertise[grant.featureName] || [];
-					if (selected.length < grant.count) {
-						JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} skill(s) for expertise from ${grant.featureName}.`});
-						return;
-					}
-				}
+				summaryItems.featoptions.setStatus(allComplete, summaries.join("; ") || "Select options");
+				accordions.featoptions.setComplete(allComplete, summaries.length ? `${summaries.length} chosen` : "");
+			};
 
-				// Validate language selections if applicable
-				for (const grant of languageGrants) {
-					const selected = selectedLanguages[grant.featureName] || [];
-					if (selected.length < grant.count) {
-						JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} language(s) from ${grant.featureName}.`});
-						return;
-					}
-				}
+			$main.append(createAccordion("featoptions", "🎯", "Feature Choices", $featOptContent, {required: true}));
+		}
 
-				// Apply level up
-				await this._applyLevelUp({
-					classEntry,
-					newLevel,
-					asiChoices,
-					selectedFeat,
-					selectedSubclass,
-					selectedOptionalFeatures,
-					selectedFeatureOptions,
-					selectedExpertise,
-					selectedLanguages,
-					newFeatures: currentFeatures, // Use updated features if subclass was selected
-					hpMethod,
-					classData,
-				});
+		// ========== 5. EXPERTISE ==========
+		if (expertiseGrants.length) {
+			$summaryItems.append(createSummaryItem("expertise", "⭐", "Expertise", {required: true}));
 
-				doClose(true);
+			const $expertiseContent = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
+				selectedExpertise[featureKey] = skills;
+				updateExpertiseStatus();
 			});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			${$btnCancel}
-			${$btnConfirm}
-		</div>`.appendTo($modalInner);
+			const updateExpertiseStatus = () => {
+				let allComplete = true;
+				const allSkills = [];
+
+				for (const grant of expertiseGrants) {
+					const selected = selectedExpertise[grant.featureName] || [];
+					if (selected.length < grant.count) allComplete = false;
+					allSkills.push(...selected);
+				}
+
+				summaryItems.expertise.setStatus(allComplete, allSkills.join(", ") || "Select skills");
+				accordions.expertise.setComplete(allComplete, allSkills.join(", "));
+			};
+
+			$main.append(createAccordion("expertise", "⭐", "Expertise", $expertiseContent, {required: true}));
+		}
+
+		// ========== 6. LANGUAGES ==========
+		if (languageGrants.length) {
+			$summaryItems.append(createSummaryItem("languages", "🗣️", "Languages", {required: true}));
+
+			const $langContent = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
+				selectedLanguages[featureKey] = languages;
+				updateLanguageStatus();
+			});
+
+			const updateLanguageStatus = () => {
+				let allComplete = true;
+				const allLangs = [];
+
+				for (const grant of languageGrants) {
+					const selected = selectedLanguages[grant.featureName] || [];
+					if (selected.length < grant.count) allComplete = false;
+					allLangs.push(...selected);
+				}
+
+				summaryItems.languages.setStatus(allComplete, allLangs.join(", ") || "Select languages");
+				accordions.languages.setComplete(allComplete, allLangs.join(", "));
+			};
+
+			$main.append(createAccordion("languages", "🗣️", "Languages", $langContent, {required: true}));
+		}
+
+		// ========== 7. SCHOLAR EXPERTISE (Wizard) ==========
+		if (needsScholarChoice) {
+			$summaryItems.append(createSummaryItem("scholar", "📖", "Scholar", {required: true}));
+
+			const $scholarContent = this._renderScholarExpertiseSelection((skill) => {
+				selectedScholarSkill = skill;
+				summaryItems.scholar.setStatus(true, skill);
+				accordions.scholar.setComplete(true, skill);
+				expandNextIncomplete();
+			});
+
+			$main.append(createAccordion("scholar", "📖", "Scholar Expertise", $scholarContent, {required: true}));
+		}
+
+		// ========== 8. WIZARD SPELLBOOK ==========
+		if (isWizard) {
+			$summaryItems.append(createSummaryItem("spellbook", "📕", "Spellbook", {required: true}));
+
+			const $spellbookContent = this._renderWizardSpellbookSelection(wizardSpellCount, maxSpellLevel, (spells) => {
+				selectedSpellbookSpells = spells;
+				const complete = spells.length >= wizardSpellCount;
+				const summary = spells.length > 0 ? spells.map(s => s.name).join(", ") : "Select spells";
+				summaryItems.spellbook.setStatus(complete, summary);
+				accordions.spellbook.setComplete(complete, `${spells.length}/${wizardSpellCount} spells`);
+			});
+
+			$main.append(createAccordion("spellbook", "📕", `Spellbook (+${wizardSpellCount} Spells)`, $spellbookContent, {required: true}));
+		}
+
+		// ========== 9. NEW FEATURES (Info Only) ==========
+		const filteredFeatures = filterAsiFeatures(currentFeatures);
+		if (filteredFeatures.length) {
+			$summaryItems.append(createSummaryItem("features", "⭐", "New Features", {required: false}));
+
+			const $featuresContent = this._renderFeaturesCompact(filteredFeatures);
+			$main.append(createAccordion("features", "⭐", `New Features (${filteredFeatures.length})`, $featuresContent, {required: false}));
+
+			summaryItems.features.setStatus(true, `${filteredFeatures.length} feature${filteredFeatures.length !== 1 ? "s" : ""}`);
+			accordions.features.setComplete(true, `${filteredFeatures.length} gained`);
+		}
+
+		// ========== 10. HP ==========
+		$summaryItems.append(createSummaryItem("hp", "❤️", "Hit Points", {required: false}));
+
+		const hitDie = this._getClassHitDie(classData);
+		const conMod = this._state.getAbilityMod("con");
+		const averageHp = Math.ceil(hitDie / 2) + 1 + conMod;
+
+		const $hpContent = $(`
+			<div class="charsheet__levelup-hp">
+				<label class="ve-flex-v-center">
+					<input type="radio" name="hp-method-wizard" value="average" checked class="mr-2">
+					<span>Take average: <strong>${averageHp}</strong> HP (${Math.ceil(hitDie / 2) + 1} + ${conMod} CON)</span>
+				</label>
+				<label class="ve-flex-v-center">
+					<input type="radio" name="hp-method-wizard" value="roll" class="mr-2">
+					<span>Roll: 1d${hitDie} + ${conMod} CON</span>
+				</label>
+			</div>
+		`);
+
+		$hpContent.find('input[name="hp-method-wizard"]').on("change", function () {
+			hpMethod = $(this).val();
+			summaryItems.hp.setStatus(true, hpMethod === "average" ? `+${averageHp} (avg)` : `1d${hitDie}+${conMod}`);
+		});
+
+		$main.append(createAccordion("hp", "❤️", "Hit Points", $hpContent, {required: false}));
+		summaryItems.hp.setStatus(true, `+${averageHp} (avg)`);
+		accordions.hp.setComplete(true, `+${averageHp}`);
+
+		// ========== EXPAND FIRST INCOMPLETE ==========
+		const expandNextIncomplete = () => {
+			const firstIncomplete = Object.entries(accordions).find(([id, acc]) => acc.required && !acc.$el.hasClass("completed"));
+			if (firstIncomplete) {
+				$main.find(".charsheet__levelup-accordion").removeClass("expanded");
+				firstIncomplete[1].$el.addClass("expanded");
+				updateActiveSummary(firstIncomplete[0]);
+			}
+		};
+
+		// Initial expand
+		if (!needsSubclass) expandNextIncomplete();
+		updateProgress();
+
+		// ========== FOOTER BUTTONS ==========
+		const $footer = $$`
+			<div class="ve-flex-v-center ve-flex-h-right mt-3 pt-3" style="border-top: 1px solid var(--rgb-border-grey);">
+				<button class="ve-btn ve-btn-default mr-2">Cancel</button>
+				<button class="ve-btn ve-btn-primary ve-btn-lg">
+					<span class="glyphicon glyphicon-arrow-up"></span> Level Up to ${newLevel}
+				</button>
+			</div>
+		`.appendTo($modalInner);
+
+		$footer.find(".ve-btn-default").on("click", () => doClose(false));
+		$footer.find(".ve-btn-primary").on("click", async () => {
+			// ========== VALIDATION ==========
+			if (needsSubclass && !selectedSubclass) {
+				JqueryUtil.doToast({type: "warning", content: "Please select a subclass."});
+				accordions.subclass.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+				return;
+			}
+
+			if (hasAsi) {
+				const totalAsi = Object.values(asiChoices).reduce((sum, v) => sum + v, 0);
+				if (isBothAsiAndFeat) {
+					if (totalAsi !== 2) {
+						JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points (2 total)."});
+						accordions.asi.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+						return;
+					}
+					if (!selectedFeat) {
+						JqueryUtil.doToast({type: "warning", content: "Please select a feat (Thelemar: ASI + Feat at level 4)."});
+						accordions.asi.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+						return;
+					}
+				} else if (!selectedFeat && totalAsi !== 2) {
+					JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points or select a feat."});
+					accordions.asi.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+					return;
+				}
+			}
+
+			for (const gain of optionalFeatureGains) {
+				const featureKey = gain.featureTypes.join("_");
+				const selected = selectedOptionalFeatures[featureKey] || [];
+				if (selected.length < gain.newCount) {
+					JqueryUtil.doToast({type: "warning", content: `Please select ${gain.newCount} ${gain.name}.`});
+					accordions.optfeatures?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					return;
+				}
+			}
+
+			// Feature options validation
+			const existingFeatures = this._state.getFeatures?.() || [];
+			const existingFeatureNames = new Set(existingFeatures.map(f => f.name));
+
+			for (const optGroup of featureOptionGroups) {
+				const featureKey = `${optGroup.featureName}_${optGroup.featureSource || ""}`;
+				const selected = selectedFeatureOptions[featureKey] || [];
+
+				const availableCount = optGroup.options.filter(opt => {
+					if (!existingFeatureNames.has(opt.name)) return true;
+					if (opt.type === "classFeature" && opt.ref) {
+						const parts = opt.ref.split("|");
+						const classFeatures = this._page.getClassFeatures();
+						const fullOpt = classFeatures.find(f => f.name === parts[0] && f.className === parts[1] && f.source === parts[2]);
+						if (fullOpt?.entries) {
+							const text = JSON.stringify(fullOpt.entries).toLowerCase();
+							return text.includes("multiple times") || text.includes("chosen again");
+						}
+					}
+					return false;
+				}).length;
+
+				const requiredCount = Math.min(optGroup.count, availableCount);
+				if (requiredCount > 0 && selected.length < requiredCount) {
+					JqueryUtil.doToast({type: "warning", content: `Please select ${requiredCount} option(s) for ${optGroup.featureName}.`});
+					accordions.featoptions?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					return;
+				}
+			}
+
+			for (const grant of expertiseGrants) {
+				const selected = selectedExpertise[grant.featureName] || [];
+				if (selected.length < grant.count) {
+					JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} skill(s) for expertise.`});
+					accordions.expertise?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					return;
+				}
+			}
+
+			for (const grant of languageGrants) {
+				const selected = selectedLanguages[grant.featureName] || [];
+				if (selected.length < grant.count) {
+					JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} language(s).`});
+					accordions.languages?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					return;
+				}
+			}
+
+			if (needsScholarChoice && !selectedScholarSkill) {
+				JqueryUtil.doToast({type: "warning", content: "Please select a skill for Scholar expertise."});
+				accordions.scholar?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				return;
+			}
+
+			if (isWizard && selectedSpellbookSpells.length < wizardSpellCount) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${wizardSpellCount} spells for your spellbook.`});
+				accordions.spellbook?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				return;
+			}
+
+			// ========== APPLY LEVEL UP ==========
+			await this._applyLevelUp({
+				classEntry,
+				newLevel,
+				asiChoices,
+				selectedFeat,
+				selectedSubclass,
+				selectedOptionalFeatures,
+				selectedFeatureOptions,
+				selectedExpertise,
+				selectedLanguages,
+				selectedScholarSkill,
+				selectedSpellbookSpells,
+				newFeatures: currentFeatures,
+				hpMethod,
+				classData,
+			});
+
+			doClose(true);
+		});
+	}
+
+	/**
+	 * Render compact subclass selection for wizard layout
+	 */
+	_renderSubclassSelectionCompact (classData, onSelect) {
+		const subclasses = classData.subclasses || [];
+		const $container = $(`<div class="charsheet__levelup-subclasses"></div>`);
+
+		subclasses.forEach(subclass => {
+			const $option = $(`
+				<div class="charsheet__levelup-option">
+					<div class="charsheet__levelup-option-header">
+						<input type="radio" name="subclass-choice-wizard" value="${subclass.name}">
+						<span>${subclass.name}</span>
+						<span class="ve-small ve-muted ml-auto">${Parser.sourceJsonToAbv(subclass.source)}</span>
+					</div>
+				</div>
+			`);
+
+			$option.on("click", () => {
+				$container.find(".charsheet__levelup-option").removeClass("selected");
+				$option.addClass("selected").find("input").prop("checked", true);
+				onSelect(subclass);
+			});
+
+			$container.append($option);
+		});
+
+		return $container;
+	}
+
+	/**
+	 * Render compact ASI selection for wizard layout
+	 */
+	_renderAsiSelectionCompact (onAsiChange, onFeatSelect, isBothAsiAndFeat, isEpicBoonLevel) {
+		// Get the full section and extract just the contents
+		const $fullSection = this._renderAsiSelection(onAsiChange, onFeatSelect, isBothAsiAndFeat, isEpicBoonLevel);
+		// Return all children without the wrapper div
+		return $fullSection.children();
+	}
+
+	/**
+	 * Render compact features list for wizard layout with hover links
+	 */
+	_renderFeaturesCompact (features) {
+		const $container = $(`<div class="charsheet__levelup-features"></div>`);
+
+		features.forEach(feature => {
+			const $feature = $(`
+				<div class="charsheet__levelup-feature">
+					<div class="charsheet__levelup-feature-header"></div>
+					${feature.description ? `<div class="charsheet__levelup-feature-description">${feature.description.substring(0, 150)}${feature.description.length > 150 ? "..." : ""}</div>` : ""}
+				</div>
+			`);
+
+			// Add feature name with hover link
+			const $header = $feature.find(".charsheet__levelup-feature-header");
+			try {
+				if (this._page?.getHoverLink && feature.source && feature.className) {
+					// Use same logic as features tab for proper source handling
+					const storedClass = this._state.getClasses().find(c => c.name?.toLowerCase() === feature.className?.toLowerCase());
+
+					// Check if feature.source looks like a class source (official sources like PHB, XPHB)
+					const officialClassSources = [Parser.SRC_PHB, Parser.SRC_XPHB, "PHB", "XPHB", "TCE", "XGE", "TGTT"];
+					const isOfficialSource = (src) => officialClassSources.includes(src?.toUpperCase?.() || src);
+
+					let actualClassSource = feature.classSource;
+					// If classSource is not set or is a homebrew source but feature.source is official, use feature.source
+					if (!actualClassSource || (!isOfficialSource(actualClassSource) && isOfficialSource(feature.source))) {
+						actualClassSource = feature.source;
+					}
+					// Final fallback to stored class or XPHB
+					if (!actualClassSource) {
+						actualClassSource = storedClass?.source || Parser.SRC_XPHB;
+					}
+
+					const hashInput = {
+						name: feature.name,
+						className: feature.className,
+						classSource: actualClassSource,
+						level: feature.level || 1,
+						source: feature.source,
+					};
+
+					// Add subclass info if this is a subclass feature
+					if (feature.subclassName || feature.isSubclassFeature) {
+						hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
+						hashInput.subclassSource = feature.subclassSource || storedClass?.subclass?.source || feature.source;
+					}
+
+					const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASS_SUBCLASS_FEATURES](hashInput);
+					
+					// For subclass features, use subclassSource; for class features, use classSource
+					const hoverSource = hashInput.subclassSource || hashInput.classSource;
+					const hoverLink = this._page.getHoverLink(
+						UrlUtil.PG_CLASS_SUBCLASS_FEATURES,
+						feature.name,
+						hoverSource,
+						hash,
+					);
+					$header.html(hoverLink);
+				} else if (this._page?.getHoverLink && feature.featureType) {
+					// Optional feature
+					const hoverLink = this._page.getHoverLink(
+						UrlUtil.PG_OPT_FEATURES,
+						feature.name,
+						feature.source || Parser.SRC_XPHB,
+					);
+					$header.html(hoverLink);
+				} else {
+					$header.text(feature.name);
+				}
+			} catch (e) {
+				console.warn("[LevelUp] Feature hover link error:", e);
+				$header.text(feature.name);
+			}
+
+			$container.append($feature);
+		});
+
+		return $container;
 	}
 
 	_renderSubclassSelection (classData, onSelect) {
@@ -2148,6 +2588,89 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
+	 * Parse automatic effects from a specialty/feature that don't require user choices.
+	 * Examples: "passive Perception increases by 3", "bonus equal to proficiency bonus"
+	 * @param {Object} opt - The option object with ref, name, type
+	 * @returns {Array} Array of effect objects: [{type, value, note}]
+	 */
+	_parseFeatureAutoEffects (opt) {
+		if (opt.type !== "classFeature" || !opt.ref) return [];
+
+		const parts = opt.ref.split("|");
+		const classFeatures = this._page.getClassFeatures();
+		const fullOpt = classFeatures.find(f =>
+			f.name === parts[0] && f.className === parts[1] && f.source === parts[2],
+		);
+		if (!fullOpt?.entries) return [];
+
+		const text = JSON.stringify(fullOpt.entries);
+		const effects = [];
+
+		// Pattern: "passive [Ability] ({@skill SkillName}) score increases by X"
+		// e.g., "your passive Wisdom ({@skill Perception}) score increases by 3"
+		const passiveIncreaseMatch = text.match(/passive\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*(?:score\s+)?increases?\s+by\s+(\d+)/i);
+		if (passiveIncreaseMatch) {
+			const skill = passiveIncreaseMatch[1].toLowerCase().replace(/\s+/g, "");
+			const value = parseInt(passiveIncreaseMatch[2]);
+			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveIncreaseMatch[1]}`});
+		}
+
+		// Pattern: "bonus to [Ability] ({@skill SkillName}) checks equal to your proficiency bonus"
+		// e.g., "You gain a bonus to Wisdom ({@skill Perception}) checks equal to your proficiency bonus"
+		const skillBonusProfMatch = text.match(/bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?\s+equal\s+to\s+(?:your\s+)?proficiency\s+bonus/i);
+		if (skillBonusProfMatch) {
+			const skill = skillBonusProfMatch[1].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `skill:${skill}`, value: "proficiency", note: `+PB to ${skillBonusProfMatch[1]} checks`});
+		}
+
+		// Pattern: "gain a +X bonus to [Ability] ({@skill SkillName}) checks"
+		const skillBonusFixedMatch = text.match(/gain\s+a?\s*\+?(\d+)\s*bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?/i);
+		if (skillBonusFixedMatch) {
+			const value = parseInt(skillBonusFixedMatch[1]);
+			const skill = skillBonusFixedMatch[2].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `skill:${skill}`, value, note: `+${value} to ${skillBonusFixedMatch[2]} checks`});
+		}
+
+		// Pattern: "Speed increases by X feet" or "your speed increases by X"
+		const speedIncreaseMatch = text.match(/(?:your\s+)?speed\s+increases?\s+by\s+(\d+)\s*(?:feet|ft)?/i);
+		if (speedIncreaseMatch) {
+			const value = parseInt(speedIncreaseMatch[1]);
+			effects.push({type: "speed", value, note: `+${value} ft. speed`});
+		}
+
+		// Pattern: "+X to passive {@skill SkillName}" or "passive {@skill SkillName} +X"
+		const passiveSimpleMatch = text.match(/\+(\d+)\s*(?:bonus\s+)?(?:to\s+)?(?:your\s+)?passive\s+\{@skill\s+([^}]+)\}/i);
+		if (passiveSimpleMatch) {
+			const value = parseInt(passiveSimpleMatch[1]);
+			const skill = passiveSimpleMatch[2].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveSimpleMatch[2]}`});
+		}
+
+		// Pattern: "darkvision increases by X feet" or "gain darkvision out to X feet"
+		const darkvisionIncreaseMatch = text.match(/darkvision\s+(?:increases?\s+by|out\s+to)\s+(\d+)\s*(?:feet|ft)?/i);
+		if (darkvisionIncreaseMatch) {
+			const value = parseInt(darkvisionIncreaseMatch[1]);
+			effects.push({type: "sense:darkvision", value, note: `Darkvision ${value} ft.`});
+		}
+
+		// Pattern: "AC increases by X" or "+X to AC"
+		const acMatch = text.match(/(?:AC|armor\s+class)\s+increases?\s+by\s+(\d+)|\+(\d+)\s+(?:to\s+)?(?:AC|armor\s+class)/i);
+		if (acMatch) {
+			const value = parseInt(acMatch[1] || acMatch[2]);
+			effects.push({type: "ac", value, note: `+${value} AC`});
+		}
+
+		// Pattern: "+X to initiative" or "initiative bonus of +X"
+		const initMatch = text.match(/\+(\d+)\s+(?:to\s+)?initiative|initiative\s+(?:bonus\s+(?:of\s+)?|increases?\s+by\s+)\+?(\d+)/i);
+		if (initMatch) {
+			const value = parseInt(initMatch[1] || initMatch[2]);
+			effects.push({type: "initiative", value, note: `+${value} initiative`});
+		}
+
+		return effects;
+	}
+
+	/**
 	 * Render a skill sub-choice UI below a specialty checkbox (level-up version).
 	 * @param {Object} choice - From _parseFeatureSkillChoice: {type, count, from}
 	 * @param {string} choiceKey - Unique key for storing selections
@@ -2251,6 +2774,7 @@ class CharacterSheetLevelUp {
 			if (!optGroup.options.length) {
 				$list.append(`<div class="ve-muted">No options available.</div>`);
 			} else {
+				let renderedCount = 0;
 				optGroup.options.forEach(opt => {
 					// Check if this option was already chosen (deduplication)
 					const isAlreadyChosen = existingFeatureNames.has(opt.name);
@@ -2273,6 +2797,8 @@ class CharacterSheetLevelUp {
 
 					// Skip already-chosen non-repeatable features
 					if (isAlreadyChosen && !canRepeat) return;
+
+					renderedCount++;
 					const $item = $(`
 						<label class="charsheet__levelup-feat-opt-item d-block mb-1" style="cursor: pointer; padding: 0.25rem; border-radius: 4px;">
 							<input type="checkbox" class="mr-2">
@@ -2358,6 +2884,11 @@ class CharacterSheetLevelUp {
 
 					$list.append($item);
 				});
+
+				// If all options were filtered out, show a message
+				if (renderedCount === 0) {
+					$list.append(`<div class="ve-muted">All available options have already been chosen.</div>`);
+				}
 			}
 
 			$container.append($groupSection);
@@ -2562,6 +3093,463 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
+	/**
+	 * Render Scholar expertise selection UI for level up (Wizard XPHB level 2)
+	 * @param {Function} onSelect - Callback(skill) when a skill is selected
+	 * @returns {jQuery} The section element
+	 */
+	_renderScholarExpertiseSelection (onSelect) {
+		const $section = $(`
+			<div class="charsheet__levelup-section">
+				<h5 class="charsheet__levelup-section-title">
+					<span class="glyphicon glyphicon-education"></span> Scholar Expertise
+				</h5>
+				<p class="ve-small">Choose one skill from the Scholar list to gain expertise (double proficiency bonus):</p>
+				<div class="charsheet__levelup-scholar-skills"></div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__levelup-scholar-skills");
+
+		// Scholar skill options
+		const scholarSkills = ["arcana", "history", "investigation", "medicine", "nature", "religion"];
+
+		// Get character's current skill proficiencies
+		const skillProficiencies = this._state.getSkillProficiencies();
+		const existingExpertise = this._state.getExpertise() || [];
+
+		// Get only eligible skills (must be proficient, not already expertise)
+		const eligibleSkills = scholarSkills.filter(skill => {
+			const isProficient = (skillProficiencies[skill] || 0) >= 1;
+			const hasExpertise = existingExpertise.includes(skill);
+			return isProficient && !hasExpertise;
+		});
+
+		if (eligibleSkills.length === 0) {
+			$container.append(`<p class="ve-muted">No eligible skills. You must be proficient in a Scholar skill (Arcana, History, Investigation, Medicine, Nature, or Religion) without already having expertise in it.</p>`);
+		} else {
+			let selectedSkill = null;
+
+			eligibleSkills.forEach(skill => {
+				const skillName = skill.toTitleCase();
+				const $radio = $(`
+					<label class="charsheet__levelup-skill-radio mr-3 mb-1 d-inline-block" style="cursor: pointer;">
+						<input type="radio" name="scholar-expertise" class="mr-1" value="${skill}">
+						${skillName}
+					</label>
+				`);
+
+				$radio.find("input").on("change", (e) => {
+					if (e.target.checked) {
+						selectedSkill = skill;
+						onSelect(skill);
+					}
+				});
+
+				$container.append($radio);
+			});
+		}
+
+		return $section;
+	}
+
+	/**
+	 * Render wizard spellbook spell selection UI for level up
+	 * @param {number} spellCount - Number of spells to select (typically 2)
+	 * @param {number} maxSpellLevel - Maximum spell level the wizard can learn
+	 * @param {Function} onSelect - Callback(spells[]) when spells are selected
+	 * @returns {jQuery} The section element
+	 */
+	_renderWizardSpellbookSelection (spellCount, maxSpellLevel, onSelect) {
+		const $section = $(`
+			<div class="charsheet__levelup-section">
+				<h5 class="charsheet__levelup-section-title">
+					<span class="glyphicon glyphicon-book"></span> Spellbook
+				</h5>
+				<p class="ve-small">Choose ${spellCount} wizard spells (up to level ${maxSpellLevel}) to add to your spellbook:</p>
+				<div class="charsheet__levelup-spellbook-selections"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="spell-count">0</span>/${spellCount}</div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__levelup-spellbook-selections");
+		const selectedSpells = [];
+
+		// Get all wizard spells from the page
+		const allSpells = this._page.getSpells?.() || [];
+		const allowedSources = this._page.filterByAllowedSources?.(allSpells) || allSpells;
+		
+		// Filter to wizard spells up to max level
+		const wizardSpells = allowedSources.filter(spell => {
+			// Check if on wizard spell list
+			const isWizardSpell = spell.classes?.fromClassList?.some(c => 
+				c.name === "Wizard"
+			);
+			// Check level
+			const isCorrectLevel = spell.level >= 1 && spell.level <= maxSpellLevel;
+			return isWizardSpell && isCorrectLevel;
+		}).sort((a, b) => {
+			// Sort by level then name
+			if (a.level !== b.level) return a.level - b.level;
+			return a.name.localeCompare(b.name);
+		});
+
+		// Get spells already known
+		const knownSpells = this._state.getSpells?.() || [];
+		const knownIds = new Set(knownSpells.map(s => `${s.name}|${s.source}`));
+
+		// Collect unique schools and sources for filters
+		const schools = [...new Set(wizardSpells.map(s => s.school).filter(Boolean))].sort();
+		const sources = [...new Set(wizardSpells.map(s => s.source).filter(Boolean))].sort();
+		
+		// Filter state
+		let filterText = "";
+		let filterLevels = new Set(); // Empty = all
+		let filterSchools = new Set(); // Empty = all
+
+		// Build filter row
+		const $filterRow = $(`<div class="ve-flex-wrap gap-2 mb-2" style="align-items: center;"></div>`);
+		$container.append($filterRow);
+
+		// Search input
+		const $search = $(`<input type="text" class="form-control form-control-sm" placeholder="🔍 Search..." style="flex: 1; min-width: 150px;">`);
+		$filterRow.append($search);
+
+		// Level filter dropdown
+		const levelOptions = [];
+		for (let i = 1; i <= maxSpellLevel; i++) {
+			levelOptions.push({value: i.toString(), label: `Level ${i}`});
+		}
+		const $levelFilter = $(`
+			<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
+				<option value="">All Levels</option>
+				${levelOptions.map(l => `<option value="${l.value}">${l.label}</option>`).join("")}
+			</select>
+		`);
+		$filterRow.append($levelFilter);
+
+		// School filter dropdown
+		const $schoolFilter = $(`
+			<select class="form-control form-control-sm" style="width: auto; min-width: 120px;">
+				<option value="">All Schools</option>
+				${schools.map(s => `<option value="${s}">${this._getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
+			</select>
+		`);
+		$filterRow.append($schoolFilter);
+
+		// Quick filters for ritual/concentration
+		const $ritualFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`);
+		const $concFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`);
+		$filterRow.append($ritualFilter, $concFilter);
+
+		const $spellList = $(`<div class="charsheet__modal-list" style="max-height: 350px; overflow-y: auto;"></div>`);
+		$container.append($spellList);
+
+		// Helper to get school emoji (matches spell tab)
+		const getSchoolEmoji = (school) => {
+			const schoolEmojis = {
+				"A": "✨", // Abjuration
+				"C": "🌀", // Conjuration
+				"D": "👁️", // Divination
+				"E": "💫", // Enchantment
+				"V": "🔥", // Evocation
+				"I": "🎭", // Illusion
+				"N": "💀", // Necromancy
+				"T": "🔄", // Transmutation
+			};
+			return schoolEmojis[school] || "📜";
+		};
+
+		const renderSpellList = () => {
+			$spellList.empty();
+			
+			// Get current filter values
+			const searchText = $search.val()?.toLowerCase() || "";
+			const levelVal = $levelFilter.val();
+			const schoolVal = $schoolFilter.val();
+			const onlyRitual = $ritualFilter.find("input").prop("checked");
+			const onlyConc = $concFilter.find("input").prop("checked");
+			
+			// Apply all filters
+			const filtered = wizardSpells.filter(spell => {
+				// Text search
+				if (searchText && !spell.name.toLowerCase().includes(searchText)) return false;
+				
+				// Level filter
+				if (levelVal && spell.level !== parseInt(levelVal)) return false;
+				
+				// School filter
+				if (schoolVal && spell.school !== schoolVal) return false;
+				
+				// Ritual filter
+				const isRitual = spell.ritual || spell.meta?.ritual || false;
+				if (onlyRitual && !isRitual) return false;
+				
+				// Concentration filter
+				const isConc = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+				if (onlyConc && !isConc) return false;
+				
+				return true;
+			});
+
+			if (!filtered.length) {
+				$spellList.append(`<p class="ve-muted text-center py-2">No spells match your filters</p>`);
+				return;
+			}
+
+			// Group by level (matches spell tab)
+			const byLevel = {};
+			filtered.forEach(spell => {
+				if (!byLevel[spell.level]) byLevel[spell.level] = [];
+				byLevel[spell.level].push(spell);
+			});
+
+			Object.keys(byLevel).sort((a, b) => Number(a) - Number(b)).forEach(level => {
+				const levelEmoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"][parseInt(level) - 1] || "📜";
+				const $levelSection = $(`<div class="charsheet__modal-section"></div>`).appendTo($spellList);
+				$(`<div class="charsheet__modal-section-title">${levelEmoji} Level ${level} <span style="opacity: 0.6;">(${byLevel[level].length})</span></div>`).appendTo($levelSection);
+				
+				byLevel[level].forEach(spell => {
+					const spellId = `${spell.name}|${spell.source}`;
+					const isKnown = knownIds.has(spellId);
+					const isSelected = selectedSpells.some(s => `${s.name}|${s.source}` === spellId);
+					const school = Parser.spSchoolAbvToFull?.(spell.school) || spell.school;
+					const schoolEmoji = getSchoolEmoji(spell.school);
+					
+					// Build component string
+					const components = [];
+					if (spell.components?.v) components.push("V");
+					if (spell.components?.s) components.push("S");
+					if (spell.components?.m) components.push("M");
+					const componentStr = components.join(", ");
+
+					// Check concentration and ritual
+					const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+					const isRitual = spell.ritual || spell.meta?.ritual || false;
+
+					// Build tags string (matches spell tab)
+					const tagParts = [];
+					if (isRitual) tagParts.push("🔮");
+					if (isConcentration) tagParts.push("⏳");
+					const tagsStr = tagParts.length ? ` ${tagParts.join(" ")}` : "";
+
+					// Build subschool string (for Thelemar rarity tags)
+					let subschoolStr = "";
+					if (spell.subschools && spell.subschools.length > 0) {
+						const formatSubschool = (sub) => {
+							const parts = sub.split(":");
+							if (parts.length === 2) {
+								return `${parts[1].toTitleCase()}`;
+							}
+							return sub.toTitleCase();
+						};
+						subschoolStr = ` • 🏷️ ${spell.subschools.map(formatSubschool).join(", ")}`;
+					}
+
+					// Use same class structure as spell tab picker
+					const $item = $(`
+						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""} ${isSelected ? "charsheet__modal-list-item--selected" : ""}">
+							<div class="charsheet__modal-list-item-icon">${schoolEmoji}</div>
+							<div class="charsheet__modal-list-item-content">
+								<div class="charsheet__modal-list-item-title"></div>
+								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}${subschoolStr}</div>
+							</div>
+							${isKnown
+								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
+								: isSelected
+									? `<button class="ve-btn ve-btn-danger ve-btn-xs spell-toggle">✓ Selected</button>`
+									: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-toggle">+ Add</button>`
+							}
+						</div>
+					`);
+
+					// Add spell name with hover link
+					const $title = $item.find(".charsheet__modal-list-item-title");
+					try {
+						if (this._page?.getHoverLink) {
+							const hoverLink = this._page.getHoverLink(UrlUtil.PG_SPELLS, spell.name, spell.source || Parser.SRC_XPHB);
+							$title.html(`${hoverLink}${tagsStr}`);
+						} else {
+							$title.html(`${spell.name}${tagsStr}`);
+						}
+					} catch (e) {
+						$title.html(`${spell.name}${tagsStr}`);
+					}
+
+					if (!isKnown) {
+						$item.find(".spell-toggle").on("click", (e) => {
+							e.stopPropagation();
+							const idx = selectedSpells.findIndex(s => `${s.name}|${s.source}` === spellId);
+							
+							if (idx >= 0) {
+								// Remove
+								selectedSpells.splice(idx, 1);
+							} else if (selectedSpells.length < spellCount) {
+								// Add
+								selectedSpells.push(spell);
+							} else {
+								JqueryUtil.doToast({type: "warning", content: `You can only select ${spellCount} spells.`});
+								return;
+							}
+							
+							$section.find(".spell-count").text(selectedSpells.length);
+							onSelect([...selectedSpells]);
+							renderSpellList();
+						});
+						
+						// Click row to show info (matches spell tab)
+						$item.on("click", (e) => {
+							if (!$(e.target).is("button") && !$(e.target).closest("a").length) {
+								this._showSpellInfoModal(spell);
+							}
+						});
+					}
+
+					$levelSection.append($item);
+				});
+			});
+		};
+
+		// Bind filter change events
+		$search.on("input", renderSpellList);
+		$levelFilter.on("change", renderSpellList);
+		$schoolFilter.on("change", renderSpellList);
+		$ritualFilter.find("input").on("change", renderSpellList);
+		$concFilter.find("input").on("change", renderSpellList);
+		
+		renderSpellList();
+
+		return $section;
+	}
+
+	/**
+	 * Show spell info in a modal (for level-up spell picker)
+	 */
+	async _showSpellInfoModal (spell) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: spell.name,
+			isMinHeight0: true,
+		});
+
+		const levelSchool = spell.level === 0
+			? `${Parser.spSchoolAbvToFull(spell.school)} cantrip`
+			: `${Parser.spLevelToFull(spell.level)}-level ${Parser.spSchoolAbvToFull(spell.school).toLowerCase()}`;
+
+		$modalInner.append(`<p class="ve-muted"><em>${levelSchool}</em></p>`);
+
+		// Basic info
+		const infoLines = [];
+		if (spell.time?.length) {
+			const time = spell.time[0];
+			infoLines.push(`<strong>Casting Time:</strong> ${time.number} ${time.unit}`);
+		}
+		if (spell.range) {
+			let rangeStr = "";
+			const range = spell.range;
+			if (range.type === "point") {
+				if (range.distance?.type === "self") rangeStr = "Self";
+				else if (range.distance?.type === "touch") rangeStr = "Touch";
+				else rangeStr = `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
+			} else {
+				rangeStr = range.type || "";
+			}
+			infoLines.push(`<strong>Range:</strong> ${rangeStr}`);
+		}
+		if (spell.components) {
+			const parts = [];
+			if (spell.components.v) parts.push("V");
+			if (spell.components.s) parts.push("S");
+			if (spell.components.m) {
+				const mText = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
+				parts.push(mText ? `M (${mText})` : "M");
+			}
+			infoLines.push(`<strong>Components:</strong> ${parts.join(", ")}`);
+		}
+		if (spell.duration?.length) {
+			const dur = spell.duration[0];
+			let durStr = "Instantaneous";
+			if (dur.type === "timed") {
+				durStr = dur.concentration
+					? `Concentration, up to ${dur.duration.amount} ${dur.duration.type}`
+					: `${dur.duration.amount} ${dur.duration.type}`;
+			} else if (dur.type === "permanent") {
+				durStr = "Until dispelled";
+			}
+			infoLines.push(`<strong>Duration:</strong> ${durStr}`);
+		}
+
+		$modalInner.append(`<div class="mb-2">${infoLines.join("<br>")}</div>`);
+
+		// Spell description
+		if (spell.entries) {
+			$modalInner.append(`<div class="rd__b">${Renderer.get().render({type: "entries", entries: spell.entries})}</div>`);
+		}
+
+		// Higher level scaling
+		if (spell.entriesHigherLevel) {
+			$modalInner.append(`<div class="rd__b mt-2"><strong>At Higher Levels.</strong> ${Renderer.get().render({type: "entries", entries: spell.entriesHigherLevel})}</div>`);
+		}
+
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
+	// Helper functions to extract spell data from raw spell objects
+	_getSpellCastingTime (spell) {
+		if (!spell.time?.length) return "";
+		const time = spell.time[0];
+		return `${time.number} ${time.unit}`;
+	}
+
+	_getSpellRange (spell) {
+		if (!spell.range) return "";
+		const range = spell.range;
+		if (range.type === "point") {
+			if (range.distance?.type === "self") return "Self";
+			if (range.distance?.type === "touch") return "Touch";
+			return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
+		}
+		return range.type || "";
+	}
+
+	_getSpellComponents (spell) {
+		if (!spell.components) return "";
+		const parts = [];
+		if (spell.components.v) parts.push("V");
+		if (spell.components.s) parts.push("S");
+		if (spell.components.m) {
+			const mat = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
+			parts.push(mat ? `M (${mat})` : "M");
+		}
+		return parts.join(", ");
+	}
+
+	_getSpellDuration (spell) {
+		if (!spell.duration?.length) return "";
+		const dur = spell.duration[0];
+		if (dur.type === "instant") return "Instantaneous";
+		if (dur.type === "permanent") return "Permanent";
+		if (dur.concentration) {
+			return `Concentration, up to ${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
+		}
+		return `${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
+	}
+
+	_getSchoolEmoji (school) {
+		const schoolEmojis = {
+			"A": "✨", // Abjuration
+			"C": "🌀", // Conjuration
+			"D": "👁️", // Divination
+			"E": "💫", // Enchantment
+			"V": "🔥", // Evocation
+			"I": "🎭", // Illusion
+			"N": "💀", // Necromancy
+			"T": "🔄", // Transmutation
+		};
+		return schoolEmojis[school] || "📜";
+	}
+
 	_getClassHitDie (classData) {
 		const hitDieMap = {
 			"Barbarian": 12,
@@ -2580,7 +3568,7 @@ class CharacterSheetLevelUp {
 		return classData.hd?.faces || hitDieMap[classData.name] || 8;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, selectedExpertise, selectedLanguages, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, newFeatures, hpMethod, classData}) {
 		console.log(`[LevelUp] _applyLevelUp called: selectedSubclass=${selectedSubclass?.name || "null"}`);
 		console.log(`[LevelUp] Initial newFeatures:`, newFeatures?.map(f => f.name));
 
@@ -2770,6 +3758,19 @@ class CharacterSheetLevelUp {
 								});
 							}
 						}
+
+						// Apply automatic effects from the specialty (passive bonuses, speed, etc.)
+						const autoEffects = this._parseFeatureAutoEffects(opt);
+						autoEffects.forEach(effect => {
+							this._state.addNamedModifier({
+								name: opt.name,
+								type: effect.type,
+								value: effect.value,
+								note: effect.note || `From specialty: ${opt.name}`,
+								enabled: true,
+							});
+							console.log(`[LevelUp] Applied auto-effect from "${opt.name}":`, effect);
+						});
 					} else if (opt.type === "subclassFeature" && opt.ref) {
 						const currentSubclass = this._state.getClasses().find(c => c.name === classEntry.name)?.subclass;
 						// Look up full subclass feature data for description
@@ -2825,6 +3826,42 @@ class CharacterSheetLevelUp {
 				});
 				console.log(`[LevelUp] Applied expertise from ${featureName}:`, skills);
 			});
+		}
+
+		// Apply Scholar expertise selection (Wizard XPHB level 2)
+		if (selectedScholarSkill) {
+			this._state.setScholarExpertise(selectedScholarSkill);
+			console.log(`[LevelUp] Applied Scholar expertise:`, selectedScholarSkill);
+		}
+
+		// Apply wizard spellbook spell selections
+		if (selectedSpellbookSpells && selectedSpellbookSpells.length > 0) {
+			selectedSpellbookSpells.forEach(spell => {
+				// Detect concentration from duration array (raw spell data format)
+				const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+				// Detect ritual from meta object (raw spell data format)
+				const isRitual = spell.ritual || spell.meta?.ritual || false;
+
+				this._state.addSpell({
+					name: spell.name,
+					source: spell.source,
+					level: spell.level,
+					school: spell.school,
+					ritual: isRitual,
+					concentration: isConcentration,
+					prepared: false,
+					inSpellbook: true, // Mark as in spellbook
+					sourceFeature: "Wizard Spellbook",
+					sourceClass: "Wizard",
+					// Include all spell details like the spell tab does
+					castingTime: this._getSpellCastingTime(spell),
+					range: this._getSpellRange(spell),
+					components: this._getSpellComponents(spell),
+					duration: this._getSpellDuration(spell),
+					subschools: spell.subschools || [], // Include rarity/legality tags
+				});
+			});
+			console.log(`[LevelUp] Applied wizard spellbook spells:`, selectedSpellbookSpells.map(s => s.name));
 		}
 
 		// Apply selected languages from features like Deft Explorer Improvement

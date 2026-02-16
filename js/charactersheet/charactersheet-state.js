@@ -3098,6 +3098,9 @@ class CharacterSheetState {
 				lucidFocusActive: false, // Whether Lucid Focus die is currently active
 			},
 
+			// Scholar expertise (Wizard XPHB level 2 feature)
+			scholarExpertise: null, // The skill chosen for Scholar expertise
+
 			// Attacks (weapons + custom)
 			attacks: [], // [{name, attackBonus, damage, damageType, range, properties}]
 
@@ -3978,29 +3981,29 @@ class CharacterSheetState {
 
 	/**
 	 * Get passive perception (10 + perception modifier + passive bonuses)
+	 * Delegates to getPassiveScore for proper modifier aggregation
 	 * @returns {number} Passive perception score
 	 */
 	getPassivePerception () {
-		const passiveBonus = this._data.customModifiers.passives?.perception || 0;
-		return 10 + this.getSkillMod("perception") + passiveBonus;
+		return this.getPassiveScore("perception");
 	}
 
 	/**
 	 * Get passive investigation (10 + investigation modifier + passive bonuses)
+	 * Delegates to getPassiveScore for proper modifier aggregation
 	 * @returns {number} Passive investigation score
 	 */
 	getPassiveInvestigation () {
-		const passiveBonus = this._data.customModifiers.passives?.investigation || 0;
-		return 10 + this.getSkillMod("investigation") + passiveBonus;
+		return this.getPassiveScore("investigation");
 	}
 
 	/**
 	 * Get passive insight (10 + insight modifier + passive bonuses)
+	 * Delegates to getPassiveScore for proper modifier aggregation
 	 * @returns {number} Passive insight score
 	 */
 	getPassiveInsight () {
-		const passiveBonus = this._data.customModifiers.passives?.insight || 0;
-		return 10 + this.getSkillMod("insight") + passiveBonus;
+		return this.getPassiveScore("insight");
 	}
 	// #endregion
 
@@ -4622,7 +4625,27 @@ class CharacterSheetState {
 	}
 
 	getSkillProficiency (skill) {
-		return this._data.skillProficiencies[skill] || 0;
+		const baseProficiency = this._data.skillProficiencies[skill] || 0;
+		// Scholar feature grants expertise in one skill if already proficient
+		if (this._data.scholarExpertise === skill && baseProficiency >= 1) {
+			return 2; // Expertise level
+		}
+		return baseProficiency;
+	}
+
+	// Scholar expertise methods (Wizard XPHB level 2 feature)
+	getScholarExpertise () {
+		return this._data.scholarExpertise;
+	}
+
+	setScholarExpertise (skill) {
+		this._data.scholarExpertise = skill;
+		this._saveState();
+	}
+
+	hasScholarFeature () {
+		const calculations = this.getFeatureCalculations();
+		return calculations.hasScholar || false;
 	}
 
 	/**
@@ -5281,10 +5304,16 @@ class CharacterSheetState {
 			return base + bonus;
 		};
 
-		const fly = Math.max(0, Math.floor(getSpeedWithEqualToWalk("fly", this._data.speed.fly || 0, (speedMods.fly || 0) + this.getSpeedBonusFromStates("fly")) * speedMultiplier) - exhaustionSpeedPenalty);
-		const swim = Math.max(0, Math.floor(getSpeedWithEqualToWalk("swim", this._data.speed.swim || 0, (speedMods.swim || 0) + this.getSpeedBonusFromStates("swim")) * speedMultiplier) - exhaustionSpeedPenalty);
-		const climb = Math.max(0, Math.floor(getSpeedWithEqualToWalk("climb", this._data.speed.climb || 0, (speedMods.climb || 0) + this.getSpeedBonusFromStates("climb")) * speedMultiplier) - exhaustionSpeedPenalty);
-		const burrow = Math.max(0, Math.floor(getSpeedWithEqualToWalk("burrow", this._data.speed.burrow || 0, (speedMods.burrow || 0) + this.getSpeedBonusFromStates("burrow")) * speedMultiplier) - exhaustionSpeedPenalty);
+		// Only apply bonuses to speeds that the character actually has (base > 0)
+		const baseFly = this._data.speed.fly || 0;
+		const baseSwim = this._data.speed.swim || 0;
+		const baseClimb = this._data.speed.climb || 0;
+		const baseBurrow = this._data.speed.burrow || 0;
+
+		const fly = baseFly > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("fly", baseFly, (speedMods.fly || 0) + this.getSpeedBonusFromStates("fly")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
+		const swim = baseSwim > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("swim", baseSwim, (speedMods.swim || 0) + this.getSpeedBonusFromStates("swim")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
+		const climb = baseClimb > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("climb", baseClimb, (speedMods.climb || 0) + this.getSpeedBonusFromStates("climb")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
+		const burrow = baseBurrow > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("burrow", baseBurrow, (speedMods.burrow || 0) + this.getSpeedBonusFromStates("burrow")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
 
 		if (fly > 0) parts.push(`fly ${fly} ft.`);
 		if (swim > 0) parts.push(`swim ${swim} ft.`);
@@ -5318,6 +5347,12 @@ class CharacterSheetState {
 		if (equalToWalkMod) {
 			// Override base with walking speed
 			base = Math.max(base, this.getWalkSpeed());
+		}
+
+		// For non-walk speeds, only apply bonuses if character has that movement type
+		// (base > 0, or equalToWalk modifier grants it)
+		if (type !== "walk" && base === 0) {
+			return 0;
 		}
 
 		return Math.max(0, Math.floor((base + bonus) * this.getSpeedMultiplierFromConditions()) - this._getExhaustionSpeedPenalty());
@@ -19419,6 +19454,45 @@ class CharacterSheetState {
 		if (result.removeDisadvantage && result.disadvantage) result.disadvantage = false;
 
 		return result;
+	}
+
+	/**
+	 * Aggregate all modifiers that match a given prefix (e.g., "passive:", "skill:")
+	 * @param {string} prefix - The type prefix to match (e.g., "passive:", "skill:")
+	 * @returns {Object} Map of suffix → value (e.g., {"perception": 3, "insight": 2})
+	 */
+	aggregateModifiersByPrefix (prefix) {
+		const results = {};
+		const namedMods = this._data.namedModifiers || [];
+
+		namedMods.forEach(mod => {
+			if (!mod.enabled || !mod.type?.startsWith(prefix)) return;
+
+			const suffix = mod.type.slice(prefix.length);
+			if (!suffix) return;
+
+			// Handle "proficiency" special value
+			if (mod.value === "proficiency") {
+				// Track as "proficiency" string if that's the only bonus
+				if (results[suffix] === undefined) {
+					results[suffix] = "proficiency";
+				} else if (typeof results[suffix] === "number") {
+					// Add numeric proficiency bonus if there's already a number
+					results[suffix] += this.getProficiencyBonus();
+				}
+			} else if (typeof mod.value === "number") {
+				if (results[suffix] === undefined) {
+					results[suffix] = mod.value;
+				} else if (results[suffix] === "proficiency") {
+					// Convert proficiency to number and add
+					results[suffix] = this.getProficiencyBonus() + mod.value;
+				} else {
+					results[suffix] += mod.value;
+				}
+			}
+		});
+
+		return results;
 	}
 
 	/**
