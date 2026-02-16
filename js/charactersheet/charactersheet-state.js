@@ -23418,6 +23418,9 @@ class CharacterSheetState {
 	 * @param {string} [companionData.creatureType] - Creature type (e.g., "beast", "construct")
 	 * @param {boolean} [companionData.concentrationLinked] - If true, dismissed when concentration breaks
 	 * @param {string} [companionData.sourceFeatureId] - Feature that granted this companion
+	 * @param {number} [companionData.count] - Number of identical creatures (for conjure spells)
+	 * @param {Array<{current: number, max: number}>} [companionData.hpArray] - Individual HP tracking for grouped creatures
+	 * @param {string} [companionData.groupId] - ID to link related conjured creatures
 	 * @returns {string} The new companion's ID
 	 */
 	addCompanion (companionData) {
@@ -23494,6 +23497,11 @@ class CharacterSheetState {
 
 			// Attack data (for quick reference)
 			attacks: companionData.attacks || [],
+
+			// Grouped creatures (for conjure spells)
+			count: companionData.count || 1,
+			hpArray: companionData.hpArray || null, // Array of {current, max} for individual HP tracking
+			groupId: companionData.groupId || null,
 		};
 
 		this._data.companions.push(companion);
@@ -23625,6 +23633,108 @@ class CharacterSheetState {
 		const before = companion.hp.current;
 		companion.hp.current = Math.min(companion.hp.max, companion.hp.current + amount);
 		return companion.hp.current - before;
+	}
+
+	// ---- Grouped Companion HP Management (for Conjure spells) ----
+
+	/**
+	 * Damage a specific creature in a grouped companion
+	 * @param {string} companionId - The companion ID
+	 * @param {number} index - The creature index (0-based)
+	 * @param {number} amount - Damage amount
+	 * @returns {object} {hpLost, droppedToZero}
+	 */
+	damageGroupedCreature (companionId, index, amount) {
+		const companion = this.getCompanion(companionId);
+		if (!companion || !companion.hpArray || index < 0 || index >= companion.hpArray.length) {
+			return {hpLost: 0, droppedToZero: false};
+		}
+
+		const creature = companion.hpArray[index];
+		const hpBefore = creature.current;
+		creature.current = Math.max(0, creature.current - amount);
+		const hpLost = hpBefore - creature.current;
+
+		return {
+			hpLost,
+			droppedToZero: creature.current === 0,
+		};
+	}
+
+	/**
+	 * Heal a specific creature in a grouped companion
+	 * @param {string} companionId - The companion ID
+	 * @param {number} index - The creature index (0-based)
+	 * @param {number} amount - Healing amount
+	 * @returns {number} Amount actually healed
+	 */
+	healGroupedCreature (companionId, index, amount) {
+		const companion = this.getCompanion(companionId);
+		if (!companion || !companion.hpArray || index < 0 || index >= companion.hpArray.length) {
+			return 0;
+		}
+
+		const creature = companion.hpArray[index];
+		const before = creature.current;
+		creature.current = Math.min(creature.max, creature.current + amount);
+		return creature.current - before;
+	}
+
+	/**
+	 * Damage all creatures in a grouped companion
+	 * @param {string} companionId - The companion ID
+	 * @param {number} amount - Damage amount (applied to each creature)
+	 * @returns {object} {totalDamage, creaturesDropped}
+	 */
+	damageAllGroupedCreatures (companionId, amount) {
+		const companion = this.getCompanion(companionId);
+		if (!companion || !companion.hpArray) {
+			return {totalDamage: 0, creaturesDropped: 0};
+		}
+
+		let totalDamage = 0;
+		let creaturesDropped = 0;
+
+		companion.hpArray.forEach(creature => {
+			const wasAlive = creature.current > 0;
+			const hpBefore = creature.current;
+			creature.current = Math.max(0, creature.current - amount);
+			totalDamage += hpBefore - creature.current;
+			if (wasAlive && creature.current === 0) creaturesDropped++;
+		});
+
+		return {totalDamage, creaturesDropped};
+	}
+
+	/**
+	 * Heal all creatures in a grouped companion
+	 * @param {string} companionId - The companion ID
+	 * @param {number} amount - Healing amount (applied to each creature)
+	 * @returns {number} Total amount healed across all creatures
+	 */
+	healAllGroupedCreatures (companionId, amount) {
+		const companion = this.getCompanion(companionId);
+		if (!companion || !companion.hpArray) return 0;
+
+		let totalHealed = 0;
+		companion.hpArray.forEach(creature => {
+			const before = creature.current;
+			creature.current = Math.min(creature.max, creature.current + amount);
+			totalHealed += creature.current - before;
+		});
+
+		return totalHealed;
+	}
+
+	/**
+	 * Get the number of living creatures in a grouped companion
+	 * @param {string} companionId - The companion ID
+	 * @returns {number} Count of creatures with HP > 0
+	 */
+	getLivingGroupedCreatureCount (companionId) {
+		const companion = this.getCompanion(companionId);
+		if (!companion || !companion.hpArray) return companion ? 1 : 0;
+		return companion.hpArray.filter(c => c.current > 0).length;
 	}
 
 	/**

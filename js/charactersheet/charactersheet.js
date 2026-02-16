@@ -529,10 +529,8 @@ class CharacterSheetPage {
 		$("#charsheet-btn-exhaustion-add").on("click", () => this._addExhaustion());
 		$("#charsheet-btn-exhaustion-remove").on("click", () => this._removeExhaustion());
 
-		// Companions - Summon Familiar button
-		$("#charsheet-btn-summon-familiar").on("click", () => this._onSummonFamiliar());
-
-		// Companions - New Round button (resets action economy)
+		// Companions - Buttons rendered dynamically via _renderCompanionButtons()
+		// New Round button (resets action economy)
 		$("#charsheet-btn-new-round").on("click", () => this._resetAllCompanionActions());
 
 		// Currency
@@ -729,6 +727,612 @@ class CharacterSheetPage {
 		} else {
 			JqueryUtil.doToast({type: "warning", content: "Familiar picker not available."});
 		}
+	}
+
+	/**
+	 * Render dynamic companion summon buttons based on character features
+	 */
+	_renderCompanionButtons () {
+		const $container = $("#charsheet-companion-buttons");
+		if (!$container.length) return;
+
+		$container.empty();
+
+		const calculations = this._state.getFeatureCalculations?.() || {};
+		const spells = this._state.getSpells?.() || [];
+		const cantrips = this._state.getCantrips?.() || [];
+
+		// Check if character has Find Familiar spell or is a warlock (Pact of Chain)
+		const hasFindFamiliar = spells.some(s => s.name?.toLowerCase() === "find familiar") ||
+			cantrips.some(c => c.name?.toLowerCase() === "find familiar");
+		const isWarlock = this._state.getClassLevel?.("warlock") > 0;
+		const hasAnimalAccomplice = calculations.hasAnimalAccomplice; // Wizard School of Illusion
+
+		// Always show summon familiar if they have the spell, are a warlock, or have animal accomplice
+		if (hasFindFamiliar || isWarlock || hasAnimalAccomplice) {
+			const $btn = $(`<button class="ve-btn ve-btn-primary" style="white-space: nowrap;">
+				<span class="glyphicon glyphicon-plus mr-1"></span>🦉 Summon Familiar
+			</button>`);
+			$btn.on("click", () => this._onSummonFamiliar());
+			$container.append($btn);
+		}
+
+		// Beast Master Ranger - Beast Companion
+		if (calculations.hasBeastCompanion) {
+			const $btn = $(`<button class="ve-btn ve-btn-success" style="white-space: nowrap;">
+				<span class="glyphicon glyphicon-plus mr-1"></span>🐺 Beast Companion
+			</button>`);
+			$btn.on("click", () => this._onSummonBeastCompanion());
+			$container.append($btn);
+		}
+
+		// Drakewarden Ranger - Drake Companion
+		if (calculations.hasDrakeCompanion) {
+			const $btn = $(`<button class="ve-btn ve-btn-danger" style="white-space: nowrap;">
+				<span class="glyphicon glyphicon-plus mr-1"></span>🐉 Summon Drake
+			</button>`);
+			$btn.on("click", () => this._onSummonDrake());
+			$container.append($btn);
+		}
+
+		// Battle Smith Artificer - Steel Defender
+		if (calculations.hasSteelDefender) {
+			const $btn = $(`<button class="ve-btn ve-btn-info" style="white-space: nowrap;">
+				<span class="glyphicon glyphicon-plus mr-1"></span>⚙️ Create Steel Defender
+			</button>`);
+			$btn.on("click", () => this._onSummonSteelDefender());
+			$container.append($btn);
+		}
+
+		// Druid - Wild Shape
+		if (calculations.wildShapeUses > 0) {
+			const uses = calculations.wildShapeUses === Infinity ? "∞" : calculations.wildShapeUses;
+			const $btn = $(`<button class="ve-btn ve-btn-warning" style="white-space: nowrap;">
+				<span class="glyphicon glyphicon-refresh mr-1"></span>🐻 Wild Shape (${uses})
+			</button>`);
+			$btn.on("click", () => this._onWildShape());
+			$container.append($btn);
+		}
+
+		// Find Steed / Find Greater Steed (Paladin)
+		const hasFindSteed = spells.some(s => s.name?.toLowerCase() === "find steed");
+		const hasFindGreaterSteed = spells.some(s => s.name?.toLowerCase() === "find greater steed");
+		if (hasFindSteed || hasFindGreaterSteed) {
+			const steedType = hasFindGreaterSteed ? "Greater Steed" : "Steed";
+			const $btn = $(`<button class="ve-btn ve-btn-default" style="white-space: nowrap;">
+				<span class="glyphicon glyphicon-plus mr-1"></span>🐎 Find ${steedType}
+			</button>`);
+			$btn.on("click", () => this._onFindSteed(hasFindGreaterSteed));
+			$container.append($btn);
+		}
+
+		// Always show "Add Custom" button
+		const $customBtn = $(`<button class="ve-btn ve-btn-default" style="white-space: nowrap;" title="Add a custom companion manually">
+			<span class="glyphicon glyphicon-plus mr-1"></span>➕ Custom
+		</button>`);
+		$customBtn.on("click", () => this._onAddCustomCompanion());
+		$container.append($customBtn);
+	}
+
+	/**
+	 * Beast Master Ranger - Summon Beast Companion
+	 */
+	async _onSummonBeastCompanion () {
+		const calculations = this._state.getFeatureCalculations?.() || {};
+
+		// Offer choice between Primal Companion templates and legacy beast
+		const choice = await InputUiUtil.pGetUserEnum({
+			title: "Beast Companion Type",
+			htmlDescription: `<div>Choose your Beast Companion type:</div>`,
+			values: ["Beast of the Land", "Beast of the Sea", "Beast of the Sky", "Legacy Beast (CR ≤ 1/4)"],
+			isResolveItem: true,
+		});
+		if (!choice) return;
+
+		// Dismiss existing beast companions first
+		const existingCompanions = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.BEAST_COMPANION) || [];
+		for (const comp of existingCompanions) {
+			this._state.removeCompanion?.(comp.id);
+		}
+
+		if (choice.startsWith("Legacy")) {
+			// Show bestiary picker filtered to CR ≤ 1/4 beasts
+			await this._pShowBeastPicker({
+				maxCr: 0.25,
+				type: CharacterSheetState.COMPANION_TYPES.BEAST_COMPANION,
+				origin: "Beast Master",
+			});
+		} else {
+			// Create a Primal Companion
+			const primalType = choice.replace("Beast of the ", "").toLowerCase();
+			this._createPrimalCompanion(primalType);
+		}
+
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+	}
+
+	/**
+	 * Create a Primal Companion (Beast of Land/Sea/Sky)
+	 */
+	_createPrimalCompanion (type) {
+		const calculations = this._state.getFeatureCalculations?.() || {};
+		const rangerLevel = this._state.getClassLevel?.("ranger") || 0;
+		const pb = this._state.getProficiencyBonus?.() || 2;
+
+		// Base stats for primal companions (XPHB/Tasha's)
+		const baseStats = {
+			land: {
+				name: "Beast of the Land",
+				size: "M",
+				speed: {walk: 40, climb: 40},
+				ac: 13 + pb,
+				hp: 5 + (5 * rangerLevel),
+				abilities: {str: 14, dex: 14, con: 15, int: 8, wis: 14, cha: 11},
+				senses: ["darkvision 60 ft."],
+				actions: [{name: "Maul", entries: [`Melee Attack: +${pb + 2} to hit, reach 5 ft. Hit: 1d8 + 2 + PB slashing damage.`]}],
+				traits: [{name: "Charge", entries: ["If the beast moves at least 20 feet straight toward a target and then hits it with a Maul attack on the same turn, the target takes an extra 1d6 slashing damage."]}],
+			},
+			sea: {
+				name: "Beast of the Sea",
+				size: "M",
+				speed: {walk: 5, swim: 60},
+				ac: 13 + pb,
+				hp: 5 + (5 * rangerLevel),
+				abilities: {str: 14, dex: 14, con: 15, int: 8, wis: 14, cha: 11},
+				senses: ["darkvision 60 ft."],
+				actions: [{name: "Binding Strike", entries: [`Melee Attack: +${pb + 2} to hit, reach 5 ft. Hit: 1d6 + 2 + PB bludgeoning or piercing damage, and target is grappled (escape DC ${8 + pb + 2}).`]}],
+				traits: [{name: "Amphibious", entries: ["The beast can breathe air and water."]}],
+			},
+			sky: {
+				name: "Beast of the Sky",
+				size: "S",
+				speed: {walk: 10, fly: 60},
+				ac: 13 + pb,
+				hp: 4 + (4 * rangerLevel),
+				abilities: {str: 6, dex: 16, con: 13, int: 8, wis: 14, cha: 11},
+				senses: ["darkvision 60 ft."],
+				actions: [{name: "Shred", entries: [`Melee Attack: +${pb + 3} to hit, reach 5 ft. Hit: 1d4 + 3 + PB slashing damage.`]}],
+				traits: [{name: "Flyby", entries: ["The beast doesn't provoke opportunity attacks when it flies out of an enemy's reach."]}],
+			},
+		};
+
+		const stats = baseStats[type];
+		if (!stats) return;
+
+		this._state.addCompanion?.({
+			name: stats.name,
+			type: CharacterSheetState.COMPANION_TYPES.BEAST_COMPANION,
+			origin: "Beast Master (Primal Companion)",
+			size: stats.size,
+			creatureType: "beast",
+			ac: stats.ac,
+			hp: {max: stats.hp, current: stats.hp},
+			speed: stats.speed,
+			abilities: stats.abilities,
+			senses: stats.senses,
+			passive: 10 + 2 + pb, // WIS mod + prof
+			actions: stats.actions,
+			traits: stats.traits,
+			profBonus: pb,
+			skillProficiencies: {perception: 1, stealth: 1, athletics: 1},
+			saveProficiencies: ["dex", "con"],
+		});
+
+		JqueryUtil.doToast({type: "success", content: `Created ${stats.name}!`});
+	}
+
+	/**
+	 * Drakewarden Ranger - Summon Drake
+	 */
+	async _onSummonDrake () {
+		const calculations = this._state.getFeatureCalculations?.() || {};
+		const rangerLevel = this._state.getClassLevel?.("ranger") || 0;
+		const pb = this._state.getProficiencyBonus?.() || 2;
+
+		// Dismiss existing drake first
+		const existingDrakes = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.DRAKE) || [];
+		for (const drake of existingDrakes) {
+			this._state.removeCompanion?.(drake.id);
+		}
+
+		// Choose damage type
+		const damageType = await InputUiUtil.pGetUserEnum({
+			title: "Drake Damage Type",
+			htmlDescription: `<div>Choose your Drake's damage type (Draconic Essence):</div>`,
+			values: ["Acid", "Cold", "Fire", "Lightning", "Poison"],
+			isResolveItem: true,
+		});
+		if (!damageType) return;
+
+		// Scaling based on ranger level
+		const size = rangerLevel >= 15 ? "L" : rangerLevel >= 7 ? "M" : "S";
+		const canFly = rangerLevel >= 7;
+		const hp = 5 + (5 * rangerLevel);
+		const ac = 14 + pb;
+
+		this._state.addCompanion?.({
+			name: "Drake Companion",
+			type: CharacterSheetState.COMPANION_TYPES.DRAKE,
+			origin: "Drakewarden",
+			size,
+			creatureType: "dragon",
+			ac,
+			hp: {max: hp, current: hp},
+			speed: {walk: 40, fly: canFly ? 40 : 0},
+			abilities: {str: 16, dex: 12, con: 15, int: 8, wis: 14, cha: 8},
+			senses: ["darkvision 60 ft."],
+			passive: 10 + 2 + pb,
+			actions: [
+				{name: "Bite", entries: [`Melee Attack: +${pb + 3} to hit, reach 5 ft. Hit: 1d6 + ${pb} piercing damage.`]},
+			],
+			reactions: [
+				{name: "Infused Strikes", entries: [`When another creature within 30 feet hits a target, add 1d6 ${damageType.toLowerCase()} damage to the attack.`]},
+			],
+			traits: [
+				{name: "Draconic Essence", entries: [`${damageType} damage. The drake's bite deals +1d6 ${damageType.toLowerCase()} damage.`]},
+			],
+			immunities: [damageType.toLowerCase()],
+			profBonus: pb,
+			skillProficiencies: {perception: 1},
+			saveProficiencies: ["dex", "wis"],
+		});
+
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+		JqueryUtil.doToast({type: "success", content: `Summoned Drake Companion (${damageType})!`});
+	}
+
+	/**
+	 * Battle Smith Artificer - Create Steel Defender
+	 */
+	async _onSummonSteelDefender () {
+		const calculations = this._state.getFeatureCalculations?.() || {};
+		const artificerLevel = this._state.getClassLevel?.("artificer") || 0;
+		const pb = this._state.getProficiencyBonus?.() || 2;
+		const intMod = this._state.getAbilityMod?.("int") || 0;
+
+		// Dismiss existing steel defender first
+		const existingDefenders = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.STEEL_DEFENDER) || [];
+		for (const defender of existingDefenders) {
+			this._state.removeCompanion?.(defender.id);
+		}
+
+		// Steel Defender stats
+		const hp = 2 + intMod + (5 * artificerLevel);
+		const ac = artificerLevel >= 15 ? 17 : 15;
+		const spellAttackMod = pb + intMod;
+
+		this._state.addCompanion?.({
+			name: "Steel Defender",
+			type: CharacterSheetState.COMPANION_TYPES.STEEL_DEFENDER,
+			origin: "Battle Smith",
+			size: "M",
+			creatureType: "construct",
+			ac,
+			hp: {max: hp, current: hp},
+			speed: {walk: 40},
+			abilities: {str: 14, dex: 12, con: 14, int: 4, wis: 10, cha: 6},
+			senses: ["darkvision 60 ft."],
+			passive: 10 + pb,
+			actions: [
+				{name: "Force-Empowered Rend", entries: [`Melee Attack: +${spellAttackMod} to hit, reach 5 ft. Hit: 1d8 + ${pb} force damage.`]},
+				{name: "Repair (3/Day)", entries: [`The defender restores 2d8 + ${pb} HP to itself or a construct within 5 feet.`]},
+			],
+			reactions: [
+				{name: "Deflect Attack", entries: ["When a creature the defender can see within 5 feet is hit by an attack, impose disadvantage on that attack roll."]},
+			],
+			traits: [
+				{name: "Vigilant", entries: ["The defender can't be surprised."]},
+			],
+			immunities: ["poison"],
+			conditionImmunities: ["charmed", "exhaustion", "poisoned"],
+			profBonus: pb,
+			skillProficiencies: {athletics: 1, perception: 1},
+			saveProficiencies: ["dex", "con"],
+		});
+
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+		JqueryUtil.doToast({type: "success", content: `Created Steel Defender! (HP: ${hp}, AC: ${ac})`});
+	}
+
+	/**
+	 * Druid - Wild Shape
+	 */
+	async _onWildShape () {
+		const calculations = this._state.getFeatureCalculations?.() || {};
+		const druidLevel = this._state.getClassLevel?.("druid") || 0;
+
+		// Check if already in wild shape
+		const existingWildShape = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.WILD_SHAPE) || [];
+		if (existingWildShape.length > 0) {
+			const confirmed = await InputUiUtil.pGetUserBoolean({
+				title: "End Wild Shape?",
+				htmlDescription: `You are currently in Wild Shape as <strong>${existingWildShape[0].name}</strong>. End this form?`,
+				textYes: "End Wild Shape",
+				textNo: "Cancel",
+			});
+			if (confirmed) {
+				for (const ws of existingWildShape) {
+					this._state.removeCompanion?.(ws.id);
+				}
+				this._saveCurrentCharacter();
+				this._renderCompanions();
+				JqueryUtil.doToast({type: "info", content: "Wild Shape ended."});
+			}
+			return;
+		}
+
+		// Show beast picker with CR limit based on druid level
+		const maxCr = calculations.wildShapeCr || (druidLevel >= 8 ? 1 : druidLevel >= 4 ? 0.5 : 0.25);
+		const canSwim = calculations.wildShapeCanSwim || druidLevel >= 4;
+		const canFly = calculations.wildShapeCanFly || druidLevel >= 8;
+
+		await this._pShowBeastPicker({
+			maxCr,
+			canSwim,
+			canFly,
+			type: CharacterSheetState.COMPANION_TYPES.WILD_SHAPE,
+			origin: "Wild Shape",
+		});
+
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+	}
+
+	/**
+	 * Find Steed / Find Greater Steed
+	 */
+	async _onFindSteed (isGreater = false) {
+		// Dismiss existing mounts first
+		const existingMounts = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.MOUNT) || [];
+		for (const mount of existingMounts) {
+			this._state.removeCompanion?.(mount.id);
+		}
+
+		const maxCr = isGreater ? 2 : 0.5;
+		await this._pShowMountPicker(maxCr, isGreater);
+
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+	}
+
+	/**
+	 * Show mount picker for Find Steed/Find Greater Steed
+	 */
+	async _pShowMountPicker (maxCr, isGreater = false) {
+		const spellName = isGreater ? "Find Greater Steed" : "Find Steed";
+
+		// Standard mount options
+		const standardMounts = isGreater
+			? ["Griffon", "Pegasus", "Peryton", "Dire Wolf", "Rhinoceros", "Saber-Toothed Tiger"]
+			: ["Warhorse", "Pony", "Camel", "Elk", "Mastiff"];
+
+		const choice = await InputUiUtil.pGetUserEnum({
+			title: spellName,
+			htmlDescription: `<div>Choose your steed (appears as celestial, fey, or fiend):</div>`,
+			values: [...standardMounts, "From Bestiary..."],
+			isResolveItem: true,
+		});
+		if (!choice) return;
+
+		if (choice === "From Bestiary...") {
+			await this._pShowBeastPicker({
+				maxCr,
+				type: CharacterSheetState.COMPANION_TYPES.MOUNT,
+				origin: spellName,
+				creatureTypes: ["beast"],
+				minSize: "L", // Mounts must be Large or larger
+			});
+		} else {
+			// Use standard mount stats
+			const mountStats = this._getStandardMountStats(choice);
+			if (mountStats) {
+				this._state.addCompanion?.({
+					...mountStats,
+					type: CharacterSheetState.COMPANION_TYPES.MOUNT,
+					origin: spellName,
+				});
+				JqueryUtil.doToast({type: "success", content: `Summoned ${choice} as your steed!`});
+			}
+		}
+	}
+
+	/**
+	 * Get standard mount stats
+	 */
+	_getStandardMountStats (name) {
+		const mounts = {
+			"Warhorse": {name: "Warhorse", size: "L", creatureType: "beast", ac: 11, hp: {max: 19, current: 19}, speed: {walk: 60}, abilities: {str: 18, dex: 12, con: 13, int: 2, wis: 12, cha: 7}, senses: [], passive: 11},
+			"Pony": {name: "Pony", size: "M", creatureType: "beast", ac: 10, hp: {max: 11, current: 11}, speed: {walk: 40}, abilities: {str: 15, dex: 10, con: 13, int: 2, wis: 11, cha: 7}, senses: [], passive: 10},
+			"Camel": {name: "Camel", size: "L", creatureType: "beast", ac: 9, hp: {max: 15, current: 15}, speed: {walk: 50}, abilities: {str: 16, dex: 8, con: 14, int: 2, wis: 8, cha: 5}, senses: [], passive: 9},
+			"Elk": {name: "Elk", size: "L", creatureType: "beast", ac: 10, hp: {max: 13, current: 13}, speed: {walk: 50}, abilities: {str: 16, dex: 10, con: 12, int: 2, wis: 10, cha: 6}, senses: [], passive: 10},
+			"Mastiff": {name: "Mastiff", size: "M", creatureType: "beast", ac: 12, hp: {max: 5, current: 5}, speed: {walk: 40}, abilities: {str: 13, dex: 14, con: 12, int: 3, wis: 12, cha: 7}, senses: [], passive: 13},
+			"Griffon": {name: "Griffon", size: "L", creatureType: "monstrosity", ac: 12, hp: {max: 59, current: 59}, speed: {walk: 30, fly: 80}, abilities: {str: 18, dex: 15, con: 16, int: 2, wis: 13, cha: 8}, senses: ["darkvision 60 ft."], passive: 15},
+			"Pegasus": {name: "Pegasus", size: "L", creatureType: "celestial", ac: 12, hp: {max: 59, current: 59}, speed: {walk: 60, fly: 90}, abilities: {str: 18, dex: 15, con: 16, int: 10, wis: 15, cha: 13}, senses: [], passive: 16},
+			"Peryton": {name: "Peryton", size: "M", creatureType: "monstrosity", ac: 13, hp: {max: 33, current: 33}, speed: {walk: 20, fly: 60}, abilities: {str: 16, dex: 12, con: 13, int: 9, wis: 12, cha: 10}, senses: [], passive: 11},
+			"Dire Wolf": {name: "Dire Wolf", size: "L", creatureType: "beast", ac: 14, hp: {max: 37, current: 37}, speed: {walk: 50}, abilities: {str: 17, dex: 15, con: 15, int: 3, wis: 12, cha: 7}, senses: [], passive: 13},
+			"Rhinoceros": {name: "Rhinoceros", size: "L", creatureType: "beast", ac: 11, hp: {max: 45, current: 45}, speed: {walk: 40}, abilities: {str: 21, dex: 8, con: 15, int: 2, wis: 12, cha: 6}, senses: [], passive: 11},
+			"Saber-Toothed Tiger": {name: "Saber-Toothed Tiger", size: "L", creatureType: "beast", ac: 12, hp: {max: 52, current: 52}, speed: {walk: 40}, abilities: {str: 18, dex: 14, con: 15, int: 3, wis: 12, cha: 8}, senses: [], passive: 12},
+		};
+		return mounts[name] || null;
+	}
+
+	/**
+	 * Generic beast picker from bestiary
+	 */
+	async _pShowBeastPicker (options = {}) {
+		const {maxCr = 1, canSwim = true, canFly = false, type, origin, creatureTypes = ["beast"], minSize = null} = options;
+
+		// Try to load bestiary data
+		let allCreatures = [];
+		try {
+			const bestiaryUrls = [
+				"data/bestiary/bestiary-mm.json",
+				"data/bestiary/bestiary-xmm.json",
+				"data/bestiary/bestiary-mpmm.json",
+			];
+
+			for (const url of bestiaryUrls) {
+				try {
+					const data = await DataUtil.loadJSON(url);
+					if (data?.monster) allCreatures.push(...data.monster);
+				} catch (e) { /* ignore missing files */ }
+			}
+		} catch (e) {
+			JqueryUtil.doToast({type: "warning", content: "Could not load bestiary data."});
+			return;
+		}
+
+		// Filter creatures
+		const sizeOrder = ["T", "S", "M", "L", "H", "G"];
+		const minSizeIdx = minSize ? sizeOrder.indexOf(minSize) : -1;
+
+		const validCreatures = allCreatures.filter(c => {
+			// Check type
+			const cType = typeof c.type === "string" ? c.type : c.type?.type;
+			if (!creatureTypes.includes(cType?.toLowerCase())) return false;
+
+			// Check CR
+			let cr = c.cr;
+			if (typeof cr === "object") cr = cr.cr;
+			const crNum = Parser.crToNumber(cr);
+			if (crNum > maxCr) return false;
+
+			// Check size
+			const size = Array.isArray(c.size) ? c.size[0] : c.size;
+			if (minSizeIdx >= 0 && sizeOrder.indexOf(size) < minSizeIdx) return false;
+
+			// Check movement restrictions
+			if (!canFly && c.speed?.fly) return false;
+			if (!canSwim && c.speed?.swim && !c.speed?.walk) return false; // Aquatic-only
+
+			return true;
+		});
+
+		if (validCreatures.length === 0) {
+			JqueryUtil.doToast({type: "warning", content: "No valid creatures found for this companion type."});
+			return;
+		}
+
+		// Sort by CR then name
+		validCreatures.sort((a, b) => {
+			const crA = Parser.crToNumber(typeof a.cr === "object" ? a.cr.cr : a.cr);
+			const crB = Parser.crToNumber(typeof b.cr === "object" ? b.cr.cr : b.cr);
+			if (crA !== crB) return crA - crB;
+			return a.name.localeCompare(b.name);
+		});
+
+		// Show picker
+		const choice = await InputUiUtil.pGetUserEnum({
+			title: `Select ${origin || "Companion"}`,
+			htmlDescription: `<div>CR ≤ ${maxCr}${!canFly ? ", no fly" : ""}${!canSwim ? ", no swim-only" : ""}</div>`,
+			values: validCreatures.map(c => `${c.name} (CR ${typeof c.cr === "object" ? c.cr.cr : c.cr})`),
+			isResolveItem: true,
+		});
+		if (!choice) return;
+
+		const selectedName = choice.split(" (CR")[0];
+		const selectedCreature = validCreatures.find(c => c.name === selectedName);
+		if (!selectedCreature) return;
+
+		// Add companion from bestiary
+		this._state.addCompanionFromBestiary?.(selectedCreature, {
+			type,
+			origin,
+		});
+
+		JqueryUtil.doToast({type: "success", content: `Added ${selectedCreature.name} as ${origin || "companion"}!`});
+	}
+
+	/**
+	 * Add custom companion manually
+	 */
+	async _onAddCustomCompanion () {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "➕ Add Custom Companion",
+			isMinHeight0: true,
+			isWidth100: true,
+		});
+
+		let name = "";
+		let hp = 10;
+		let ac = 10;
+		let speed = 30;
+		let creatureType = "beast";
+
+		$modalInner.append(`
+			<div style="display: flex; flex-direction: column; gap: 12px;">
+				<div>
+					<label class="ve-small ve-muted">Name *</label>
+					<input type="text" class="form-control" id="custom-comp-name" placeholder="Companion name...">
+				</div>
+				<div style="display: flex; gap: 12px;">
+					<div style="flex: 1;">
+						<label class="ve-small ve-muted">HP</label>
+						<input type="number" class="form-control" id="custom-comp-hp" value="10" min="1">
+					</div>
+					<div style="flex: 1;">
+						<label class="ve-small ve-muted">AC</label>
+						<input type="number" class="form-control" id="custom-comp-ac" value="10" min="1">
+					</div>
+					<div style="flex: 1;">
+						<label class="ve-small ve-muted">Speed (ft)</label>
+						<input type="number" class="form-control" id="custom-comp-speed" value="30" min="0">
+					</div>
+				</div>
+				<div>
+					<label class="ve-small ve-muted">Creature Type</label>
+					<select class="form-control" id="custom-comp-type">
+						<option value="beast">Beast</option>
+						<option value="celestial">Celestial</option>
+						<option value="construct">Construct</option>
+						<option value="dragon">Dragon</option>
+						<option value="elemental">Elemental</option>
+						<option value="fey">Fey</option>
+						<option value="fiend">Fiend</option>
+						<option value="undead">Undead</option>
+					</select>
+				</div>
+				<div class="ve-flex-h-right" style="gap: 8px; margin-top: 8px;">
+					<button class="ve-btn ve-btn-default" id="custom-comp-cancel">Cancel</button>
+					<button class="ve-btn ve-btn-primary" id="custom-comp-add">
+						<span class="glyphicon glyphicon-plus mr-1"></span>Add Companion
+					</button>
+				</div>
+			</div>
+		`);
+
+		$modalInner.find("#custom-comp-cancel").on("click", doClose);
+		$modalInner.find("#custom-comp-add").on("click", () => {
+			name = $modalInner.find("#custom-comp-name").val()?.trim();
+			hp = parseInt($modalInner.find("#custom-comp-hp").val()) || 10;
+			ac = parseInt($modalInner.find("#custom-comp-ac").val()) || 10;
+			speed = parseInt($modalInner.find("#custom-comp-speed").val()) || 30;
+			creatureType = $modalInner.find("#custom-comp-type").val() || "beast";
+
+			if (!name) {
+				JqueryUtil.doToast({type: "warning", content: "Please enter a name."});
+				return;
+			}
+
+			this._state.addCompanion?.({
+				name,
+				type: CharacterSheetState.COMPANION_TYPES.CUSTOM,
+				origin: "Custom",
+				creatureType,
+				ac,
+				hp: {max: hp, current: hp},
+				speed: {walk: speed},
+				abilities: {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10},
+			});
+
+			doClose();
+			this._saveCurrentCharacter();
+			this._renderCompanions();
+			JqueryUtil.doToast({type: "success", content: `Added ${name}!`});
+		});
 	}
 
 	async _saveCurrentCharacter () {
@@ -1831,6 +2435,9 @@ class CharacterSheetPage {
 		const $list = $("#charsheet-companions-list");
 		if (!$list.length) return;
 
+		// Render dynamic summon buttons based on character features
+		this._renderCompanionButtons();
+
 		$list.empty();
 
 		const companions = this._state.getActiveCompanions?.() || [];
@@ -1850,6 +2457,12 @@ class CharacterSheetPage {
 		}
 
 		companions.forEach(companion => {
+			// Check if this is a grouped companion (conjured creatures)
+			if (companion.count > 1 && companion.hpArray) {
+				this._renderGroupedCompanion(companion, $list);
+				return;
+			}
+
 			const hp = companion.hp || {current: 1, max: 1};
 			const hpPercent = Math.round((hp.current / hp.max) * 100);
 			const hpColor = hpPercent > 50 ? "#22c55e" : hpPercent > 25 ? "#f59e0b" : "#ef4444";
@@ -1927,13 +2540,21 @@ class CharacterSheetPage {
 			const usedAction = companion.usedAction || false;
 			const usedReaction = companion.usedReaction || false;
 
-			// Check if familiar can attack (Pact of Chain familiars have attack actions)
-			const canAttack = companion.actions?.some(a =>
-				a.name?.toLowerCase().includes("bite") ||
-				a.name?.toLowerCase().includes("claw") ||
-				a.name?.toLowerCase().includes("sting") ||
-				a.entries?.some(e => typeof e === "string" && e.toLowerCase().includes("melee weapon attack")),
-			) && companion.type === CharacterSheetState.COMPANION_TYPES.FAMILIAR;
+			// Get all attack actions from the companion's stat block
+			const attackActions = companion.actions?.filter(a =>
+				a.entries?.some(e => typeof e === "string" && /\{@atk/.test(e)),
+			) || [];
+
+			// Build attack buttons HTML for all attacks
+			const attackButtonsHtml = attackActions.map(action => {
+				const entry = action.entries?.find(e => typeof e === "string") || "";
+				const hitMatch = entry.match(/\{@hit\s*(-?\d+)\}/);
+				const attackBonus = hitMatch ? parseInt(hitMatch[1]) : 0;
+				const bonusStr = attackBonus >= 0 ? `+${attackBonus}` : `${attackBonus}`;
+				return `<button class="ve-btn ve-btn-xs ve-btn-danger btn-companion-attack-roll" data-action-name="${action.name.replace(/"/g, '&quot;')}" title="Roll ${action.name}" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
+					⚔️ ${action.name} (${bonusStr})
+				</button>`;
+			}).join("");
 
 			const $card = $(`
 				<div class="charsheet__companion-card" data-companion-id="${companion.id}" style="
@@ -2065,8 +2686,12 @@ class CharacterSheetPage {
 							<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-action" data-action="search" title="Make a Perception or Investigation check to find something" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
 								🔎 Search
 							</button>
-							${canAttack ? `<button class="ve-btn ve-btn-xs ve-btn-danger btn-companion-action" data-action="attack" title="Make an attack (Pact of Chain only)" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>⚔️ Attack</button>` : ''}
 						</div>
+						${attackButtonsHtml ? `
+						<div class="ve-flex mt-2" style="gap: 6px; flex-wrap: wrap;">
+							${attackButtonsHtml}
+						</div>
+						` : ''}
 					</div>
 
 					<!-- Action Buttons -->
@@ -2174,6 +2799,12 @@ class CharacterSheetPage {
 			$card.find(".btn-companion-action").on("click", (evt) => {
 				const action = $(evt.currentTarget).data("action");
 				this._useCompanionAction(companion, action);
+			});
+
+			// Attack roll buttons
+			$card.find(".btn-companion-attack-roll").on("click", async (evt) => {
+				const actionName = $(evt.currentTarget).data("action-name");
+				await this._rollCompanionAttack(companion, actionName);
 			});
 
 			$list.append($card);
@@ -2294,7 +2925,7 @@ class CharacterSheetPage {
 			}).join("")
 			: "<div class='ve-muted'>None</div>";
 
-		// Format actions with proper rendering
+		// Format actions with proper rendering and roll buttons
 		const actionsHtml = companion.actions?.length
 			? companion.actions.map(a => {
 				let text;
@@ -2303,7 +2934,30 @@ class CharacterSheetPage {
 				} catch (e) {
 					text = a.entries?.join(" ") || a.text || "";
 				}
-				return `<div class="mb-2"><strong>${a.name}.</strong> ${text}</div>`;
+
+				// Check if this is an attack action
+				const entry = a.entries?.find(e => typeof e === "string") || "";
+				const isAttack = /\{@atk/.test(entry);
+				const hitMatch = entry.match(/\{@hit\s*(-?\d+)\}/);
+				const attackBonus = hitMatch ? parseInt(hitMatch[1]) : 0;
+				const bonusStr = attackBonus >= 0 ? `+${attackBonus}` : `${attackBonus}`;
+
+				// Parse damage for display
+				const damageMatches = [...entry.matchAll(/\{@damage\s+([^}]+)\}/g)];
+				const hasDamage = damageMatches.length > 0;
+
+				const rollButton = isAttack ? `
+					<div class="ve-flex mt-1" style="gap: 6px;">
+						<button class="ve-btn ve-btn-xs ve-btn-danger btn-statblock-attack" data-action-name="${a.name.replace(/"/g, '&quot;')}" title="Roll attack">
+							⚔️ Attack (${bonusStr})
+						</button>
+						${hasDamage ? `<button class="ve-btn ve-btn-xs ve-btn-warning btn-statblock-damage" data-action-name="${a.name.replace(/"/g, '&quot;')}" title="Roll damage only">
+							💥 Damage
+						</button>` : ""}
+					</div>
+				` : "";
+
+				return `<div class="mb-2"><strong>${a.name}.</strong> ${text}${rollButton}</div>`;
 			}).join("")
 			: "<div class='ve-muted'>None</div>";
 
@@ -2382,6 +3036,27 @@ class CharacterSheetPage {
 				content: `🎲 ${companion.name} ${ability.toUpperCase()} Save: ${roll} ${modStr} = <strong>${total}</strong>`,
 			});
 		});
+
+		// Bind attack roll buttons in stat block
+		$modalInner.find(".btn-statblock-attack").on("click", async (evt) => {
+			const actionName = $(evt.currentTarget).data("action-name");
+			await this._rollCompanionAttack(companion, actionName);
+		});
+
+		// Bind damage-only roll buttons in stat block
+		$modalInner.find(".btn-statblock-damage").on("click", (evt) => {
+			const actionName = $(evt.currentTarget).data("action-name");
+			const action = companion.actions?.find(a => a.name === actionName);
+			if (!action) return;
+
+			const entry = action.entries?.find(e => typeof e === "string") || "";
+			const damageMatches = [...entry.matchAll(/\{@damage\s+([^}]+)\}/g)];
+			const damages = damageMatches.map(m => m[1].trim());
+
+			if (damages.length > 0) {
+				this._rollCompanionDamage(companion, actionName, damages, false);
+			}
+		});
 	}
 
 	_formatCompanionSpeeds (speed) {
@@ -2393,6 +3068,320 @@ class CharacterSheetPage {
 		if (speed.climb) parts.push(`climb ${speed.climb} ft.`);
 		if (speed.burrow) parts.push(`burrow ${speed.burrow} ft.`);
 		return parts.length > 0 ? parts.join(", ") : "—";
+	}
+
+	/**
+	 * Render a grouped companion card (for conjured creatures)
+	 * @param {object} companion - The companion data with count and hpArray
+	 * @param {jQuery} $list - The list container to append to
+	 */
+	_renderGroupedCompanion (companion, $list) {
+		const livingCount = this._state.getLivingGroupedCreatureCount?.(companion.id) || 0;
+		const totalCount = companion.count || 1;
+
+		// Format speeds
+		const speeds = [];
+		if (companion.speed?.walk) speeds.push(`${companion.speed.walk} ft.`);
+		if (companion.speed?.fly) speeds.push(`fly ${companion.speed.fly} ft.`);
+		if (companion.speed?.swim) speeds.push(`swim ${companion.speed.swim} ft.`);
+		const speedStr = speeds.length > 0 ? speeds.join(", ") : "—";
+
+		// Type info
+		const info = {label: "Conjured", icon: "✨", color: "#3b82f6"};
+
+		// Get creature emoji
+		const creatureEmojis = {
+			wolf: "🐺", bear: "🐻", panther: "🐆", elk: "🦌", boar: "🐗",
+			hawk: "🦅", eagle: "🦅", owl: "🦉", bat: "🦇", raven: "🐦‍⬛",
+			snake: "🐍", spider: "🕷️", rat: "🐀", lion: "🦁", tiger: "🐅",
+		};
+		const creatureEmoji = creatureEmojis[companion.name?.toLowerCase()] || "🐾";
+
+		// Build hoverable name link
+		let nameDisplay;
+		if (companion.source) {
+			try {
+				const hash = UrlUtil.encodeForHash([companion.name, companion.source].join(HASH_LIST_SEP));
+				const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BESTIARY, source: companion.source, hash});
+				nameDisplay = `<a href="${UrlUtil.PG_BESTIARY}#${hash}" ${hoverAttrs} style="font-size: 1.25em; font-weight: bold;">${companion.name}</a>`;
+			} catch (e) {
+				nameDisplay = `<span style="font-size: 1.25em; font-weight: bold;">${companion.name}</span>`;
+			}
+		} else {
+			nameDisplay = `<span style="font-size: 1.25em; font-weight: bold;">${companion.name}</span>`;
+		}
+
+		// Create individual HP bars HTML
+		const hpBarsHtml = companion.hpArray.map((creatureHp, index) => {
+			const hpPercent = Math.round((creatureHp.current / creatureHp.max) * 100);
+			const hpColor = creatureHp.current === 0 ? "#6b7280" : hpPercent > 50 ? "#22c55e" : hpPercent > 25 ? "#f59e0b" : "#ef4444";
+			const isDead = creatureHp.current === 0;
+			return `
+				<div class="charsheet__grouped-creature" data-index="${index}" style="
+					display: flex;
+					align-items: center;
+					gap: 8px;
+					padding: 6px 8px;
+					background: ${isDead ? "rgba(107, 114, 128, 0.1)" : "rgba(var(--rgb-bg-text), 0.03)"};
+					border-radius: 6px;
+					${isDead ? "opacity: 0.6;" : ""}
+				">
+					<span style="font-size: 0.85em; width: 24px; text-align: center; color: var(--rgb-text-muted);">#${index + 1}</span>
+					<div style="flex: 1; display: flex; align-items: center; gap: 6px;">
+						<div style="flex: 1; height: 8px; background: rgba(var(--rgb-bg-text), 0.1); border-radius: 4px; overflow: hidden;">
+							<div style="width: ${hpPercent}%; height: 100%; background: ${hpColor}; transition: width 0.2s;"></div>
+						</div>
+						<span style="font-size: 0.8em; min-width: 48px; text-align: right; color: ${hpColor};">${creatureHp.current}/${creatureHp.max}</span>
+					</div>
+					<div class="ve-flex" style="gap: 4px;">
+						<button class="ve-btn ve-btn-xxs ve-btn-success btn-heal-creature" data-index="${index}" title="Heal" ${isDead ? "" : ""}>+</button>
+						<button class="ve-btn ve-btn-xxs ve-btn-danger btn-damage-creature" data-index="${index}" title="Damage" ${isDead ? "disabled" : ""}>−</button>
+					</div>
+					${isDead ? '<span style="font-size: 0.8em; color: #ef4444;">☠️</span>' : ''}
+				</div>
+			`;
+		}).join("");
+
+		const $card = $(`
+			<div class="charsheet__companion-card charsheet__grouped-companion" data-companion-id="${companion.id}" style="
+				border: 2px solid ${info.color}33;
+				border-radius: 12px;
+				padding: 16px;
+				margin-bottom: 12px;
+				background: linear-gradient(135deg, ${info.color}08, transparent);
+				position: relative;
+				overflow: hidden;
+			">
+				<!-- Type badge -->
+				<div style="
+					position: absolute;
+					top: 0;
+					right: 0;
+					background: ${info.color}22;
+					color: ${info.color};
+					padding: 4px 12px 4px 16px;
+					font-size: 0.75em;
+					font-weight: 600;
+					border-bottom-left-radius: 12px;
+				">${info.icon} ${info.label}</div>
+
+				<!-- Header -->
+				<div class="ve-flex ve-flex-v-center mb-3" style="gap: 12px;">
+					<div style="font-size: 2.5em; line-height: 1;">${creatureEmoji}</div>
+					<div class="ve-flex-col" style="flex: 1;">
+						<div class="ve-flex ve-flex-v-center" style="gap: 8px;">
+							<span style="font-size: 1.5em; font-weight: bold; color: ${info.color};">${totalCount}×</span>
+							${nameDisplay}
+						</div>
+						<div class="ve-muted ve-small">from ${companion.origin || "Conjure spell"} • ${livingCount}/${totalCount} alive</div>
+					</div>
+				</div>
+
+				<!-- Summary Stats -->
+				<div style="
+					display: grid;
+					grid-template-columns: repeat(4, 1fr);
+					gap: 12px;
+					margin-bottom: 12px;
+					padding: 12px;
+					background: rgba(var(--rgb-bg-text), 0.03);
+					border-radius: 8px;
+				">
+					<div class="ve-flex-col ve-text-center">
+						<div class="ve-muted ve-small" style="margin-bottom: 2px;">Each HP</div>
+						<div class="bold" style="font-size: 1.1em;">❤️ ${companion.hp?.max || "?"}</div>
+					</div>
+					<div class="ve-flex-col ve-text-center">
+						<div class="ve-muted ve-small" style="margin-bottom: 2px;">AC</div>
+						<div class="bold" style="font-size: 1.1em;">🛡️ ${companion.ac || "—"}</div>
+					</div>
+					<div class="ve-flex-col ve-text-center">
+						<div class="ve-muted ve-small" style="margin-bottom: 2px;">Speed</div>
+						<div style="font-size: 0.9em;">👟 ${speedStr}</div>
+					</div>
+					<div class="ve-flex-col ve-text-center">
+						<div class="ve-muted ve-small" style="margin-bottom: 2px;">Passive</div>
+						<div style="font-size: 0.9em;">👁️ ${companion.passive || "—"}</div>
+					</div>
+				</div>
+
+				<!-- Individual Creatures (Expandable) -->
+				<div class="charsheet__grouped-creatures-container mb-3">
+					<div class="ve-flex ve-flex-v-center mb-2" style="gap: 8px;">
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-toggle-creatures" style="padding: 2px 8px;">
+							<span class="toggle-icon">▶</span> Individual Creatures
+						</button>
+						<span class="ve-muted ve-small">(${livingCount} alive, ${totalCount - livingCount} dead)</span>
+					</div>
+					<div class="charsheet__grouped-creatures-list" style="display: none; max-height: 200px; overflow-y: auto; padding: 4px;">
+						<div class="ve-flex-col" style="gap: 4px;">
+							${hpBarsHtml}
+						</div>
+					</div>
+				</div>
+
+				<!-- Bulk Actions -->
+				<div class="ve-flex mb-3" style="gap: 8px;">
+					<button class="ve-btn ve-btn-sm ve-btn-success btn-heal-all" style="flex: 1;">
+						<span class="glyphicon glyphicon-heart"></span> Heal All
+					</button>
+					<button class="ve-btn ve-btn-sm ve-btn-danger btn-damage-all" style="flex: 1;">
+						<span class="glyphicon glyphicon-flash"></span> Damage All
+					</button>
+				</div>
+
+				<!-- Attacks (if any) -->
+				${this._buildGroupedCompanionAttacksHtml(companion)}
+
+				<!-- Other Actions -->
+				<div class="ve-flex" style="gap: 8px; flex-wrap: wrap;">
+					<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-view" title="View full stat block">
+						<span class="glyphicon glyphicon-list-alt"></span> Stat Block
+					</button>
+					<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-dismiss" title="Dismiss all conjured creatures" style="color: #ef4444;">
+						<span class="glyphicon glyphicon-remove"></span> Dismiss All
+					</button>
+				</div>
+			</div>
+		`);
+
+		// Toggle creatures list
+		$card.find(".btn-toggle-creatures").on("click", function () {
+			const $list = $card.find(".charsheet__grouped-creatures-list");
+			const $icon = $(this).find(".toggle-icon");
+			$list.slideToggle(200);
+			$icon.text($list.is(":visible") ? "▶" : "▼");
+		});
+
+		// Heal all creatures
+		$card.find(".btn-heal-all").on("click", async () => {
+			const amount = await InputUiUtil.pGetUserNumber({
+				title: `Heal All ${companion.name}`,
+				min: 1,
+				int: true,
+			});
+			if (amount == null) return;
+
+			const healed = this._state.healAllGroupedCreatures?.(companion.id, amount);
+			this._saveCurrentCharacter();
+			this._renderCompanions();
+			JqueryUtil.doToast({type: "success", content: `Healed ${healed} HP across all ${companion.name}!`});
+		});
+
+		// Damage all creatures
+		$card.find(".btn-damage-all").on("click", async () => {
+			const amount = await InputUiUtil.pGetUserNumber({
+				title: `Damage All ${companion.name}`,
+				min: 1,
+				int: true,
+			});
+			if (amount == null) return;
+
+			const result = this._state.damageAllGroupedCreatures?.(companion.id, amount);
+			this._saveCurrentCharacter();
+			this._renderCompanions();
+
+			let msg = `Dealt ${result.totalDamage} damage across all ${companion.name}!`;
+			if (result.creaturesDropped > 0) {
+				msg += ` ${result.creaturesDropped} creature(s) dropped to 0 HP.`;
+			}
+			JqueryUtil.doToast({type: "warning", content: msg});
+		});
+
+		// Heal individual creature
+		$card.find(".btn-heal-creature").on("click", async (evt) => {
+			evt.stopPropagation();
+			const index = parseInt($(evt.currentTarget).data("index"));
+			const amount = await InputUiUtil.pGetUserNumber({
+				title: `Heal ${companion.name} #${index + 1}`,
+				min: 1,
+				int: true,
+			});
+			if (amount == null) return;
+
+			this._state.healGroupedCreature?.(companion.id, index, amount);
+			this._saveCurrentCharacter();
+			this._renderCompanions();
+		});
+
+		// Damage individual creature
+		$card.find(".btn-damage-creature").on("click", async (evt) => {
+			evt.stopPropagation();
+			const index = parseInt($(evt.currentTarget).data("index"));
+			const amount = await InputUiUtil.pGetUserNumber({
+				title: `Damage ${companion.name} #${index + 1}`,
+				min: 1,
+				int: true,
+			});
+			if (amount == null) return;
+
+			const result = this._state.damageGroupedCreature?.(companion.id, index, amount);
+			this._saveCurrentCharacter();
+			this._renderCompanions();
+
+			if (result.droppedToZero) {
+				JqueryUtil.doToast({type: "warning", content: `${companion.name} #${index + 1} dropped to 0 HP!`});
+			}
+		});
+
+		// View stat block
+		$card.find(".btn-companion-view").on("click", () => {
+			this._showCompanionStatBlock(companion);
+		});
+
+		// Attack roll buttons for grouped companions
+		$card.find(".btn-grouped-attack-roll").on("click", async (evt) => {
+			const actionName = $(evt.currentTarget).data("action-name");
+			await this._rollCompanionAttack(companion, actionName);
+		});
+
+		// Dismiss all
+		$card.find(".btn-companion-dismiss").on("click", async () => {
+			const confirmed = await InputUiUtil.pGetUserBoolean({
+				title: "Dismiss Conjured Creatures?",
+				htmlDescription: `Are you sure you want to dismiss all <strong>${companion.count}× ${companion.name}</strong>?`,
+				textYes: "Dismiss All",
+				textNo: "Cancel",
+			});
+			if (!confirmed) return;
+
+			this._state.removeCompanion?.(companion.id);
+			this._saveCurrentCharacter();
+			this._renderCompanions();
+			JqueryUtil.doToast({type: "info", content: `${companion.count}× ${companion.name} have been dismissed.`});
+		});
+
+		$list.append($card);
+	}
+
+	/**
+	 * Build attack buttons HTML for grouped companions
+	 */
+	_buildGroupedCompanionAttacksHtml (companion) {
+		const attackActions = companion.actions?.filter(a =>
+			a.entries?.some(e => typeof e === "string" && /\{@atk/.test(e)),
+		) || [];
+
+		if (attackActions.length === 0) return "";
+
+		const attackButtonsHtml = attackActions.map(action => {
+			const entry = action.entries?.find(e => typeof e === "string") || "";
+			const hitMatch = entry.match(/\{@hit\s*(-?\d+)\}/);
+			const attackBonus = hitMatch ? parseInt(hitMatch[1]) : 0;
+			const bonusStr = attackBonus >= 0 ? `+${attackBonus}` : `${attackBonus}`;
+			return `<button class="ve-btn ve-btn-xs ve-btn-danger btn-grouped-attack-roll" data-action-name="${action.name.replace(/"/g, '&quot;')}" title="Roll ${action.name}">
+				⚔️ ${action.name} (${bonusStr})
+			</button>`;
+		}).join("");
+
+		return `
+			<div class="charsheet__grouped-attacks mb-3" style="padding: 0 4px;">
+				<div class="ve-muted ve-small mb-1"><strong>Attacks:</strong></div>
+				<div class="ve-flex" style="gap: 6px; flex-wrap: wrap;">
+					${attackButtonsHtml}
+				</div>
+			</div>
+		`;
 	}
 
 	async _onAddCompanionCondition (companion) {
@@ -2440,6 +3429,112 @@ class CharacterSheetPage {
 		JqueryUtil.doToast({
 			type: "info",
 			content: `🎲 ${companion.customName || companion.name} ${skillName}: ${roll} ${modStr} = <strong>${total}</strong>`,
+		});
+	}
+
+	/**
+	 * Roll a companion attack with attack roll and damage
+	 * @param {object} companion - The companion data
+	 * @param {string} actionName - Name of the action to use
+	 */
+	async _rollCompanionAttack (companion, actionName) {
+		const action = companion.actions?.find(a => a.name === actionName);
+		if (!action) {
+			JqueryUtil.doToast({type: "warning", content: `Action "${actionName}" not found`});
+			return;
+		}
+
+		// Parse attack info from entries
+		const entry = action.entries?.find(e => typeof e === "string") || "";
+		const hitMatch = entry.match(/\{@hit\s*(-?\d+)\}/);
+		const attackBonus = hitMatch ? parseInt(hitMatch[1]) : 0;
+
+		// Parse all damage dice from entry
+		const damageMatches = [...entry.matchAll(/\{@damage\s+([^}]+)\}/g)];
+		const damages = damageMatches.map(m => m[1].trim());
+
+		// Parse DC for save-based effects
+		const dcMatch = entry.match(/\{@dc\s*(\d+)\}/);
+		const saveDC = dcMatch ? parseInt(dcMatch[1]) : null;
+
+		// Roll attack
+		const attackRoll = Renderer.dice.parseRandomise2("1d20");
+		const attackTotal = attackRoll + attackBonus;
+		const bonusStr = attackBonus >= 0 ? `+${attackBonus}` : `${attackBonus}`;
+		const isCrit = attackRoll === 20;
+		const isFumble = attackRoll === 1;
+
+		// Mark action as used
+		this._state.updateCompanion?.(companion.id, {usedAction: true});
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+
+		// Build attack result message
+		let attackResult = `<strong>Attack Roll:</strong> ${attackRoll} ${bonusStr} = <strong style="font-size: 1.2em;">${attackTotal}</strong>`;
+		if (isCrit) attackResult += ` <span style="color: #22c55e;">⭐ CRITICAL!</span>`;
+		if (isFumble) attackResult += ` <span style="color: #ef4444;">💀 FUMBLE!</span>`;
+
+		// Show attack roll first
+		JqueryUtil.doToast({
+			type: isCrit ? "success" : isFumble ? "danger" : "info",
+			content: $(`<div>
+				<div class="bold mb-1">⚔️ ${companion.customName || companion.name} — ${actionName}</div>
+				<div>${attackResult}</div>
+				${damages.length > 0 ? `<div class="mt-2"><button class="ve-btn ve-btn-xs ve-btn-warning btn-roll-damage" style="width: 100%;">💥 Roll Damage${isCrit ? " (Crit!)" : ""}</button></div>` : ""}
+				${saveDC ? `<div class="ve-muted ve-small mt-1">Target must make a DC ${saveDC} save</div>` : ""}
+			</div>`),
+		});
+
+		// Bind damage roll button
+		setTimeout(() => {
+			const $btn = $(".btn-roll-damage");
+			if ($btn.length && damages.length > 0) {
+				$btn.off("click").on("click", () => {
+					this._rollCompanionDamage(companion, actionName, damages, isCrit);
+				});
+			}
+		}, 100);
+	}
+
+	/**
+	 * Roll damage for a companion attack
+	 */
+	_rollCompanionDamage (companion, actionName, damages, isCrit = false) {
+		const damageResults = damages.map(damageStr => {
+			// Clean up the damage string
+			const cleanDamage = damageStr.replace(/\s+/g, "");
+
+			// For crits, double the dice (not the modifier)
+			let finalDamage = cleanDamage;
+			if (isCrit) {
+				// Parse dice and modifier
+				const diceMatch = cleanDamage.match(/(\d+)d(\d+)/);
+				if (diceMatch) {
+					const numDice = parseInt(diceMatch[1]) * 2; // Double dice for crit
+					const dieSize = diceMatch[2];
+					finalDamage = cleanDamage.replace(/\d+d\d+/, `${numDice}d${dieSize}`);
+				}
+			}
+
+			const total = Renderer.dice.parseRandomise2(finalDamage);
+			return {dice: damageStr, total, critDice: isCrit ? finalDamage : null};
+		});
+
+		// Build damage output
+		const damageLines = damageResults.map(r => {
+			const critNote = r.critDice ? ` (${r.critDice})` : "";
+			return `${r.dice}${critNote} = <strong>${r.total}</strong>`;
+		}).join(" + ");
+
+		const totalDamage = damageResults.reduce((sum, r) => sum + r.total, 0);
+
+		JqueryUtil.doToast({
+			type: "warning",
+			content: $(`<div>
+				<div class="bold mb-1">💥 ${companion.customName || companion.name} — ${actionName} Damage${isCrit ? " (CRIT!)" : ""}</div>
+				<div>${damageLines}</div>
+				<div class="bold mt-1" style="font-size: 1.2em;">Total: ${totalDamage} damage</div>
+			</div>`),
 		});
 	}
 

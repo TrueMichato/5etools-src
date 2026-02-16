@@ -1218,25 +1218,22 @@
 						border-radius: 12px;
 						padding: 20px;
 						margin-bottom: 20px;
-						display: flex;
-						align-items: center;
-						justify-content: space-between;
-						gap: 16px;
 					">
-						<div style="display: flex; align-items: center; gap: 16px;">
-							<span style="font-size: 3em;">🐾</span>
-							<div>
-								<h3 style="margin: 0 0 4px 0; font-size: 1.4em;">Companions</h3>
-								<div class="ve-muted">Familiars, beast companions, and summoned creatures</div>
+						<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px;">
+							<div style="display: flex; align-items: center; gap: 16px;">
+								<span style="font-size: 3em;">🐾</span>
+								<div>
+									<h3 style="margin: 0 0 4px 0; font-size: 1.4em;">Companions</h3>
+									<div class="ve-muted">Familiars, beast companions, and summoned creatures</div>
+								</div>
 							</div>
-						</div>
-						<div style="display: flex; gap: 8px;">
 							<button class="ve-btn ve-btn-default" id="charsheet-btn-new-round" style="white-space: nowrap;" title="Reset all companion actions/reactions for a new round">
 								🔄 New Round
 							</button>
-							<button class="ve-btn ve-btn-primary" id="charsheet-btn-summon-familiar" style="white-space: nowrap;">
-								<span class="glyphicon glyphicon-plus mr-1"></span>Summon Familiar
-							</button>
+						</div>
+						<!-- Dynamic companion summon buttons -->
+						<div id="charsheet-companion-buttons" class="ve-flex" style="gap: 8px; flex-wrap: wrap;">
+							<!-- Populated by JS based on character features -->
 						</div>
 					</div>
 					
