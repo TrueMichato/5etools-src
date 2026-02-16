@@ -529,6 +529,9 @@ class CharacterSheetPage {
 		$("#charsheet-btn-exhaustion-add").on("click", () => this._addExhaustion());
 		$("#charsheet-btn-exhaustion-remove").on("click", () => this._removeExhaustion());
 
+		// Companions - Summon Familiar button
+		$("#charsheet-btn-summon-familiar").on("click", () => this._onSummonFamiliar());
+
 		// Currency
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
 			$(`#charsheet-ipt-${currency}`).on("change", (e) => {
@@ -716,6 +719,15 @@ class CharacterSheetPage {
 		this._$selCharacter.val("");
 	}
 
+	async _onSummonFamiliar () {
+		// Delegate to the spells module's familiar picker
+		if (this._spells?._pShowFamiliarPicker) {
+			await this._spells._pShowFamiliarPicker();
+		} else {
+			JqueryUtil.doToast({type: "warning", content: "Familiar picker not available."});
+		}
+	}
+
 	async _saveCurrentCharacter () {
 		if (!this._currentCharacterId) return;
 
@@ -838,6 +850,7 @@ class CharacterSheetPage {
 		this._renderAbilitiesDetailed();
 		this._renderCustomFeatures();
 		this._renderModifierIndicators();
+		this._renderCompanions();
 
 		// Sub-modules
 		if (this._spells) this._spells.render();
@@ -1809,6 +1822,377 @@ class CharacterSheetPage {
 		if (this._spellsModule && this._state.getExhaustionRules() === "thelemar") {
 			this._spellsModule.render();
 		}
+	}
+
+	_renderCompanions () {
+		const $list = $("#charsheet-companions-list");
+		if (!$list.length) return;
+
+		$list.empty();
+
+		const companions = this._state.getActiveCompanions?.() || [];
+
+		// Also render the overview indicator
+		this._renderCompanionsOverviewIndicator();
+
+		if (companions.length === 0) {
+			$list.append(`
+				<div class="charsheet__companions-empty" style="text-align: center; padding: 40px 20px;">
+					<div style="font-size: 3em; margin-bottom: 12px; opacity: 0.5;">🦉</div>
+					<div class="ve-muted" style="font-size: 1.1em; margin-bottom: 8px;">No active companions</div>
+					<div class="ve-muted ve-small">Cast <em>Find Familiar</em> or click the button above to summon one.</div>
+				</div>
+			`);
+			return;
+		}
+
+		companions.forEach(companion => {
+			const hp = companion.hp || {current: 1, max: 1};
+			const hpPercent = Math.round((hp.current / hp.max) * 100);
+			const hpColor = hpPercent > 50 ? "#22c55e" : hpPercent > 25 ? "#f59e0b" : "#ef4444";
+			const hpBgColor = hpPercent > 50 ? "rgba(34, 197, 94, 0.15)" : hpPercent > 25 ? "rgba(245, 158, 11, 0.15)" : "rgba(239, 68, 68, 0.15)";
+
+			// Format speeds
+			const speeds = [];
+			if (companion.speed?.walk) speeds.push(`${companion.speed.walk} ft.`);
+			if (companion.speed?.fly) speeds.push(`fly ${companion.speed.fly} ft.`);
+			if (companion.speed?.swim) speeds.push(`swim ${companion.speed.swim} ft.`);
+			if (companion.speed?.climb) speeds.push(`climb ${companion.speed.climb} ft.`);
+			const speedStr = speeds.length > 0 ? speeds.join(", ") : "—";
+
+			// Format senses
+			const sensesStr = companion.senses?.join(", ") || "—";
+
+			// Get companion type label and icon
+			const typeInfo = {
+				familiar: {label: "Familiar", icon: "🦉", color: "#8b5cf6"},
+				beast_companion: {label: "Beast Companion", icon: "🐺", color: "#22c55e"},
+				steel_defender: {label: "Steel Defender", icon: "🤖", color: "#64748b"},
+				drake: {label: "Drake", icon: "🐉", color: "#f59e0b"},
+				summon: {label: "Summon", icon: "✨", color: "#3b82f6"},
+				mount: {label: "Mount", icon: "🐴", color: "#a855f7"},
+				wild_shape: {label: "Wild Shape", icon: "🌿", color: "#10b981"},
+				custom: {label: "Companion", icon: "🐾", color: "#6b7280"},
+			};
+			const info = typeInfo[companion.type] || typeInfo.custom;
+
+			// Get creature emoji
+			const creatureEmojis = {
+				bat: "🦇", cat: "🐱", frog: "🐸", hawk: "🦅", lizard: "🦎",
+				octopus: "🐙", owl: "🦉", rat: "🐀", raven: "🐦‍⬛", spider: "🕷️",
+				weasel: "🦨", snake: "🐍", crab: "🦀", wolf: "🐺", bear: "🐻",
+			};
+			const creatureEmoji = creatureEmojis[companion.name?.toLowerCase()] || info.icon;
+
+			// Build hoverable name link for the creature
+			let nameDisplay;
+			if (companion.source) {
+				try {
+					const hash = UrlUtil.encodeForHash([companion.name, companion.source].join(HASH_LIST_SEP));
+					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BESTIARY, source: companion.source, hash});
+					nameDisplay = `<a href="${UrlUtil.PG_BESTIARY}#${hash}" ${hoverAttrs} style="font-size: 1.25em; font-weight: bold;">${companion.customName || companion.name}</a>`;
+				} catch (e) {
+					nameDisplay = `<span style="font-size: 1.25em; font-weight: bold;">${companion.customName || companion.name}</span>`;
+				}
+			} else {
+				nameDisplay = `<span style="font-size: 1.25em; font-weight: bold;">${companion.customName || companion.name}</span>`;
+			}
+
+			const $card = $(`
+				<div class="charsheet__companion-card" data-companion-id="${companion.id}" style="
+					border: 2px solid ${info.color}33;
+					border-radius: 12px;
+					padding: 16px;
+					margin-bottom: 12px;
+					background: linear-gradient(135deg, ${info.color}08, transparent);
+					position: relative;
+					overflow: hidden;
+				">
+					<!-- Type badge -->
+					<div style="
+						position: absolute;
+						top: 0;
+						right: 0;
+						background: ${info.color}22;
+						color: ${info.color};
+						padding: 4px 12px 4px 16px;
+						font-size: 0.75em;
+						font-weight: 600;
+						border-bottom-left-radius: 12px;
+					">${info.icon} ${info.label}</div>
+
+					<!-- Header -->
+					<div class="ve-flex ve-flex-v-center mb-3" style="gap: 12px;">
+						<div style="font-size: 2.5em; line-height: 1;">${creatureEmoji}</div>
+						<div class="ve-flex-col" style="flex: 1;">
+							${nameDisplay}
+							<div class="ve-muted ve-small">from ${companion.origin || "Unknown origin"}</div>
+						</div>
+					</div>
+
+					<!-- Stats Grid -->
+					<div style="
+						display: grid;
+						grid-template-columns: repeat(4, 1fr);
+						gap: 12px;
+						margin-bottom: 12px;
+						padding: 12px;
+						background: rgba(var(--rgb-bg-text), 0.03);
+						border-radius: 8px;
+					">
+						<div class="ve-flex-col ve-text-center">
+							<div class="ve-muted ve-small" style="margin-bottom: 2px;">HP</div>
+							<div class="ve-flex ve-flex-v-center ve-flex-h-center" style="gap: 6px;">
+								<span class="bold" style="font-size: 1.1em; color: ${hpColor};">${hp.current}/${hp.max}</span>
+							</div>
+							<div style="
+								width: 100%;
+								height: 4px;
+								background: rgba(var(--rgb-bg-text), 0.1);
+								border-radius: 2px;
+								overflow: hidden;
+								margin-top: 4px;
+							">
+								<div style="width: ${hpPercent}%; height: 100%; background: ${hpColor}; transition: width 0.3s;"></div>
+							</div>
+						</div>
+						<div class="ve-flex-col ve-text-center">
+							<div class="ve-muted ve-small" style="margin-bottom: 2px;">AC</div>
+							<div class="bold" style="font-size: 1.1em;">🛡️ ${companion.ac || "—"}</div>
+						</div>
+						<div class="ve-flex-col ve-text-center">
+							<div class="ve-muted ve-small" style="margin-bottom: 2px;">Speed</div>
+							<div style="font-size: 0.9em;">👟 ${speedStr}</div>
+						</div>
+						<div class="ve-flex-col ve-text-center">
+							<div class="ve-muted ve-small" style="margin-bottom: 2px;">Passive</div>
+							<div style="font-size: 0.9em;">👁️ ${companion.passive || "—"}</div>
+						</div>
+					</div>
+
+					<!-- Senses -->
+					<div class="ve-muted ve-small mb-3" style="padding: 0 4px;">
+						<strong>Senses:</strong> ${sensesStr}
+					</div>
+
+					<!-- Action Buttons -->
+					<div class="ve-flex" style="gap: 8px; flex-wrap: wrap;">
+						<button class="ve-btn ve-btn-xs ve-btn-success btn-companion-heal" style="flex: 1; min-width: 80px;">
+							<span class="glyphicon glyphicon-heart"></span> Heal
+						</button>
+						<button class="ve-btn ve-btn-xs ve-btn-danger btn-companion-damage" style="flex: 1; min-width: 80px;">
+							<span class="glyphicon glyphicon-flash"></span> Damage
+						</button>
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-view" title="View full stat block">
+							<span class="glyphicon glyphicon-list-alt"></span>
+						</button>
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-dismiss" title="Dismiss companion" style="color: #ef4444;">
+							<span class="glyphicon glyphicon-remove"></span>
+						</button>
+					</div>
+				</div>
+			`);
+
+			// Dismiss button
+			$card.find(".btn-companion-dismiss").on("click", async () => {
+				const confirmed = await InputUiUtil.pGetUserBoolean({
+					title: "Dismiss Companion?",
+					htmlDescription: `Are you sure you want to dismiss <strong>${companion.customName || companion.name}</strong>?`,
+					textYes: "Dismiss",
+					textNo: "Cancel",
+				});
+				if (!confirmed) return;
+
+				this._state.removeCompanion?.(companion.id);
+				this._saveCurrentCharacter();
+				this._renderCompanions();
+				JqueryUtil.doToast({type: "info", content: `${companion.name} has been dismissed.`});
+			});
+
+			// View stat block button
+			$card.find(".btn-companion-view").on("click", () => {
+				this._showCompanionStatBlock(companion);
+			});
+
+			// Heal button
+			$card.find(".btn-companion-heal").on("click", async () => {
+				const healing = await InputUiUtil.pGetUserNumber({
+					title: `Heal ${companion.name}`,
+					min: 1,
+					int: true,
+				});
+				if (healing == null) return;
+
+				const newHp = Math.min(hp.max, hp.current + healing);
+				this._state.setCompanionHp?.(companion.id, newHp);
+				this._saveCurrentCharacter();
+				this._renderCompanions();
+			});
+
+			// Damage button
+			$card.find(".btn-companion-damage").on("click", async () => {
+				const damage = await InputUiUtil.pGetUserNumber({
+					title: `Damage ${companion.name}`,
+					min: 1,
+					int: true,
+				});
+				if (damage == null) return;
+
+				const newHp = Math.max(0, hp.current - damage);
+				this._state.setCompanionHp?.(companion.id, newHp);
+				this._saveCurrentCharacter();
+				this._renderCompanions();
+
+				if (newHp === 0) {
+					JqueryUtil.doToast({type: "warning", content: `${companion.name} has been reduced to 0 HP!`});
+				}
+			});
+
+			$list.append($card);
+		});
+	}
+
+	_renderCompanionsOverviewIndicator () {
+		const $container = $("#charsheet-companions-indicator");
+		const $section = $("#charsheet-companions-section");
+		if (!$container.length) return;
+
+		const companions = this._state.getActiveCompanions?.() || [];
+
+		if (companions.length === 0) {
+			$container.hide();
+			$section.hide();
+			return;
+		}
+
+		$container.empty().show();
+		$section.show();
+
+		companions.forEach(companion => {
+			const hp = companion.hp || {current: 1, max: 1};
+			const hpPercent = Math.round((hp.current / hp.max) * 100);
+			const hpColor = hpPercent > 50 ? "#22c55e" : hpPercent > 25 ? "#f59e0b" : "#ef4444";
+
+			// Get creature emoji
+			const creatureEmojis = {
+				bat: "🦇", cat: "🐱", frog: "🐸", hawk: "🦅", lizard: "🦎",
+				octopus: "🐙", owl: "🦉", rat: "🐀", raven: "🐦‍⬛", spider: "🕷️",
+				weasel: "🦨", snake: "🐍", wolf: "🐺", bear: "🐻",
+			};
+			const emoji = creatureEmojis[companion.name?.toLowerCase()] || "🐾";
+
+			// Build hoverable name
+			let nameHtml;
+			if (companion.source) {
+				try {
+					const hash = UrlUtil.encodeForHash([companion.name, companion.source].join(HASH_LIST_SEP));
+					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BESTIARY, source: companion.source, hash});
+					nameHtml = `<a href="${UrlUtil.PG_BESTIARY}#${hash}" ${hoverAttrs}>${companion.customName || companion.name}</a>`;
+				} catch (e) {
+					nameHtml = companion.customName || companion.name;
+				}
+			} else {
+				nameHtml = companion.customName || companion.name;
+			}
+
+			const $badge = $(`
+				<div class="charsheet__companion-badge" style="
+					display: inline-flex;
+					align-items: center;
+					gap: 8px;
+					padding: 6px 12px;
+					background: rgba(139, 92, 246, 0.1);
+					border: 1px solid rgba(139, 92, 246, 0.3);
+					border-radius: 20px;
+					margin-right: 8px;
+					margin-bottom: 4px;
+				">
+					<span style="font-size: 1.2em;">${emoji}</span>
+					<span class="bold">${nameHtml}</span>
+					<span style="
+						display: inline-flex;
+						align-items: center;
+						gap: 4px;
+						padding: 2px 8px;
+						background: ${hpColor}22;
+						border-radius: 10px;
+						font-size: 0.85em;
+						color: ${hpColor};
+						font-weight: 600;
+					">❤️ ${hp.current}/${hp.max}</span>
+				</div>
+			`);
+
+			$container.append($badge);
+		});
+	}
+
+	async _showCompanionStatBlock (companion) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `📋 ${companion.customName || companion.name}`,
+			isMinHeight0: true,
+		});
+
+		// Format abilities
+		const abilities = companion.abilities || {};
+		const abilityRow = Parser.ABIL_ABVS.map(abl => {
+			const score = abilities[abl] || 10;
+			const mod = Math.floor((score - 10) / 2);
+			const modStr = mod >= 0 ? `+${mod}` : mod;
+			return `<div class="ve-text-center" style="flex: 1;">
+				<div class="ve-muted ve-small">${abl.toUpperCase()}</div>
+				<div class="bold">${score}</div>
+				<div class="ve-muted">(${modStr})</div>
+			</div>`;
+		}).join("");
+
+		// Format traits
+		const traitsHtml = companion.traits?.length
+			? companion.traits.map(t => `<div class="mb-1"><strong>${t.name}.</strong> ${t.entries?.join(" ") || t.text || ""}</div>`).join("")
+			: "<div class='ve-muted'>None</div>";
+
+		// Format actions
+		const actionsHtml = companion.actions?.length
+			? companion.actions.map(a => `<div class="mb-1"><strong>${a.name}.</strong> ${a.entries?.join(" ") || a.text || ""}</div>`).join("")
+			: "<div class='ve-muted'>None</div>";
+
+		$modalInner.append(`
+			<div style="font-size: 0.95em;">
+				<div class="ve-flex mb-3" style="gap: 16px; flex-wrap: wrap;">
+					<div><strong>AC:</strong> ${companion.ac || "—"}</div>
+					<div><strong>HP:</strong> ${companion.hp?.current || 0}/${companion.hp?.max || 0}</div>
+					<div><strong>Speed:</strong> ${this._formatCompanionSpeeds(companion.speed)}</div>
+				</div>
+
+				<div class="ve-flex mb-3" style="border: 1px solid var(--rgb-border-grey-muted); border-radius: 6px; padding: 8px;">
+					${abilityRow}
+				</div>
+
+				<div class="mb-2">
+					<strong>Senses:</strong> ${companion.senses?.join(", ") || "—"}
+					${companion.passive ? `, passive Perception ${companion.passive}` : ""}
+				</div>
+
+				<div class="mb-3"><strong>Languages:</strong> ${companion.languages?.join(", ") || "—"}</div>
+
+				<h5 class="mb-1">Traits</h5>
+				<div class="mb-3">${traitsHtml}</div>
+
+				<h5 class="mb-1">Actions</h5>
+				<div>${actionsHtml}</div>
+			</div>
+		`);
+	}
+
+	_formatCompanionSpeeds (speed) {
+		if (!speed) return "—";
+		const parts = [];
+		if (speed.walk) parts.push(`${speed.walk} ft.`);
+		if (speed.fly) parts.push(`fly ${speed.fly} ft.`);
+		if (speed.swim) parts.push(`swim ${speed.swim} ft.`);
+		if (speed.climb) parts.push(`climb ${speed.climb} ft.`);
+		if (speed.burrow) parts.push(`burrow ${speed.burrow} ft.`);
+		return parts.length > 0 ? parts.join(", ") : "—";
 	}
 
 	_renderAbilitiesDetailed () {

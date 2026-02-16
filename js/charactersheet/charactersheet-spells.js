@@ -1814,6 +1814,238 @@ class CharacterSheetSpells {
 			this._page._combat?.renderCombatStates?.();
 			this._page._renderHp?.();
 		}
+
+		// Check for special spell triggers (Find Familiar, etc.)
+		await this._handleSpecialSpellTriggers(spell);
+	}
+
+	/**
+	 * Handle special triggers for specific spells like Find Familiar
+	 */
+	async _handleSpecialSpellTriggers (spell) {
+		const spellNameLower = spell.name.toLowerCase();
+
+		// Find Familiar - show familiar picker
+		if (spellNameLower === "find familiar") {
+			await this._pShowFamiliarPicker();
+		}
+	}
+
+	/**
+	 * Show familiar picker modal for Find Familiar spell
+	 */
+	async _pShowFamiliarPicker () {
+		// Load bestiary data
+		const bestiaryData = await DataLoader.pCacheAndGetAllSite(UrlUtil.PG_BESTIARY);
+
+		// Standard familiars from Find Familiar spell: CR 0 Tiny beasts
+		// XPHB lists: Bat, Cat, Frog, Hawk, Lizard, Octopus, Owl, Rat, Raven, Spider, Weasel
+		const standardFamiliarNames = new Set([
+			"bat", "cat", "frog", "hawk", "lizard", "octopus", "owl", "rat", "raven", "spider", "weasel",
+		]);
+
+		// Filter for valid familiars: CR 0, Tiny beasts with familiar flag or in standard list
+		const familiars = bestiaryData.filter(creature => {
+			// Must be a beast
+			if (creature.type !== "beast" && creature.type?.type !== "beast") return false;
+
+			// Must be CR 0
+			if (creature.cr !== "0" && creature.cr?.cr !== "0") return false;
+
+			// Must be Tiny
+			const size = Array.isArray(creature.size) ? creature.size[0] : creature.size;
+			if (size !== "T") return false;
+
+			// Accept if it has familiar flag or is in the standard list
+			return creature.familiar || standardFamiliarNames.has(creature.name.toLowerCase());
+		});
+
+		// Sort alphabetically
+		familiars.sort((a, b) => a.name.localeCompare(b.name));
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "🐾 Choose Your Familiar",
+			isMinHeight0: true,
+			isWidth100: true,
+		});
+
+		$modalInner.append(`
+			<div class="charsheet__familiar-picker-header mb-3" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1)); border-radius: 8px; padding: 12px;">
+				<div class="ve-flex ve-flex-v-center" style="gap: 10px;">
+					<span style="font-size: 2em;">🦉</span>
+					<div>
+						<div class="bold" style="font-size: 1.1em;">Choose Your Familiar</div>
+						<div class="ve-muted ve-small">Select a beast to serve you. Your familiar appears within 10 feet.</div>
+					</div>
+				</div>
+			</div>
+		`);
+
+		// Search filter with icon
+		const $searchContainer = $(`<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`).appendTo($modalInner);
+		$searchContainer.append(`<span style="font-size: 1.2em;">🔍</span>`);
+		const $search = $(`<input type="text" class="form-control" placeholder="Search familiars..." style="flex: 1;">`).appendTo($searchContainer);
+
+		// Familiars grid
+		const $list = $(`<div class="charsheet__familiar-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-height: 450px; overflow-y: auto; padding: 4px;"></div>`).appendTo($modalInner);
+
+		const renderList = (filter = "") => {
+			$list.empty();
+			const filteredFamiliars = familiars.filter(f =>
+				f.name.toLowerCase().includes(filter.toLowerCase()),
+			);
+
+			if (filteredFamiliars.length === 0) {
+				$list.append(`<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No familiars match your search</div>`);
+				return;
+			}
+
+			filteredFamiliars.forEach(creature => {
+				const hp = creature.hp?.average || creature.hp || "?";
+				const ac = Array.isArray(creature.ac) ? creature.ac[0]?.ac || creature.ac[0] : creature.ac;
+				const speeds = this._formatCreatureSpeeds(creature.speed);
+				
+				// Get a fitting emoji for this creature
+				const creatureEmojis = {
+					bat: "🦇", cat: "🐱", frog: "🐸", hawk: "🦅", lizard: "🦎",
+					octopus: "🐙", owl: "🦉", rat: "🐀", raven: "🐦‍⬛", spider: "🕷️",
+					weasel: "🦨", snake: "🐍", crab: "🦀", fish: "🐟", seahorse: "🐴",
+				};
+				const emoji = creatureEmojis[creature.name.toLowerCase()] || "🐾";
+				
+				// Get primary sense
+				const primarySense = creature.senses?.[0] || "Normal vision";
+
+				// Build hover link for the creature
+				let nameDisplay;
+				try {
+					const hash = UrlUtil.encodeForHash([creature.name, creature.source].join(HASH_LIST_SEP));
+					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BESTIARY, source: creature.source, hash});
+					nameDisplay = `<a href="${UrlUtil.PG_BESTIARY}#${hash}" ${hoverAttrs} class="charsheet__familiar-name">${creature.name}</a>`;
+				} catch (e) {
+					nameDisplay = `<span class="charsheet__familiar-name">${creature.name}</span>`;
+				}
+
+				const $card = $(`
+					<div class="charsheet__familiar-card" style="
+						border: 2px solid var(--rgb-border-grey-muted);
+						border-radius: 10px;
+						padding: 12px;
+						cursor: pointer;
+						transition: all 0.2s ease;
+						background: rgba(var(--rgb-bg-text), 0.02);
+						position: relative;
+					">
+						<div class="ve-flex ve-flex-v-center mb-2" style="gap: 8px;">
+							<span style="font-size: 1.8em;">${emoji}</span>
+							<div class="bold" style="font-size: 1.05em;">${nameDisplay}</div>
+						</div>
+						<div class="charsheet__familiar-stats" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.85em;">
+							<div class="ve-flex ve-flex-v-center" style="gap: 4px;">
+								<span style="opacity: 0.7;">🛡️</span>
+								<span>AC ${ac}</span>
+							</div>
+							<div class="ve-flex ve-flex-v-center" style="gap: 4px;">
+								<span style="opacity: 0.7;">❤️</span>
+								<span>${hp} HP</span>
+							</div>
+							<div class="ve-flex ve-flex-v-center" style="gap: 4px; grid-column: 1 / -1;">
+								<span style="opacity: 0.7;">👟</span>
+								<span class="ve-small">${speeds}</span>
+							</div>
+							<div class="ve-flex ve-flex-v-center" style="gap: 4px; grid-column: 1 / -1;">
+								<span style="opacity: 0.7;">👁️</span>
+								<span class="ve-small ve-muted">${primarySense}</span>
+							</div>
+						</div>
+						<button class="ve-btn ve-btn-xs ve-btn-primary btn-select-familiar" style="
+							position: absolute;
+							bottom: 8px;
+							right: 8px;
+							opacity: 0;
+							transition: opacity 0.2s;
+						">Select</button>
+					</div>
+				`).appendTo($list);
+
+				// Hover effects
+				$card.on("mouseenter", function () {
+					$(this).css({
+						"border-color": "var(--rgb-link)",
+						"background": "rgba(var(--rgb-link-rgb), 0.08)",
+						"transform": "translateY(-2px)",
+						"box-shadow": "0 4px 12px rgba(0, 0, 0, 0.15)",
+					});
+					$(this).find(".btn-select-familiar").css("opacity", "1");
+				}).on("mouseleave", function () {
+					$(this).css({
+						"border-color": "var(--rgb-border-grey-muted)",
+						"background": "rgba(var(--rgb-bg-text), 0.02)",
+						"transform": "translateY(0)",
+						"box-shadow": "none",
+					});
+					$(this).find(".btn-select-familiar").css("opacity", "0");
+				});
+
+				$card.find(".btn-select-familiar").on("click", async (evt) => {
+					evt.stopPropagation();
+					await this._selectFamiliar(creature);
+					doClose();
+				});
+
+				// Clicking the card also selects
+				$card.on("click", async (evt) => {
+					if ($(evt.target).closest("a").length) return; // Don't select if clicking hover link
+					await this._selectFamiliar(creature);
+					doClose();
+				});
+			});
+		};
+
+		$search.on("input", () => renderList($search.val()));
+		renderList();
+	}
+
+	/**
+	 * Format creature speeds for display
+	 */
+	_formatCreatureSpeeds (speed) {
+		if (!speed) return "—";
+		const parts = [];
+		if (speed.walk) parts.push(`${speed.walk} ft.`);
+		if (speed.fly) parts.push(`fly ${speed.fly} ft.`);
+		if (speed.swim) parts.push(`swim ${speed.swim} ft.`);
+		if (speed.climb) parts.push(`climb ${speed.climb} ft.`);
+		if (speed.burrow) parts.push(`burrow ${speed.burrow} ft.`);
+		return parts.length > 0 ? parts.join(", ") : "—";
+	}
+
+	/**
+	 * Select a familiar and add it to companions
+	 */
+	async _selectFamiliar (creature) {
+		// Remove any existing familiars first (you can only have one)
+		const existingFamiliars = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.FAMILIAR) || [];
+		existingFamiliars.forEach(f => this._state.removeCompanion?.(f.id));
+
+		// Add the new familiar
+		const companionId = this._state.addCompanionFromBestiary?.(
+			creature,
+			CharacterSheetState.COMPANION_TYPES.FAMILIAR,
+			"Find Familiar",
+		);
+
+		if (companionId) {
+			JqueryUtil.doToast({
+				type: "success",
+				content: `🐾 ${creature.name} appears as your familiar!`,
+			});
+
+			// Update companions UI
+			this._page._renderCompanions?.();
+		}
+
+		this._page.saveCharacter();
 	}
 
 	/**
