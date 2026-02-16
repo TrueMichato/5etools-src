@@ -532,6 +532,9 @@ class CharacterSheetPage {
 		// Companions - Summon Familiar button
 		$("#charsheet-btn-summon-familiar").on("click", () => this._onSummonFamiliar());
 
+		// Companions - New Round button (resets action economy)
+		$("#charsheet-btn-new-round").on("click", () => this._resetAllCompanionActions());
+
 		// Currency
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
 			$(`#charsheet-ipt-${currency}`).on("change", (e) => {
@@ -1898,6 +1901,40 @@ class CharacterSheetPage {
 				nameDisplay = `<span style="font-size: 1.25em; font-weight: bold;">${companion.customName || companion.name}</span>`;
 			}
 
+			// Get companion conditions
+			const conditions = this._state.getCompanionConditions?.(companion.id) || [];
+			const conditionsHtml = conditions.map(c => {
+				const condName = typeof c === "string" ? c : c.name;
+				const condDef = CharacterSheetState.getConditionEffects(condName);
+				const icon = condDef?.icon || "⚠️";
+				return `<span class="charsheet__companion-condition-badge" data-condition="${condName}" style="
+					display: inline-flex; align-items: center; gap: 4px;
+					padding: 2px 8px; background: rgba(239, 68, 68, 0.15);
+					border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px;
+					font-size: 0.8em; cursor: pointer;
+				" title="Click to remove">${icon} ${condName}<span style="margin-left: 4px; opacity: 0.7;">×</span></span>`;
+			}).join(" ");
+
+			// Get skill modifiers for quick checks
+			const perceptionMod = this._state.getCompanionSkillMod?.(companion.id, "perception") || 0;
+			const stealthMod = this._state.getCompanionSkillMod?.(companion.id, "stealth") || 0;
+			const investigationMod = this._state.getCompanionSkillMod?.(companion.id, "investigation") || 0;
+			const perceptionStr = perceptionMod >= 0 ? `+${perceptionMod}` : `${perceptionMod}`;
+			const stealthStr = stealthMod >= 0 ? `+${stealthMod}` : `${stealthMod}`;
+			const investigationStr = investigationMod >= 0 ? `+${investigationMod}` : `${investigationMod}`;
+
+			// Check action economy state
+			const usedAction = companion.usedAction || false;
+			const usedReaction = companion.usedReaction || false;
+
+			// Check if familiar can attack (Pact of Chain familiars have attack actions)
+			const canAttack = companion.actions?.some(a =>
+				a.name?.toLowerCase().includes("bite") ||
+				a.name?.toLowerCase().includes("claw") ||
+				a.name?.toLowerCase().includes("sting") ||
+				a.entries?.some(e => typeof e === "string" && e.toLowerCase().includes("melee weapon attack")),
+			) && companion.type === CharacterSheetState.COMPANION_TYPES.FAMILIAR;
+
 			const $card = $(`
 				<div class="charsheet__companion-card" data-companion-id="${companion.id}" style="
 					border: 2px solid ${info.color}33;
@@ -1971,8 +2008,65 @@ class CharacterSheetPage {
 					</div>
 
 					<!-- Senses -->
-					<div class="ve-muted ve-small mb-3" style="padding: 0 4px;">
+					<div class="ve-muted ve-small mb-2" style="padding: 0 4px;">
 						<strong>Senses:</strong> ${sensesStr}
+					</div>
+
+					<!-- Conditions -->
+					<div class="charsheet__companion-conditions mb-2" style="padding: 0 4px; min-height: 28px;">
+						${conditionsHtml}
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-add-condition" style="font-size: 0.75em; padding: 2px 8px; opacity: 0.8;">
+							➕ Condition
+						</button>
+					</div>
+
+					<!-- Quick Skill Checks -->
+					<div class="ve-flex mb-2" style="gap: 8px;">
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-skill" data-skill="perception" style="flex: 1;" title="Roll Perception check">
+							👁️ Perception (${perceptionStr})
+						</button>
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-skill" data-skill="stealth" style="flex: 1;" title="Roll Stealth check">
+							🤫 Stealth (${stealthStr})
+						</button>
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-skill" data-skill="investigation" style="flex: 1;" title="Roll Investigation check">
+							🔍 Investigation (${investigationStr})
+						</button>
+					</div>
+
+					<!-- Familiar Actions -->
+					<div class="charsheet__companion-actions mb-3" style="padding: 0 4px;">
+						<div class="ve-muted ve-small mb-1" style="display: flex; align-items: center; gap: 8px;">
+							<span><strong>Actions:</strong></span>
+							<span class="charsheet__companion-action-status" style="font-size: 0.9em; color: ${usedAction ? "#f59e0b" : "#22c55e"}">
+								${usedAction ? "⏳ Used" : "✅ Available"}
+							</span>
+							<span class="ve-muted">|</span>
+							<span><strong>Reaction:</strong></span>
+							<span class="charsheet__companion-reaction-status" style="font-size: 0.9em; color: ${usedReaction ? "#f59e0b" : "#22c55e"}">
+								${usedReaction ? "⏳ Used" : "✅ Available"}
+							</span>
+						</div>
+						<div class="ve-flex" style="gap: 6px; flex-wrap: wrap;">
+							<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-action" data-action="help" title="Give an ally advantage on their next attack or ability check" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
+								🤝 Help
+							</button>
+							<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-action" data-action="dash" title="Double your speed for this turn" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
+								💨 Dash
+							</button>
+							<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-action" data-action="disengage" title="Your movement doesn't provoke opportunity attacks" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
+								🏃 Disengage
+							</button>
+							<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-action" data-action="dodge" title="Attacks against you have disadvantage; DEX saves have advantage" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
+								🛡️ Dodge
+							</button>
+							<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-action" data-action="hide" title="Make a Stealth check to become hidden" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
+								🫥 Hide
+							</button>
+							<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-action" data-action="search" title="Make a Perception or Investigation check to find something" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>
+								🔎 Search
+							</button>
+							${canAttack ? `<button class="ve-btn ve-btn-xs ve-btn-danger btn-companion-action" data-action="attack" title="Make an attack (Pact of Chain only)" ${usedAction ? 'disabled style="opacity: 0.5;"' : ''}>⚔️ Attack</button>` : ''}
+						</div>
 					</div>
 
 					<!-- Action Buttons -->
@@ -1982,6 +2076,9 @@ class CharacterSheetPage {
 						</button>
 						<button class="ve-btn ve-btn-xs ve-btn-danger btn-companion-damage" style="flex: 1; min-width: 80px;">
 							<span class="glyphicon glyphicon-flash"></span> Damage
+						</button>
+						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-edit" title="Edit companion name">
+							<span class="glyphicon glyphicon-pencil"></span>
 						</button>
 						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-view" title="View full stat block">
 							<span class="glyphicon glyphicon-list-alt"></span>
@@ -2046,6 +2143,37 @@ class CharacterSheetPage {
 				if (newHp === 0) {
 					JqueryUtil.doToast({type: "warning", content: `${companion.name} has been reduced to 0 HP!`});
 				}
+			});
+
+			// Add condition button
+			$card.find(".btn-companion-add-condition").on("click", () => {
+				this._onAddCompanionCondition(companion);
+			});
+
+			// Remove condition badges
+			$card.find(".charsheet__companion-condition-badge").on("click", (evt) => {
+				const condName = $(evt.currentTarget).data("condition");
+				this._state.removeCompanionCondition?.(companion.id, condName);
+				this._saveCurrentCharacter();
+				this._renderCompanions();
+				JqueryUtil.doToast({type: "info", content: `Removed ${condName} from ${companion.name}`});
+			});
+
+			// Skill check buttons
+			$card.find(".btn-companion-skill").on("click", (evt) => {
+				const skill = $(evt.currentTarget).data("skill");
+				this._rollCompanionSkillCheck(companion, skill);
+			});
+
+			// Edit name button
+			$card.find(".btn-companion-edit").on("click", () => {
+				this._onEditCompanionName(companion);
+			});
+
+			// Action buttons
+			$card.find(".btn-companion-action").on("click", (evt) => {
+				const action = $(evt.currentTarget).data("action");
+				this._useCompanionAction(companion, action);
 			});
 
 			$list.append($card);
@@ -2131,36 +2259,89 @@ class CharacterSheetPage {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `📋 ${companion.customName || companion.name}`,
 			isMinHeight0: true,
+			isWidth100: true,
 		});
 
-		// Format abilities
+		// Format abilities with clickable saves
 		const abilities = companion.abilities || {};
 		const abilityRow = Parser.ABIL_ABVS.map(abl => {
 			const score = abilities[abl] || 10;
 			const mod = Math.floor((score - 10) / 2);
 			const modStr = mod >= 0 ? `+${mod}` : mod;
+			const hasSaveProf = companion.saveProficiencies?.includes(abl);
+			const saveMod = hasSaveProf ? mod + (companion.profBonus || 2) : mod;
+			const saveStr = saveMod >= 0 ? `+${saveMod}` : saveMod;
 			return `<div class="ve-text-center" style="flex: 1;">
 				<div class="ve-muted ve-small">${abl.toUpperCase()}</div>
 				<div class="bold">${score}</div>
 				<div class="ve-muted">(${modStr})</div>
+				<div class="ve-small clickable btn-companion-save" data-ability="${abl}" data-mod="${saveMod}" title="Click to roll ${abl.toUpperCase()} save" style="cursor: pointer; color: var(--rgb-link);">
+					${hasSaveProf ? "★" : ""} Save ${saveStr}
+				</div>
 			</div>`;
 		}).join("");
 
-		// Format traits
+		// Format traits with proper rendering
 		const traitsHtml = companion.traits?.length
-			? companion.traits.map(t => `<div class="mb-1"><strong>${t.name}.</strong> ${t.entries?.join(" ") || t.text || ""}</div>`).join("")
+			? companion.traits.map(t => {
+				let text;
+				try {
+					text = t.entries ? Renderer.get().render({entries: t.entries}) : (t.text || "");
+				} catch (e) {
+					text = t.entries?.join(" ") || t.text || "";
+				}
+				return `<div class="mb-2"><strong>${t.name}.</strong> ${text}</div>`;
+			}).join("")
 			: "<div class='ve-muted'>None</div>";
 
-		// Format actions
+		// Format actions with proper rendering
 		const actionsHtml = companion.actions?.length
-			? companion.actions.map(a => `<div class="mb-1"><strong>${a.name}.</strong> ${a.entries?.join(" ") || a.text || ""}</div>`).join("")
+			? companion.actions.map(a => {
+				let text;
+				try {
+					text = a.entries ? Renderer.get().render({entries: a.entries}) : (a.text || "");
+				} catch (e) {
+					text = a.entries?.join(" ") || a.text || "";
+				}
+				return `<div class="mb-2"><strong>${a.name}.</strong> ${text}</div>`;
+			}).join("")
 			: "<div class='ve-muted'>None</div>";
+
+		// Format reactions if any
+		const reactionsHtml = companion.reactions?.length
+			? companion.reactions.map(r => {
+				let text;
+				try {
+					text = r.entries ? Renderer.get().render({entries: r.entries}) : (r.text || "");
+				} catch (e) {
+					text = r.entries?.join(" ") || r.text || "";
+				}
+				return `<div class="mb-2"><strong>${r.name}.</strong> ${text}</div>`;
+			}).join("")
+			: null;
+
+		// Get conditions
+		const conditions = this._state.getCompanionConditions?.(companion.id) || [];
+		const conditionsHtml = conditions.length > 0
+			? conditions.map(c => {
+				const condName = typeof c === "string" ? c : c.name;
+				const condDef = CharacterSheetState.getConditionEffects(condName);
+				return `<span style="display: inline-block; padding: 2px 8px; background: rgba(239, 68, 68, 0.15); border-radius: 12px; font-size: 0.85em; margin-right: 4px;">${condDef?.icon || "⚠️"} ${condName}</span>`;
+			}).join("")
+			: "<span class='ve-muted'>None</span>";
+
+		// Size and type info
+		const sizeStr = companion.size ? Parser.sizeAbvToFull(companion.size) : "";
+		const typeStr = companion.creatureType || "";
+		const subtypeStr = [sizeStr, typeStr].filter(Boolean).join(" ");
 
 		$modalInner.append(`
 			<div style="font-size: 0.95em;">
-				<div class="ve-flex mb-3" style="gap: 16px; flex-wrap: wrap;">
+				${subtypeStr ? `<div class="ve-muted ve-small mb-2">${subtypeStr}</div>` : ""}
+
+				<div class="ve-flex mb-3" style="gap: 16px; flex-wrap: wrap; padding: 8px; background: rgba(var(--rgb-bg-text), 0.03); border-radius: 6px;">
 					<div><strong>AC:</strong> ${companion.ac || "—"}</div>
-					<div><strong>HP:</strong> ${companion.hp?.current || 0}/${companion.hp?.max || 0}</div>
+					<div><strong>HP:</strong> <span style="color: ${companion.hp?.current > 0 ? "#22c55e" : "#ef4444"};">${companion.hp?.current || 0}</span>/${companion.hp?.max || 0}</div>
 					<div><strong>Speed:</strong> ${this._formatCompanionSpeeds(companion.speed)}</div>
 				</div>
 
@@ -2168,20 +2349,39 @@ class CharacterSheetPage {
 					${abilityRow}
 				</div>
 
-				<div class="mb-2">
+				<div class="mb-2" style="padding: 0 4px;">
+					<strong>Conditions:</strong> ${conditionsHtml}
+				</div>
+
+				<div class="mb-2" style="padding: 0 4px;">
 					<strong>Senses:</strong> ${companion.senses?.join(", ") || "—"}
 					${companion.passive ? `, passive Perception ${companion.passive}` : ""}
 				</div>
 
-				<div class="mb-3"><strong>Languages:</strong> ${companion.languages?.join(", ") || "—"}</div>
+				<div class="mb-3" style="padding: 0 4px;"><strong>Languages:</strong> ${companion.languages?.join(", ") || "—"}</div>
 
-				<h5 class="mb-1">Traits</h5>
+				<h5 class="mb-1" style="border-bottom: 1px solid var(--rgb-border-grey-muted); padding-bottom: 4px;">Traits</h5>
 				<div class="mb-3">${traitsHtml}</div>
 
-				<h5 class="mb-1">Actions</h5>
-				<div>${actionsHtml}</div>
+				<h5 class="mb-1" style="border-bottom: 1px solid var(--rgb-border-grey-muted); padding-bottom: 4px;">Actions</h5>
+				<div class="mb-3">${actionsHtml}</div>
+
+				${reactionsHtml ? `<h5 class="mb-1" style="border-bottom: 1px solid var(--rgb-border-grey-muted); padding-bottom: 4px;">Reactions</h5><div>${reactionsHtml}</div>` : ""}
 			</div>
 		`);
+
+		// Bind save roll buttons
+		$modalInner.find(".btn-companion-save").on("click", (evt) => {
+			const ability = $(evt.currentTarget).data("ability");
+			const mod = parseInt($(evt.currentTarget).data("mod"));
+			const roll = Renderer.dice.parseRandomise2("1d20");
+			const total = roll + mod;
+			const modStr = mod >= 0 ? `+${mod}` : mod;
+			JqueryUtil.doToast({
+				type: "info",
+				content: `🎲 ${companion.name} ${ability.toUpperCase()} Save: ${roll} ${modStr} = <strong>${total}</strong>`,
+			});
+		});
 	}
 
 	_formatCompanionSpeeds (speed) {
@@ -2193,6 +2393,172 @@ class CharacterSheetPage {
 		if (speed.climb) parts.push(`climb ${speed.climb} ft.`);
 		if (speed.burrow) parts.push(`burrow ${speed.burrow} ft.`);
 		return parts.length > 0 ? parts.join(", ") : "—";
+	}
+
+	async _onAddCompanionCondition (companion) {
+		const allConditions = this.getConditionsList();
+		const currentConditions = this._state.getCompanionConditions?.(companion.id) || [];
+
+		// Filter out conditions already applied
+		const availableConditions = allConditions.filter(cond =>
+			!currentConditions.some(curr => {
+				const currName = typeof curr === "string" ? curr : curr.name;
+				return currName.toLowerCase() === cond.name.toLowerCase();
+			}),
+		);
+
+		if (!availableConditions.length) {
+			JqueryUtil.doToast({type: "warning", content: "All conditions already applied!"});
+			return;
+		}
+
+		const chosen = await InputUiUtil.pGetUserEnum({
+			title: `Add Condition to ${companion.customName || companion.name}`,
+			values: availableConditions.map(c => c.name),
+			fnDisplay: v => {
+				const condDef = CharacterSheetState.getConditionEffects(v);
+				return `${condDef?.icon || "⚠️"} ${v}`;
+			},
+			isResolveItem: true,
+		});
+
+		if (!chosen) return;
+
+		this._state.addCompanionCondition?.(companion.id, chosen);
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+		JqueryUtil.doToast({type: "info", content: `Added ${chosen} to ${companion.customName || companion.name}`});
+	}
+
+	_rollCompanionSkillCheck (companion, skill) {
+		const mod = this._state.getCompanionSkillMod?.(companion.id, skill) || 0;
+		const roll = Renderer.dice.parseRandomise2("1d20");
+		const total = roll + mod;
+		const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+		const skillName = skill.charAt(0).toUpperCase() + skill.slice(1);
+
+		JqueryUtil.doToast({
+			type: "info",
+			content: `🎲 ${companion.customName || companion.name} ${skillName}: ${roll} ${modStr} = <strong>${total}</strong>`,
+		});
+	}
+
+	async _onEditCompanionName (companion) {
+		const newName = await InputUiUtil.pGetUserString({
+			title: `Rename ${companion.name}`,
+			default: companion.customName || "",
+		});
+
+		if (newName === null) return; // Cancelled
+
+		this._state.updateCompanion?.(companion.id, {customName: newName || null});
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+
+		if (newName) {
+			JqueryUtil.doToast({type: "success", content: `Renamed to "${newName}"`});
+		} else {
+			JqueryUtil.doToast({type: "info", content: `Name reset to ${companion.name}`});
+		}
+	}
+
+	_useCompanionAction (companion, action) {
+		// Mark action as used
+		this._state.updateCompanion?.(companion.id, {usedAction: true});
+		this._saveCurrentCharacter();
+
+		// Action descriptions for the toast
+		const actionDescriptions = {
+			help: "gives an ally advantage on their next attack or ability check",
+			dash: `doubles their speed (${this._formatCompanionSpeeds(companion.speed)} × 2) this turn`,
+			disengage: "can move without provoking opportunity attacks this turn",
+			dodge: "has attacks against them at disadvantage and advantage on DEX saves until next turn",
+			hide: "attempts to become hidden",
+			search: "searches the area",
+			attack: "makes an attack",
+		};
+
+		const actionName = action.charAt(0).toUpperCase() + action.slice(1);
+		const name = companion.customName || companion.name;
+
+		// For Hide and Search, roll the appropriate skill check
+		if (action === "hide") {
+			this._rollCompanionSkillCheck(companion, "stealth");
+			this._renderCompanions();
+			return;
+		}
+		if (action === "search") {
+			this._rollCompanionSkillCheck(companion, "perception");
+			this._renderCompanions();
+			return;
+		}
+
+		// For Attack, show available attack actions
+		if (action === "attack" && companion.actions?.length) {
+			this._showCompanionAttackOptions(companion);
+			this._renderCompanions();
+			return;
+		}
+
+		JqueryUtil.doToast({
+			type: "info",
+			content: `⚡ ${name} takes the <strong>${actionName}</strong> action — ${actionDescriptions[action]}`,
+		});
+
+		this._renderCompanions();
+	}
+
+	async _showCompanionAttackOptions (companion) {
+		const attacks = (companion.actions || []).filter(a =>
+			a.entries?.some(e => typeof e === "string" && e.toLowerCase().includes("attack")),
+		);
+
+		if (!attacks.length) {
+			JqueryUtil.doToast({type: "warning", content: "No attack actions available"});
+			return;
+		}
+
+		const chosen = await InputUiUtil.pGetUserEnum({
+			title: `${companion.customName || companion.name} — Choose Attack`,
+			values: attacks.map(a => a.name),
+			isResolveItem: true,
+		});
+
+		if (!chosen) return;
+
+		const attack = attacks.find(a => a.name === chosen);
+		if (!attack) return;
+
+		// Parse attack bonus from entries
+		let attackBonus = 0;
+		for (const entry of attack.entries || []) {
+			if (typeof entry !== "string") continue;
+			const match = entry.match(/\{@hit (\d+)\}/);
+			if (match) {
+				attackBonus = parseInt(match[1]);
+				break;
+			}
+		}
+
+		// Roll attack
+		const roll = Renderer.dice.parseRandomise2("1d20");
+		const total = roll + attackBonus;
+		const modStr = attackBonus >= 0 ? `+${attackBonus}` : attackBonus;
+
+		JqueryUtil.doToast({
+			type: "info",
+			content: `⚔️ ${companion.customName || companion.name} ${chosen}: ${roll} ${modStr} = <strong>${total}</strong>`,
+		});
+	}
+
+	_resetAllCompanionActions () {
+		const companions = this._state.getActiveCompanions?.() || [];
+		for (const companion of companions) {
+			this._state.updateCompanion?.(companion.id, {usedAction: false, usedReaction: false});
+		}
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+		JqueryUtil.doToast({type: "success", content: "🔄 New round — all companion actions reset!"});
 	}
 
 	_renderAbilitiesDetailed () {
