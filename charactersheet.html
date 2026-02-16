@@ -208,6 +208,7 @@
 			<li><a data-toggle="tab" href="#charsheet-tab-inventory"><span class="charsheet__tab-icon">🎒</span><span class="charsheet__tab-text">Inventory</span></a></li>
 			<li><a data-toggle="tab" href="#charsheet-tab-features"><span class="charsheet__tab-icon">📜</span><span class="charsheet__tab-text">Features</span></a></li>
 			<li><a data-toggle="tab" href="#charsheet-tab-notes"><span class="charsheet__tab-icon">📝</span><span class="charsheet__tab-text">Notes</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-companions"><span class="charsheet__tab-icon">🐾</span><span class="charsheet__tab-text">Companions</span></a></li>
 			<li><a data-toggle="tab" href="#charsheet-tab-builder"><span class="charsheet__tab-icon">🔧</span><span class="charsheet__tab-text">Builder</span></a></li>
 		</ul>
 
@@ -615,6 +616,17 @@
 								</div>
 								<div class="charsheet__exhaustion-effect" id="charsheet-exhaustion-effect">No exhaustion</div>
 								<div class="charsheet__exhaustion-rules" id="charsheet-exhaustion-rules"></div>
+							</div>
+						</div>
+
+						<!-- Companions Indicator -->
+						<div class="charsheet__section charsheet__section--companions-indicator" id="charsheet-companions-section" style="display: none;">
+							<h4 class="charsheet__section-title">
+								<span class="charsheet__section-icon">🐾</span>
+								Companions
+							</h4>
+							<div class="charsheet__companions-indicator-list" id="charsheet-companions-indicator">
+								<!-- Populated by JS -->
 							</div>
 						</div>
 					</div>
@@ -1193,6 +1205,39 @@
 							<h4 class="charsheet__section-title">Additional Notes</h4>
 							<textarea class="form-control charsheet__textarea" id="charsheet-txt-notes" rows="8" placeholder="Enter additional notes..."></textarea>
 						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Companions Tab -->
+			<div id="charsheet-tab-companions" class="tab-pane fade">
+				<div class="charsheet__companions-container" style="max-width: 800px;">
+					<!-- Header -->
+					<div class="charsheet__companions-header" style="
+						background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.05));
+						border-radius: 12px;
+						padding: 20px;
+						margin-bottom: 20px;
+						display: flex;
+						align-items: center;
+						justify-content: space-between;
+						gap: 16px;
+					">
+						<div style="display: flex; align-items: center; gap: 16px;">
+							<span style="font-size: 3em;">🐾</span>
+							<div>
+								<h3 style="margin: 0 0 4px 0; font-size: 1.4em;">Companions</h3>
+								<div class="ve-muted">Familiars, beast companions, and summoned creatures</div>
+							</div>
+						</div>
+						<button class="ve-btn ve-btn-primary" id="charsheet-btn-summon-familiar" style="white-space: nowrap;">
+							<span class="glyphicon glyphicon-plus mr-1"></span>Summon Familiar
+						</button>
+					</div>
+					
+					<!-- Companions List -->
+					<div class="charsheet__companions-list" id="charsheet-companions-list">
+						<!-- Populated by JS -->
 					</div>
 				</div>
 			</div>
