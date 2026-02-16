@@ -4091,6 +4091,7 @@ class CharacterSheetState {
 	// #region HP
 	setCurrentHp (hp) {
 		this._data.hp.current = Math.max(0, Math.min(hp, this.getMaxHp()));
+		this._updateBloodiedCondition();
 	}
 
 	getCurrentHp () { return this._data.hp.current; }
@@ -4163,6 +4164,8 @@ class CharacterSheetState {
 		if (wasAtZero && this._data.hp.current > 0) {
 			this.resetDeathSaves();
 		}
+
+		this._updateBloodiedCondition();
 	}
 
 	/**
@@ -4180,6 +4183,7 @@ class CharacterSheetState {
 		if (this._data.hp.temp > 0) {
 			if (this._data.hp.temp >= damage) {
 				this._data.hp.temp -= damage;
+				this._updateBloodiedCondition();
 				return true;
 			} else {
 				damage -= this._data.hp.temp;
@@ -4195,6 +4199,9 @@ class CharacterSheetState {
 		if (overkill <= -maxHp) {
 			this._data.massiveDamageDeath = true;
 		}
+
+		// Update bloodied condition based on new HP
+		this._updateBloodiedCondition();
 
 		return true;
 	}
@@ -4233,6 +4240,38 @@ class CharacterSheetState {
 		this._data.hp.current = Math.max(0, current);
 		if (max !== undefined) this._data.hp.max = max;
 		if (temp !== undefined) this._data.hp.temp = Math.max(0, temp);
+		this._updateBloodiedCondition();
+	}
+
+	/**
+	 * Check and update the Bloodied condition based on current HP.
+	 * Bloodied is applied when HP drops to ≤50% of max, removed when above.
+	 * @private
+	 */
+	_updateBloodiedCondition () {
+		const current = this._data.hp.current;
+		const max = this.getMaxHp();
+		if (max <= 0) return;
+
+		const isBloodied = current > 0 && current <= Math.floor(max / 2);
+		const hasBloodied = this.hasCondition("bloodied");
+
+		if (isBloodied && !hasBloodied) {
+			this.addCondition("bloodied");
+		} else if (!isBloodied && hasBloodied) {
+			this.removeCondition("bloodied");
+		}
+	}
+
+	/**
+	 * Check if character is bloodied (≤50% max HP and alive)
+	 * @returns {boolean}
+	 */
+	isBloodied () {
+		const current = this._data.hp.current;
+		const max = this.getMaxHp();
+		if (max <= 0 || current <= 0) return false;
+		return current <= Math.floor(max / 2);
 	}
 	// #endregion
 
@@ -12049,9 +12088,10 @@ class CharacterSheetState {
 					// PHB: level 2, XPHB: level 3
 					const subclassLevel = is2024 ? 3 : 2;
 
-					// Scholar (XPHB level 2) - expertise in Arcana
+					// Scholar (XPHB level 2) - expertise choice from specific skills
 					if (is2024 && level >= 2) {
 						calculations.hasScholar = true;
+						calculations.scholarSkillOptions = ["arcana", "history", "investigation", "medicine", "nature", "religion"];
 					}
 
 					// Memorize Spell (XPHB level 5)
@@ -21157,6 +21197,14 @@ class CharacterSheetState {
 				{type: "autoFail", target: "check:sight"}, // Auto-fail any check requiring sight
 			],
 		},
+		bloodied: {
+			name: "Bloodied",
+			icon: "🩸",
+			description: "At or below half maximum hit points. Some abilities trigger when bloodied.",
+			effects: [
+				{type: "note", value: "At or below 50% maximum HP"},
+			],
+		},
 		charmed: {
 			name: "Charmed",
 			icon: "💕",
@@ -22964,12 +23012,9 @@ class CharacterSheetState {
 			startedAt: Date.now(),
 		};
 
-		// Also add as an active state
-		this.activateState("concentration", {
-			name: `Concentrating: ${spellName}`,
-			spellName,
-			spellLevel: level,
-		});
+		// Don't add a separate "Concentrating" active state - the spell effect state
+		// already tracks this via its isSpellEffect + concentration flags.
+		// Adding a duplicate state causes confusion (two entries for one spell).
 	}
 
 	/**
@@ -24900,6 +24945,14 @@ class CharacterSheetState {
 			selfEffects: [{type: "sanctuaryProtection"}],
 			duration: {amount: 1, unit: "minute"},
 		},
+		"blade ward": {
+			selfEffects: [
+				{type: "resistance", target: "damage:bludgeoning"},
+				{type: "resistance", target: "damage:piercing"},
+				{type: "resistance", target: "damage:slashing"},
+			],
+			duration: {amount: 1, unit: "round"},
+		},
 	};
 
 	/**
@@ -25359,7 +25412,9 @@ class CharacterSheetState {
 	static _parseTempHp (spell) {
 		const text = JSON.stringify(spell.entries || []).toLowerCase();
 
-		const tempHpMatch = text.match(/(\d+)\s*temporary\s*hit\s*points?/);
+		// Match patterns like "1d4+4} temporary hit points" or "5 temporary hit points"
+		// Allow non-alphabetic chars (like } from {@dice ...}) between the digit and "temporary"
+		const tempHpMatch = text.match(/(\d+)[^a-z]*temporary\s*hit\s*points?/);
 		if (tempHpMatch) {
 			return {
 				amount: parseInt(tempHpMatch[1]),

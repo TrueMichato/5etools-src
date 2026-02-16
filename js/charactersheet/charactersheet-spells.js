@@ -1767,6 +1767,7 @@ class CharacterSheetSpells {
 				|| effects.buffs?.length > 0
 				|| effects.tempHp
 				|| effects.conditions?.length > 0
+				|| effects.registryEffects?.length > 0
 			);
 
 			// Handle target selection for beneficial effects
@@ -1887,7 +1888,7 @@ class CharacterSheetSpells {
 				const hp = this._state.getHp();
 				const newHp = Math.min(hp.max, hp.current + healAmount);
 				const actualHealing = newHp - hp.current;
-				this._state.setHp(hp.max, newHp);
+				this._state.setHp(newHp, hp.max); // Fixed: setHp(current, max)
 				appliedEffects.push(`Healed ${actualHealing} HP`);
 			}
 		}
@@ -1942,6 +1943,7 @@ class CharacterSheetSpells {
 				sourceFeatureId: `spell_${spell.name}_${Date.now()}`,
 				customEffects: [], // Empty - condition provides the effects
 				isSpellEffect: true,
+				spellSource: spell.source || spellData?.source || Parser.SRC_XPHB,
 				concentration: effects.concentration || false,
 				duration: effects.duration,
 				grantsConditions: conditionsToApply, // Track which conditions this spell grants
@@ -1988,13 +1990,15 @@ class CharacterSheetSpells {
 				});
 			}
 
-			const stateId = this._state.addActiveState("custom", {
+			// Use activateState to trigger side effects like _applyTempHpFromState
+			const stateId = this._state.activateState("custom", {
 				name: spell.name,
 				icon: effects.concentration ? "🔮" : "✨",
 				description: `Spell effect: ${spell.name}`,
 				sourceFeatureId: `spell_${spell.name}_${Date.now()}`,
 				customEffects,
 				isSpellEffect: true,
+				spellSource: spell.source || spellData?.source || Parser.SRC_XPHB,
 				concentration: effects.concentration || false,
 				duration: effects.duration,
 			});

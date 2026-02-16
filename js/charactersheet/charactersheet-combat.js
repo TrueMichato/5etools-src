@@ -1776,10 +1776,21 @@ class CharacterSheetCombat {
 				}
 			}
 
+			// Create hoverable condition link
+			let conditionLink = conditionName;
+			try {
+				const hash = UrlUtil.encodeForHash([conditionName, conditionSource].join(HASH_LIST_SEP));
+				const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CONDITIONS_DISEASES, source: conditionSource, hash: hash});
+				conditionLink = `<a href="${UrlUtil.PG_CONDITIONS_DISEASES}#${hash}" ${hoverAttrs}>${conditionName}</a>`;
+			} catch (e) {
+				// Fall back to plain name if hover fails
+				conditionLink = conditionName;
+			}
+
 			const $condition = $(`
 				<div class="charsheet__combat-condition badge badge-warning mr-1 mb-1" 
 					title="${tooltip}" data-condition-name="${conditionName}" data-condition-source="${conditionSource}">
-					${icon} ${conditionName}
+					${icon} <span class="charsheet__condition-name-link">${conditionLink}</span>
 					<span class="charsheet__condition-source-badge">${sourceAbbr}</span>
 					<span class="charsheet__condition-remove ml-1" title="Remove condition">&times;</span>
 				</div>
@@ -1812,13 +1823,14 @@ class CharacterSheetCombat {
 		const conditionImmunities = this._state.getConditionImmunities?.() || [];
 
 		// Also get defenses from active states (like Rage giving resistance to B/P/S)
+		// Strip "damage:" prefix to match base resistance format
 		const activeStateEffects = this._state.getActiveStateEffects?.() || [];
 		const stateResistances = activeStateEffects
 			.filter(e => e.type === "resistance")
-			.map(e => e.target);
+			.map(e => (e.target || "").replace(/^damage:/i, ""));
 		const stateImmunities = activeStateEffects
 			.filter(e => e.type === "immunity")
-			.map(e => e.target);
+			.map(e => (e.target || "").replace(/^damage:/i, ""));
 		const stateConditionImmunities = activeStateEffects
 			.filter(e => e.type === "conditionImmunity")
 			.map(e => e.target);
@@ -1900,8 +1912,10 @@ class CharacterSheetCombat {
 	 */
 	_formatDamageType (type) {
 		if (!type) return "Unknown";
-		// Capitalize first letter, handle compound types like "bludgeoning, piercing, and slashing"
-		return type.split(/,\s*/).map(t => t.trim().charAt(0).toUpperCase() + t.trim().slice(1)).join(", ");
+		// Strip "damage:" prefix if present, then capitalize first letter
+		const clean = type.replace(/^damage:/i, "").trim();
+		// Handle compound types like "bludgeoning, piercing, and slashing"
+		return clean.split(/,\s*/).map(t => t.trim().charAt(0).toUpperCase() + t.trim().slice(1)).join(", ");
 	}
 
 	/**
@@ -2400,9 +2414,23 @@ class CharacterSheetCombat {
 				}
 				const tooltip = tooltipParts.join("\n");
 
-				// Try to create hoverable name from source feature
+				// Check if this is a spell effect
+				const isSpellEffect = state.isSpellEffect || state.sourceFeatureId?.startsWith("spell_");
+
+				// Try to create hoverable name from source feature or spell
 				let stateNameHtml = state.name || stateType?.name || state.stateTypeId;
-				if (state.sourceFeatureId) {
+				if (isSpellEffect) {
+					// Create spell hover link
+					try {
+						const source = state.spellSource || Parser.SRC_XPHB;
+						const hash = UrlUtil.encodeForHash([state.name, source].join(HASH_LIST_SEP));
+						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_SPELLS, source: source, hash: hash});
+						stateNameHtml = `<a href="${UrlUtil.PG_SPELLS}#${hash}" ${hoverAttrs}>${state.name}</a>`;
+					} catch (e) {
+						// Fall back to plain name
+						stateNameHtml = state.name;
+					}
+				} else if (state.sourceFeatureId) {
 					const feature = this._state.getFeatures?.().find(f => f.id === state.sourceFeatureId);
 					if (feature) {
 						stateNameHtml = this._page._getFeatureHoverLink?.(feature) || stateNameHtml;

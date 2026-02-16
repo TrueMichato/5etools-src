@@ -481,11 +481,14 @@ class CharacterSheetPage {
 		$("#charsheet-ipt-hp-current").on("change", (e) => {
 			this._state.setCurrentHp(parseInt(e.target.value) || 0);
 			this._saveCurrentCharacter();
+			this._renderHp(); // Update HP bar
+			this._renderConditions(); // Update bloodied condition display
 		});
 
 		$("#charsheet-ipt-hp-temp").on("change", (e) => {
 			this._state.setTempHp(parseInt(e.target.value) || 0);
 			this._saveCurrentCharacter();
+			this._renderHp(); // Update HP bar
 		});
 
 		$("#charsheet-btn-heal").on("click", () => this._onHeal());
@@ -818,6 +821,7 @@ class CharacterSheetPage {
 		this._renderSkills();
 		this._renderHp();
 		this._renderCombatStats();
+		this._renderDefenses();
 		this._renderHitDice();
 		this._renderDeathSaves();
 		this._renderInspiration();
@@ -1053,9 +1057,40 @@ class CharacterSheetPage {
 	}
 
 	_renderHp () {
-		$("#charsheet-ipt-hp-current").val(this._state.getCurrentHp());
-		$("#charsheet-disp-hp-max").text(this._state.getMaxHp());
-		$("#charsheet-ipt-hp-temp").val(this._state.getTempHp());
+		const currentHp = this._state.getCurrentHp();
+		const maxHp = this._state.getMaxHp();
+		const tempHp = this._state.getTempHp();
+
+		$("#charsheet-ipt-hp-current").val(currentHp);
+		$("#charsheet-disp-hp-max").text(maxHp);
+		$("#charsheet-ipt-hp-temp").val(tempHp);
+
+		// Update HP bar fill width and color
+		const hpPercent = maxHp > 0 ? Math.max(0, Math.min(100, (currentHp / maxHp) * 100)) : 0;
+		const tempPercent = maxHp > 0 ? Math.max(0, Math.min(100 - hpPercent, (tempHp / maxHp) * 100)) : 0;
+
+		// Color based on HP threshold - use 'background' to override CSS linear-gradient
+		let barColor = "#28a745"; // Green (healthy)
+		if (hpPercent <= 25) {
+			barColor = "#dc3545"; // Red (critical)
+		} else if (hpPercent <= 50) {
+			barColor = "#ffc107"; // Yellow (bloodied)
+		}
+
+		$("#charsheet-hp-bar-fill").css({
+			"width": `${hpPercent}%`,
+			"background": barColor, // Use 'background' to override CSS gradient
+		});
+
+		// Temp HP bar (cyan/blue, positioned after regular HP)
+		$("#charsheet-hp-bar-temp").css({
+			"width": `${tempPercent}%`,
+			"left": `${hpPercent}%`,
+			"background": "#17a2b8",
+		});
+
+		// Update HP percentage text
+		$("#charsheet-hp-percent").text(`${Math.round(hpPercent)}%`);
 	}
 
 	_renderCombatStats () {
@@ -1235,6 +1270,55 @@ class CharacterSheetPage {
 				</div>
 			`);
 		});
+	}
+
+	/**
+	 * Render the defenses section (resistances, immunities, vulnerabilities)
+	 * This combines base defenses with those from active states (e.g., Blade Ward, Rage)
+	 */
+	_renderDefenses () {
+		const defenses = this._state.getEffectiveDefenses();
+
+		// Format damage type for display (capitalize, handle "damage:" prefix)
+		const formatType = (type) => {
+			const clean = type.replace(/^damage:/i, "").trim();
+			return clean.charAt(0).toUpperCase() + clean.slice(1);
+		};
+
+		// Resistances
+		if (defenses.resistances.length > 0) {
+			const resistanceText = defenses.resistances.map(formatType).join(", ");
+			$("#charsheet-resistances").text(resistanceText);
+		} else {
+			$("#charsheet-resistances").text("—");
+		}
+
+		// Immunities (damage immunities)
+		if (defenses.immunities.length > 0) {
+			const immunityText = defenses.immunities.map(formatType).join(", ");
+			$("#charsheet-immunities").text(immunityText);
+		} else {
+			$("#charsheet-immunities").text("—");
+		}
+
+		// Vulnerabilities
+		if (defenses.vulnerabilities.length > 0) {
+			const vulnerabilityText = defenses.vulnerabilities.map(formatType).join(", ");
+			$("#charsheet-vulnerabilities").text(vulnerabilityText);
+		} else {
+			$("#charsheet-vulnerabilities").text("—");
+		}
+
+		// Condition immunities (if there's a UI element for it)
+		const $conditionImmunities = $("#charsheet-condition-immunities");
+		if ($conditionImmunities.length > 0) {
+			if (defenses.conditionImmunities.length > 0) {
+				const conditionText = defenses.conditionImmunities.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
+				$conditionImmunities.text(conditionText);
+			} else {
+				$conditionImmunities.text("—");
+			}
+		}
 	}
 
 	_renderHitDice () {
@@ -2406,9 +2490,20 @@ class CharacterSheetPage {
 		// Check if this is a spell effect
 		const isSpellEffect = state.isSpellEffect || state.sourceFeatureId?.startsWith("spell_");
 		
-		// Try to create hoverable name by finding the source feature
+		// Try to create hoverable name by finding the source feature or spell
 		let nameHtml = state.name;
-		if (state.sourceFeatureId && !isSpellEffect) {
+		if (isSpellEffect) {
+			// Create spell hover link for spell effects
+			try {
+				const source = state.spellSource || Parser.SRC_XPHB;
+				const hash = UrlUtil.encodeForHash([state.name, source].join(HASH_LIST_SEP));
+				const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_SPELLS, source: source, hash: hash});
+				nameHtml = `<a href="${UrlUtil.PG_SPELLS}#${hash}" ${hoverAttrs}>${state.name}</a>`;
+			} catch (e) {
+				// Fall back to plain name if hover fails
+				nameHtml = state.name;
+			}
+		} else if (state.sourceFeatureId) {
 			const feature = this._state.getFeatures().find(f => f.id === state.sourceFeatureId);
 			if (feature) {
 				nameHtml = this._getFeatureHoverLink(feature);
@@ -2426,6 +2521,8 @@ class CharacterSheetPage {
 		if (state.customEffects?.length) {
 			const effectsStr = state.customEffects.map(e => {
 				if (e.target === "ac") return `+${e.value} AC`;
+				if (e.type === "resistance") return `Resist ${(e.target || "").replace("damage:", "")}`;
+				if (e.type === "immunity") return `Immune ${(e.target || "").replace("damage:", "")}`;
 				if (e.dice) return `+${e.dice} to rolls`;
 				return e.type || "";
 			}).filter(Boolean).join("; ");
