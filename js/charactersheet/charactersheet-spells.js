@@ -2390,8 +2390,12 @@ class CharacterSheetSpells {
 
 	/**
 	 * Show familiar picker modal for Find Familiar spell
+	 * @param {Object} opts - Options
+	 * @param {boolean} opts.isWildCompanion - If true, familiar is summoned as Fey (Wild Companion)
 	 */
-	async _pShowFamiliarPicker () {
+	async _pShowFamiliarPicker (opts = {}) {
+		const {isWildCompanion = false} = opts;
+
 		// Load bestiary data
 		const bestiaryData = await DataLoader.pCacheAndGetAllSite(UrlUtil.PG_BESTIARY);
 
@@ -2420,8 +2424,15 @@ class CharacterSheetSpells {
 		// Sort alphabetically
 		familiars.sort((a, b) => a.name.localeCompare(b.name));
 
+		const modalTitle = isWildCompanion ? "🧚 Wild Companion" : "🐾 Choose Your Familiar";
+		const headerEmoji = isWildCompanion ? "🧚" : "🦉";
+		const headerTitle = isWildCompanion ? "Choose Your Wild Companion" : "Choose Your Familiar";
+		const headerDesc = isWildCompanion
+			? "Select a form for your Fey familiar. Cost: 1 Wild Shape use or spell slot."
+			: "Select a beast to serve you. Your familiar appears within 10 feet.";
+
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "🐾 Choose Your Familiar",
+			title: modalTitle,
 			isMinHeight0: true,
 			isWidth100: true,
 		});
@@ -2429,10 +2440,10 @@ class CharacterSheetSpells {
 		$modalInner.append(`
 			<div class="charsheet__familiar-picker-header mb-3" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1)); border-radius: 8px; padding: 12px;">
 				<div class="ve-flex ve-flex-v-center" style="gap: 10px;">
-					<span style="font-size: 2em;">🦉</span>
+					<span style="font-size: 2em;">${headerEmoji}</span>
 					<div>
-						<div class="bold" style="font-size: 1.1em;">Choose Your Familiar</div>
-						<div class="ve-muted ve-small">Select a beast to serve you. Your familiar appears within 10 feet.</div>
+						<div class="bold" style="font-size: 1.1em;">${headerTitle}</div>
+						<div class="ve-muted ve-small">${headerDesc}</div>
 					</div>
 				</div>
 			</div>
@@ -2546,14 +2557,14 @@ class CharacterSheetSpells {
 
 				$card.find(".btn-select-familiar").on("click", async (evt) => {
 					evt.stopPropagation();
-					await this._selectFamiliar(creature);
+					await this._selectFamiliar(creature, {isWildCompanion});
 					doClose();
 				});
 
 				// Clicking the card also selects
 				$card.on("click", async (evt) => {
 					if ($(evt.target).closest("a").length) return; // Don't select if clicking hover link
-					await this._selectFamiliar(creature);
+					await this._selectFamiliar(creature, {isWildCompanion});
 					doClose();
 				});
 			});
@@ -2579,23 +2590,43 @@ class CharacterSheetSpells {
 
 	/**
 	 * Select a familiar and add it to companions
+	 * @param {Object} creature - The bestiary creature data
+	 * @param {Object} opts - Options
+	 * @param {boolean} opts.isWildCompanion - If true, familiar is summoned as Fey (Wild Companion)
 	 */
-	async _selectFamiliar (creature) {
+	async _selectFamiliar (creature, opts = {}) {
+		const {isWildCompanion = false} = opts;
+
 		// Remove any existing familiars first (you can only have one)
 		const existingFamiliars = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.FAMILIAR) || [];
 		existingFamiliars.forEach(f => this._state.removeCompanion?.(f.id));
+
+		// Determine origin and creature type
+		const origin = isWildCompanion ? "Wild Companion" : "Find Familiar";
+		const creatureType = isWildCompanion ? "fey" : "beast";
 
 		// Add the new familiar
 		const companionId = this._state.addCompanionFromBestiary?.(
 			creature,
 			CharacterSheetState.COMPANION_TYPES.FAMILIAR,
-			"Find Familiar",
+			origin,
+			{creatureTypeOverride: creatureType}, // Pass type override
 		);
 
+		// Update the creature type if Wild Companion
+		if (companionId && isWildCompanion) {
+			const companion = this._state.getCompanion?.(companionId);
+			if (companion) {
+				companion.creatureType = "fey";
+			}
+		}
+
 		if (companionId) {
+			const emoji = isWildCompanion ? "🧚" : "🐾";
+			const typeStr = isWildCompanion ? " (Fey)" : "";
 			JqueryUtil.doToast({
 				type: "success",
-				content: `🐾 ${creature.name} appears as your familiar!`,
+				content: `${emoji} ${creature.name}${typeStr} appears as your familiar!`,
 			});
 
 			// Update companions UI

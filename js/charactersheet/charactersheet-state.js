@@ -10968,9 +10968,48 @@ class CharacterSheetState {
 					// Wild Shape DC is spell save DC
 					calculations.wildShapeDc = this.getSpellSaveDc();
 
+					// Primal Order (XPHB level 1) - Magician or Warden choice
+					if (isXPHB && level >= 1) {
+						const hasMagician = this.hasFeature("Magician");
+						const hasWarden = this.hasFeature("Warden");
+
+						if (hasMagician) {
+							calculations.hasMagician = true;
+							// Magician grants: extra cantrip + WIS bonus to Arcana/Nature
+							calculations.magicianCantripsBonus = 1;
+							const wisMod = this.getAbilityMod("wis");
+							calculations.magicianSkillBonus = Math.max(1, wisMod); // minimum +1
+							calculations.magicianAffectedSkills = ["arcana", "nature"];
+						}
+
+						if (hasWarden) {
+							calculations.hasWarden = true;
+							// Warden grants: martial weapon proficiency + medium armor training
+							calculations.wardenMartialWeapons = true;
+							calculations.wardenMediumArmor = true;
+						}
+					}
+
 					// Wild Shape uses: 2 per short/long rest (both PHB and XPHB)
 					if (level >= 2) {
 						calculations.wildShapeUses = 2;
+					}
+
+					// Wild Companion (TCE optional feature for PHB, standard for XPHB at level 2)
+					// Allows spending Wild Shape (or spell slot in XPHB) to cast Find Familiar as a Fey
+					if (level >= 2) {
+						if (isXPHB) {
+							// XPHB: Wild Companion is a standard feature at level 2
+							calculations.hasWildCompanion = true;
+							calculations.wildCompanionDuration = "until long rest";
+						} else {
+							// PHB: Wild Companion is an optional feature from TCE - check if character has it
+							const hasWildCompanionFeature = this.hasFeature("Wild Companion");
+							if (hasWildCompanionFeature) {
+								calculations.hasWildCompanion = true;
+								calculations.wildCompanionDuration = `${Math.floor(level / 2)} hours`;
+							}
+						}
 					}
 
 					// Wild Shape CR limits (PHB) - based on druid level
@@ -14024,6 +14063,36 @@ class CharacterSheetState {
 				resource: "wildShape",
 				property: "unlimited",
 				source: "Archdruid",
+			});
+		}
+
+		// Primal Order: Warden (XPHB Druid 1) - Martial weapons + Medium armor
+		if (calculations.hasWarden && !alreadyProcessed("Warden")) {
+			effects.push({
+				type: "weaponProficiency",
+				weapon: "martial",
+				source: "Warden (Primal Order)",
+			});
+			effects.push({
+				type: "armorProficiency",
+				armor: "medium",
+				source: "Warden (Primal Order)",
+			});
+		}
+
+		// Primal Order: Magician (XPHB Druid 1) - Arcana/Nature skill bonus
+		if (calculations.hasMagician && calculations.magicianSkillBonus && !alreadyProcessed("Magician")) {
+			effects.push({
+				type: "skillBonus",
+				skill: "arcana",
+				value: calculations.magicianSkillBonus,
+				source: "Magician (Primal Order)",
+			});
+			effects.push({
+				type: "skillBonus",
+				skill: "nature",
+				value: calculations.magicianSkillBonus,
+				source: "Magician (Primal Order)",
 			});
 		}
 
