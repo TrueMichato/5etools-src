@@ -3005,17 +3005,6 @@ class CharacterSheetLevelUp {
 
 		const $container = $section.find(".charsheet__levelup-language-grants");
 
-		// Get current character languages
-		const currentLanguages = (this._state.getLanguages() || []).map(l => l.toLowerCase());
-
-		// Get grouped language options including homebrew
-		const langOptions = this._page.getLanguageOptionsGrouped?.() || {
-			standard: Parser.LANGUAGES_STANDARD || ["Common", "Dwarvish", "Elvish", "Giant", "Gnomish", "Goblin", "Halfling", "Orc"],
-			exotic: Parser.LANGUAGES_EXOTIC || ["Abyssal", "Celestial", "Draconic", "Deep Speech", "Infernal", "Primordial", "Sylvan", "Undercommon"],
-			secret: Parser.LANGUAGES_SECRET || ["Druidic", "Thieves' Cant"],
-			homebrew: [],
-		};
-
 		languageGrants.forEach(grant => {
 			const featureKey = grant.featureName;
 			const selectedForGrant = [];
@@ -3023,70 +3012,58 @@ class CharacterSheetLevelUp {
 			const $grantSection = $(`
 				<div class="charsheet__levelup-language-grant mb-3">
 					<p><strong>${grant.featureName}:</strong> Choose ${grant.count} language${grant.count > 1 ? "s" : ""}:</p>
-					<div class="charsheet__levelup-language-dropdowns"></div>
+					<div class="charsheet__levelup-language-selection"></div>
 					<div class="ve-small ve-muted mt-1">Selected: <span class="lang-count">0</span>/${grant.count}</div>
 				</div>
 			`);
 
-			const $dropdowns = $grantSection.find(".charsheet__levelup-language-dropdowns");
+			const $selection = $grantSection.find(".charsheet__levelup-language-selection");
 
-			// Create dropdowns for each language selection
-			for (let i = 0; i < grant.count; i++) {
-				const $select = $(`
-					<select class="form-control form-control-sm mb-1" style="max-width: 200px; display: inline-block; margin-right: 0.5rem;">
-						<option value="">-- Select Language ${i + 1} --</option>
-					</select>
-				`);
+			// Display selected languages and add button
+			const $selectedDisplay = $(`<div class="ve-flex ve-flex-wrap" style="gap: 8px;"></div>`).appendTo($selection);
+			const $addBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary" style="display: inline-flex; align-items: center; gap: 4px;">
+				<span class="glyphicon glyphicon-plus"></span> Choose Language
+			</button>`);
 
-				// Add language options grouped by type - homebrew first if available
-				if (langOptions.homebrew.length) {
-					$select.append(`<optgroup label="──── Homebrew Languages ────">`);
-					langOptions.homebrew.forEach(lang => {
-						if (!currentLanguages.includes(lang.toLowerCase())) {
-							$select.append(`<option value="${lang}">${lang}</option>`);
-						}
+			const renderSelected = () => {
+				$selectedDisplay.empty();
+				selectedForGrant.forEach((lang, idx) => {
+					const $tag = $(`
+						<span class="badge" style="background: rgba(var(--rgb-link-rgb), 0.15); color: var(--rgb-link); display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 0.9em;">
+							🗣️ ${lang}
+							<span class="clickable" style="cursor: pointer; opacity: 0.7;" title="Remove">&times;</span>
+						</span>
+					`);
+					$tag.find(".clickable").on("click", () => {
+						selectedForGrant.splice(idx, 1);
+						renderSelected();
+						$grantSection.find(".lang-count").text(selectedForGrant.length);
+						onSelect(featureKey, [...selectedForGrant]);
 					});
-					$select.append(`</optgroup>`);
+					$selectedDisplay.append($tag);
+				});
+
+				// Show add button if more languages can be selected
+				if (selectedForGrant.length < grant.count) {
+					$selectedDisplay.append($addBtn);
 				}
+			};
 
-				$select.append(`<optgroup label="──── Standard Languages ────">`);
-				langOptions.standard.forEach(lang => {
-					if (!currentLanguages.includes(lang.toLowerCase())) {
-						$select.append(`<option value="${lang}">${lang}</option>`);
-					}
+			$addBtn.on("click", async () => {
+				const result = await this._page.showLanguagePicker?.({
+					exclude: selectedForGrant,
+					title: grant.featureName,
+					count: 1,
 				});
-				$select.append(`</optgroup>`);
-
-				$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
-				langOptions.exotic.forEach(lang => {
-					if (!currentLanguages.includes(lang.toLowerCase())) {
-						$select.append(`<option value="${lang}">${lang}</option>`);
-					}
-				});
-				$select.append(`</optgroup>`);
-
-				$select.append(`<optgroup label="──── Secret Languages ────">`);
-				langOptions.secret.forEach(lang => {
-					if (!currentLanguages.includes(lang.toLowerCase())) {
-						$select.append(`<option value="${lang}">${lang}</option>`);
-					}
-				});
-				$select.append(`</optgroup>`);
-
-				$select.on("change", () => {
-					// Rebuild selected languages from all dropdowns
-					selectedForGrant.length = 0;
-					$dropdowns.find("select").each(function () {
-						const val = $(this).val();
-						if (val) selectedForGrant.push(val);
-					});
+				if (result?.length) {
+					selectedForGrant.push(...result);
+					renderSelected();
 					$grantSection.find(".lang-count").text(selectedForGrant.length);
 					onSelect(featureKey, [...selectedForGrant]);
-				});
+				}
+			});
 
-				$dropdowns.append($select);
-			}
-
+			renderSelected();
 			$container.append($grantSection);
 		});
 

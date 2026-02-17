@@ -851,6 +851,16 @@ class CharacterSheetPage {
 			$container.append($btn);
 		}
 
+		// Druid - Wild Companion (Fey familiar via Wild Shape use)
+		if (calculations.hasWildCompanion) {
+			const duration = calculations.wildCompanionDuration || "";
+			const $btn = $(`<button class="ve-btn ve-btn-info" style="white-space: nowrap;" title="Summon a Fey familiar for ${duration}">
+				<span class="glyphicon glyphicon-plus mr-1"></span>🧚 Wild Companion
+			</button>`);
+			$btn.on("click", () => this._onWildCompanion());
+			$container.append($btn);
+		}
+
 		// Find Steed / Find Greater Steed (Paladin)
 		const hasFindSteed = spells.some(s => s.name?.toLowerCase() === "find steed");
 		const hasFindGreaterSteed = spells.some(s => s.name?.toLowerCase() === "find greater steed");
@@ -1139,6 +1149,47 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Druid - Wild Companion (summon Fey familiar using Wild Shape)
+	 */
+	async _onWildCompanion () {
+		const calculations = this._state.getFeatureCalculations?.() || {};
+		const druidLevel = this._state.getClassLevel?.("druid") || 0;
+
+		// Dismiss existing familiars first
+		const existingFamiliars = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.FAMILIAR) || [];
+		for (const familiar of existingFamiliars) {
+			this._state.removeCompanion?.(familiar.id);
+		}
+
+		// Use the spells module's familiar picker, but mark the result as Fey
+		if (this._spells?._pShowFamiliarPicker) {
+			// Pass isFey flag to indicate this is a Wild Companion (Fey creature type)
+			await this._spells._pShowFamiliarPicker({isWildCompanion: true});
+
+			// After selection, update the familiar's creature type to Fey
+			const newFamiliars = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.FAMILIAR) || [];
+			for (const familiar of newFamiliars) {
+				if (familiar.creatureType === "beast") {
+					familiar.creatureType = "fey";
+					familiar.origin = "Wild Companion";
+				}
+			}
+
+			// Add duration note based on PHB vs XPHB rules
+			const duration = calculations.wildCompanionDuration || "";
+			JqueryUtil.doToast({
+				type: "success",
+				content: `Wild Companion summoned as a Fey! Duration: ${duration}`,
+			});
+		} else {
+			JqueryUtil.doToast({type: "warning", content: "Familiar picker not available."});
+		}
+
+		this._saveCurrentCharacter();
+		this._renderCompanions();
+	}
+
+	/**
 	 * Find Steed / Find Greater Steed
 	 */
 	async _onFindSteed (isGreater = false) {
@@ -1247,9 +1298,11 @@ class CharacterSheetPage {
 		const minSizeIdx = minSize ? sizeOrder.indexOf(minSize) : -1;
 
 		const validCreatures = allCreatures.filter(c => {
-			// Check type
-			const cType = typeof c.type === "string" ? c.type : c.type?.type;
-			if (!creatureTypes.includes(cType?.toLowerCase())) return false;
+			// Check type - handle both string and object formats
+			let cType = typeof c.type === "string" ? c.type : c.type?.type;
+			// Ensure cType is a string before calling toLowerCase
+			if (typeof cType !== "string") return false;
+			if (!creatureTypes.includes(cType.toLowerCase())) return false;
 
 			// Check CR
 			let cr = c.cr;
@@ -8383,6 +8436,179 @@ class CharacterSheetPage {
 			secret: sortLangs(secret),
 			homebrew: sortLangs(homebrew),
 		};
+	}
+
+	/**
+	 * Show a searchable language picker modal
+	 * @param {Object} opts - Options
+	 * @param {Array} opts.exclude - Languages to exclude (already known)
+	 * @param {string} opts.title - Modal title
+	 * @param {number} opts.count - Number of languages to select (default: 1)
+	 * @returns {Promise<Array|null>} Array of selected language names or null if cancelled
+	 */
+	async showLanguagePicker (opts = {}) {
+		const {exclude = [], title = "Choose a Language", count = 1} = opts;
+
+		// Get current languages to exclude
+		const currentLanguages = this._state.getLanguages() || [];
+		const excludeSet = new Set([...exclude, ...currentLanguages].map(l => l.toLowerCase()));
+
+		// Get grouped language options
+		const langOptions = this.getLanguageOptionsGrouped();
+
+		// Flatten all languages with their category
+		const allLanguages = [
+			...langOptions.standard.map(l => ({name: l, category: "Standard"})),
+			...langOptions.exotic.map(l => ({name: l, category: "Exotic"})),
+			...langOptions.secret.map(l => ({name: l, category: "Secret"})),
+			...langOptions.homebrew.map(l => ({name: l, category: "Homebrew"})),
+		].filter(l => !excludeSet.has(l.name.toLowerCase()));
+
+		const selectedLanguages = [];
+
+		return new Promise(async (resolve) => {
+			const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+				title: count > 1 ? `${title} (Choose ${count})` : title,
+				isMinHeight0: true,
+				isWidth100: true,
+				cbClose: () => resolve(selectedLanguages.length === count ? selectedLanguages : null),
+			});
+
+			$modalInner.append(`
+				<div class="charsheet__language-picker-header mb-3" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.1)); border-radius: 8px; padding: 12px;">
+					<div class="ve-flex ve-flex-v-center" style="gap: 10px;">
+						<span style="font-size: 2em;">🗣️</span>
+						<div>
+							<div class="bold" style="font-size: 1.1em;">${title}</div>
+							<div class="ve-muted ve-small">Select ${count === 1 ? "a language" : `${count} languages`} to learn. Search to filter.</div>
+						</div>
+					</div>
+				</div>
+			`);
+
+			// Search filter
+			const $searchContainer = $(`<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`).appendTo($modalInner);
+			$searchContainer.append(`<span style="font-size: 1.2em;">🔍</span>`);
+			const $search = $(`<input type="text" class="form-control" placeholder="Search languages..." style="flex: 1;">`).appendTo($searchContainer);
+
+			// Selection status
+			const $status = $(`<div class="ve-flex ve-flex-v-center mb-2" style="gap: 8px;">
+				<span class="ve-muted">Selected: </span>
+				<span class="badge" style="background: rgba(var(--rgb-link-rgb), 0.15); color: var(--rgb-link);">
+					<span class="lang-count">0</span>/${count}
+				</span>
+				<span class="selected-names ve-muted ve-small"></span>
+			</div>`).appendTo($modalInner);
+
+			// Languages grid
+			const $list = $(`<div class="charsheet__language-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto; padding: 4px;"></div>`).appendTo($modalInner);
+
+			// Category icons/colors
+			const categoryInfo = {
+				Standard: {emoji: "📜", color: "rgba(59, 130, 246, 0.1)"},
+				Exotic: {emoji: "✨", color: "rgba(139, 92, 246, 0.1)"},
+				Secret: {emoji: "🤫", color: "rgba(239, 68, 68, 0.1)"},
+				Homebrew: {emoji: "🍺", color: "rgba(245, 158, 11, 0.1)"},
+			};
+
+			const updateStatus = () => {
+				$status.find(".lang-count").text(selectedLanguages.length);
+				$status.find(".selected-names").text(selectedLanguages.length ? `(${selectedLanguages.join(", ")})` : "");
+			};
+
+			const renderList = (filter = "") => {
+				$list.empty();
+				const filtered = allLanguages.filter(l =>
+					l.name.toLowerCase().includes(filter.toLowerCase()) &&
+					!selectedLanguages.includes(l.name),
+				);
+
+				if (filtered.length === 0 && selectedLanguages.length === 0) {
+					$list.append(`<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No languages match your search</div>`);
+					return;
+				}
+
+				// Group by category
+				const byCategory = {};
+				filtered.forEach(l => {
+					if (!byCategory[l.category]) byCategory[l.category] = [];
+					byCategory[l.category].push(l);
+				});
+
+				// Render each category
+				for (const category of ["Standard", "Exotic", "Secret", "Homebrew"]) {
+					const langs = byCategory[category];
+					if (!langs?.length) continue;
+
+					const info = categoryInfo[category];
+
+					// Category header
+					$list.append(`<div style="grid-column: 1 / -1; margin-top: 8px; font-weight: bold; color: var(--rgb-link); display: flex; align-items: center; gap: 6px;">
+						<span>${info.emoji}</span> ${category} Languages
+					</div>`);
+
+					langs.forEach(lang => {
+						const $card = $(`
+							<div class="charsheet__language-card" style="
+								border: 2px solid var(--rgb-border-grey-muted);
+								border-radius: 8px;
+								padding: 10px;
+								cursor: pointer;
+								transition: all 0.2s ease;
+								background: ${info.color};
+								display: flex;
+								align-items: center;
+								gap: 8px;
+							">
+								<span style="font-size: 1.3em;">${info.emoji}</span>
+								<span class="bold">${lang.name}</span>
+							</div>
+						`);
+
+						$card.on("mouseenter", function () {
+							$(this).css({
+								"border-color": "var(--rgb-link)",
+								"transform": "translateY(-2px)",
+								"box-shadow": "0 4px 8px rgba(0, 0, 0, 0.1)",
+							});
+						}).on("mouseleave", function () {
+							$(this).css({
+								"border-color": "var(--rgb-border-grey-muted)",
+								"transform": "translateY(0)",
+								"box-shadow": "none",
+							});
+						}).on("click", function () {
+							if (selectedLanguages.length < count) {
+								selectedLanguages.push(lang.name);
+								updateStatus();
+								if (selectedLanguages.length === count) {
+									doClose();
+								} else {
+									renderList($search.val());
+								}
+							}
+						});
+
+						$list.append($card);
+					});
+				}
+			};
+
+			// Confirm button
+			const $footer = $(`<div class="ve-flex ve-flex-h-right mt-3"></div>`).appendTo($modalInner);
+			const $confirmBtn = $(`<button class="ve-btn ve-btn-primary" ${count > 1 ? 'disabled' : ''}>Confirm Selection</button>`).appendTo($footer);
+			$confirmBtn.on("click", () => {
+				if (selectedLanguages.length === count || count === 1) {
+					doClose();
+				}
+			});
+
+			$search.on("input", () => renderList($search.val()));
+			renderList();
+
+			// Auto-focus search
+			setTimeout(() => $search.focus(), 100);
+		});
 	}
 
 	async saveCharacter () {
