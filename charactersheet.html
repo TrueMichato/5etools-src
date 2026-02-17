@@ -192,6 +192,48 @@
 					</div>
 				</div>
 
+				<div class="charsheet__header-dice-controls">
+					<button class="charsheet__dice-toggle" id="charsheet-btn-dice" title="Dice animation settings">
+						<span class="charsheet__dice-toggle-icon">🎲</span>
+						<span class="charsheet__dice-toggle-text">Dice</span>
+					</button>
+					<div class="charsheet__dice-dropdown" id="charsheet-dice-dropdown">
+						<div class="charsheet__dice-dropdown-content">
+							<div class="charsheet__dice-header">Dice Settings</div>
+							<label class="charsheet__dice-toggle-option">
+								<input type="checkbox" id="charsheet-dice-animated">
+								<span>Animated Dice</span>
+							</label>
+							<div class="charsheet__dice-themes" id="charsheet-dice-themes">
+								<div class="charsheet__dice-theme-label">Theme</div>
+								<div class="charsheet__dice-theme-options">
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--standard" data-theme="standard" title="Classic Red"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--blue" data-theme="blue" title="Ice Blue"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--gold" data-theme="gold" title="Royal Gold"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--purple" data-theme="purple" title="Mystic Purple"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--green" data-theme="green" title="Emerald Green"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--dark" data-theme="dark" title="Shadow Dark"></button>
+								</div>
+								<div class="charsheet__dice-theme-label">Special Effects</div>
+								<div class="charsheet__dice-theme-options">
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--cosmic" data-theme="cosmic" title="Cosmic Nebula"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--inferno" data-theme="inferno" title="Inferno Flames"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--frost" data-theme="frost" title="Frost Crystal"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--nature" data-theme="nature" title="Nature Spirit"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--arcane" data-theme="arcane" title="Arcane Magic"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--blood" data-theme="blood" title="Blood Moon"></button>
+								</div>
+								<div class="charsheet__dice-theme-options">
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--ocean" data-theme="ocean" title="Ocean Depths"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--storm" data-theme="storm" title="Thunder Storm"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--void" data-theme="void" title="Void Walker"></button>
+									<button class="charsheet__dice-theme-btn charsheet__dice-theme-btn--radiant" data-theme="radiant" title="Radiant Holy"></button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
 				<button class="charsheet__help-toggle" id="charsheet-help-toggle" title="Toggle help tips">
 					<span class="charsheet__help-toggle-icon">❓</span>
 					<span class="charsheet__help-toggle-text">Tips</span>
@@ -222,8 +264,19 @@
 						<!-- Basic Info -->
 						<div class="charsheet__section charsheet__section--header charsheet__section--identity">
 							<div class="charsheet__identity-main">
+								<!-- Portrait -->
+								<div class="charsheet__portrait-container" id="charsheet-portrait-container" title="Click to change portrait">
+									<div class="charsheet__portrait-placeholder" id="charsheet-portrait-placeholder">
+										<span class="charsheet__portrait-icon">👤</span>
+										<span class="charsheet__portrait-hint">Add Portrait</span>
+									</div>
+									<img class="charsheet__portrait-image ve-hidden" id="charsheet-portrait-image" alt="Character Portrait">
+									<div class="charsheet__portrait-overlay">
+										<span class="glyphicon glyphicon-camera"></span>
+									</div>
+									<input type="file" id="charsheet-portrait-input" accept="image/*" class="ve-hidden">
+								</div>
 								<div class="charsheet__identity-name">
-									<span class="charsheet__identity-icon">👤</span>
 									<input type="text" class="form-control form-control--minimal charsheet__ipt-name" id="charsheet-ipt-name" placeholder="Character Name">
 								</div>
 								<div class="charsheet__identity-level" id="charsheet-level-badge" title="Character Level">
@@ -1168,6 +1221,22 @@
 					<div class="ve-flex-col charsheet__col-half">
 						<div class="charsheet__section">
 							<h4 class="charsheet__section-title">Appearance</h4>
+							<!-- Portrait in Notes tab -->
+							<div class="charsheet__notes-portrait-row mb-3">
+								<div class="charsheet__notes-portrait-container" id="charsheet-notes-portrait-container" title="Click to change portrait">
+									<div class="charsheet__portrait-placeholder" id="charsheet-notes-portrait-placeholder">
+										<span class="charsheet__portrait-icon">👤</span>
+										<span class="charsheet__portrait-hint">Add Portrait</span>
+									</div>
+									<img class="charsheet__portrait-image ve-hidden" id="charsheet-notes-portrait-image" alt="Character Portrait">
+									<div class="charsheet__portrait-overlay">
+										<span class="glyphicon glyphicon-camera"></span>
+									</div>
+								</div>
+								<button class="btn btn-xs btn-default charsheet__portrait-remove-btn ve-hidden" id="charsheet-portrait-remove-btn" title="Remove portrait">
+									<span class="glyphicon glyphicon-trash"></span> Remove
+								</button>
+							</div>
 							<div class="ve-flex mb-2">
 								<div class="ve-flex-col mr-2" style="flex: 1;">
 									<label class="ve-muted ve-small">Age</label>
