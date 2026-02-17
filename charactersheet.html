@@ -252,6 +252,7 @@
 			<li><a data-toggle="tab" href="#charsheet-tab-notes"><span class="charsheet__tab-icon">📝</span><span class="charsheet__tab-text">Notes</span></a></li>
 			<li><a data-toggle="tab" href="#charsheet-tab-companions"><span class="charsheet__tab-icon">🐾</span><span class="charsheet__tab-text">Companions</span></a></li>
 			<li><a data-toggle="tab" href="#charsheet-tab-builder"><span class="charsheet__tab-icon">🔧</span><span class="charsheet__tab-text">Builder</span></a></li>
+			<li><a data-toggle="tab" href="#charsheet-tab-respec"><span class="charsheet__tab-icon">🔄</span><span class="charsheet__tab-text">Respec</span></a></li>
 		</ul>
 
 		<!-- Tab Content -->
@@ -1354,6 +1355,24 @@
 					</div>
 				</div>
 			</div>
+
+			<!-- Respec Tab -->
+			<div id="charsheet-tab-respec" class="tab-pane fade">
+				<div class="charsheet__respec-container">
+					<!-- Level History Timeline -->
+					<div class="charsheet__level-history" id="charsheet-level-history">
+						<h4 class="charsheet__level-history-header">
+							<span class="charsheet__level-history-icon">📊</span>
+							<span class="charsheet__level-history-title">Level Progression</span>
+							<span class="charsheet__level-history-badge charsheet__level-history-badge--legacy ve-hidden" id="charsheet-legacy-badge" title="This character was created before level history tracking. New levels will be tracked.">Legacy</span>
+						</h4>
+						<p class="charsheet__respec-description">View your character's level history and edit past choices. Click the pencil icon on any level to modify your selections.</p>
+						<div class="charsheet__level-history-timeline" id="charsheet-level-timeline">
+							<!-- Populated by JS -->
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 	</div>
 </main>
@@ -1377,6 +1396,7 @@
 <script type="text/javascript" defer src="js/render-dice.js"></script>
 <script type="text/javascript" defer src="js/hist.js"></script>
 <script type="module" src="js/shim-esmodules.js"></script>
+<script type="text/javascript" defer src="js/charactersheet/charactersheet-respec.js"></script>
 <script type="module" src="js/charactersheet/charactersheet.js"></script>
 
 </body>

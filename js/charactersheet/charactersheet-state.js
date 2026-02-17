@@ -2966,6 +2966,24 @@ class CharacterSheetState {
 			classes: [], // [{name, source, level, subclass}]
 			background: null,
 
+			// Level-by-level history for tracking and editing choices
+			// Each entry: {
+			//   level: number,                    // Character level (1-20)
+			//   class: {name, source},            // Class taken at this level
+			//   choices: {
+			//     asi?: {str: 1, dex: 1, ...},    // ASI allocation (if ASI chosen)
+			//     feat?: {name, source},          // Feat taken (if feat chosen)
+			//     subclass?: {name, source},      // Subclass chosen (if at subclass level)
+			//     skills?: ["athletics", ...],    // Skills chosen (usually level 1 only)
+			//     optionalFeatures?: [{name, source, type}], // Eldritch Invocations, Metamagic, etc.
+			//     featureChoices?: [{featureName, choice}],  // Feature-specific choices (Fighting Style, etc.)
+			//     expertise?: ["stealth", ...],   // Expertise choices
+			//   },
+			//   complete: boolean,               // Whether all choices were recorded
+			//   timestamp: number,               // When this level was gained
+			// }
+			levelHistory: [],
+
 			// Ability scores (base values before racial bonuses)
 			abilities: {
 				str: 10,
@@ -3279,6 +3297,11 @@ class CharacterSheetState {
 		// Ensure activeStates array exists
 		if (!Array.isArray(this._data.activeStates)) {
 			this._data.activeStates = [];
+		}
+
+		// Ensure levelHistory array exists (characters without it are legacy)
+		if (!Array.isArray(this._data.levelHistory)) {
+			this._data.levelHistory = [];
 		}
 
 		// Migrate features: infer featureType for old saves that don't have it
@@ -3943,6 +3966,158 @@ class CharacterSheetState {
 	applyASI (ability, amount = 1, maxScore = 20) {
 		const currentBase = this._data.abilities[ability] || 10;
 		this._data.abilities[ability] = Math.min(maxScore, currentBase + amount);
+	}
+	// #endregion
+
+	// #region Level History
+	/**
+	 * Check if this character has complete level history (non-legacy)
+	 * Legacy characters are those created before history tracking was added
+	 * @returns {boolean} True if history is complete for all levels
+	 */
+	hasCompleteLevelHistory () {
+		const totalLevel = this.getTotalLevel();
+		if (totalLevel === 0) return true; // No levels = nothing to track
+		
+		// Check if we have history entries for all levels
+		const historyLevels = new Set(this._data.levelHistory.map(h => h.level));
+		for (let i = 1; i <= totalLevel; i++) {
+			if (!historyLevels.has(i)) return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Check if this is a legacy character (no or incomplete level history)
+	 * @returns {boolean} True if legacy character
+	 */
+	isLegacyCharacter () {
+		return this.getTotalLevel() > 0 && !this.hasCompleteLevelHistory();
+	}
+
+	/**
+	 * Get the level history array
+	 * @returns {Array} Array of level history entries
+	 */
+	getLevelHistory () {
+		return this._data.levelHistory || [];
+	}
+
+	/**
+	 * Get history entry for a specific level
+	 * @param {number} level - The character level
+	 * @returns {object|null} The history entry or null
+	 */
+	getLevelHistoryEntry (level) {
+		return this._data.levelHistory.find(h => h.level === level) || null;
+	}
+
+	/**
+	 * Record a level-up choice in history
+	 * @param {object} entry - The history entry
+	 * @param {number} entry.level - Character level (1-20)
+	 * @param {object} entry.class - {name, source} of class taken
+	 * @param {object} [entry.choices] - Choices made at this level
+	 * @param {object} [entry.choices.asi] - ASI allocation {str: 1, dex: 1, ...}
+	 * @param {object} [entry.choices.feat] - Feat taken {name, source}
+	 * @param {object} [entry.choices.subclass] - Subclass chosen {name, source}
+	 * @param {Array} [entry.choices.skills] - Skills chosen
+	 * @param {Array} [entry.choices.optionalFeatures] - Optional features like invocations
+	 * @param {Array} [entry.choices.featureChoices] - Feature-specific choices
+	 * @param {Array} [entry.choices.expertise] - Expertise choices
+	 */
+	recordLevelChoice (entry) {
+		if (!entry.level || !entry.class) {
+			console.warn("[CharSheet State] recordLevelChoice: Missing required fields");
+			return;
+		}
+
+		// Remove existing entry for this level if present
+		this._data.levelHistory = this._data.levelHistory.filter(h => h.level !== entry.level);
+
+		// Add new entry
+		this._data.levelHistory.push({
+			level: entry.level,
+			class: entry.class,
+			choices: entry.choices || {},
+			complete: entry.complete !== false,
+			timestamp: entry.timestamp || Date.now(),
+		});
+
+		// Sort by level
+		this._data.levelHistory.sort((a, b) => a.level - b.level);
+	}
+
+	/**
+	 * Update choices for an existing level history entry
+	 * @param {number} level - The level to update
+	 * @param {object} updates - Updates to apply to choices
+	 * @returns {boolean} True if updated, false if level not found
+	 */
+	updateLevelChoice (level, updates) {
+		const entry = this._data.levelHistory.find(h => h.level === level);
+		if (!entry) return false;
+
+		entry.choices = {...entry.choices, ...updates};
+		entry.timestamp = Date.now();
+		return true;
+	}
+
+	/**
+	 * Clear all level history (for character reset)
+	 */
+	clearLevelHistory () {
+		this._data.levelHistory = [];
+	}
+
+	/**
+	 * Get summary of what was gained at a specific level
+	 * @param {number} level - The character level
+	 * @returns {object|null} Summary with class, choices, and features
+	 */
+	getLevelSummary (level) {
+		const history = this.getLevelHistoryEntry(level);
+		if (!history) return null;
+
+		// Get features gained at this level
+		const featuresAtLevel = this._data.features.filter(f => f.level === level);
+
+		return {
+			level,
+			class: history.class,
+			choices: history.choices,
+			features: featuresAtLevel,
+			complete: history.complete,
+		};
+	}
+
+	/**
+	 * Get all ASI/feat choices from history
+	 * @returns {Array} Array of {level, type: 'asi'|'feat', data}
+	 */
+	getAsiAndFeatChoices () {
+		return this._data.levelHistory
+			.filter(h => h.choices?.asi || h.choices?.feat)
+			.map(h => ({
+				level: h.level,
+				class: h.class,
+				type: h.choices.feat ? "feat" : "asi",
+				data: h.choices.feat || h.choices.asi,
+			}));
+	}
+
+	/**
+	 * Get all subclass choices from history
+	 * @returns {Array} Array of {level, class, subclass}
+	 */
+	getSubclassChoices () {
+		return this._data.levelHistory
+			.filter(h => h.choices?.subclass)
+			.map(h => ({
+				level: h.level,
+				class: h.class,
+				subclass: h.choices.subclass,
+			}));
 	}
 	// #endregion
 

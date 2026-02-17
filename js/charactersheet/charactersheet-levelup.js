@@ -3954,6 +3954,127 @@ class CharacterSheetLevelUp {
 		// Check for racial spells at the new character level
 		this._updateRacialSpells();
 
+		// Record level-up choices in history
+		const totalLevel = this._state.getTotalLevel();
+		const historyEntry = {
+			level: totalLevel,
+			class: {
+				name: classEntry.name,
+				source: classEntry.source,
+			},
+			choices: {},
+			complete: true,
+			timestamp: Date.now(),
+		};
+
+		// Record feat choice (if any)
+		if (selectedFeat) {
+			historyEntry.choices.feat = {
+				name: selectedFeat.name,
+				source: selectedFeat.source,
+			};
+		}
+
+		// Record ASI choice (if any) - separate from feat for Thelemar rule support
+		if (asiChoices) {
+			const asiData = {};
+			Parser.ABIL_ABVS.forEach(abl => {
+				if (asiChoices[abl]) {
+					asiData[abl] = asiChoices[abl];
+				}
+			});
+			if (Object.keys(asiData).length > 0) {
+				historyEntry.choices.asi = asiData;
+			}
+		}
+
+		// Record subclass selection
+		if (selectedSubclass) {
+			historyEntry.choices.subclass = {
+				name: selectedSubclass.name,
+				shortName: selectedSubclass.shortName,
+				source: selectedSubclass.source,
+			};
+		}
+
+		// Record optional features (invocations, metamagic, etc.)
+		if (selectedOptionalFeatures && Object.keys(selectedOptionalFeatures).length > 0) {
+			const optFeatures = [];
+			Object.entries(selectedOptionalFeatures).forEach(([key, opts]) => {
+				opts.forEach(opt => {
+					optFeatures.push({
+						name: opt.name,
+						source: opt.source,
+						type: key, // e.g., "EI", "MM"
+					});
+				});
+			});
+			if (optFeatures.length > 0) {
+				historyEntry.choices.optionalFeatures = optFeatures;
+			}
+		}
+
+		// Record feature options (fighting styles, specialties, etc.)
+		if (selectedFeatureOptions && Object.keys(selectedFeatureOptions).length > 0) {
+			const featureChoices = [];
+			Object.entries(selectedFeatureOptions).forEach(([featureName, options]) => {
+				options.forEach(opt => {
+					featureChoices.push({
+						featureName: featureName.split("_")[0],
+						choice: opt.name,
+						source: opt.source,
+					});
+				});
+			});
+			if (featureChoices.length > 0) {
+				historyEntry.choices.featureChoices = featureChoices;
+			}
+		}
+
+		// Record expertise choices
+		if (selectedExpertise && Object.keys(selectedExpertise).length > 0) {
+			const expertiseList = [];
+			Object.values(selectedExpertise).forEach(skills => {
+				skills.forEach(skill => expertiseList.push(skill.toLowerCase()));
+			});
+			if (expertiseList.length > 0) {
+				historyEntry.choices.expertise = expertiseList;
+			}
+		}
+
+		// Record language choices
+		if (selectedLanguages && Object.keys(selectedLanguages).length > 0) {
+			const languagesList = [];
+			Object.entries(selectedLanguages).forEach(([featureName, langs]) => {
+				langs.forEach(lang => {
+					languagesList.push({
+						featureName,
+						language: lang,
+					});
+				});
+			});
+			if (languagesList.length > 0) {
+				historyEntry.choices.languages = languagesList;
+			}
+		}
+
+		// Record scholar skill choice (Sage/Knowledge domain expertise)
+		if (selectedScholarSkill) {
+			historyEntry.choices.scholarSkill = selectedScholarSkill;
+		}
+
+		// Record spellbook spell choices (Wizard)
+		if (selectedSpellbookSpells && selectedSpellbookSpells.length > 0) {
+			historyEntry.choices.spellbookSpells = selectedSpellbookSpells.map(spell => ({
+				name: spell.name,
+				source: spell.source,
+				level: spell.level,
+			}));
+		}
+
+		// Record the history entry
+		this._state.recordLevelChoice(historyEntry);
+
 		// Save and re-render
 		await this._page.saveCharacter();
 		this._page.renderCharacter();
