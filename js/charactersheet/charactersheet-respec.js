@@ -601,11 +601,180 @@ class CharacterSheetRespec {
 	 * Edit feature choice (fighting style, specialty, warden, etc.)
 	 * @param {number} level - The level
 	 * @param {object} history - The history entry
-	 * @param {object} choice - The choice info
+	 * @param {object} choice - The choice info (includes label, current, index)
 	 * @param {Function} closeParentModal - Function to close parent modal
 	 */
 	async _editFeatureChoice (level, history, choice, closeParentModal) {
-		JqueryUtil.doToast({type: "info", content: `Editing ${choice.label} choices will be available in a future update.`});
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `Change ${choice.label}`,
+			isMinHeight0: true,
+			isWidth100: true,
+			isUncappedWidth: true,
+			cbClose: () => {},
+		});
+
+		const currentChoice = history.choices.featureChoices[choice.index];
+		const $content = $(`<div class="charsheet__respec-feature-modal"></div>`);
+
+		$content.append(`<p class="text-muted mb-2">Current: <strong>${currentChoice.choice}</strong></p>`);
+
+		// Get available options for this feature
+		const parentFeatureName = currentChoice.featureName;
+		const classFeatures = this._page.getClassFeatures();
+
+		// Find the parent feature that defines the options
+		const parentFeature = classFeatures.find(f =>
+			f.name === parentFeatureName
+			&& f.className === history.class.name,
+		);
+
+		if (!parentFeature) {
+			$content.append(`<p class="text-danger">Could not find parent feature "${parentFeatureName}" to load options.</p>`);
+			const $closeBtn = $(`<button class="ve-btn ve-btn-default mt-3">Close</button>`);
+			$closeBtn.on("click", () => doClose());
+			$content.append($closeBtn);
+			$modalInner.append($content);
+			return;
+		}
+
+		// Get options from the parent feature
+		const levelUp = this._page._levelUp;
+		const optionGroups = levelUp._findFeatureOptions(parentFeature, level);
+
+		if (!optionGroups.length || !optionGroups[0].options?.length) {
+			$content.append(`<p class="text-danger">No alternative options found for this feature.</p>`);
+			const $closeBtn = $(`<button class="ve-btn ve-btn-default mt-3">Close</button>`);
+			$closeBtn.on("click", () => doClose());
+			$content.append($closeBtn);
+			$modalInner.append($content);
+			return;
+		}
+
+		// Get existing features to filter already-chosen options
+		const existingFeatures = this._state.getFeatures();
+		const existingFeatureNames = new Set(existingFeatures.map(f => f.name));
+
+		// Filter to options not already chosen (except current)
+		const availableOptions = optionGroups[0].options.filter(opt => {
+			if (opt.name === currentChoice.choice) return true; // Always show current
+			return !existingFeatureNames.has(opt.name);
+		});
+
+		$content.append(`<h5>Select New ${choice.label}</h5>`);
+
+		// Option list
+		const $optionList = $(`<div class="charsheet__respec-feat-list"></div>`);
+		let selectedOption = null;
+
+		availableOptions.forEach(opt => {
+			const isCurrent = opt.name === currentChoice.choice;
+			const $item = $(`
+				<div class="charsheet__respec-feat-item ${isCurrent ? "charsheet__respec-feat-current" : ""}">
+					<strong>${opt.name}</strong>
+					${opt.source ? `<span class="text-muted">${Parser.sourceJsonToAbv(opt.source)}</span>` : ""}
+				</div>
+			`);
+
+			$item.on("click", () => {
+				selectedOption = opt;
+				$optionList.find(".charsheet__respec-feat-selected").removeClass("charsheet__respec-feat-selected");
+				$item.addClass("charsheet__respec-feat-selected");
+			});
+
+			$optionList.append($item);
+		});
+
+		$content.append($optionList);
+
+		// Buttons
+		const $btnRow = $(`<div class="charsheet__respec-btn-row mt-3"></div>`);
+		const $cancelBtn = $(`<button class="ve-btn ve-btn-default">Cancel</button>`);
+		$cancelBtn.on("click", () => doClose());
+
+		const $applyBtn = $(`<button class="ve-btn ve-btn-primary">Apply Changes</button>`);
+		$applyBtn.on("click", async () => {
+			if (!selectedOption) {
+				JqueryUtil.doToast({type: "warning", content: "Please select an option."});
+				return;
+			}
+
+			if (selectedOption.name === currentChoice.choice) {
+				JqueryUtil.doToast({type: "info", content: "No changes made."});
+				doClose();
+				return;
+			}
+
+			await this._applyFeatureChoiceChange(level, history, choice.index, currentChoice, selectedOption);
+
+			doClose();
+			closeParentModal();
+			this.render();
+			this._page.renderCharacter();
+			await this._page.saveCharacter();
+			JqueryUtil.doToast({type: "success", content: `Changed ${choice.label} to ${selectedOption.name}.`});
+		});
+
+		$btnRow.append($cancelBtn).append($applyBtn);
+		$content.append($btnRow);
+
+		$modalInner.append($content);
+	}
+
+	/**
+	 * Apply feature choice change
+	 * @param {number} level - The level
+	 * @param {object} history - The history entry
+	 * @param {number} choiceIndex - Index in featureChoices array
+	 * @param {object} oldChoice - The old choice {featureName, choice, source}
+	 * @param {object} newOption - The new option to apply
+	 */
+	async _applyFeatureChoiceChange (level, history, choiceIndex, oldChoice, newOption) {
+		// Remove old feature using proper API
+		const features = this._state.getFeatures();
+		const oldFeature = features.find(f =>
+			f.name === oldChoice.choice && f.parentFeature === oldChoice.featureName,
+		);
+		if (oldFeature) {
+			this._state.removeFeature(oldFeature.id);
+		}
+
+		// Add new feature
+		const classFeatures = this._page.getClassFeatures();
+		let fullFeature = null;
+
+		if (newOption.type === "classFeature" && newOption.ref) {
+			const parts = newOption.ref.split("|");
+			fullFeature = classFeatures.find(f =>
+				f.name === parts[0]
+				&& f.className === parts[1]
+				&& f.source === parts[2],
+			);
+		}
+
+		this._state.addFeature({
+			name: newOption.name,
+			source: newOption.source || fullFeature?.source || history.class.source,
+			level: newOption.level || level,
+			className: newOption.className || history.class.name,
+			classSource: history.class.source,
+			featureType: "Class",
+			entries: fullFeature?.entries,
+			description: fullFeature?.entries ? Renderer.get().render({entries: fullFeature.entries}) : "",
+			isFeatureOption: true,
+			parentFeature: oldChoice.featureName,
+		});
+
+		// Update history
+		const updatedFeatureChoices = [...history.choices.featureChoices];
+		updatedFeatureChoices[choiceIndex] = {
+			featureName: oldChoice.featureName,
+			choice: newOption.name,
+			source: newOption.source,
+		};
+
+		this._state.updateLevelChoice(level, {
+			featureChoices: updatedFeatureChoices,
+		});
 	}
 
 	/**
@@ -717,12 +886,261 @@ class CharacterSheetRespec {
 				source: newFeat.source,
 			},
 		});
+	}
 
 	/**
-	 * Edit subclass choice (placeholder for future implementation)
+	 * Edit subclass choice - shows cascade warning and handles feature removal
+	 * @param {number} level - The level where subclass was chosen
+	 * @param {object} history - The history entry
+	 * @param {Function} closeParentModal - Function to close parent modal
 	 */
 	async _editSubclass (level, history, closeParentModal) {
-		JqueryUtil.doToast({type: "info", content: "Subclass editing will be available in a future update. This requires careful handling of dependent features."});
+		const currentSubclass = history.choices?.subclass;
+		if (!currentSubclass) {
+			JqueryUtil.doToast({type: "warning", content: "No subclass found at this level."});
+			return;
+		}
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `Change ${history.class.name} Subclass`,
+			isMinHeight0: true,
+			isWidth100: true,
+			isUncappedWidth: true,
+			cbClose: () => {},
+		});
+
+		const $content = $(`<div class="charsheet__respec-subclass-modal"></div>`);
+
+		// Show current subclass
+		$content.append(`<p class="text-muted mb-2">Current Subclass: <strong>${currentSubclass.name}</strong></p>`);
+
+		// Get available subclasses for this class
+		const classes = this._page.getClasses();
+		const classData = classes.find(c => c.name === history.class.name && c.source === history.class.source);
+
+		if (!classData?.subclasses?.length) {
+			$content.append(`<p class="text-danger">Could not find subclass options for ${history.class.name}.</p>`);
+			const $closeBtn = $(`<button class="ve-btn ve-btn-default mt-3">Close</button>`);
+			$closeBtn.on("click", () => doClose());
+			$content.append($closeBtn);
+			$modalInner.append($content);
+			return;
+		}
+
+		// Filter subclasses by allowed sources
+		let availableSubclasses = classData.subclasses;
+		if (this._page.filterByAllowedSources) {
+			availableSubclasses = this._page.filterByAllowedSources(availableSubclasses);
+		}
+
+		// Calculate what will be removed
+		const featuresToRemove = this._getSubclassFeatures(currentSubclass);
+		const willRemoveCount = featuresToRemove.length;
+
+		// Show cascade warning
+		if (willRemoveCount > 0) {
+			const $warning = $(`
+				<div class="charsheet__respec-cascade-warning">
+					<h5><span class="text-warning">⚠️</span> Features to be removed (${willRemoveCount}):</h5>
+					<ul class="charsheet__respec-cascade-list"></ul>
+				</div>
+			`);
+			const $list = $warning.find(".charsheet__respec-cascade-list");
+			featuresToRemove.slice(0, 10).forEach(f => {
+				$list.append(`<li>${f.name} <span class="text-muted">(Level ${f.level})</span></li>`);
+			});
+			if (willRemoveCount > 10) {
+				$list.append(`<li class="text-muted">...and ${willRemoveCount - 10} more</li>`);
+			}
+			$content.append($warning);
+		}
+
+		// Subclass selection
+		$content.append(`<h5>Select New Subclass</h5>`);
+
+		const $searchRow = $(`<div class="charsheet__respec-search-row mb-2"></div>`);
+		const $searchInput = $(`<input type="text" class="form-control" placeholder="Search subclasses...">`);
+		$searchRow.append($searchInput);
+		$content.append($searchRow);
+
+		const $subclassList = $(`<div class="charsheet__respec-feat-list"></div>`);
+		let selectedSubclass = null;
+
+		const renderSubclasses = (filter = "") => {
+			$subclassList.empty();
+			const filterLower = filter.toLowerCase();
+			const filtered = availableSubclasses.filter(sc => {
+				if (!sc.name.toLowerCase().includes(filterLower)) return false;
+				return true;
+			}).slice(0, 30);
+
+			if (filtered.length === 0) {
+				$subclassList.append(`<p class="text-muted">No subclasses found.</p>`);
+				return;
+			}
+
+			filtered.forEach(subclass => {
+				const isCurrent = subclass.name === currentSubclass.name && subclass.source === currentSubclass.source;
+				const isSelected = selectedSubclass && subclass.name === selectedSubclass.name && subclass.source === selectedSubclass.source;
+				const $item = $(`
+					<div class="charsheet__respec-feat-item ${isCurrent ? "charsheet__respec-feat-current" : ""} ${isSelected ? "charsheet__respec-feat-selected" : ""}">
+						<strong>${subclass.name}</strong>
+						<span class="text-muted">${Parser.sourceJsonToAbv(subclass.source)}</span>
+					</div>
+				`);
+				$item.on("click", () => {
+					selectedSubclass = subclass;
+					$subclassList.find(".charsheet__respec-feat-selected").removeClass("charsheet__respec-feat-selected");
+					$item.addClass("charsheet__respec-feat-selected");
+				});
+				$subclassList.append($item);
+			});
+		};
+
+		renderSubclasses();
+
+		$searchInput.on("input", () => {
+			renderSubclasses($searchInput.val());
+		});
+
+		$content.append($subclassList);
+
+		// Buttons
+		const $btnRow = $(`<div class="charsheet__respec-btn-row mt-3"></div>`);
+		const $cancelBtn = $(`<button class="ve-btn ve-btn-default">Cancel</button>`);
+		$cancelBtn.on("click", () => doClose());
+
+		const $applyBtn = $(`<button class="ve-btn ve-btn-danger">Change Subclass</button>`);
+		$applyBtn.on("click", async () => {
+			if (!selectedSubclass) {
+				JqueryUtil.doToast({type: "warning", content: "Please select a subclass."});
+				return;
+			}
+
+			if (selectedSubclass.name === currentSubclass.name && selectedSubclass.source === currentSubclass.source) {
+				JqueryUtil.doToast({type: "info", content: "No changes made."});
+				doClose();
+				return;
+			}
+
+			// Confirm cascade removal
+			const confirmed = await InputUiUtil.pGetUserBoolean({
+				title: "Confirm Subclass Change",
+				htmlDescription: `<p>This will remove <strong>${willRemoveCount}</strong> features from your character and add all features from <strong>${selectedSubclass.name}</strong> up to your current level.</p><p>Are you sure?</p>`,
+				textYes: "Change Subclass",
+				textNo: "Cancel",
+			});
+
+			if (!confirmed) return;
+
+			await this._applySubclassChange(level, history, currentSubclass, selectedSubclass);
+
+			doClose();
+			closeParentModal();
+			this.render();
+			this._page.renderCharacter();
+			await this._page.saveCharacter();
+			JqueryUtil.doToast({type: "success", content: `Changed subclass to ${selectedSubclass.name}.`});
+		});
+
+		$btnRow.append($cancelBtn).append($applyBtn);
+		$content.append($btnRow);
+
+		$modalInner.append($content);
+	}
+
+	/**
+	 * Get all features that belong to a specific subclass
+	 * @param {object} subclass - The subclass {name, shortName, source}
+	 * @returns {Array} Array of features to remove
+	 */
+	_getSubclassFeatures (subclass) {
+		const features = this._state.getFeatures();
+		return features.filter(f => {
+			// Check if feature is explicitly a subclass feature
+			if (f.isSubclassFeature) {
+				// Match by subclass name or short name
+				if (f.subclassName === subclass.name || f.subclassShortName === subclass.shortName) {
+					return true;
+				}
+			}
+			// Check if feature has subclass source matching
+			if (f.subclassSource === subclass.source && f.subclassShortName === subclass.shortName) {
+				return true;
+			}
+			return false;
+		});
+	}
+
+	/**
+	 * Apply subclass change - removes old features and adds new ones
+	 * @param {number} level - The level where subclass was chosen
+	 * @param {object} history - The history entry
+	 * @param {object} oldSubclass - The old subclass
+	 * @param {object} newSubclass - The new subclass
+	 */
+	async _applySubclassChange (level, history, oldSubclass, newSubclass) {
+		// Get current total level for this class
+		const classes = this._state.getClasses();
+		const classEntry = classes.find(c => c.name === history.class.name);
+		const classLevel = classEntry?.level || 1;
+
+		// Remove old subclass features using proper API
+		const featuresToRemove = this._getSubclassFeatures(oldSubclass);
+		featuresToRemove.forEach(f => {
+			this._state.removeFeature(f.id);
+		});
+
+		// Update class entry with new subclass
+		if (classEntry) {
+			classEntry.subclass = {
+				name: newSubclass.name,
+				shortName: newSubclass.shortName,
+				source: newSubclass.source,
+			};
+		}
+
+		// Get new subclass features up to current level
+		const subclassFeatures = this._page.getSubclassFeatures?.() || [];
+		const newFeatures = subclassFeatures.filter(f => {
+			if (f.subclassShortName !== newSubclass.shortName) return false;
+			if (f.subclassSource !== newSubclass.source) return false;
+			if (f.className !== history.class.name) return false;
+			if (f.level > classLevel) return false;
+			return true;
+		});
+
+		// Add new subclass features
+		newFeatures.forEach(f => {
+			this._state.addFeature({
+				name: f.name,
+				source: f.source,
+				level: f.level,
+				className: f.className,
+				classSource: f.classSource,
+				subclassName: newSubclass.name,
+				subclassShortName: newSubclass.shortName,
+				subclassSource: newSubclass.source,
+				featureType: "Subclass",
+				entries: f.entries,
+				description: f.entries ? Renderer.get().render({entries: f.entries}) : "",
+				isSubclassFeature: true,
+			});
+		});
+
+		// Update all level history entries that had the old subclass
+		const levelHistory = this._state.getLevelHistory();
+		levelHistory.forEach(entry => {
+			if (entry.choices?.subclass?.name === oldSubclass.name) {
+				this._state.updateLevelChoice(entry.level, {
+					subclass: {
+						name: newSubclass.name,
+						shortName: newSubclass.shortName,
+						source: newSubclass.source,
+					},
+				});
+			}
+		});
 	}
 }
 
