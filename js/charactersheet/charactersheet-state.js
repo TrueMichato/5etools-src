@@ -3131,6 +3131,7 @@ class CharacterSheetState {
 				eyes: "",
 				skin: "",
 				hair: "",
+				portraitUrl: "", // Base64 data URL or external URL for character portrait
 			},
 
 			// Defenses

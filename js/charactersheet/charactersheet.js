@@ -522,6 +522,9 @@ class CharacterSheetPage {
 		// Font picker
 		this._initFontPicker();
 
+		// Dice settings picker
+		this._initDicePicker();
+
 		// Conditions
 		$("#charsheet-btn-add-condition").on("click", () => this._onAddCondition());
 
@@ -560,6 +563,9 @@ class CharacterSheetPage {
 				this._saveCurrentCharacter();
 			});
 		});
+
+		// Portrait handlers
+		this._initPortraitHandlers();
 
 		// Death saves
 		$("#charsheet-deathsaves-success, #charsheet-deathsaves-failure").on("change", "input", () => {
@@ -1448,6 +1454,7 @@ class CharacterSheetPage {
 		this._renderCurrency();
 		this._renderNotes();
 		this._renderAppearance();
+		this._renderPortrait();
 		this._renderConditions();
 		this._renderExhaustion();
 		this._renderResources();
@@ -2144,6 +2151,108 @@ class CharacterSheetPage {
 		["age", "height", "weight", "eyes", "skin", "hair"].forEach(field => {
 			$(`#charsheet-ipt-${field}`).val(this._state.getAppearance(field));
 		});
+	}
+
+	/**
+	 * Initialize portrait upload handlers for both overview and notes tabs
+	 */
+	_initPortraitHandlers () {
+		// Overview tab portrait - clicking container triggers file input
+		$("#charsheet-portrait-container").on("click", () => {
+			$("#charsheet-portrait-input").trigger("click");
+		});
+
+		// File input change handler (overview tab)
+		$("#charsheet-portrait-input").on("change", (e) => {
+			const file = e.target.files?.[0];
+			if (file) this._handlePortraitFile(file);
+		});
+
+		// Notes tab portrait - clicking triggers same file input
+		$("#charsheet-notes-portrait-container").on("click", () => {
+			$("#charsheet-portrait-input").trigger("click");
+		});
+
+		// Remove portrait button
+		$("#charsheet-portrait-remove-btn").on("click", (e) => {
+			e.stopPropagation();
+			this._removePortrait();
+		});
+	}
+
+	/**
+	 * Handle an uploaded portrait file
+	 * @param {File} file - The image file to use as portrait
+	 */
+	_handlePortraitFile (file) {
+		if (!file.type.startsWith("image/")) {
+			JqueryUtil.doToast({type: "warning", content: "Please select an image file"});
+			return;
+		}
+
+		// Limit file size to 2MB to avoid localStorage issues
+		if (file.size > 2 * 1024 * 1024) {
+			JqueryUtil.doToast({type: "warning", content: "Image is too large (max 2MB)"});
+			return;
+		}
+
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			const dataUrl = e.target.result;
+			this._state.setAppearance("portraitUrl", dataUrl);
+			this._saveCurrentCharacter();
+			this._renderPortrait();
+			JqueryUtil.doToast({type: "success", content: "Portrait updated!"});
+		};
+		reader.onerror = () => {
+			JqueryUtil.doToast({type: "danger", content: "Failed to read image file"});
+		};
+		reader.readAsDataURL(file);
+	}
+
+	/**
+	 * Remove the current portrait
+	 */
+	_removePortrait () {
+		this._state.setAppearance("portraitUrl", "");
+		this._saveCurrentCharacter();
+		this._renderPortrait();
+		JqueryUtil.doToast({type: "info", content: "Portrait removed"});
+	}
+
+	/**
+	 * Render the character portrait in both overview and notes tabs
+	 */
+	_renderPortrait () {
+		const portraitUrl = this._state.getAppearance("portraitUrl");
+		const hasPortrait = !!portraitUrl;
+
+		// Overview tab portrait
+		const $overviewPlaceholder = $("#charsheet-portrait-placeholder");
+		const $overviewImage = $("#charsheet-portrait-image");
+
+		if (hasPortrait) {
+			$overviewPlaceholder.addClass("ve-hidden");
+			$overviewImage.attr("src", portraitUrl).removeClass("ve-hidden");
+		} else {
+			$overviewPlaceholder.removeClass("ve-hidden");
+			$overviewImage.addClass("ve-hidden").attr("src", "");
+		}
+
+		// Notes tab portrait
+		const $notesPlaceholder = $("#charsheet-notes-portrait-placeholder");
+		const $notesImage = $("#charsheet-notes-portrait-image");
+
+		if (hasPortrait) {
+			$notesPlaceholder.addClass("ve-hidden");
+			$notesImage.attr("src", portraitUrl).removeClass("ve-hidden");
+		} else {
+			$notesPlaceholder.removeClass("ve-hidden");
+			$notesImage.addClass("ve-hidden").attr("src", "");
+		}
+
+		// Remove button visibility
+		$("#charsheet-portrait-remove-btn").toggleClass("ve-hidden", !hasPortrait);
 	}
 
 	/**
@@ -4794,6 +4903,7 @@ class CharacterSheetPage {
 		this._state.setCurrentHp(newHp);
 		this._saveCurrentCharacter();
 		this._renderHp();
+		this._renderConditions(); // Update bloodied condition display
 
 		this._showDiceResult("Healing", amount, `Healed ${amount} HP`);
 	}
@@ -4827,8 +4937,159 @@ class CharacterSheetPage {
 
 		this._saveCurrentCharacter();
 		this._renderHp();
+		this._renderConditions(); // Update bloodied condition display
 
 		this._showDiceResult("Damage", amount, `Took ${amount} damage`);
+
+		// Prompt for concentration check if concentrating
+		if (this._state.isConcentrating?.()) {
+			await this._promptConcentrationCheck(amount);
+		}
+	}
+
+	/**
+	 * Prompt the user to make a concentration check after taking damage.
+	 * Shows DC calculation, allows rolling, skipping, or voluntarily breaking.
+	 * @param {number} damageTaken - The amount of damage taken
+	 */
+	async _promptConcentrationCheck (damageTaken) {
+		const concentration = this._state.getConcentration?.();
+		if (!concentration) return;
+
+		const spellName = concentration.spellName || "Unknown Spell";
+		const checkInfo = this._state.makeConcentrationCheck(damageTaken);
+		let {dc, bonus, advantage, sources, rollNeeded} = checkInfo;
+
+		const dcExplanation = `DC = max(10, damage ÷ 2) = max(10, ${damageTaken} ÷ 2) = ${dc}`;
+		const bonusBreakdown = [];
+		bonusBreakdown.push(`CON save modifier`);
+		if (sources.length) bonusBreakdown.push(...sources);
+
+		return new Promise(resolve => {
+			const {$modalInner, doClose} = UiUtil.getShowModal({
+				title: "Concentration Check",
+				isMinHeight0: true,
+				cbClose: () => resolve(),
+			});
+
+			const $rollResult = $(`<div class="charsheet__concentration-result ve-hidden"></div>`);
+			
+			// Editable DC input
+			const $dcInput = $(`<input type="number" class="form-control form-control--minimal input-xs" style="width: 50px; text-align: center;" value="${dc}" min="1">`);
+			const $rollNeededDisplay = $(`<span>${rollNeeded}</span>`);
+			
+			// Update roll needed when DC changes
+			$dcInput.on("change input", () => {
+				dc = parseInt($dcInput.val()) || 10;
+				const newRollNeeded = Math.max(1, Math.min(20, dc - bonus));
+				$rollNeededDisplay.text(newRollNeeded);
+			});
+
+			$modalInner.append(`
+				<div class="ve-flex-col w-100">
+					<div class="mb-2">
+						You are concentrating on <strong>${spellName.escapeQuotes()}</strong> and took <strong>${damageTaken}</strong> damage.
+					</div>
+				</div>
+			`);
+			
+			// DC row with editable input
+			const $dcRow = $$`<div class="ve-flex ve-flex-v-center mb-2">
+				<span class="mr-2"><strong>DC:</strong></span>
+				${$dcInput}
+				<span class="glyphicon glyphicon-info-sign help ml-2" title="${dcExplanation.escapeQuotes()}"></span>
+				<span class="ve-muted ml-2 ve-small">(click to edit)</span>
+			</div>`;
+			$modalInner.append($dcRow);
+			
+			$modalInner.append(`
+				<div class="ve-flex-col w-100">
+					<div class="mb-2">
+						<strong>Your bonus:</strong> ${bonus >= 0 ? "+" : ""}${bonus}
+						${sources.length ? `<span class="ve-muted">(${sources.join(", ")})</span>` : ""}
+					</div>
+					${advantage ? `<div class="mb-2 ve-small ve-muted">You have <strong>advantage</strong> on this check</div>` : ""}
+				</div>
+			`);
+			
+			// Roll needed display (updates dynamically)
+			const $rollNeededRow = $$`<div class="mb-3">
+				<span class="ve-muted">You need to roll a </span>${$rollNeededDisplay}<span class="ve-muted"> or higher on the die${advantage ? " (with advantage)" : ""} to maintain concentration.</span>
+			</div>`;
+			$modalInner.append($rollNeededRow);
+			
+			$modalInner.append($rollResult);
+
+			const $btnRow = $(`<div class="ve-flex-h-right mt-3"></div>`);
+
+			const performRoll = async () => {
+				// Get current DC value from input
+				const currentDc = parseInt($dcInput.val()) || 10;
+				
+				const roll1 = RollerUtil.randomise(20);
+				const roll2 = advantage ? RollerUtil.randomise(20) : null;
+				const effectiveRoll = advantage ? Math.max(roll1, roll2) : roll1;
+				const total = effectiveRoll + bonus;
+				const success = total >= currentDc;
+
+				// Show animated dice if enabled
+				if (this._state.getSettings()?.animatedDice) {
+					await this._showAnimatedDice(20, effectiveRoll, advantage, false);
+				}
+
+				const rollText = advantage
+					? `Rolls: ${roll1}, ${roll2} (took ${effectiveRoll}) + ${bonus} = <strong>${total}</strong> vs DC ${currentDc}`
+					: `Roll: ${roll1} + ${bonus} = <strong>${total}</strong> vs DC ${currentDc}`;
+
+				const resultClass = success ? "charsheet__concentration-success" : "charsheet__concentration-fail";
+				const resultText = success ? "Success! Concentration maintained." : "Failed! Concentration broken.";
+
+				$rollResult.html(`
+					<div class="${resultClass} p-2 text-center">
+						<div>${rollText}</div>
+						<div class="mt-1"><strong>${resultText}</strong></div>
+					</div>
+				`).removeClass("ve-hidden");
+
+				if (!success) {
+					this._state.breakConcentration();
+					this._combatModule?.renderCombatStates?.();
+					this._renderActiveStates?.();
+					this._saveCurrentCharacter();
+					this._renderCharacter?.();
+				}
+
+				// Replace buttons with close button
+				$btnRow.empty().append(
+					$(`<button class="btn btn-primary">Close</button>`)
+						.on("click", () => { doClose(); resolve(); }),
+				);
+			};
+
+			// Roll button
+			const $btnRoll = $(`<button class="btn btn-primary mr-2">Roll Check</button>`)
+				.on("click", () => performRoll());
+
+			// Skip button (keep concentration without rolling)
+			const $btnSkip = $(`<button class="btn btn-default mr-2">Skip (Keep)</button>`)
+				.on("click", () => { doClose(); resolve(); });
+
+			// Break button (voluntarily end concentration)
+			const $btnBreak = $(`<button class="btn btn-danger">Break Concentration</button>`)
+				.on("click", () => {
+					this._state.breakConcentration();
+					this._combatModule?.renderCombatStates?.();
+					this._renderActiveStates?.();
+					this._saveCurrentCharacter();
+					this._renderCharacter?.();
+					JqueryUtil.doToast({type: "info", content: `Concentration on ${spellName} ended.`});
+					doClose();
+					resolve();
+				});
+
+			$btnRow.append($btnRoll, $btnSkip, $btnBreak);
+			$modalInner.append($btnRow);
+		});
 	}
 
 	async _onUseHitDie () {
@@ -4855,6 +5116,7 @@ class CharacterSheetPage {
 		this._saveCurrentCharacter();
 		this._renderHp();
 		this._renderHitDice();
+		this._renderConditions(); // Update bloodied condition display
 
 		this._showDiceResult(
 			"Hit Die",
@@ -4897,6 +5159,7 @@ class CharacterSheetPage {
 		this._saveCurrentCharacter();
 		this._renderHp();
 		this._renderDeathSaves();
+		this._renderConditions(); // Update bloodied condition display
 
 		this._showDiceResult("Death Save", roll, result);
 	}
@@ -5373,6 +5636,87 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Initialize dice settings picker dropdown in header
+	 * Uses character settings for animated dice preference
+	 */
+	_initDicePicker () {
+		const $btn = $("#charsheet-btn-dice");
+		const $dropdown = $("#charsheet-dice-dropdown");
+		const $animatedCheckbox = $("#charsheet-dice-animated");
+		const $themeButtons = $(".charsheet__dice-theme-btn");
+
+		// Update checkbox state from settings
+		const updateCheckbox = () => {
+			const isAnimated = this._state?.getSettings()?.animatedDice || false;
+			$animatedCheckbox.prop("checked", isAnimated);
+		};
+
+		// Update theme button selection
+		const updateThemeSelection = () => {
+			const currentTheme = this._state?.getSettings()?.diceTheme || "standard";
+			$themeButtons.removeClass("active");
+			$(`.charsheet__dice-theme-btn[data-theme="${currentTheme}"]`).addClass("active");
+		};
+
+		// Position dropdown relative to button
+		const positionDropdown = () => {
+			const btnRect = $btn[0].getBoundingClientRect();
+			const dropdownWidth = 180;
+
+			let left = btnRect.right - dropdownWidth;
+			const top = btnRect.bottom + 8;
+
+			if (left < 8) left = 8;
+
+			$dropdown.css({
+				top: `${top}px`,
+				left: `${left}px`,
+			});
+		};
+
+		// Toggle dropdown
+		$btn.on("click", (e) => {
+			e.stopPropagation();
+			const isOpen = $dropdown.hasClass("active");
+			if (!isOpen) {
+				updateCheckbox();
+				updateThemeSelection();
+				positionDropdown();
+			}
+			$dropdown.toggleClass("active", !isOpen);
+			$btn.toggleClass("active", !isOpen);
+		});
+
+		// Animated dice checkbox
+		$animatedCheckbox.on("change", (e) => {
+			e.stopPropagation();
+			this._state.setSetting("animatedDice", e.target.checked);
+			this._saveCurrentCharacter();
+		});
+
+		// Theme buttons
+		$themeButtons.on("click", (e) => {
+			e.stopPropagation();
+			const theme = $(e.currentTarget).data("theme");
+			this._state.setSetting("diceTheme", theme);
+			this._saveCurrentCharacter();
+			updateThemeSelection();
+		});
+
+		// Close dropdown when clicking outside
+		$(document).on("click", (e) => {
+			if (!$(e.target).closest(".charsheet__header-dice-controls").length) {
+				$dropdown.removeClass("active");
+				$btn.removeClass("active");
+			}
+		});
+
+		// Initial update
+		updateCheckbox();
+		updateThemeSelection();
+	}
+
+	/**
 	 * Reset section layout to default for current tab
 	 */
 	_resetLayout () {
@@ -5805,7 +6149,7 @@ class CharacterSheetPage {
 		return "";
 	}
 
-	_rollAbilityCheck (ability, event) {
+	async _rollAbilityCheck (ability, event) {
 		const mod = this._state.getAbilityMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
 		
@@ -5832,6 +6176,12 @@ class CharacterSheetPage {
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
+
+		// Show animated dice if enabled
+		if (this._state.getSettings()?.animatedDice) {
+			await this._showAnimatedDice(20, rollResult.roll, rollResult.mode === "advantage", rollResult.mode === "disadvantage");
+		}
+
 		this._showDiceResult(
 			`${Parser.attAbvToFull(ability)} Check${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
@@ -5841,7 +6191,7 @@ class CharacterSheetPage {
 		);
 	}
 
-	_rollSavingThrow (ability, event) {
+	async _rollSavingThrow (ability, event) {
 		// Check for auto-fail from conditions (e.g., Paralyzed/Stunned → auto-fail STR/DEX saves)
 		if (this._state.hasAutoFailFromConditions?.(`save:${ability}`)) {
 			this._showDiceResult(
@@ -5882,6 +6232,12 @@ class CharacterSheetPage {
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
+
+		// Show animated dice if enabled
+		if (this._state.getSettings()?.animatedDice) {
+			await this._showAnimatedDice(20, rollResult.roll, rollResult.mode === "advantage", rollResult.mode === "disadvantage");
+		}
+
 		this._showDiceResult(
 			`${Parser.attAbvToFull(ability)} Save${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
@@ -5891,7 +6247,7 @@ class CharacterSheetPage {
 		);
 	}
 
-	_rollSkillCheck (skillKey, skillName, event, overrideAbility = null) {
+	async _rollSkillCheck (skillKey, skillName, event, overrideAbility = null) {
 		const mod = overrideAbility
 			? this._state.getSkillModWithAbility(skillKey, overrideAbility)
 			: this._state.getSkillMod(skillKey);
@@ -5922,6 +6278,12 @@ class CharacterSheetPage {
 		const abilityLabel = overrideAbility ? ` (${overrideAbility.toUpperCase()})` : "";
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
+
+		// Show animated dice if enabled
+		if (this._state.getSettings()?.animatedDice) {
+			await this._showAnimatedDice(20, rollResult.roll, rollResult.mode === "advantage", rollResult.mode === "disadvantage");
+		}
+
 		this._showDiceResult(
 			`${skillName}${abilityLabel} Check${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
@@ -6149,8 +6511,173 @@ class CharacterSheetPage {
 		} else {
 			// New object format
 			const breakdown = opts.subtitle || `1d20 (${opts.roll}) ${opts.modifier >= 0 ? "+" : ""}${opts.modifier}`;
-			this._showDiceResult(opts.title, opts.total, breakdown, opts.resultClass, opts.resultNote);
+			
+			// Check if animated dice is enabled and we have dice info
+			if (this._state.getSettings()?.animatedDice && opts.roll !== undefined) {
+				this._showAnimatedDice(opts.diceType || 20, opts.roll, opts.isAdvantage, opts.isDisadvantage)
+					.then(() => {
+						this._showDiceResult(opts.title, opts.total, breakdown, opts.resultClass, opts.resultNote);
+					});
+			} else {
+				this._showDiceResult(opts.title, opts.total, breakdown, opts.resultClass, opts.resultNote);
+			}
 		}
+	}
+
+	/**
+	 * Show animated dice rolling overlay
+	 * @param {number} diceType - The type of die (4, 6, 8, 10, 12, 20, 100)
+	 * @param {number} finalValue - The value the die should land on
+	 * @param {boolean} isAdvantage - Whether rolling with advantage
+	 * @param {boolean} isDisadvantage - Whether rolling with disadvantage
+	 * @returns {Promise} Resolves when animation is complete
+	 */
+	async _showAnimatedDice (diceType, finalValue, isAdvantage = false, isDisadvantage = false) {
+		const theme = this._state.getSettings()?.diceTheme || "standard";
+		const themeColors = {
+			// Classic themes
+			standard: {bg: "#dc3545", bgDark: "#a71d2a", pip: "#fff", text: "#fff", shadow: "rgba(220, 53, 69, 0.6)", glow: "rgba(220, 53, 69, 0.3)", accent: "#ff6b7a"},
+			blue: {bg: "#0d6efd", bgDark: "#0a58ca", pip: "#fff", text: "#fff", shadow: "rgba(13, 110, 253, 0.6)", glow: "rgba(13, 110, 253, 0.3)", accent: "#5c9aff"},
+			gold: {bg: "#ffc107", bgDark: "#d39e00", pip: "#000", text: "#000", shadow: "rgba(255, 193, 7, 0.6)", glow: "rgba(255, 193, 7, 0.3)", accent: "#ffe066"},
+			purple: {bg: "#6f42c1", bgDark: "#5a32a3", pip: "#fff", text: "#fff", shadow: "rgba(111, 66, 193, 0.6)", glow: "rgba(111, 66, 193, 0.3)", accent: "#9f7ae5"},
+			green: {bg: "#198754", bgDark: "#146c43", pip: "#fff", text: "#fff", shadow: "rgba(25, 135, 84, 0.6)", glow: "rgba(25, 135, 84, 0.3)", accent: "#4ead82"},
+			dark: {bg: "#343a40", bgDark: "#1d2124", pip: "#e0e0e0", text: "#fff", shadow: "rgba(33, 37, 41, 0.6)", glow: "rgba(100, 100, 100, 0.3)", accent: "#6c757d"},
+			// Creative themes
+			cosmic: {bg: "linear-gradient(135deg, #1a0533 0%, #4a1a6e 50%, #0d1b2a 100%)", bgDark: "#0a0118", pip: "#e0d4ff", text: "#e0d4ff", shadow: "rgba(138, 43, 226, 0.7)", glow: "rgba(186, 85, 211, 0.5)", accent: "#da70d6", special: "cosmic"},
+			inferno: {bg: "linear-gradient(135deg, #ff4500 0%, #dc143c 50%, #8b0000 100%)", bgDark: "#4a0000", pip: "#fff5e0", text: "#fff5e0", shadow: "rgba(255, 69, 0, 0.7)", glow: "rgba(255, 140, 0, 0.5)", accent: "#ff8c00", special: "inferno"},
+			frost: {bg: "linear-gradient(135deg, #e0f7ff 0%, #87ceeb 50%, #4682b4 100%)", bgDark: "#1e4d6b", pip: "#001a33", text: "#001a33", shadow: "rgba(135, 206, 235, 0.7)", glow: "rgba(224, 247, 255, 0.6)", accent: "#b0e0e6", special: "frost"},
+			nature: {bg: "linear-gradient(135deg, #228b22 0%, #2e8b57 50%, #006400 100%)", bgDark: "#003000", pip: "#f0fff0", text: "#f0fff0", shadow: "rgba(34, 139, 34, 0.7)", glow: "rgba(144, 238, 144, 0.4)", accent: "#90ee90", special: "nature"},
+			arcane: {bg: "linear-gradient(135deg, #9932cc 0%, #4b0082 50%, #191970 100%)", bgDark: "#0d0030", pip: "#e6e6fa", text: "#e6e6fa", shadow: "rgba(153, 50, 204, 0.7)", glow: "rgba(218, 112, 214, 0.5)", accent: "#da70d6", special: "arcane"},
+			blood: {bg: "linear-gradient(135deg, #8b0000 0%, #660000 50%, #330000 100%)", bgDark: "#1a0000", pip: "#ffcccc", text: "#ffcccc", shadow: "rgba(139, 0, 0, 0.8)", glow: "rgba(178, 34, 34, 0.4)", accent: "#b22222", special: "blood"},
+			ocean: {bg: "linear-gradient(135deg, #006994 0%, #004c6d 50%, #003049 100%)", bgDark: "#001a26", pip: "#e0ffff", text: "#e0ffff", shadow: "rgba(0, 105, 148, 0.7)", glow: "rgba(64, 224, 208, 0.4)", accent: "#40e0d0", special: "ocean"},
+			storm: {bg: "linear-gradient(135deg, #1c1c3c 0%, #2f2f5f 50%, #1a1a2e 100%)", bgDark: "#0a0a15", pip: "#ffff99", text: "#ffff99", shadow: "rgba(255, 255, 0, 0.5)", glow: "rgba(135, 206, 250, 0.6)", accent: "#87cefa", special: "storm"},
+			void: {bg: "linear-gradient(135deg, #0d0d0d 0%, #1a1a2e 50%, #000000 100%)", bgDark: "#000000", pip: "#9966cc", text: "#9966cc", shadow: "rgba(75, 0, 130, 0.6)", glow: "rgba(138, 43, 226, 0.3)", accent: "#8a2be2", special: "void"},
+			radiant: {bg: "linear-gradient(135deg, #fffacd 0%, #ffd700 50%, #daa520 100%)", bgDark: "#b8860b", pip: "#fff8dc", text: "#4a3000", shadow: "rgba(255, 215, 0, 0.8)", glow: "rgba(255, 255, 224, 0.7)", accent: "#ffffe0", special: "radiant"},
+		};
+		const colors = themeColors[theme] || themeColors.standard;
+
+		// Generate pip pattern for d6
+		const generatePips = (value) => {
+			const pipPositions = {
+				1: ["center"],
+				2: ["top-right", "bottom-left"],
+				3: ["top-right", "center", "bottom-left"],
+				4: ["top-left", "top-right", "bottom-left", "bottom-right"],
+				5: ["top-left", "top-right", "center", "bottom-left", "bottom-right"],
+				6: ["top-left", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-right"],
+			};
+			const positions = pipPositions[value] || [];
+			return positions.map(pos => `<span class="charsheet__dice-pip charsheet__dice-pip--${pos}"></span>`).join("");
+		};
+
+		// Get dice shape class
+		const getDiceShape = () => {
+			switch (diceType) {
+				case 4: return "charsheet__dice--d4";
+				case 6: return "charsheet__dice--d6";
+				case 8: return "charsheet__dice--d8";
+				case 10: return "charsheet__dice--d10";
+				case 12: return "charsheet__dice--d12";
+				case 20: return "charsheet__dice--d20";
+				case 100: return "charsheet__dice--d100";
+				default: return "";
+			}
+		};
+
+		const diceShape = getDiceShape();
+		const specialClass = colors.special ? `charsheet__dice--${colors.special}` : "";
+		const bgStyle = colors.special ? `background: ${colors.bg}` : `--dice-bg: ${colors.bg}; --dice-bg-dark: ${colors.bgDark}`;
+
+		// Create dice face content - pips for d6, numbers for others
+		const createFaceContent = (value) => {
+			if (diceType === 6 && value >= 1 && value <= 6) {
+				return `<div class="charsheet__dice-face">${generatePips(value)}</div>`;
+			}
+			return `<span class="charsheet__dice-value">${value}</span>`;
+		};
+
+		// Create overlay
+		const $overlay = $(`
+			<div class="charsheet__dice-overlay">
+				<div class="charsheet__dice-container">
+					<div class="charsheet__dice ${diceShape} ${specialClass} charsheet__dice--rolling" style="${bgStyle}; --dice-pip: ${colors.pip}; --dice-text: ${colors.text}; --dice-shadow: ${colors.shadow}; --dice-glow: ${colors.glow}; --dice-accent: ${colors.accent}">
+						${createFaceContent("?")}
+						<span class="charsheet__dice-type">d${diceType}</span>
+					</div>
+				</div>
+			</div>
+		`);
+
+		$("body").append($overlay);
+
+		// Animate random values
+		const $dice = $overlay.find(".charsheet__dice");
+		const maxValue = diceType === 100 ? 100 : diceType;
+		let animationCycles = 0;
+		const maxCycles = 12;
+
+		// Helper to update dice face
+		const updateFace = (value) => {
+			if (diceType === 6) {
+				$dice.find(".charsheet__dice-face").remove();
+				$dice.find(".charsheet__dice-value").remove();
+				$dice.prepend(createFaceContent(value));
+			} else {
+				let $value = $dice.find(".charsheet__dice-value");
+				if (!$value.length) {
+					$dice.prepend(`<span class="charsheet__dice-value">${value}</span>`);
+				} else {
+					$value.text(value);
+				}
+			}
+		};
+		
+		return new Promise(resolve => {
+			const animate = () => {
+				if (animationCycles < maxCycles) {
+					const randomVal = diceType === 100 
+						? (Math.floor(Math.random() * 10) + 1) * 10 
+						: Math.floor(Math.random() * maxValue) + 1;
+					updateFace(randomVal);
+					animationCycles++;
+					
+					let delay;
+					if (animationCycles < 4) {
+						delay = 60;
+					} else if (animationCycles < 8) {
+						delay = 80;
+					} else {
+						delay = 120 + (animationCycles - 8) * 40;
+					}
+					
+					setTimeout(animate, delay);
+				} else {
+					// Show final value with landing animation
+					updateFace(finalValue);
+					$dice.removeClass("charsheet__dice--rolling").addClass("charsheet__dice--landed");
+					
+					// Check for critical/fumble styling
+					if (diceType === 20) {
+						if (finalValue === 20) {
+							$dice.addClass("charsheet__dice--critical");
+						} else if (finalValue === 1) {
+							$dice.addClass("charsheet__dice--fumble");
+						}
+					}
+					
+					// Remove after delay
+					const displayTime = (finalValue === 20 || finalValue === 1) && diceType === 20 ? 1000 : 700;
+					setTimeout(() => {
+						$overlay.fadeOut(150, () => {
+							$overlay.remove();
+							resolve();
+						});
+					}, displayTime);
+				}
+			};
+			
+			setTimeout(animate, 50);
+		});
 	}
 
 	_showDiceResult (title, total, breakdown, resultClass = "", resultNote = "") {
