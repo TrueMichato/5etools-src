@@ -412,6 +412,80 @@ class CharacterSheetBuilder {
 					spellcastingAbility: spellcastingAbilityBuilder,
 				});
 				this._applyClassFeatures();
+
+				// Record level 1 history entry
+				{
+					const level1History = {
+						level: 1,
+						class: {
+							name: this._selectedClass.name,
+							source: this._selectedClass.source,
+						},
+						choices: {},
+						complete: true,
+						timestamp: Date.now(),
+					};
+
+					// Record skill selections
+					if (this._selectedSkills?.length > 0) {
+						level1History.choices.skills = [...this._selectedSkills];
+					}
+
+					// Record expertise selections (for Rogue, etc.)
+					if (this._selectedExpertise?.length > 0) {
+						level1History.choices.expertise = this._selectedExpertise.map(s => s.toLowerCase());
+					}
+
+					// Record subclass if selected at level 1 (Cleric, Sorcerer, Warlock)
+					if (this._selectedSubclass) {
+						level1History.choices.subclass = {
+							name: this._selectedSubclass.name,
+							shortName: this._selectedSubclass.shortName,
+							source: this._selectedSubclass.source,
+						};
+					}
+
+					// Record optional features (invocations from Warlock, etc.)
+					if (this._selectedOptionalFeatures && Object.keys(this._selectedOptionalFeatures).length > 0) {
+						const optFeatures = [];
+						Object.entries(this._selectedOptionalFeatures).forEach(([key, opts]) => {
+							opts.forEach(opt => {
+								optFeatures.push({
+									name: opt.name,
+									source: opt.source,
+									type: key,
+								});
+							});
+						});
+						if (optFeatures.length > 0) {
+							level1History.choices.optionalFeatures = optFeatures;
+						}
+					}
+
+					// Record feature choices (fighting styles, specialties, etc.)
+					if (this._selectedFeatureOptions && Object.keys(this._selectedFeatureOptions).length > 0) {
+						const featureChoices = [];
+						Object.entries(this._selectedFeatureOptions).forEach(([featureName, options]) => {
+							options.forEach(opt => {
+								featureChoices.push({
+									featureName: featureName.split("_")[0],
+									choice: opt.name,
+									source: opt.source,
+								});
+							});
+						});
+						if (featureChoices.length > 0) {
+							level1History.choices.featureChoices = featureChoices;
+						}
+					}
+
+					// Record weapon masteries
+					if (this._selectedWeaponMasteries?.length > 0) {
+						level1History.choices.weaponMasteries = [...this._selectedWeaponMasteries];
+					}
+
+					this._state.recordLevelChoice(level1History);
+				}
 				break;
 
 			case 3: // Abilities
@@ -1776,6 +1850,9 @@ class CharacterSheetBuilder {
 
 		// Save the character
 		await this._page.saveCharacter();
+
+		// Update tab visibility (hide builder, show respec)
+		this._page._updateTabVisibility();
 
 		// Switch to overview tab
 		this._page.switchToTab("#charsheet-tab-overview");

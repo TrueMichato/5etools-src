@@ -103,6 +103,12 @@ class CharacterSheetPage {
 			console.log("CharacterSheetPage.pInit: Layout module initialized");
 		} catch (e) { console.error("Failed to init layout:", e); }
 
+		try {
+			this._respec = new CharacterSheetRespec({page: this, state: this._state});
+			this._respec.init();
+			console.log("CharacterSheetPage.pInit: Respec module initialized");
+		} catch (e) { console.error("Failed to init respec:", e); }
+
 		// Pass loaded data to modules
 		if (this._inventory) this._inventory.setItems(this._itemsData);
 		if (this._combat) this._combat.setItems(this._itemsData);
@@ -456,6 +462,48 @@ class CharacterSheetPage {
 		$(tabId).addClass("active in");
 	}
 
+	/**
+	 * Hide a tab from the navigation
+	 * @param {string} tabId - The tab ID (e.g., "#charsheet-tab-builder")
+	 */
+	_hideTab (tabId) {
+		const $tab = $(`#charsheet-tabs a[href="${tabId}"]`).parent("li");
+		$tab.addClass("ve-hidden");
+	}
+
+	/**
+	 * Show a hidden tab in the navigation
+	 * @param {string} tabId - The tab ID (e.g., "#charsheet-tab-builder")
+	 */
+	_showTab (tabId) {
+		const $tab = $(`#charsheet-tabs a[href="${tabId}"]`).parent("li");
+		$tab.removeClass("ve-hidden");
+	}
+
+	/**
+	 * Update tab visibility based on character state
+	 * - Builder tab: Only shown when no character exists (during creation)
+	 * - Respec tab: Only shown when a character exists
+	 */
+	_updateTabVisibility () {
+		const totalLevel = this._state?.getTotalLevel?.() || 0;
+		const hasCharacter = totalLevel > 0;
+
+		// Builder: only show when no character exists (during building)
+		if (hasCharacter) {
+			this._hideTab("#charsheet-tab-builder");
+		} else {
+			this._showTab("#charsheet-tab-builder");
+		}
+
+		// Respec: only show when character exists
+		if (hasCharacter) {
+			this._showTab("#charsheet-tab-respec");
+		} else {
+			this._hideTab("#charsheet-tab-respec");
+		}
+	}
+
 	_initEventListeners () {
 		// Character selection
 		this._$selCharacter.on("change", () => this._onCharacterSelect());
@@ -665,6 +713,9 @@ class CharacterSheetPage {
 	async _onNewCharacter () {
 		this._createNewCharacter();
 		this._$selCharacter.val("");
+
+		// Show builder tab (may be hidden after previous character)
+		this._showTab("#charsheet-tab-builder");
 
 		// Switch to builder tab
 		this.switchToTab("#charsheet-tab-builder");
@@ -1471,6 +1522,10 @@ class CharacterSheetPage {
 		if (this._inventory) this._inventory.render();
 		if (this._features) this._features.render();
 		if (this._combat) this._combat.render();
+		if (this._respec) this._respec.render();
+
+		// Update tab visibility based on character state
+		this._updateTabVisibility();
 	}
 
 	_renderBasicInfo () {
