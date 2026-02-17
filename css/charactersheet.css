@@ -7164,6 +7164,39 @@
 	background: var(--cs-accent, #8b5cf6);
 }
 
+/* Cascade Warning for Subclass Changes */
+.charsheet__respec-cascade-warning {
+	background: rgba(245, 158, 11, 0.1);
+	border: 1px solid rgba(245, 158, 11, 0.3);
+	border-radius: var(--cs-radius-md, 8px);
+	padding: var(--cs-space-md, 0.75rem);
+	margin-bottom: var(--cs-space-lg, 1rem);
+}
+
+.charsheet__respec-cascade-warning h5 {
+	margin: 0 0 var(--cs-space-sm, 0.5rem) 0;
+	font-size: var(--cs-text-sm, 0.875rem);
+	color: var(--cs-warning, #f59e0b);
+}
+
+.charsheet__respec-cascade-list {
+	margin: 0;
+	padding-left: var(--cs-space-lg, 1rem);
+	font-size: var(--cs-text-sm, 0.875rem);
+	max-height: 150px;
+	overflow-y: auto;
+}
+
+.charsheet__respec-cascade-list li {
+	margin-bottom: 0.25rem;
+}
+
+/* Feature and Subclass Modal Styles */
+.charsheet__respec-feature-modal,
+.charsheet__respec-subclass-modal {
+	min-width: 400px;
+}
+
 /* Defense rows */
 .charsheet__defense-row {
 	padding: 0.25rem 0;
