@@ -9035,6 +9035,37 @@
 	border-top: 1px dashed var(--cs-border-subtle, rgba(128, 128, 128, 0.2));
 }
 
+/* Immune condition item (cannot be selected) */
+.charsheet__condition-item--immune {
+	opacity: 0.5;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
+.charsheet__condition-item--immune::before {
+	background: rgba(34, 197, 94, 0.1);
+}
+
+.charsheet__condition-item-immune {
+	background: rgba(34, 197, 94, 0.2);
+	color: #4ade80;
+	font-size: var(--cs-text-xs, 0.75rem);
+	padding: 2px 6px;
+	border-radius: 4px;
+	margin-left: auto;
+}
+
+/* Condition immunity link styling in combat tab */
+.charsheet__condition-immune-link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.charsheet__condition-immune-link:hover {
+	color: inherit;
+	text-decoration: underline;
+}
+
 /* Rest Modal */
 .charsheet__rest-summary {
 	background: var(--rgb-bg-alt);
@@ -12605,6 +12636,54 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 	color: #fbbf24;
 }
 
+/* Badges container */
+.custom-abilities__card-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+
+/* Action badge */
+.custom-abilities__action-badge {
+	font-size: calc(var(--cs-font-base, 14px) * 0.7);
+	padding: 2px 6px;
+	border-radius: 999px;
+	font-weight: 600;
+	background: rgba(59, 130, 246, 0.2);
+	color: #60a5fa;
+}
+
+.custom-abilities__action-badge--bonus {
+	background: rgba(251, 146, 60, 0.2);
+	color: #fb923c;
+}
+
+.custom-abilities__action-badge--reaction {
+	background: rgba(168, 85, 247, 0.2);
+	color: #a855f7;
+}
+
+/* Duration badge */
+.custom-abilities__duration-badge {
+	font-size: calc(var(--cs-font-base, 14px) * 0.7);
+	padding: 2px 6px;
+	border-radius: 999px;
+	font-weight: 600;
+	background: rgba(139, 92, 246, 0.2);
+	color: #a78bfa;
+}
+
+/* Concentration badge */
+.custom-abilities__concentration-badge {
+	font-size: calc(var(--cs-font-base, 14px) * 0.7);
+	padding: 2px 6px;
+	border-radius: 999px;
+	font-weight: 600;
+	background: rgba(236, 72, 153, 0.2);
+	color: #f472b6;
+}
+
 /* Card description */
 .custom-abilities__card-description {
 	font-size: calc(var(--cs-font-base, 14px) * 0.9);
@@ -13260,6 +13339,47 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 	background: rgba(251, 191, 36, 0.1);
 	border: 1px solid rgba(251, 191, 36, 0.3);
 	border-radius: var(--cs-radius-sm, 4px);
+}
+
+/* Activation options row */
+.custom-abilities__activation-options {
+	display: none;
+	gap: var(--cs-space-md, 1rem);
+	margin-top: var(--cs-space-sm, 0.5rem);
+	padding: var(--cs-space-sm, 0.5rem);
+	background: rgba(59, 130, 246, 0.1);
+	border: 1px solid rgba(59, 130, 246, 0.3);
+	border-radius: var(--cs-radius-sm, 4px);
+}
+
+/* Duration options row */
+.custom-abilities__duration-options {
+	display: none;
+	gap: var(--cs-space-md, 1rem);
+	margin-top: var(--cs-space-sm, 0.5rem);
+	padding: var(--cs-space-sm, 0.5rem);
+	background: rgba(139, 92, 246, 0.1);
+	border: 1px solid rgba(139, 92, 246, 0.3);
+	border-radius: var(--cs-radius-sm, 4px);
+}
+
+.custom-abilities__concentration-field {
+	flex: 1;
+}
+
+.custom-abilities__checkbox-label {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	cursor: pointer;
+	font-weight: 500;
+	margin-bottom: 4px;
+}
+
+.custom-abilities__checkbox-label input[type="checkbox"] {
+	width: 16px;
+	height: 16px;
+	accent-color: var(--cs-accent, #6366f1);
 }
 
 /* Effects Section - Enhanced */
@@ -13927,4 +14047,128 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 	display: flex;
 	flex-wrap: wrap;
 	gap: var(--cs-space-xs, 0.25rem);
+}
+
+/* Defensive Traits Styling */
+.custom-abilities__defensive-section {
+	background: rgba(0, 0, 0, 0.15);
+	border: 1px solid var(--cs-border-light, rgba(255, 255, 255, 0.1));
+	border-radius: var(--cs-radius, 6px);
+	padding: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__defensive-group {
+	margin-bottom: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__defensive-group:last-child {
+	margin-bottom: 0;
+}
+
+.custom-abilities__defensive-group > summary {
+	cursor: pointer;
+	font-weight: 600;
+	font-size: calc(var(--cs-font-base, 14px) * 0.95);
+	padding: var(--cs-space-xs, 0.25rem) 0;
+}
+
+.custom-abilities__defensive-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--cs-space-xs, 0.25rem);
+	padding: var(--cs-space-sm, 0.5rem) 0;
+}
+
+.custom-abilities__defensive-pill {
+	padding: 6px 12px;
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius, 6px);
+	color: var(--cs-text-muted, #888);
+	font-size: calc(var(--cs-font-base, 14px) * 0.85);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.custom-abilities__defensive-pill:hover {
+	background: rgba(255, 255, 255, 0.05);
+	border-color: rgba(255, 255, 255, 0.25);
+	color: var(--cs-text, #f5f5f5);
+}
+
+/* Resistance - Yellow */
+.custom-abilities__defensive-pill.selected[data-trait-type="resistance"] {
+	background: rgba(245, 158, 11, 0.2);
+	border-color: #f59e0b;
+	color: #fbbf24;
+}
+
+/* Immunity - Green */
+.custom-abilities__defensive-pill.selected[data-trait-type="immunity"] {
+	background: rgba(34, 197, 94, 0.2);
+	border-color: #22c55e;
+	color: #4ade80;
+}
+
+/* Vulnerability - Red */
+.custom-abilities__defensive-pill.selected[data-trait-type="vulnerability"] {
+	background: rgba(239, 68, 68, 0.2);
+	border-color: #ef4444;
+	color: #f87171;
+}
+
+/* Condition Immunity - Purple */
+.custom-abilities__defensive-pill.selected[data-trait-type="conditionImmunity"] {
+	background: rgba(168, 85, 247, 0.2);
+	border-color: #a855f7;
+	color: #c084fc;
+}
+
+/* Custom input row for homebrew types */
+.custom-abilities__defensive-custom-row {
+	display: flex;
+	gap: var(--cs-space-xs, 0.25rem);
+	margin-top: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__defensive-custom-row input {
+	flex: 1;
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	padding: 6px 10px;
+	font-size: calc(var(--cs-font-base, 14px) * 0.85);
+}
+
+.custom-abilities__defensive-custom-row input::placeholder {
+	color: var(--cs-text-muted, #888);
+}
+
+.custom-abilities__defensive-custom-row button {
+	background: rgba(59, 130, 246, 0.2);
+	border: 1px solid rgba(59, 130, 246, 0.4);
+	border-radius: var(--cs-radius-sm, 4px);
+	color: #60a5fa;
+	padding: 6px 12px;
+	font-size: calc(var(--cs-font-base, 14px) * 0.85);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.custom-abilities__defensive-custom-row button:hover {
+	background: rgba(59, 130, 246, 0.3);
+	border-color: rgba(59, 130, 246, 0.6);
+}
+
+/* Card defensive summary */
+.custom-abilities__card-defensive {
+	font-size: calc(var(--cs-font-base, 14px) * 0.9);
+	margin-top: var(--cs-space-xs, 0.25rem);
+	padding-top: var(--cs-space-xs, 0.25rem);
+	border-top: 1px solid var(--cs-border-light, rgba(255, 255, 255, 0.08));
+}
+
+.custom-abilities__condition-immune {
+	color: #c084fc;
 }
