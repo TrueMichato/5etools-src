@@ -3145,6 +3145,10 @@ class CharacterSheetState {
 			// Each note: {id, title, content, tab: string|null, position: {x,y}|null, color, collapsed, createdAt, updatedAt}
 			stickyNotes: [],
 
+			// Custom abilities - user-created homebrew features, house rules, boons, etc.
+			// Each ability: {id, name, description, icon, category, mode, isActive, uses, activationAction, effects[]}
+			customAbilities: [],
+
 			// Appearance
 			appearance: {
 				age: "",
@@ -3312,6 +3316,14 @@ class CharacterSheetState {
 		if (!Array.isArray(this._data.stickyNotes)) {
 			this._data.stickyNotes = [];
 		}
+
+		// Ensure customAbilities array exists
+		if (!Array.isArray(this._data.customAbilities)) {
+			this._data.customAbilities = [];
+		}
+
+		// Re-register custom ability effects after loading (they're stored but need to be applied)
+		this._reapplyCustomAbilityEffects();
 
 		// Migrate features: infer featureType for old saves that don't have it
 		this._migrateFeatures();
@@ -4947,17 +4959,55 @@ class CharacterSheetState {
 		}
 
 		// Get custom modifiers (specific skill + "all skills" bonus)
+		// Note: This already includes namedModifiers via _recalculateCustomModifiers()
 		const custom = this.getSkillCustomMod(skill);
+
 		// Add item bonuses (ability check bonus from magic items)
 		const itemBonus = this._data.itemBonuses?.abilityCheck || 0;
 
-		// Get feature modifiers from named modifiers (from features like "Mark of the Wilderness")
-		const featureBonus = this._getSkillFeatureBonus(skill);
+		// Get feature modifiers that need dynamic calculation (abilityMod-based effects)
+		// Note: Basic value modifiers are already in custom via _recalculateCustomModifiers
+		const dynamicFeatureBonus = this._getDynamicSkillFeatureBonus(skill);
+
+		// Get ability check modifiers (since skill checks ARE ability checks)
+		// Note: This already includes namedModifiers via _recalculateCustomModifiers()
+		const abilityCheckBonus = ability ? this.getAbilityCheckCustomMod(ability) : 0;
+
+		// Get bonus from active states (check:ability type bonuses)
+		const stateBonus = this.getSkillBonusFromStates(skill, this.getSkillAbility(skill) || ability);
 
 		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
 		const exhaustionPenalty = this._getExhaustionD20Penalty();
 
-		return mod + profBonus + custom + itemBonus + featureBonus - exhaustionPenalty;
+		return mod + profBonus + custom + itemBonus + dynamicFeatureBonus + abilityCheckBonus + stateBonus - exhaustionPenalty;
+	}
+
+	/**
+	 * Get dynamic skill feature bonus (for effects that need runtime calculation like abilityMod)
+	 * This is separate from _recalculateCustomModifiers which handles simple value-based modifiers
+	 * @param {string} skill - The skill key
+	 * @returns {number} The dynamic feature bonus
+	 */
+	_getDynamicSkillFeatureBonus (skill) {
+		const skillModifiers = this.getNamedModifiersByType(`skill:${skill}`);
+		let total = 0;
+
+		skillModifiers.forEach(mod => {
+			// Only handle abilityMod-based effects here
+			// value-based and proficiencyBonus-based are already in customModifiers via _recalculateCustomModifiers
+			if (mod.abilityMod) {
+				total += this.getAbilityMod(mod.abilityMod);
+			}
+		});
+
+		// Thelemar rules: Linguistics gets +1 for each language known (except Common)
+		if (skill === "linguistics" && this._data.settings?.thelemar_linguisticsBonus) {
+			const languages = this._data.languages || [];
+			const languageBonus = languages.filter(lang => lang.toLowerCase() !== "common").length;
+			total += languageBonus;
+		}
+
+		return total;
 	}
 
 	/**
@@ -4966,76 +5016,28 @@ class CharacterSheetState {
 	 * @returns {number} The total feature bonus
 	 */
 	_getSkillFeatureBonus (skill) {
-		console.log(`[CharSheet State] _getSkillFeatureBonus called for skill: "${skill}"`);
 		const skillModifiers = this.getNamedModifiersByType(`skill:${skill}`);
-		console.log(`[CharSheet State] Found ${skillModifiers.length} modifiers for skill:${skill}:`, skillModifiers);
 		let total = 0;
 
 		skillModifiers.forEach(mod => {
 			if (mod.proficiencyBonus) {
-				// "bonus equal to your proficiency bonus"
-				const prof = this.getProficiencyBonus();
-				console.log(`[CharSheet State] Adding proficiency bonus (${prof}) from ${mod.name}`);
-				total += prof;
+				total += this.getProficiencyBonus();
 			} else if (mod.abilityMod) {
-				// "add your X modifier"
-				const ablMod = this.getAbilityMod(mod.abilityMod);
-				console.log(`[CharSheet State] Adding ${mod.abilityMod} modifier (${ablMod}) from ${mod.name}`);
-				total += ablMod;
+				total += this.getAbilityMod(mod.abilityMod);
 			} else {
-				console.log(`[CharSheet State] Adding value ${mod.value} from ${mod.name}`);
 				total += mod.value || 0;
 			}
 		});
 
 		// Also check active state effects for skill bonuses
-		// Map skill to ability for check:ability:skill format
-		const skillToAbility = {
-			athletics: "str",
-			acrobatics: "dex",
-			sleightofhand: "dex",
-			stealth: "dex",
-			arcana: "int",
-			history: "int",
-			investigation: "int",
-			nature: "int",
-			religion: "int",
-			animalhandling: "wis",
-			insight: "wis",
-			medicine: "wis",
-			perception: "wis",
-			survival: "wis",
-			deception: "cha",
-			intimidation: "cha",
-			performance: "cha",
-			persuasion: "cha",
-			// Custom skills
-			cooking: "wis",
-			culture: "int",
-			endurance: "con",
-			engineering: "int",
-			harvesting: "wis",
-			linguistics: "int",
-			might: "str",
-		};
-		const ability = skillToAbility[skill] || "int";
-		const stateBonus = this.getSkillBonusFromStates(skill, ability);
-		if (stateBonus > 0) {
-			console.log(`[CharSheet State] Adding ${stateBonus} from active states for ${skill}`);
-			total += stateBonus;
-		}
+		total += this.getSkillBonusFromStates(skill, this.getSkillAbility(skill));
 
 		// Thelemar rules: Linguistics gets +1 for each language known (except Common)
 		if (skill === "linguistics" && this._data.settings?.thelemar_linguisticsBonus) {
 			const languages = this._data.languages || [];
-			const languageBonus = languages.filter(lang => lang.toLowerCase() !== "common").length;
-			if (languageBonus > 0) {
-				console.log(`[CharSheet State] Adding ${languageBonus} from known languages (Thelemar rules)`);
-				total += languageBonus;
-			}
+			total += languages.filter(lang => lang.toLowerCase() !== "common").length;
 		}
 
-		console.log(`[CharSheet State] Total feature bonus for ${skill}: ${total}`);
 		return total;
 	}
 
@@ -19384,6 +19386,417 @@ class CharacterSheetState {
 	setAppearance (field, value) { this._data.appearance[field] = value; }
 	// #endregion
 
+	// #region Custom Abilities
+	/**
+	 * Custom Ability Categories
+	 */
+	static CUSTOM_ABILITY_CATEGORIES = {
+		homebrew: {id: "homebrew", name: "Homebrew Feature", icon: "🔧", color: "#6366f1"},
+		houserule: {id: "houserule", name: "House Rule", icon: "📜", color: "#8b5cf6"},
+		boon: {id: "boon", name: "Boon/Blessing", icon: "✨", color: "#f59e0b"},
+		curse: {id: "curse", name: "Curse/Drawback", icon: "💀", color: "#ef4444"},
+		campaign: {id: "campaign", name: "Campaign Ability", icon: "🌍", color: "#10b981"},
+		magicitem: {id: "magicitem", name: "Magic Item Effect", icon: "💎", color: "#06b6d4"},
+	};
+
+	/**
+	 * Custom Ability Modes
+	 */
+	static CUSTOM_ABILITY_MODES = {
+		passive: {id: "passive", name: "Passive (Always Active)", description: "Effects apply permanently"},
+		toggleable: {id: "toggleable", name: "Toggleable (On/Off)", description: "Can be activated and deactivated"},
+		limited: {id: "limited", name: "Limited Uses", description: "Has a limited number of uses that recharge"},
+	};
+
+	/**
+	 * Effect types for custom abilities (subset of namedModifier types for guided UI)
+	 */
+	static CUSTOM_ABILITY_EFFECT_TYPES = {
+		// Numeric bonuses
+		ac: {id: "ac", name: "Armor Class", category: "defense", valueType: "number"},
+		hp: {id: "hp:max", name: "Hit Point Maximum", category: "defense", valueType: "number"},
+		initiative: {id: "initiative", name: "Initiative", category: "combat", valueType: "number"},
+		speed: {id: "speed", name: "Walking Speed", category: "movement", valueType: "number"},
+		"speed:fly": {id: "speed:fly", name: "Flying Speed", category: "movement", valueType: "number"},
+		"speed:swim": {id: "speed:swim", name: "Swimming Speed", category: "movement", valueType: "number"},
+		"speed:climb": {id: "speed:climb", name: "Climbing Speed", category: "movement", valueType: "number"},
+		attack: {id: "attack", name: "Attack Rolls (All)", category: "combat", valueType: "number"},
+		"attack:melee": {id: "attack:melee", name: "Melee Attack Rolls", category: "combat", valueType: "number"},
+		"attack:ranged": {id: "attack:ranged", name: "Ranged Attack Rolls", category: "combat", valueType: "number"},
+		"attack:spell": {id: "attack:spell", name: "Spell Attack Rolls", category: "combat", valueType: "number"},
+		damage: {id: "damage", name: "Damage Rolls (All)", category: "combat", valueType: "number"},
+		"damage:melee": {id: "damage:melee", name: "Melee Damage", category: "combat", valueType: "number"},
+		"damage:ranged": {id: "damage:ranged", name: "Ranged Damage", category: "combat", valueType: "number"},
+		spellDc: {id: "spellDc", name: "Spell Save DC", category: "spellcasting", valueType: "number"},
+		spellAttack: {id: "spellAttack", name: "Spell Attack Bonus", category: "spellcasting", valueType: "number"},
+		// Saves
+		"save:all": {id: "save:all", name: "All Saving Throws", category: "saves", valueType: "number"},
+		"save:str": {id: "save:str", name: "Strength Saves", category: "saves", valueType: "number"},
+		"save:dex": {id: "save:dex", name: "Dexterity Saves", category: "saves", valueType: "number"},
+		"save:con": {id: "save:con", name: "Constitution Saves", category: "saves", valueType: "number"},
+		"save:int": {id: "save:int", name: "Intelligence Saves", category: "saves", valueType: "number"},
+		"save:wis": {id: "save:wis", name: "Wisdom Saves", category: "saves", valueType: "number"},
+		"save:cha": {id: "save:cha", name: "Charisma Saves", category: "saves", valueType: "number"},
+		// Skills (common ones for simple mode)
+		"skill:all": {id: "skill:all", name: "All Skill Checks", category: "skills", valueType: "number"},
+		"skill:perception": {id: "skill:perception", name: "Perception", category: "skills", valueType: "number"},
+		"skill:stealth": {id: "skill:stealth", name: "Stealth", category: "skills", valueType: "number"},
+		"skill:athletics": {id: "skill:athletics", name: "Athletics", category: "skills", valueType: "number"},
+		"skill:acrobatics": {id: "skill:acrobatics", name: "Acrobatics", category: "skills", valueType: "number"},
+		// Ability scores
+		"ability:str": {id: "ability:str", name: "Strength Score", category: "abilities", valueType: "number"},
+		"ability:dex": {id: "ability:dex", name: "Dexterity Score", category: "abilities", valueType: "number"},
+		"ability:con": {id: "ability:con", name: "Constitution Score", category: "abilities", valueType: "number"},
+		"ability:int": {id: "ability:int", name: "Intelligence Score", category: "abilities", valueType: "number"},
+		"ability:wis": {id: "ability:wis", name: "Wisdom Score", category: "abilities", valueType: "number"},
+		"ability:cha": {id: "ability:cha", name: "Charisma Score", category: "abilities", valueType: "number"},
+		// Senses
+		"sense:darkvision": {id: "sense:darkvision", name: "Darkvision", category: "senses", valueType: "number"},
+		"sense:blindsight": {id: "sense:blindsight", name: "Blindsight", category: "senses", valueType: "number"},
+		// Advantage/Disadvantage effects (boolean)
+		"advantage:attack": {id: "advantage:attack", name: "Advantage on Attacks", category: "advantage", valueType: "boolean"},
+		"advantage:save:all": {id: "advantage:save:all", name: "Advantage on All Saves", category: "advantage", valueType: "boolean"},
+		"advantage:save:dex": {id: "advantage:save:dex", name: "Advantage on DEX Saves", category: "advantage", valueType: "boolean"},
+		"advantage:stealth": {id: "advantage:stealth", name: "Advantage on Stealth", category: "advantage", valueType: "boolean"},
+		"disadvantage:stealth": {id: "disadvantage:stealth", name: "Disadvantage on Stealth", category: "disadvantage", valueType: "boolean"},
+		// Resistances
+		"resistance:fire": {id: "resistance:fire", name: "Fire Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:cold": {id: "resistance:cold", name: "Cold Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:lightning": {id: "resistance:lightning", name: "Lightning Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:poison": {id: "resistance:poison", name: "Poison Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:necrotic": {id: "resistance:necrotic", name: "Necrotic Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:radiant": {id: "resistance:radiant", name: "Radiant Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:bludgeoning": {id: "resistance:bludgeoning", name: "Bludgeoning Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:piercing": {id: "resistance:piercing", name: "Piercing Resistance", category: "resistance", valueType: "boolean"},
+		"resistance:slashing": {id: "resistance:slashing", name: "Slashing Resistance", category: "resistance", valueType: "boolean"},
+	};
+
+	/**
+	 * Get all custom abilities
+	 * @returns {Array} Array of custom ability objects
+	 */
+	getCustomAbilities () {
+		return [...this._data.customAbilities];
+	}
+
+	/**
+	 * Get custom abilities by category
+	 * @param {string} category - The category ID
+	 * @returns {Array} Filtered array of custom abilities
+	 */
+	getCustomAbilitiesByCategory (category) {
+		return this._data.customAbilities.filter(a => a.category === category);
+	}
+
+	/**
+	 * Get a single custom ability by ID
+	 * @param {string} id - The ability ID
+	 * @returns {object|null} The ability object or null
+	 */
+	getCustomAbility (id) {
+		return this._data.customAbilities.find(a => a.id === id) || null;
+	}
+
+	/**
+	 * Add a new custom ability
+	 * @param {object} opts - Ability options
+	 * @param {string} opts.name - Ability name (required)
+	 * @param {string} [opts.description] - Description text
+	 * @param {string} [opts.icon] - Emoji icon (default: "⚡")
+	 * @param {string} [opts.category] - Category ID (default: "homebrew")
+	 * @param {string} [opts.mode] - "passive", "toggleable", or "limited" (default: "passive")
+	 * @param {Array} [opts.effects] - Array of effect objects
+	 * @param {object} [opts.uses] - For limited mode: {max, recharge: "short"|"long"}
+	 * @param {string} [opts.activationAction] - For non-passive: "action", "bonus", "reaction", "free"
+	 * @returns {string} The new ability's ID
+	 */
+	addCustomAbility (opts = {}) {
+		const ability = {
+			id: `ca_${CryptUtil.uid()}`,
+			name: opts.name || "New Ability",
+			description: opts.description || "",
+			icon: opts.icon || "⚡",
+			category: opts.category || "homebrew",
+			mode: opts.mode || "passive",
+			isActive: opts.mode === "passive" ? true : false, // Passive abilities are always active
+			effects: opts.effects || [],
+			uses: opts.mode === "limited" ? {
+				current: opts.uses?.max || 1,
+				max: opts.uses?.max || 1,
+				recharge: opts.uses?.recharge || "long",
+			} : null,
+			activationAction: opts.activationAction || "free",
+			createdAt: Date.now(),
+		};
+
+		this._data.customAbilities.push(ability);
+
+		// Register effects for passive abilities immediately
+		if (ability.mode === "passive") {
+			this._registerCustomAbilityEffects(ability);
+		}
+
+		return ability.id;
+	}
+
+	/**
+	 * Update an existing custom ability
+	 * @param {string} id - The ability ID
+	 * @param {object} updates - Fields to update
+	 * @returns {boolean} True if ability was found and updated
+	 */
+	updateCustomAbility (id, updates) {
+		const ability = this._data.customAbilities.find(a => a.id === id);
+		if (!ability) return false;
+
+		const wasActive = ability.isActive;
+		const wasPassive = ability.mode === "passive";
+
+		// Unregister old effects if they were active
+		if (wasActive || wasPassive) {
+			this._unregisterCustomAbilityEffects(id);
+		}
+
+		// Apply updates
+		Object.assign(ability, updates);
+		ability.updatedAt = Date.now();
+
+		// Handle mode changes
+		if (updates.mode) {
+			if (updates.mode === "passive") {
+				ability.isActive = true;
+				ability.uses = null;
+			} else if (updates.mode === "limited" && !ability.uses) {
+				ability.uses = {current: 1, max: 1, recharge: "long"};
+			}
+		}
+
+		// Re-register effects if active
+		if (ability.isActive || ability.mode === "passive") {
+			this._registerCustomAbilityEffects(ability);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Remove a custom ability
+	 * @param {string} id - The ability ID
+	 * @returns {boolean} True if ability was found and removed
+	 */
+	removeCustomAbility (id) {
+		const index = this._data.customAbilities.findIndex(a => a.id === id);
+		if (index === -1) return false;
+
+		// Unregister any active effects
+		this._unregisterCustomAbilityEffects(id);
+
+		// Remove the ability
+		this._data.customAbilities.splice(index, 1);
+		return true;
+	}
+
+	/**
+	 * Toggle a toggleable custom ability on/off
+	 * @param {string} id - The ability ID
+	 * @returns {boolean} The new active state, or null if not found/not toggleable
+	 */
+	toggleCustomAbility (id) {
+		const ability = this._data.customAbilities.find(a => a.id === id);
+		if (!ability || ability.mode !== "toggleable") return null;
+
+		ability.isActive = !ability.isActive;
+
+		if (ability.isActive) {
+			this._registerCustomAbilityEffects(ability);
+		} else {
+			this._unregisterCustomAbilityEffects(id);
+		}
+
+		return ability.isActive;
+	}
+
+	/**
+	 * Use a limited-use custom ability (decrement uses)
+	 * @param {string} id - The ability ID
+	 * @returns {boolean} True if use was successful, false if no uses remaining or not limited
+	 */
+	useCustomAbility (id) {
+		const ability = this._data.customAbilities.find(a => a.id === id);
+		if (!ability || ability.mode !== "limited" || !ability.uses) return false;
+		if (ability.uses.current <= 0) return false;
+
+		ability.uses.current--;
+		return true;
+	}
+
+	/**
+	 * Restore uses for limited custom abilities based on rest type
+	 * @param {string} restType - "short" or "long"
+	 */
+	restoreCustomAbilityUses (restType) {
+		for (const ability of this._data.customAbilities) {
+			if (ability.mode !== "limited" || !ability.uses) continue;
+			
+			if (restType === "long" || ability.uses.recharge === restType) {
+				ability.uses.current = ability.uses.max;
+			}
+		}
+	}
+
+	/**
+	 * Register effects from a custom ability as named modifiers
+	 * @param {object} ability - The custom ability object
+	 * @private
+	 */
+	_registerCustomAbilityEffects (ability) {
+		if (!ability.effects || !ability.effects.length) return;
+
+		for (const effect of ability.effects) {
+			// Parse the effect type to determine how to register it
+			const effectType = effect.type;
+
+			// Handle resistance effects - add to resistances array
+			if (effectType.startsWith("resistance:")) {
+				const damageType = effectType.replace("resistance:", "");
+				if (!this._data.resistances.includes(damageType)) {
+					this._data.resistances.push(damageType);
+				}
+				continue;
+			}
+
+			// Handle advantage/disadvantage - these go to active states
+			if (effectType.startsWith("advantage:") || effectType.startsWith("disadvantage:")) {
+				// Create/update active state for the ability if toggleable
+				if (ability.mode === "toggleable") {
+					this._ensureCustomAbilityActiveState(ability);
+				}
+				continue;
+			}
+
+			// Standard numeric modifiers
+			this.addNamedModifier({
+				name: `${ability.name}: ${effect.name || effectType}`,
+				type: effectType,
+				value: effect.value || 0,
+				enabled: true,
+				sourceFeatureId: ability.id,
+				sourceType: "customAbility",
+				note: ability.description ? `From custom ability: ${ability.name}` : "",
+				// Pass through any special flags
+				advantage: effect.advantage,
+				disadvantage: effect.disadvantage,
+				setMinimum: effect.setMinimum,
+				setMaximum: effect.setMaximum,
+			});
+		}
+	}
+
+	/**
+	 * Unregister effects from a custom ability
+	 * @param {string} abilityId - The ability ID
+	 * @private
+	 */
+	_unregisterCustomAbilityEffects (abilityId) {
+		// Remove named modifiers with this sourceFeatureId
+		this.removeModifiersByFeature(abilityId);
+
+		// Remove any active state for this ability
+		const stateIndex = this._data.activeStates.findIndex(s => s.sourceFeatureId === abilityId);
+		if (stateIndex !== -1) {
+			this._data.activeStates.splice(stateIndex, 1);
+		}
+
+		// Clean up resistances added by this ability
+		const ability = this.getCustomAbility(abilityId);
+		if (ability?.effects) {
+			for (const effect of ability.effects) {
+				if (effect.type.startsWith("resistance:")) {
+					const damageType = effect.type.replace("resistance:", "");
+					const idx = this._data.resistances.indexOf(damageType);
+					if (idx !== -1) {
+						this._data.resistances.splice(idx, 1);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Ensure an active state exists for a toggleable custom ability
+	 * @param {object} ability - The custom ability
+	 * @private
+	 */
+	_ensureCustomAbilityActiveState (ability) {
+		// Check if state already exists
+		const existing = this._data.activeStates.find(s => s.sourceFeatureId === ability.id);
+		if (existing) {
+			existing.active = ability.isActive;
+			return;
+		}
+
+		// Create new active state for toggleable abilities with advantage/disadvantage effects
+		const customEffects = ability.effects
+			.filter(e => e.type.startsWith("advantage:") || e.type.startsWith("disadvantage:"))
+			.map(e => {
+				const parts = e.type.split(":");
+				const effectType = parts[0]; // "advantage" or "disadvantage"
+				const target = parts.slice(1).join(":"); // e.g., "save:dex" or "attack"
+				return {
+					type: effectType,
+					target: target,
+				};
+			});
+
+		if (customEffects.length) {
+			this._data.activeStates.push({
+				id: `cas_${ability.id}`,
+				stateTypeId: "customAbility",
+				name: ability.name,
+				icon: ability.icon,
+				description: ability.description,
+				active: ability.isActive,
+				sourceFeatureId: ability.id,
+				customEffects,
+			});
+		}
+	}
+
+	/**
+	 * Re-apply effects for all custom abilities (called after loading character data)
+	 * @private
+	 */
+	_reapplyCustomAbilityEffects () {
+		if (!Array.isArray(this._data.customAbilities)) return;
+
+		for (const ability of this._data.customAbilities) {
+			// Skip if not active (toggleable abilities that are off)
+			if (ability.mode === "toggleable" && !ability.isActive) continue;
+
+			// Passive abilities are always active, limited abilities apply when used
+			// For loading, we just re-register passive effects
+			if (ability.mode === "passive") {
+				// First clean up any existing registrations to avoid duplicates
+				this._unregisterCustomAbilityEffects(ability.id);
+				this._registerCustomAbilityEffects(ability);
+			} else if (ability.mode === "toggleable" && ability.isActive) {
+				this._unregisterCustomAbilityEffects(ability.id);
+				this._registerCustomAbilityEffects(ability);
+			}
+		}
+	}
+
+	/**
+	 * Get the note for a custom ability
+	 * @param {string} abilityId - The ability ID
+	 * @returns {string} The description/note or empty string
+	 */
+	getCustomAbilityNote (abilityId) {
+		const ability = this.getCustomAbility(abilityId);
+		return ability?.description || "";
+	}
+	// #endregion
+
 	// #region Custom Modifiers
 	/**
 	 * Get all named modifiers
@@ -19769,11 +20182,12 @@ class CharacterSheetState {
 
 	/**
 	 * Get custom modifier for a specific ability check (includes "all checks" bonus)
+	 * Note: namedModifiers are automatically aggregated into customModifiers by _recalculateCustomModifiers()
 	 * @param {string} ability - The ability abbreviation
 	 * @returns {number} The total custom modifier
 	 */
 	getAbilityCheckCustomMod (ability) {
-		return this._data.customModifiers.abilityChecks[ability] || 0;
+		return this._data.customModifiers.abilityChecks?.[ability] || 0;
 	}
 
 	/**
@@ -20115,7 +20529,7 @@ class CharacterSheetState {
 
 		// Category match (e.g., "check:str" matches "skill:athletics" if athletics uses STR)
 		if (targetParts[0] === "check" && typeParts[0] === "skill") {
-			const skillAbility = this._getSkillAbility(typeParts[1]);
+			const skillAbility = this.getSkillAbility(typeParts[1]);
 			return targetParts[1] === "all" || targetParts[1] === skillAbility;
 		}
 
@@ -20126,18 +20540,51 @@ class CharacterSheetState {
 	}
 
 	/**
-	 * Get the ability used for a skill
-	 * @private
+	 * Get the ability associated with a skill (supports both standard and custom skills)
+	 * @param {string} skill - The skill key
+	 * @returns {string|null} The ability abbreviation, or null if skill has no ability
 	 */
-	_getSkillAbility (skill) {
+	getSkillAbility (skill) {
 		const skillMap = {
 			athletics: "str",
 			acrobatics: "dex", sleightofhand: "dex", stealth: "dex",
 			arcana: "int", history: "int", investigation: "int", nature: "int", religion: "int",
 			animalhandling: "wis", insight: "wis", medicine: "wis", perception: "wis", survival: "wis",
 			deception: "cha", intimidation: "cha", performance: "cha", persuasion: "cha",
+			// Homebrew/custom standard skills
+			cooking: "wis",
+			culture: "int",
+			endurance: "con",
+			engineering: "int",
+			harvesting: "wis",
+			linguistics: "int",
+			might: "str",
 		};
-		return skillMap[skill?.toLowerCase().replace(/\s+/g, "")] || "int";
+
+		const normalizedSkill = skill?.toLowerCase().replace(/\s+/g, "");
+		
+		// Check standard skills first
+		if (skillMap[normalizedSkill]) {
+			return skillMap[normalizedSkill];
+		}
+
+		// Check custom skills
+		const customSkill = this._data.customSkills?.find(s =>
+			s.name.toLowerCase().replace(/\s+/g, "") === normalizedSkill,
+		);
+		if (customSkill) {
+			return customSkill.ability || null;
+		}
+
+		// Default to int for unknown skills (backwards compatibility)
+		return "int";
+	}
+
+	/**
+	 * @deprecated Use getSkillAbility instead
+	 */
+	_getSkillAbility (skill) {
+		return this.getSkillAbility(skill);
 	}
 
 	/**

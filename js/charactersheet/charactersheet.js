@@ -10,6 +10,7 @@ import {CharacterSheetExport} from "./charactersheet-export.js";
 import {CharacterSheetLevelUp} from "./charactersheet-levelup.js";
 import {CharacterSheetLayout} from "./charactersheet-layout.js";
 import {CharacterSheetNotes} from "./charactersheet-notes.js";
+import {CharacterSheetCustomAbilities} from "./charactersheet-customabilities.js";
 
 /**
  * Character Sheet - Main Controller
@@ -28,6 +29,7 @@ class CharacterSheetPage {
 		this._levelUp = null;
 		this._layout = null;
 		this._notes = null;
+		this._customAbilities = null;
 
 		this._$selCharacter = null;
 		this._currentCharacterId = null;
@@ -109,6 +111,11 @@ class CharacterSheetPage {
 			this._notes = new CharacterSheetNotes(this);
 			console.log("CharacterSheetPage.pInit: Notes module initialized");
 		} catch (e) { console.error("Failed to init notes:", e); }
+
+		try {
+			this._customAbilities = new CharacterSheetCustomAbilities(this);
+			console.log("CharacterSheetPage.pInit: CustomAbilities module initialized");
+		} catch (e) { console.error("Failed to init customAbilities:", e); }
 
 		try {
 			this._respec = new CharacterSheetRespec({page: this, state: this._state});
@@ -633,9 +640,6 @@ class CharacterSheetPage {
 
 		// Edit weapon masteries
 		$("#charsheet-edit-masteries").on("click", () => this._showEditWeaponMasteriesModal());
-
-		// Add custom feature
-		$("#charsheet-add-custom-feature").on("click", () => this._showAddCustomFeatureModal());
 	}
 
 	// #region Character Management
@@ -1573,7 +1577,6 @@ class CharacterSheetPage {
 		this._renderAttacks();
 		this._renderQuickSpells();
 		this._renderAbilitiesDetailed();
-		this._renderCustomFeatures();
 		this._renderModifierIndicators();
 		this._renderCompanions();
 
@@ -1581,6 +1584,7 @@ class CharacterSheetPage {
 		if (this._spells) this._spells.render();
 		if (this._inventory) this._inventory.render();
 		if (this._features) this._features.render();
+		if (this._customAbilities) this._customAbilities.render();
 		if (this._combat) this._combat.render();
 		if (this._respec) this._respec.render();
 
@@ -2012,6 +2016,19 @@ class CharacterSheetPage {
 				</div>
 			`);
 		});
+	}
+
+	/**
+	 * Update all calculated values and re-render affected UI sections.
+	 * Call this after any change that affects character stats (custom abilities, modifiers, etc.)
+	 */
+	_updateAllCalculations () {
+		this._renderAbilities();
+		this._renderSavingThrows();
+		this._renderSkills();
+		this._renderPassiveScores();
+		this._renderCombatStats();
+		this._renderDefenses();
 	}
 
 	/**
@@ -6279,18 +6296,34 @@ class CharacterSheetPage {
 	}
 
 	async _rollAbilityCheck (ability, event) {
-		const mod = this._state.getAbilityMod(ability);
+		const baseMod = this._state.getAbilityMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
 		
-		// Check for advantage/disadvantage from active states (e.g., Rage gives advantage on STR checks)
+		// Get aggregated modifiers for this ability check (includes custom abilities, items, etc.)
+		const aggregated = this._state.aggregateModifiers(`check:${ability}`);
+		const customBonus = aggregated.bonus;
+		const totalMod = baseMod + customBonus;
+		
+		// Determine advantage/disadvantage from aggregated modifiers and active states
 		let mode;
-		const hasAdvantage = this._state.hasAdvantageFromStates(`check:${ability}`);
-		const hasDisadvantage = this._state.hasDisadvantageFromStates(`check:${ability}`);
+		const hasAdvantageFromStates = this._state.hasAdvantageFromStates(`check:${ability}`);
+		const hasDisadvantageFromStates = this._state.hasDisadvantageFromStates(`check:${ability}`);
+		const hasAdvantage = aggregated.advantage || hasAdvantageFromStates;
+		const hasDisadvantage = aggregated.disadvantage || hasDisadvantageFromStates;
 		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
 		
 		const rollResult = this._rollD20({event, mode});
-		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
+		
+		// Apply minimum if set (e.g., Reliable Talent, custom abilities)
+		let effectiveRoll = rollResult.roll;
+		let minimumApplied = false;
+		if (aggregated.minimum != null && rollResult.roll < aggregated.minimum) {
+			effectiveRoll = aggregated.minimum;
+			minimumApplied = true;
+		}
+		
+		let total = effectiveRoll + totalMod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
 
 		// Thelemar crit visual cues
 		let resultClass = "";
@@ -6302,9 +6335,15 @@ class CharacterSheetPage {
 			resultClass = "charsheet__dice-result-total--fumble";
 			resultNote = "Natural 1! (-5 Thelemar)";
 		}
+		if (minimumApplied) {
+			resultNote = resultNote ? `${resultNote} | Min ${aggregated.minimum} applied` : `Min ${aggregated.minimum} applied (rolled ${rollResult.roll})`;
+		}
 
+		// Build breakdown string
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
+		const customBonusStr = customBonus !== 0 ? ` + ${customBonus} (custom)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
+		const sourcesStr = aggregated.sources.length > 0 ? ` [${aggregated.sources.join(", ")}]` : "";
 
 		// Show animated dice if enabled
 		if (this._state.getSettings()?.animatedDice) {
@@ -6314,10 +6353,47 @@ class CharacterSheetPage {
 		this._showDiceResult(
 			`${Parser.attAbvToFull(ability)} Check${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
-			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
+			this._formatD20BreakdownWithCustom(rollResult, baseMod, customBonus, exhaustionStr, minimumApplied ? aggregated.minimum : null) + sourcesStr,
 			resultClass,
 			resultNote,
 		);
+	}
+	
+	/**
+	 * Format d20 breakdown with custom bonus separated out
+	 */
+	_formatD20BreakdownWithCustom (rollResult, baseMod, customBonus, extraStr = "", minimumApplied = null) {
+		const baseModStr = baseMod >= 0 ? `+ ${baseMod}` : `- ${Math.abs(baseMod)}`;
+		const customStr = customBonus !== 0 ? (customBonus > 0 ? ` + ${customBonus}` : ` - ${Math.abs(customBonus)}`) : "";
+		const thelemar_critStr = rollResult.thelemar_critBonus 
+			? (rollResult.thelemar_critBonus > 0 ? ` + ${rollResult.thelemar_critBonus} [Nat 20]` : ` - ${Math.abs(rollResult.thelemar_critBonus)} [Nat 1]`)
+			: "";
+		const minStr = minimumApplied != null ? ` [min ${minimumApplied}]` : "";
+		
+		if (rollResult.mode === "advantage") {
+			return `2d20kh (${rollResult.roll1}, ${rollResult.roll2}) → ${minimumApplied ?? rollResult.roll}${minStr} ${baseModStr}${customStr}${thelemar_critStr}${extraStr}`;
+		} else if (rollResult.mode === "disadvantage") {
+			return `2d20kl (${rollResult.roll1}, ${rollResult.roll2}) → ${minimumApplied ?? rollResult.roll}${minStr} ${baseModStr}${customStr}${thelemar_critStr}${extraStr}`;
+		}
+		return `1d20 (${rollResult.roll})${minStr} ${baseModStr}${customStr}${thelemar_critStr}${extraStr}`;
+	}
+	
+	/**
+	 * Format d20 breakdown with minimum applied
+	 */
+	_formatD20BreakdownWithMinimum (rollResult, modifier, extraStr = "", minimumApplied = null) {
+		const modStr = modifier >= 0 ? `+ ${modifier}` : `- ${Math.abs(modifier)}`;
+		const thelemar_critStr = rollResult.thelemar_critBonus 
+			? (rollResult.thelemar_critBonus > 0 ? ` + ${rollResult.thelemar_critBonus} [Nat 20]` : ` - ${Math.abs(rollResult.thelemar_critBonus)} [Nat 1]`)
+			: "";
+		const minStr = minimumApplied != null ? ` [min ${minimumApplied}]` : "";
+		
+		if (rollResult.mode === "advantage") {
+			return `2d20kh (${rollResult.roll1}, ${rollResult.roll2}) → ${minimumApplied ?? rollResult.roll}${minStr} ${modStr}${thelemar_critStr}${extraStr}`;
+		} else if (rollResult.mode === "disadvantage") {
+			return `2d20kl (${rollResult.roll1}, ${rollResult.roll2}) → ${minimumApplied ?? rollResult.roll}${minStr} ${modStr}${thelemar_critStr}${extraStr}`;
+		}
+		return `1d20 (${rollResult.roll})${minStr} ${modStr}${thelemar_critStr}${extraStr}`;
 	}
 
 	async _rollSavingThrow (ability, event) {
@@ -6333,20 +6409,34 @@ class CharacterSheetPage {
 			return;
 		}
 
-		const mod = this._state.getSaveMod(ability);
+		const baseMod = this._state.getSaveMod(ability);
 		const exhaustionPenalty = this._getExhaustionPenalty();
 		
-		// Check for advantage/disadvantage from active states (e.g., Rage gives advantage on STR saves)
+		// Get aggregated modifiers for this saving throw
+		const aggregated = this._state.aggregateModifiers(`save:${ability}`);
+		// Note: baseMod already includes custom save modifiers, avoid double-counting
+		const mod = baseMod;
+		
+		// Check for advantage/disadvantage from active states and aggregated modifiers
 		let mode;
 		const advState = this._state.getAdvantageState?.(`save:${ability}`);
-		const hasAdvantage = advState?.advantage || this._state.hasAdvantageFromStates(`save:${ability}`);
-		const hasDisadvantage = advState?.disadvantage || this._state.hasDisadvantageFromStates(`save:${ability}`);
+		const hasAdvantage = advState?.advantage || aggregated.advantage || this._state.hasAdvantageFromStates(`save:${ability}`);
+		const hasDisadvantage = advState?.disadvantage || aggregated.disadvantage || this._state.hasDisadvantageFromStates(`save:${ability}`);
 		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
 		// If both, they cancel out - use normal (event can still override)
 		
 		const rollResult = this._rollD20({event, mode});
-		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
+		
+		// Apply minimum if set
+		let effectiveRoll = rollResult.roll;
+		let minimumApplied = false;
+		if (aggregated.minimum != null && rollResult.roll < aggregated.minimum) {
+			effectiveRoll = aggregated.minimum;
+			minimumApplied = true;
+		}
+		
+		const total = effectiveRoll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
 
 		// Thelemar crit visual cues
 		let resultClass = "";
@@ -6358,9 +6448,13 @@ class CharacterSheetPage {
 			resultClass = "charsheet__dice-result-total--fumble";
 			resultNote = "Natural 1! (-5 Thelemar)";
 		}
+		if (minimumApplied) {
+			resultNote = resultNote ? `${resultNote} | Min ${aggregated.minimum} applied` : `Min ${aggregated.minimum} applied (rolled ${rollResult.roll})`;
+		}
 
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
+		const sourcesStr = aggregated.sources.length > 0 ? ` [${aggregated.sources.join(", ")}]` : "";
 
 		// Show animated dice if enabled
 		if (this._state.getSettings()?.animatedDice) {
@@ -6370,7 +6464,7 @@ class CharacterSheetPage {
 		this._showDiceResult(
 			`${Parser.attAbvToFull(ability)} Save${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
-			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
+			this._formatD20BreakdownWithMinimum(rollResult, mod, exhaustionStr, minimumApplied ? aggregated.minimum : null) + sourcesStr,
 			resultClass,
 			resultNote,
 		);
@@ -6382,16 +6476,35 @@ class CharacterSheetPage {
 			: this._state.getSkillMod(skillKey);
 		const exhaustionPenalty = this._getExhaustionPenalty();
 
-		// Check for advantage/disadvantage from active states and modifiers
+		// Get aggregated modifiers for this skill
+		const aggregated = this._state.aggregateModifiers(`skill:${skillKey}`);
+		// Also get check: type modifiers for the underlying ability
+		const skillAbility = this._state.getSkillAbility?.(skillKey) || this._getDefaultSkillAbility(skillKey);
+		const checkAggregated = this._state.aggregateModifiers(`check:${skillAbility}`);
+		
+		// Check for advantage/disadvantage from skill and check modifiers
 		let mode;
 		const advState = this._state.getAdvantageState?.(`skill:${skillKey}`);
-		const hasAdvantage = advState?.advantage || false;
-		const hasDisadvantage = advState?.disadvantage || false;
+		const hasAdvantage = advState?.advantage || aggregated.advantage || checkAggregated.advantage;
+		const hasDisadvantage = advState?.disadvantage || aggregated.disadvantage || checkAggregated.disadvantage;
 		if (hasAdvantage && !hasDisadvantage) mode = "advantage";
 		else if (hasDisadvantage && !hasAdvantage) mode = "disadvantage";
 
 		const rollResult = this._rollD20({event, mode});
-		const total = rollResult.roll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
+		
+		// Apply minimum if set (take the highest minimum from skill and check modifiers)
+		let effectiveRoll = rollResult.roll;
+		let minimumApplied = false;
+		let minimumValue = null;
+		if (aggregated.minimum != null || checkAggregated.minimum != null) {
+			minimumValue = Math.max(aggregated.minimum ?? 0, checkAggregated.minimum ?? 0);
+			if (rollResult.roll < minimumValue) {
+				effectiveRoll = minimumValue;
+				minimumApplied = true;
+			}
+		}
+		
+		const total = effectiveRoll + mod - exhaustionPenalty + (rollResult.thelemar_critBonus || 0);
 
 		// Thelemar crit visual cues
 		let resultClass = "";
@@ -6403,10 +6516,15 @@ class CharacterSheetPage {
 			resultClass = "charsheet__dice-result-total--fumble";
 			resultNote = "Natural 1! (-5 Thelemar)";
 		}
+		if (minimumApplied) {
+			resultNote = resultNote ? `${resultNote} | Min ${minimumValue} applied` : `Min ${minimumValue} applied (rolled ${rollResult.roll})`;
+		}
 
 		const abilityLabel = overrideAbility ? ` (${overrideAbility.toUpperCase()})` : "";
 		const exhaustionStr = exhaustionPenalty > 0 ? ` - ${exhaustionPenalty} (exhaustion)` : "";
 		const stateEffectStr = (hasAdvantage || hasDisadvantage) ? this._getActiveStateEffectLabel(hasAdvantage, hasDisadvantage) : "";
+		const allSources = [...aggregated.sources, ...checkAggregated.sources.filter(s => !aggregated.sources.includes(s))];
+		const sourcesStr = allSources.length > 0 ? ` [${allSources.join(", ")}]` : "";
 
 		// Show animated dice if enabled
 		if (this._state.getSettings()?.animatedDice) {
@@ -6416,10 +6534,18 @@ class CharacterSheetPage {
 		this._showDiceResult(
 			`${skillName}${abilityLabel} Check${this._getModeLabel(rollResult.mode)}${stateEffectStr}`,
 			total,
-			this._formatD20Breakdown(rollResult, mod, exhaustionStr),
+			this._formatD20BreakdownWithMinimum(rollResult, mod, exhaustionStr, minimumApplied ? minimumValue : null) + sourcesStr,
 			resultClass,
 			resultNote,
 		);
+	}
+	
+	/**
+	 * Get the default ability for a skill (delegates to state for custom skill support)
+	 */
+	_getDefaultSkillAbility (skillKey) {
+		// Use state method which includes custom skills
+		return this._state.getSkillAbility(skillKey) || "int";
 	}
 
 	/**
@@ -9034,298 +9160,6 @@ class CharacterSheetPage {
 		}
 
 		return maxMasteries; // 0 if no Weapon Mastery feature found
-	}
-
-	/**
-	 * Get available feature suggestions from game data
-	 */
-	_getFeatureSuggestions () {
-		const features = [];
-
-		try {
-			// Add class features (deduplicated by name)
-			const classFeatureNames = new Set();
-			(this._classFeatures || []).forEach(f => {
-				if (!classFeatureNames.has(f.name)) {
-					classFeatureNames.add(f.name);
-					features.push({
-						name: f.name,
-						source: f.source,
-						description: f.entries ? Renderer.get().render({entries: f.entries}) : null,
-						featureType: `Class (${f.className})`,
-					});
-				}
-			});
-
-			// Add optional features (invocations, fighting styles, etc.)
-			(this._optionalFeaturesData || []).forEach(f => {
-				features.push({
-					name: f.name,
-					source: f.source,
-					description: f.entries ? Renderer.get().render({entries: f.entries}) : null,
-					featureType: f.featureType?.join(", ") || "Optional Feature",
-				});
-			});
-
-			// Add racial traits from race data
-			(this._races || []).forEach(race => {
-				if (race.entries) {
-					race.entries.forEach(entry => {
-						if (entry.name && entry.entries) {
-							features.push({
-								name: entry.name,
-								source: race.source,
-								description: Renderer.get().render({entries: entry.entries}),
-								featureType: `Race (${race.name})`,
-							});
-						}
-					});
-				}
-			});
-		} catch (e) {
-			console.error("[CharSheet] Error getting feature suggestions:", e);
-		}
-
-		// Sort by name and deduplicate
-		const seen = new Set();
-		return features.filter(f => {
-			const key = f.name.toLowerCase();
-			if (seen.has(key)) return false;
-			seen.add(key);
-			return true;
-		}).sort((a, b) => a.name.localeCompare(b.name));
-	}
-
-	/**
-	 * Show modal for adding a custom feature
-	 */
-	async _showAddCustomFeatureModal () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: "✨ Add Custom Feature",
-			isMinHeight0: true,
-			isWidth100: true,
-		});
-
-		let featureSuggestions = [];
-		try {
-			featureSuggestions = this._getFeatureSuggestions();
-		} catch (e) {
-			console.error("[CharSheet] Error getting feature suggestions:", e);
-		}
-
-		// Intro text
-		$modalInner.append(`
-			<p class="ve-small ve-muted mb-3">
-				Add a custom feature to your character. You can search existing features for inspiration or create something entirely new.
-			</p>
-		`);
-
-		const $form = $$`<div class="charsheet__custom-feature-form">
-			<div class="charsheet__form-group">
-				<label class="charsheet__form-label">
-					<span class="charsheet__form-label-icon">📝</span>
-					Feature Name
-				</label>
-				<div class="charsheet__form-input-wrapper">
-					<input type="text" class="form-control charsheet__form-input" id="custom-feature-name" placeholder="Search features or enter custom name...">
-					<div class="charsheet__autocomplete-dropdown" id="custom-feature-dropdown"></div>
-				</div>
-			</div>
-			
-			<div class="charsheet__form-row">
-				<div class="charsheet__form-group charsheet__form-group--half">
-					<label class="charsheet__form-label">
-						<span class="charsheet__form-label-icon">📚</span>
-						Source
-					</label>
-					<input type="text" class="form-control charsheet__form-input" id="custom-feature-source" placeholder="e.g. Race, Feat, Item" value="Custom">
-				</div>
-				<div class="charsheet__form-group charsheet__form-group--half">
-					<label class="charsheet__form-label">
-						<span class="charsheet__form-label-icon">🏷️</span>
-						Type
-					</label>
-					<select class="form-control charsheet__form-input" id="custom-feature-type">
-						<option value="Custom">Custom</option>
-						<option value="Racial">Racial Feature</option>
-						<option value="Class">Class Feature</option>
-						<option value="Feat">Feat</option>
-						<option value="Item">Item Property</option>
-						<option value="Boon">Boon/Blessing</option>
-						<option value="Other">Other</option>
-					</select>
-				</div>
-			</div>
-			
-			<div class="charsheet__form-group">
-				<label class="charsheet__form-label">
-					<span class="charsheet__form-label-icon">📖</span>
-					Description <span class="ve-muted">(optional)</span>
-				</label>
-				<textarea class="form-control charsheet__form-input charsheet__form-textarea" id="custom-feature-desc" rows="5" placeholder="Enter feature description... You can use basic formatting."></textarea>
-			</div>
-			
-			<div class="charsheet__form-actions">
-				<button class="ve-btn ve-btn-default" id="custom-feature-cancel">Cancel</button>
-				<button class="ve-btn ve-btn-primary" id="custom-feature-add">
-					<span class="glyphicon glyphicon-plus mr-1"></span> Add Feature
-				</button>
-			</div>
-		</div>`.appendTo($modalInner);
-
-		const $name = $form.find("#custom-feature-name");
-		const $source = $form.find("#custom-feature-source");
-		const $type = $form.find("#custom-feature-type");
-		const $desc = $form.find("#custom-feature-desc");
-		const $dropdown = $form.find("#custom-feature-dropdown");
-		const $addBtn = $form.find("#custom-feature-add");
-		const $cancelBtn = $form.find("#custom-feature-cancel");
-
-		const renderDropdown = (filter = "") => {
-			const filtered = featureSuggestions.filter(f => {
-				if (!filter) return false; // Don't show all when empty
-				return f.name.toLowerCase().includes(filter.toLowerCase());
-			}).slice(0, 10);
-
-			$dropdown.empty();
-			if (!filtered.length) {
-				$dropdown.removeClass("open");
-				return;
-			}
-
-			filtered.forEach(feature => {
-				const $item = $(`
-					<div class="charsheet__autocomplete-item">
-						<div class="charsheet__autocomplete-item-icon">✨</div>
-						<div class="charsheet__autocomplete-item-content">
-							<span class="charsheet__autocomplete-item-name">${feature.name}</span>
-							<span class="charsheet__autocomplete-item-type">${feature.featureType}</span>
-						</div>
-					</div>
-				`);
-				$item.on("click", () => {
-					$name.val(feature.name);
-					$source.val(feature.featureType);
-					// Try to match type
-					const typeMap = {
-						"Race": "Racial",
-						"Racial": "Racial",
-						"Class": "Class",
-						"Subclass": "Class",
-						"Feat": "Feat",
-						"Background": "Other",
-					};
-					const mappedType = Object.entries(typeMap).find(([k]) => feature.featureType.includes(k))?.[1] || "Custom";
-					$type.val(mappedType);
-					if (feature.description) $desc.val(feature.description.replace(/<[^>]*>/g, "")); // Strip HTML
-					$dropdown.removeClass("open");
-				});
-				$dropdown.append($item);
-			});
-			$dropdown.addClass("open");
-		};
-
-		$name.on("input", () => renderDropdown($name.val()));
-		$name.on("focus", () => renderDropdown($name.val()));
-		$name.on("blur", () => setTimeout(() => $dropdown.removeClass("open"), 200));
-
-		$cancelBtn.on("click", () => doClose());
-
-		$addBtn.on("click", () => {
-			const name = $name.val().trim();
-			const source = $source.val().trim() || "Custom";
-			const type = $type.val();
-			const description = $desc.val().trim();
-
-			if (!name) {
-				JqueryUtil.doToast({type: "warning", content: "Please enter a feature name."});
-				$name.focus();
-				return;
-			}
-
-			// Add the custom feature
-			this._state.addFeature({
-				name,
-				source,
-				description: description || null,
-				featureType: type,
-				isCustom: true,
-			});
-
-			// Re-render features
-			if (this._features) this._features.render();
-			this._renderCustomFeatures();
-			this._saveCurrentCharacter();
-
-			JqueryUtil.doToast({type: "success", content: `Added feature: ${name}`});
-			doClose();
-		});
-
-		// Allow Enter in name to move to description, Ctrl+Enter to submit
-		$name.on("keypress", (e) => {
-			if (e.which === 13) {
-				e.preventDefault();
-				$desc.focus();
-			}
-		});
-
-		$desc.on("keydown", (e) => {
-			if (e.which === 13 && (e.ctrlKey || e.metaKey)) {
-				e.preventDefault();
-				$addBtn.click();
-			}
-		});
-
-		$name.focus();
-	}
-
-	/**
-	 * Render custom features section
-	 */
-	_renderCustomFeatures () {
-		const $container = $("#charsheet-custom-features");
-		$container.empty();
-
-		const features = this._state.getFeatures().filter(f => f.isCustom || f.featureType === "Custom");
-
-		if (!features.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No custom features added</div>`);
-			return;
-		}
-
-		features.forEach(feature => {
-			const $feature = $(`
-				<div class="charsheet__feature" data-feature-id="${feature.id}">
-					<div class="charsheet__feature-header">
-						<span class="charsheet__feature-toggle glyphicon glyphicon-chevron-down"></span>
-						<span class="charsheet__feature-name">${feature.name}</span>
-						<span class="charsheet__feature-source ve-muted">(${feature.source})</span>
-						<div class="charsheet__feature-actions">
-							<span class="charsheet__feature-remove glyphicon glyphicon-trash" title="Remove feature"></span>
-						</div>
-					</div>
-					<div class="charsheet__feature-body" style="display: none;">
-						${feature.description ? `<div class="charsheet__feature-desc">${Renderer.get().render(feature.description)}</div>` : `<div class="ve-muted">No description</div>`}
-					</div>
-				</div>
-			`);
-
-			$feature.find(".charsheet__feature-toggle, .charsheet__feature-header").on("click", (e) => {
-				if ($(e.target).closest(".charsheet__feature-actions").length) return;
-				const $body = $feature.find(".charsheet__feature-body");
-				const $toggle = $feature.find(".charsheet__feature-toggle");
-				$body.slideToggle(200);
-				$toggle.toggleClass("glyphicon-chevron-down glyphicon-chevron-up");
-			});
-
-			$feature.find(".charsheet__feature-remove").on("click", () => {
-				this._state.removeFeature(feature.id);
-				this._renderCustomFeatures();
-				this._saveCurrentCharacter();
-			});
-
-			$container.append($feature);
-		});
 	}
 	// #endregion
 }
