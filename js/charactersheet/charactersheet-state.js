@@ -15557,16 +15557,25 @@ class CharacterSheetState {
 	/**
 	 * Add a condition and apply its effects
 	 * Supports both old format (string) and new format ({name, source})
+	 * Will not add if character is immune to the condition
 	 * @param {string|object} condition - The condition name or {name, source} object
+	 * @returns {boolean} True if condition was added, false if immune or already exists
 	 */
 	addCondition (condition) {
 		const condObj = this._normalizeCondition(condition);
+
+		// Check if character is immune to this condition
+		if (this.isImmuneToCondition(condObj.name)) {
+			return false;
+		}
 
 		// Check if this exact condition (name + source) already exists
 		if (!this.hasConditionExact(condObj.name, condObj.source)) {
 			this._data.conditions.push(condObj);
 			this._applyConditionEffects(condObj.name, condObj.source);
+			return true;
 		}
+		return false;
 	}
 
 	/**
@@ -19116,11 +19125,19 @@ class CharacterSheetState {
 
 	/**
 	 * Check if character is immune to a condition (base + active states)
-	 * @param {string} condition - Condition name
+	 * Matching is case-insensitive and source-agnostic.
+	 * @param {string|object} condition - Condition name or {name, source} object
 	 * @returns {boolean} True if immune
 	 */
 	isImmuneToCondition (condition) {
-		return this._data.conditionImmunities.includes(condition) || this.hasConditionImmunityFromStates(condition);
+		const condName = (typeof condition === "string" ? condition : condition?.name || "").toLowerCase();
+		
+		// Check base condition immunities (case-insensitive)
+		const hasBaseImmunity = this._data.conditionImmunities.some(
+			ci => ci.toLowerCase() === condName,
+		);
+		
+		return hasBaseImmunity || this.hasConditionImmunityFromStates(condName);
 	}
 	// #endregion
 
@@ -19542,12 +19559,15 @@ class CharacterSheetState {
 			isActive: opts.mode === "passive" ? true : false, // Passive abilities are always active
 			effects: opts.effects || [],
 			grants: opts.grants || null,
+			defensiveTraits: opts.defensiveTraits || null,
 			uses: opts.mode === "limited" ? {
 				current: opts.uses?.max || 1,
 				max: opts.uses?.max || 1,
 				recharge: opts.uses?.recharge || "long",
 			} : null,
 			activationAction: opts.activationAction || "free",
+			duration: opts.duration || null,
+			concentration: opts.concentration || false,
 			createdAt: Date.now(),
 		};
 
@@ -19630,8 +19650,22 @@ class CharacterSheetState {
 		ability.isActive = !ability.isActive;
 
 		if (ability.isActive) {
+			// Handle concentration - break existing and set new
+			if (ability.concentration) {
+				this.breakConcentration();
+				this._data.concentrating = {
+					name: ability.name,
+					spellName: null,
+					customAbilityId: ability.id,
+					startedAt: Date.now(),
+				};
+			}
 			this._registerCustomAbilityEffects(ability);
 		} else {
+			// Clear concentration if this ability was concentrating
+			if (ability.concentration && this._data.concentrating?.customAbilityId === id) {
+				this._data.concentrating = null;
+			}
 			this._unregisterCustomAbilityEffects(id);
 		}
 
@@ -19681,9 +19715,32 @@ class CharacterSheetState {
 				// Handle resistance effects - add to resistances array
 				if (effectType.startsWith("resistance:")) {
 					const damageType = effectType.replace("resistance:", "");
-					if (!this._data.resistances.includes(damageType)) {
-						this._data.resistances.push(damageType);
-					}
+					this.addResistance(damageType);
+					this._trackGrantedDefensiveTrait("resistances", damageType, ability.id);
+					continue;
+				}
+
+				// Handle immunity effects - add to immunities array
+				if (effectType.startsWith("immunity:")) {
+					const damageType = effectType.replace("immunity:", "");
+					this.addImmunity(damageType);
+					this._trackGrantedDefensiveTrait("immunities", damageType, ability.id);
+					continue;
+				}
+
+				// Handle vulnerability effects - add to vulnerabilities array
+				if (effectType.startsWith("vulnerability:")) {
+					const damageType = effectType.replace("vulnerability:", "");
+					this.addVulnerability(damageType);
+					this._trackGrantedDefensiveTrait("vulnerabilities", damageType, ability.id);
+					continue;
+				}
+
+				// Handle condition immunity effects
+				if (effectType.startsWith("conditionImmunity:")) {
+					const condition = effectType.replace("conditionImmunity:", "");
+					this.addConditionImmunity(condition);
+					this._trackGrantedDefensiveTrait("conditionImmunities", condition, ability.id);
 					continue;
 				}
 
@@ -19717,6 +19774,54 @@ class CharacterSheetState {
 		// Handle grants (spells, proficiencies, features)
 		if (ability.grants) {
 			this._registerCustomAbilityGrants(ability);
+		}
+
+		// Handle defensive traits (new format)
+		if (ability.defensiveTraits) {
+			this._registerCustomAbilityDefensiveTraits(ability);
+		}
+	}
+
+	/**
+	 * Register defensive traits from a custom ability
+	 * @param {object} ability - The custom ability object
+	 * @private
+	 */
+	_registerCustomAbilityDefensiveTraits (ability) {
+		const traits = ability.defensiveTraits;
+		if (!traits) return;
+
+		// Resistances
+		if (traits.resistances?.length) {
+			for (const type of traits.resistances) {
+				this.addResistance(type);
+				this._trackGrantedDefensiveTrait("resistances", type, ability.id);
+			}
+		}
+
+		// Immunities
+		if (traits.immunities?.length) {
+			for (const type of traits.immunities) {
+				this.addImmunity(type);
+				this._trackGrantedDefensiveTrait("immunities", type, ability.id);
+			}
+		}
+
+		// Vulnerabilities
+		if (traits.vulnerabilities?.length) {
+			for (const type of traits.vulnerabilities) {
+				this.addVulnerability(type);
+				this._trackGrantedDefensiveTrait("vulnerabilities", type, ability.id);
+			}
+		}
+
+		// Condition Immunities (normalized to lowercase)
+		if (traits.conditionImmunities?.length) {
+			for (const cond of traits.conditionImmunities) {
+				const normalizedCond = cond.toLowerCase();
+				this.addConditionImmunity(normalizedCond);
+				this._trackGrantedDefensiveTrait("conditionImmunities", normalizedCond, ability.id);
+			}
 		}
 	}
 
@@ -19860,6 +19965,49 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Track which abilities granted defensive traits (resistances, immunities, vulnerabilities, condition immunities)
+	 * @param {string} type - "resistances", "immunities", "vulnerabilities", "conditionImmunities"
+	 * @param {string} name - The damage type or condition name
+	 * @param {string} abilityId - The source custom ability ID
+	 * @private
+	 */
+	_trackGrantedDefensiveTrait (type, name, abilityId) {
+		if (!this._data.grantedDefensiveTraits) {
+			this._data.grantedDefensiveTraits = {resistances: {}, immunities: {}, vulnerabilities: {}, conditionImmunities: {}};
+		}
+		if (!this._data.grantedDefensiveTraits[type]) {
+			this._data.grantedDefensiveTraits[type] = {};
+		}
+		if (!this._data.grantedDefensiveTraits[type][name]) {
+			this._data.grantedDefensiveTraits[type][name] = [];
+		}
+		if (!this._data.grantedDefensiveTraits[type][name].includes(abilityId)) {
+			this._data.grantedDefensiveTraits[type][name].push(abilityId);
+		}
+	}
+
+	/**
+	 * Remove granted defensive trait tracking for an ability
+	 * @param {string} type - "resistances", "immunities", "vulnerabilities", "conditionImmunities"
+	 * @param {string} name - The damage type or condition name
+	 * @param {string} abilityId - The source custom ability ID
+	 * @returns {boolean} True if this was the last source and trait should be removed
+	 * @private
+	 */
+	_untrackGrantedDefensiveTrait (type, name, abilityId) {
+		if (!this._data.grantedDefensiveTraits?.[type]?.[name]) return true; // No tracking = safe to remove
+
+		const sources = this._data.grantedDefensiveTraits[type][name];
+		const idx = sources.indexOf(abilityId);
+		if (idx !== -1) {
+			sources.splice(idx, 1);
+		}
+
+		// Return true if no more sources (should remove trait)
+		return sources.length === 0;
+	}
+
+	/**
 	 * Unregister effects from a custom ability
 	 * @param {string} abilityId - The ability ID
 	 * @private
@@ -19880,9 +20028,27 @@ class CharacterSheetState {
 			for (const effect of ability.effects) {
 				if (effect.type.startsWith("resistance:")) {
 					const damageType = effect.type.replace("resistance:", "");
-					const idx = this._data.resistances.indexOf(damageType);
-					if (idx !== -1) {
-						this._data.resistances.splice(idx, 1);
+					if (this._untrackGrantedDefensiveTrait("resistances", damageType, abilityId)) {
+						const idx = this._data.resistances.indexOf(damageType);
+						if (idx !== -1) this._data.resistances.splice(idx, 1);
+					}
+				} else if (effect.type.startsWith("immunity:")) {
+					const damageType = effect.type.replace("immunity:", "");
+					if (this._untrackGrantedDefensiveTrait("immunities", damageType, abilityId)) {
+						const idx = this._data.immunities.indexOf(damageType);
+						if (idx !== -1) this._data.immunities.splice(idx, 1);
+					}
+				} else if (effect.type.startsWith("vulnerability:")) {
+					const damageType = effect.type.replace("vulnerability:", "");
+					if (this._untrackGrantedDefensiveTrait("vulnerabilities", damageType, abilityId)) {
+						const idx = this._data.vulnerabilities.indexOf(damageType);
+						if (idx !== -1) this._data.vulnerabilities.splice(idx, 1);
+					}
+				} else if (effect.type.startsWith("conditionImmunity:")) {
+					const condition = effect.type.replace("conditionImmunity:", "");
+					if (this._untrackGrantedDefensiveTrait("conditionImmunities", condition, abilityId)) {
+						const idx = this._data.conditionImmunities.indexOf(condition);
+						if (idx !== -1) this._data.conditionImmunities.splice(idx, 1);
 					}
 				}
 			}
@@ -19891,6 +20057,62 @@ class CharacterSheetState {
 		// Clean up grants
 		if (ability?.grants) {
 			this._unregisterCustomAbilityGrants(ability);
+		}
+
+		// Clean up defensive traits (new format)
+		if (ability?.defensiveTraits) {
+			this._unregisterCustomAbilityDefensiveTraits(ability);
+		}
+	}
+
+	/**
+	 * Unregister defensive traits from a custom ability
+	 * @param {object} ability - The custom ability object
+	 * @private
+	 */
+	_unregisterCustomAbilityDefensiveTraits (ability) {
+		const traits = ability.defensiveTraits;
+		if (!traits) return;
+
+		// Resistances
+		if (traits.resistances?.length) {
+			for (const type of traits.resistances) {
+				if (this._untrackGrantedDefensiveTrait("resistances", type, ability.id)) {
+					const idx = this._data.resistances.indexOf(type);
+					if (idx !== -1) this._data.resistances.splice(idx, 1);
+				}
+			}
+		}
+
+		// Immunities
+		if (traits.immunities?.length) {
+			for (const type of traits.immunities) {
+				if (this._untrackGrantedDefensiveTrait("immunities", type, ability.id)) {
+					const idx = this._data.immunities.indexOf(type);
+					if (idx !== -1) this._data.immunities.splice(idx, 1);
+				}
+			}
+		}
+
+		// Vulnerabilities
+		if (traits.vulnerabilities?.length) {
+			for (const type of traits.vulnerabilities) {
+				if (this._untrackGrantedDefensiveTrait("vulnerabilities", type, ability.id)) {
+					const idx = this._data.vulnerabilities.indexOf(type);
+					if (idx !== -1) this._data.vulnerabilities.splice(idx, 1);
+				}
+			}
+		}
+
+		// Condition Immunities
+		if (traits.conditionImmunities?.length) {
+			for (const cond of traits.conditionImmunities) {
+				const normalizedCond = cond.toLowerCase();
+				if (this._untrackGrantedDefensiveTrait("conditionImmunities", normalizedCond, ability.id)) {
+					const idx = this._data.conditionImmunities.indexOf(normalizedCond);
+					if (idx !== -1) this._data.conditionImmunities.splice(idx, 1);
+				}
+			}
 		}
 	}
 
@@ -23959,8 +24181,12 @@ class CharacterSheetState {
 	 * @returns {boolean} True if immune
 	 */
 	hasConditionImmunityFromStates (condition) {
+		const condLower = condition.toLowerCase();
 		const effects = this.getActiveStateEffects();
-		return effects.some(e => e.type === "conditionImmunity" && (e.target === condition || e.condition === condition));
+		return effects.some(e => 
+			e.type === "conditionImmunity" && 
+			((e.target || "").toLowerCase() === condLower || (e.condition || "").toLowerCase() === condLower),
+		);
 	}
 
 	/**
@@ -24394,7 +24620,17 @@ class CharacterSheetState {
 	breakConcentration () {
 		// Save the spell name BEFORE clearing, so we can match by name as fallback
 		const concSpellName = this._data.concentrating?.spellName;
+		const concCustomAbilityId = this._data.concentrating?.customAbilityId;
 		this._data.concentrating = null;
+
+		// If a custom ability was concentrating, toggle it off
+		if (concCustomAbilityId) {
+			const ability = this._data.customAbilities.find(a => a.id === concCustomAbilityId);
+			if (ability?.isActive) {
+				ability.isActive = false;
+				this._unregisterCustomAbilityEffects(concCustomAbilityId);
+			}
+		}
 
 		// Dismiss concentration-linked companions (summons, etc.)
 		this.dismissConcentrationCompanions();

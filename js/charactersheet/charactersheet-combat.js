@@ -1914,9 +1914,36 @@ class CharacterSheetCombat {
 
 		if ($condImmunities.length) {
 			if (allConditionImmunities.length) {
+				// Get condition sources for hover support
+				const conditionsList = this._page?.getConditionsListUnique?.() || this._page?.getConditionsList?.() || [];
+				const conditionSourceMap = new Map();
+				conditionsList.forEach(c => {
+					if (!conditionSourceMap.has(c.name.toLowerCase())) {
+						conditionSourceMap.set(c.name.toLowerCase(), c.source);
+					}
+				});
+
 				$condImmunities.html(allConditionImmunities.map(c => {
 					const isFromState = stateConditionImmunities.includes(c) && !conditionImmunities.includes(c);
-					return `<span class="badge ${isFromState ? "badge-warning" : "badge-info"} mr-1" title="${isFromState ? "From active state" : "Base immunity"}">${c.charAt(0).toUpperCase() + c.slice(1)}</span>`;
+					const conditionSource = conditionSourceMap.get(c.toLowerCase()) || Parser.SRC_XPHB;
+					const displayName = c.charAt(0).toUpperCase() + c.slice(1);
+					
+					// Create hoverable link
+					let conditionContent = displayName;
+					try {
+						const hash = UrlUtil.encodeForHash([c, conditionSource].join(HASH_LIST_SEP));
+						const hoverAttrs = Renderer.hover.getHoverElementAttributes({
+							page: UrlUtil.PG_CONDITIONS_DISEASES,
+							source: conditionSource,
+							hash: hash,
+						});
+						conditionContent = `<a href="${UrlUtil.PG_CONDITIONS_DISEASES}#${hash}" ${hoverAttrs} class="charsheet__condition-immune-link">${displayName}</a>`;
+					} catch {
+						// Fall back to plain name if hover fails
+						conditionContent = displayName;
+					}
+					
+					return `<span class="badge ${isFromState ? "badge-warning" : "badge-info"} mr-1" title="${isFromState ? "From active state" : "Base immunity"}">${conditionContent}</span>`;
 				}).join(""));
 			} else {
 				$condImmunities.html(`<span class="ve-muted">—</span>`);

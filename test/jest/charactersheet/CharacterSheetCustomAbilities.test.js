@@ -866,6 +866,199 @@ describe("Character Sheet Custom Abilities", () => {
 		});
 	});
 
+	describe("Immunities and Vulnerabilities", () => {
+		test("should grant damage immunity when ability is active", () => {
+			const abilityId = charState.addCustomAbility({
+				name: "Fire Immunity",
+				mode: "toggleable",
+				effects: [{type: "immunity:fire"}],
+			});
+
+			expect(charState.hasImmunity("fire")).toBe(false);
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.hasImmunity("fire")).toBe(true);
+		});
+
+		test("should remove immunity when toggled off", () => {
+			const abilityId = charState.addCustomAbility({
+				name: "Fire Immunity",
+				mode: "toggleable",
+				effects: [{type: "immunity:fire"}],
+			});
+
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.hasImmunity("fire")).toBe(true);
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.hasImmunity("fire")).toBe(false);
+		});
+
+		test("should grant vulnerability when ability is active", () => {
+			const abilityId = charState.addCustomAbility({
+				name: "Fire Vulnerability",
+				mode: "toggleable",
+				effects: [{type: "vulnerability:fire"}],
+			});
+
+			expect(charState.hasVulnerability("fire")).toBe(false);
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.hasVulnerability("fire")).toBe(true);
+		});
+
+		test("should grant condition immunity when ability is active", () => {
+			const abilityId = charState.addCustomAbility({
+				name: "Fearless",
+				mode: "toggleable",
+				effects: [{type: "conditionImmunity:frightened"}],
+			});
+
+			expect(charState.isImmuneToCondition("frightened")).toBe(false);
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.isImmuneToCondition("frightened")).toBe(true);
+		});
+
+		test("should handle multiple defensive traits", () => {
+			const abilityId = charState.addCustomAbility({
+				name: "Complete Protection",
+				mode: "toggleable",
+				effects: [
+					{type: "immunity:poison"},
+					{type: "conditionImmunity:poisoned"},
+					{type: "resistance:necrotic"},
+				],
+			});
+
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.hasImmunity("poison")).toBe(true);
+			expect(charState.isImmuneToCondition("poisoned")).toBe(true);
+			expect(charState.hasResistance("necrotic")).toBe(true);
+		});
+
+		test("should not remove immunity if another source provides it", () => {
+			const ability1Id = charState.addCustomAbility({
+				name: "Fire Cloak",
+				mode: "toggleable",
+				effects: [{type: "immunity:fire"}],
+			});
+			const ability2Id = charState.addCustomAbility({
+				name: "Fire Aura",
+				mode: "toggleable",
+				effects: [{type: "immunity:fire"}],
+			});
+
+			charState.toggleCustomAbility(ability1Id);
+			charState.toggleCustomAbility(ability2Id);
+			expect(charState.hasImmunity("fire")).toBe(true);
+
+			// Toggle off first ability - should still have immunity from second
+			charState.toggleCustomAbility(ability1Id);
+			expect(charState.hasImmunity("fire")).toBe(true);
+
+			// Toggle off second - now immunity should be gone
+			charState.toggleCustomAbility(ability2Id);
+			expect(charState.hasImmunity("fire")).toBe(false);
+		});
+	});
+
+	describe("Concentration Abilities", () => {
+		test("should set concentration when activating concentration ability", () => {
+			// Create and activate concentration ability
+			const abilityId = charState.addCustomAbility({
+				name: "Aura of Protection",
+				mode: "toggleable",
+				concentration: true,
+				effects: [{type: "save:all", value: 2}],
+			});
+
+			expect(charState.isConcentrating()).toBe(false);
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.isConcentrating()).toBe(true);
+			
+			// Should be concentrating on the ability
+			const conc = charState.getConcentratingSpell();
+			expect(conc?.customAbilityId).toBe(abilityId);
+		});
+
+		test("should break existing concentration when activating concentration ability", () => {
+			// Set up spell concentration first
+			charState.setConcentration("Bless", 1);
+			expect(charState.isConcentrating()).toBe(true);
+			expect(charState.getConcentratingSpell()?.spellName).toBe("Bless");
+
+			// Create and activate concentration ability
+			const abilityId = charState.addCustomAbility({
+				name: "Aura of Protection",
+				mode: "toggleable",
+				concentration: true,
+				effects: [{type: "save:all", value: 2}],
+			});
+
+			charState.toggleCustomAbility(abilityId);
+
+			// Now concentrating on ability, not spell
+			const conc = charState.getConcentratingSpell();
+			expect(conc?.customAbilityId).toBe(abilityId);
+			expect(conc?.spellName).toBeFalsy();
+		});
+
+		test("should toggle off concentration ability when casting concentration spell", () => {
+			// Create and activate concentration ability
+			const abilityId = charState.addCustomAbility({
+				name: "Aura of Protection",
+				mode: "toggleable",
+				concentration: true,
+				effects: [{type: "save:all", value: 2}],
+			});
+
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.getCustomAbility(abilityId).isActive).toBe(true);
+
+			// Cast concentration spell - should break ability concentration
+			charState.setConcentration("Hold Person", 2);
+
+			// Ability should now be inactive
+			expect(charState.getCustomAbility(abilityId).isActive).toBe(false);
+			// Should be concentrating on spell now
+			expect(charState.getConcentratingSpell()?.spellName).toBe("Hold Person");
+		});
+
+		test("should clear concentration when manually toggling off", () => {
+			const abilityId = charState.addCustomAbility({
+				name: "Aura of Protection",
+				mode: "toggleable",
+				concentration: true,
+				effects: [{type: "ac", value: 1}],
+			});
+
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.isConcentrating()).toBe(true);
+
+			charState.toggleCustomAbility(abilityId);
+			expect(charState.isConcentrating()).toBe(false);
+		});
+
+		test("should only break concentration for ability with concentration flag", () => {
+			// First activate concentration ability
+			const concAbilityId = charState.addCustomAbility({
+				name: "Concentration Power",
+				mode: "toggleable",
+				concentration: true,
+				effects: [{type: "ac", value: 1}],
+			});
+			charState.toggleCustomAbility(concAbilityId);
+
+			// Then activate non-concentration ability
+			const normalAbilityId = charState.addCustomAbility({
+				name: "Normal Power",
+				mode: "toggleable",
+				effects: [{type: "ac", value: 1}],
+			});
+			charState.toggleCustomAbility(normalAbilityId);
+
+			// First ability should still be active (normal toggled didn't break concentration)
+			expect(charState.getCustomAbility(concAbilityId).isActive).toBe(true);
+		});
+	});
+
 	describe("Combined Effect Scenarios", () => {
 		test("should combine bonus + advantage + minimum on same effect", () => {
 			const abilityId = charState.addCustomAbility({
@@ -1484,6 +1677,326 @@ describe("Character Sheet Custom Abilities", () => {
 				const afterRemoval = charState.aggregateModifiers("skill:stealth");
 				expect(afterRemoval.bonus).toBe(0);
 				expect(charState.getInnateSpells().length).toBe(0);
+			});
+		});
+	});
+
+	// ===================================================================
+	// Defensive Traits Tests
+	// ===================================================================
+	describe("Defensive Traits", () => {
+		describe("Damage Resistances", () => {
+			test("should register damage resistance from passive ability", () => {
+				charState.addCustomAbility({
+					name: "Fire Resistant",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: ["fire"],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasResistance("fire")).toBe(true);
+				expect(charState.hasResistance("cold")).toBe(false);
+			});
+
+			test("should register multiple damage resistances", () => {
+				charState.addCustomAbility({
+					name: "Elemental Warding",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: ["fire", "cold", "lightning"],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasResistance("fire")).toBe(true);
+				expect(charState.hasResistance("cold")).toBe(true);
+				expect(charState.hasResistance("lightning")).toBe(true);
+			});
+
+			test("should unregister resistance when removing ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Fire Resistant",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: ["fire"],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasResistance("fire")).toBe(true);
+
+				charState.removeCustomAbility(abilityId);
+
+				expect(charState.hasResistance("fire")).toBe(false);
+			});
+
+			test("should support homebrew damage types", () => {
+				charState.addCustomAbility({
+					name: "Void Touched",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: ["void"],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasResistance("void")).toBe(true);
+			});
+		});
+
+		describe("Damage Immunities", () => {
+			test("should register damage immunity from passive ability", () => {
+				charState.addCustomAbility({
+					name: "Poison Immunity",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: ["poison"],
+						vulnerabilities: [],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasImmunity("poison")).toBe(true);
+				expect(charState.hasImmunity("fire")).toBe(false);
+			});
+
+			test("should unregister immunity when removing ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Fire Immunity",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: ["fire"],
+						vulnerabilities: [],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasImmunity("fire")).toBe(true);
+
+				charState.removeCustomAbility(abilityId);
+
+				expect(charState.hasImmunity("fire")).toBe(false);
+			});
+		});
+
+		describe("Damage Vulnerabilities", () => {
+			test("should register damage vulnerability from passive ability", () => {
+				charState.addCustomAbility({
+					name: "Fire Weakness",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: ["fire"],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasVulnerability("fire")).toBe(true);
+			});
+
+			test("should unregister vulnerability when removing ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Cold Weakness",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: ["cold"],
+						conditionImmunities: [],
+					},
+				});
+
+				expect(charState.hasVulnerability("cold")).toBe(true);
+
+				charState.removeCustomAbility(abilityId);
+
+				expect(charState.hasVulnerability("cold")).toBe(false);
+			});
+		});
+
+		describe("Condition Immunities", () => {
+			test("should register condition immunity from passive ability", () => {
+				charState.addCustomAbility({
+					name: "Mindless",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: ["charmed", "frightened"],
+					},
+				});
+
+				expect(charState.isImmuneToCondition("charmed")).toBe(true);
+				expect(charState.isImmuneToCondition("frightened")).toBe(true);
+				expect(charState.isImmuneToCondition("poisoned")).toBe(false);
+			});
+
+			test("should be case-insensitive for condition immunity", () => {
+				charState.addCustomAbility({
+					name: "Fearless",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: ["Frightened"],
+					},
+				});
+
+				expect(charState.isImmuneToCondition("frightened")).toBe(true);
+				expect(charState.isImmuneToCondition("FRIGHTENED")).toBe(true);
+				expect(charState.isImmuneToCondition("Frightened")).toBe(true);
+			});
+
+			test("should be source-agnostic for condition immunity", () => {
+				charState.addCustomAbility({
+					name: "Mind Shield",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: ["charmed"],
+					},
+				});
+
+				// Should work with string
+				expect(charState.isImmuneToCondition("charmed")).toBe(true);
+
+				// Should work with object regardless of source
+				expect(charState.isImmuneToCondition({name: "charmed", source: "PHB"})).toBe(true);
+				expect(charState.isImmuneToCondition({name: "charmed", source: "XGE"})).toBe(true);
+				expect(charState.isImmuneToCondition({name: "Charmed", source: "homebrew"})).toBe(true);
+			});
+
+			test("should unregister condition immunity when removing ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Poison Resilient",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: ["poisoned"],
+					},
+				});
+
+				expect(charState.isImmuneToCondition("poisoned")).toBe(true);
+
+				charState.removeCustomAbility(abilityId);
+
+				expect(charState.isImmuneToCondition("poisoned")).toBe(false);
+			});
+		});
+
+		describe("Toggleable Defensive Traits", () => {
+			test("should only apply defensive traits when toggled on", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Elemental Form",
+					mode: "toggleable",
+					defensiveTraits: {
+						resistances: ["fire", "cold"],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: ["exhaustion"],
+					},
+				});
+
+				// Not toggled - should not have traits
+				expect(charState.hasResistance("fire")).toBe(false);
+				expect(charState.isImmuneToCondition("exhaustion")).toBe(false);
+
+				// Toggle on
+				charState.toggleCustomAbility(abilityId);
+				expect(charState.hasResistance("fire")).toBe(true);
+				expect(charState.hasResistance("cold")).toBe(true);
+				expect(charState.isImmuneToCondition("exhaustion")).toBe(true);
+
+				// Toggle off
+				charState.toggleCustomAbility(abilityId);
+				expect(charState.hasResistance("fire")).toBe(false);
+				expect(charState.isImmuneToCondition("exhaustion")).toBe(false);
+			});
+		});
+
+		describe("Combined Defensive Traits", () => {
+			test("should handle all defensive trait types together", () => {
+				charState.addCustomAbility({
+					name: "Draconic Resilience",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: ["fire"],
+						immunities: ["poison"],
+						vulnerabilities: ["cold"],
+						conditionImmunities: ["poisoned", "frightened"],
+					},
+				});
+
+				expect(charState.hasResistance("fire")).toBe(true);
+				expect(charState.hasImmunity("poison")).toBe(true);
+				expect(charState.hasVulnerability("cold")).toBe(true);
+				expect(charState.isImmuneToCondition("poisoned")).toBe(true);
+				expect(charState.isImmuneToCondition("frightened")).toBe(true);
+			});
+		});
+
+		describe("Immunity Enforcement", () => {
+			test("should prevent adding conditions the character is immune to", () => {
+				charState.addCustomAbility({
+					name: "Mind Shield",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: ["charmed"],
+					},
+				});
+
+				expect(charState.isImmuneToCondition("charmed")).toBe(true);
+
+				// Try to add the condition - should fail
+				const result = charState.addCondition("charmed");
+				expect(result).toBe(false);
+
+				// Condition should not be in the list
+				const conditions = charState.getConditions();
+				expect(conditions.some(c => c.name.toLowerCase() === "charmed")).toBe(false);
+			});
+
+			test("should allow adding conditions the character is not immune to", () => {
+				charState.addCustomAbility({
+					name: "Mind Shield",
+					mode: "passive",
+					defensiveTraits: {
+						resistances: [],
+						immunities: [],
+						vulnerabilities: [],
+						conditionImmunities: ["charmed"],
+					},
+				});
+
+				// Try to add a different condition - should work
+				const result = charState.addCondition("frightened");
+				expect(result).toBe(true);
+
+				// Condition should be in the list
+				const conditions = charState.getConditions();
+				expect(conditions.some(c => c.name.toLowerCase() === "frightened")).toBe(true);
 			});
 		});
 	});

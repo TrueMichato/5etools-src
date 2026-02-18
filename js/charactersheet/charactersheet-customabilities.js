@@ -122,12 +122,36 @@ class CharacterSheetCustomAbilities {
 		// Header row
 		const header = document.createElement("div");
 		header.className = "custom-abilities__card-header";
+		
+		// Build badges HTML
+		const badgesHtml = [];
+		badgesHtml.push(`<span class="custom-abilities__mode-badge custom-abilities__mode-badge--${ability.mode}">
+			${ability.mode === "passive" ? "Passive" : ability.mode === "toggleable" ? "Toggle" : "Limited"}
+		</span>`);
+		
+		// Activation action badge (for non-passive, non-free)
+		if (ability.activationAction && ability.activationAction !== "free") {
+			const actionLabels = {action: "Action", bonus: "Bonus Action", reaction: "Reaction", special: "Special"};
+			const actionIcons = {action: "🔷", bonus: "🔶", reaction: "⚡", special: "⭐"};
+			badgesHtml.push(`<span class="custom-abilities__action-badge custom-abilities__action-badge--${ability.activationAction}">
+				${actionIcons[ability.activationAction] || ""} ${actionLabels[ability.activationAction] || ability.activationAction}
+			</span>`);
+		}
+		
+		// Duration badge (for toggleable with duration)
+		if (ability.mode === "toggleable" && ability.duration) {
+			badgesHtml.push(`<span class="custom-abilities__duration-badge">⏱️ ${ability.duration}</span>`);
+		}
+		
+		// Concentration badge
+		if (ability.concentration) {
+			badgesHtml.push(`<span class="custom-abilities__concentration-badge">🔮 Concentration</span>`);
+		}
+		
 		header.innerHTML = `
 			<span class="custom-abilities__card-icon" style="color: ${category.color}">${ability.icon || category.icon}</span>
 			<span class="custom-abilities__card-name">${ability.name}</span>
-			<span class="custom-abilities__mode-badge custom-abilities__mode-badge--${ability.mode}">
-				${ability.mode === "passive" ? "Passive" : ability.mode === "toggleable" ? "Toggle" : "Limited"}
-			</span>
+			<div class="custom-abilities__card-badges">${badgesHtml.join("")}</div>
 		`;
 		card.appendChild(header);
 
@@ -161,6 +185,17 @@ class CharacterSheetCustomAbilities {
 				grantsDiv.className = "custom-abilities__card-grants";
 				grantsDiv.innerHTML = `<span class="custom-abilities__grants-badge">🎁</span> ${grantsSummary}`;
 				card.appendChild(grantsDiv);
+			}
+		}
+
+		// Defensive traits summary
+		if (ability.defensiveTraits) {
+			const traitsSummary = this._formatDefensiveTraitsSummary(ability.defensiveTraits);
+			if (traitsSummary) {
+				const traitsDiv = document.createElement("div");
+				traitsDiv.className = "custom-abilities__card-defensive";
+				traitsDiv.innerHTML = traitsSummary;
+				card.appendChild(traitsDiv);
 			}
 		}
 
@@ -279,6 +314,45 @@ class CharacterSheetCustomAbilities {
 			if (profParts.length) {
 				parts.push(`<span class="text-success">📚${profParts.join(", ")}</span>`);
 			}
+		}
+
+		return parts.join(" · ");
+	}
+
+	/**
+	 * Format defensive traits for display summary
+	 */
+	_formatDefensiveTraitsSummary (traits) {
+		if (!traits) return "";
+
+		const parts = [];
+
+		// Resistances (yellow)
+		if (traits.resistances?.length) {
+			const items = traits.resistances.slice(0, 2).join(", ");
+			const more = traits.resistances.length > 2 ? ` +${traits.resistances.length - 2}` : "";
+			parts.push(`<span class="text-warning">🛡️ Resist: ${items}${more}</span>`);
+		}
+
+		// Immunities (green)
+		if (traits.immunities?.length) {
+			const items = traits.immunities.slice(0, 2).join(", ");
+			const more = traits.immunities.length > 2 ? ` +${traits.immunities.length - 2}` : "";
+			parts.push(`<span class="text-success">🛡️ Immune: ${items}${more}</span>`);
+		}
+
+		// Vulnerabilities (red)
+		if (traits.vulnerabilities?.length) {
+			const items = traits.vulnerabilities.slice(0, 2).join(", ");
+			const more = traits.vulnerabilities.length > 2 ? ` +${traits.vulnerabilities.length - 2}` : "";
+			parts.push(`<span class="text-danger">⚠️ Vulnerable: ${items}${more}</span>`);
+		}
+
+		// Condition immunities (purple)
+		if (traits.conditionImmunities?.length) {
+			const items = traits.conditionImmunities.slice(0, 2).join(", ");
+			const more = traits.conditionImmunities.length > 2 ? ` +${traits.conditionImmunities.length - 2}` : "";
+			parts.push(`<span class="custom-abilities__condition-immune">🚫 ${items}${more}</span>`);
 		}
 
 		return parts.join(" · ");
@@ -415,7 +489,7 @@ class CharacterSheetCustomAbilities {
 				],
 			},
 			{
-				group: "🔥 Resistances",
+				group: "�️ Resistances",
 				options: [
 					{value: "resistance:fire", label: "Fire Resistance"},
 					{value: "resistance:cold", label: "Cold Resistance"},
@@ -430,6 +504,60 @@ class CharacterSheetCustomAbilities {
 					{value: "resistance:bludgeoning", label: "Bludgeoning Resistance"},
 					{value: "resistance:piercing", label: "Piercing Resistance"},
 					{value: "resistance:slashing", label: "Slashing Resistance"},
+				],
+			},
+			{
+				group: "🔰 Immunities",
+				options: [
+					{value: "immunity:fire", label: "Fire Immunity"},
+					{value: "immunity:cold", label: "Cold Immunity"},
+					{value: "immunity:lightning", label: "Lightning Immunity"},
+					{value: "immunity:thunder", label: "Thunder Immunity"},
+					{value: "immunity:acid", label: "Acid Immunity"},
+					{value: "immunity:poison", label: "Poison Immunity"},
+					{value: "immunity:necrotic", label: "Necrotic Immunity"},
+					{value: "immunity:radiant", label: "Radiant Immunity"},
+					{value: "immunity:psychic", label: "Psychic Immunity"},
+					{value: "immunity:force", label: "Force Immunity"},
+					{value: "immunity:bludgeoning", label: "Bludgeoning Immunity"},
+					{value: "immunity:piercing", label: "Piercing Immunity"},
+					{value: "immunity:slashing", label: "Slashing Immunity"},
+				],
+			},
+			{
+				group: "⚠️ Vulnerabilities",
+				options: [
+					{value: "vulnerability:fire", label: "Fire Vulnerability"},
+					{value: "vulnerability:cold", label: "Cold Vulnerability"},
+					{value: "vulnerability:lightning", label: "Lightning Vulnerability"},
+					{value: "vulnerability:thunder", label: "Thunder Vulnerability"},
+					{value: "vulnerability:acid", label: "Acid Vulnerability"},
+					{value: "vulnerability:poison", label: "Poison Vulnerability"},
+					{value: "vulnerability:necrotic", label: "Necrotic Vulnerability"},
+					{value: "vulnerability:radiant", label: "Radiant Vulnerability"},
+					{value: "vulnerability:psychic", label: "Psychic Vulnerability"},
+					{value: "vulnerability:force", label: "Force Vulnerability"},
+					{value: "vulnerability:bludgeoning", label: "Bludgeoning Vulnerability"},
+					{value: "vulnerability:piercing", label: "Piercing Vulnerability"},
+					{value: "vulnerability:slashing", label: "Slashing Vulnerability"},
+				],
+			},
+			{
+				group: "🚫 Condition Immunities",
+				options: [
+					{value: "conditionImmunity:charmed", label: "Immunity to Charmed"},
+					{value: "conditionImmunity:frightened", label: "Immunity to Frightened"},
+					{value: "conditionImmunity:poisoned", label: "Immunity to Poisoned"},
+					{value: "conditionImmunity:paralyzed", label: "Immunity to Paralyzed"},
+					{value: "conditionImmunity:stunned", label: "Immunity to Stunned"},
+					{value: "conditionImmunity:petrified", label: "Immunity to Petrified"},
+					{value: "conditionImmunity:blinded", label: "Immunity to Blinded"},
+					{value: "conditionImmunity:deafened", label: "Immunity to Deafened"},
+					{value: "conditionImmunity:prone", label: "Immunity to Prone"},
+					{value: "conditionImmunity:grappled", label: "Immunity to Grappled"},
+					{value: "conditionImmunity:restrained", label: "Immunity to Restrained"},
+					{value: "conditionImmunity:incapacitated", label: "Immunity to Incapacitated"},
+					{value: "conditionImmunity:exhaustion", label: "Immunity to Exhaustion"},
 				],
 			},
 			{
@@ -587,6 +715,40 @@ class CharacterSheetCustomAbilities {
 									</select>
 								</div>
 							</div>
+							<div class="custom-abilities__activation-options" style="display: ${existingAbility?.mode && existingAbility.mode !== "passive" ? "flex" : "none"};">
+								<div class="custom-abilities__form-field">
+									<label>Activation</label>
+									<select class="form-control" name="activationAction">
+										<option value="free" ${!existingAbility?.activationAction || existingAbility?.activationAction === "free" ? "selected" : ""}>Free (No Action)</option>
+										<option value="action" ${existingAbility?.activationAction === "action" ? "selected" : ""}>Action</option>
+										<option value="bonus" ${existingAbility?.activationAction === "bonus" ? "selected" : ""}>Bonus Action</option>
+										<option value="reaction" ${existingAbility?.activationAction === "reaction" ? "selected" : ""}>Reaction</option>
+										<option value="special" ${existingAbility?.activationAction === "special" ? "selected" : ""}>Special</option>
+									</select>
+								</div>
+							</div>
+							<div class="custom-abilities__duration-options" style="display: ${existingAbility?.mode === "toggleable" ? "flex" : "none"};">
+								<div class="custom-abilities__form-field">
+									<label>Duration</label>
+									<select class="form-control" name="duration">
+										<option value="" ${!existingAbility?.duration ? "selected" : ""}>Until Toggled Off</option>
+										<option value="1 round" ${existingAbility?.duration === "1 round" ? "selected" : ""}>1 Round</option>
+										<option value="1 minute" ${existingAbility?.duration === "1 minute" ? "selected" : ""}>1 Minute</option>
+										<option value="10 minutes" ${existingAbility?.duration === "10 minutes" ? "selected" : ""}>10 Minutes</option>
+										<option value="1 hour" ${existingAbility?.duration === "1 hour" ? "selected" : ""}>1 Hour</option>
+										<option value="8 hours" ${existingAbility?.duration === "8 hours" ? "selected" : ""}>8 Hours</option>
+										<option value="24 hours" ${existingAbility?.duration === "24 hours" ? "selected" : ""}>24 Hours</option>
+										<option value="until rest" ${existingAbility?.duration === "until rest" ? "selected" : ""}>Until Rest</option>
+									</select>
+								</div>
+								<div class="custom-abilities__form-field custom-abilities__concentration-field">
+									<label class="custom-abilities__checkbox-label">
+										<input type="checkbox" name="concentration" ${existingAbility?.concentration ? "checked" : ""}>
+										<span>Requires Concentration</span>
+									</label>
+									<span class="ve-muted ve-small">Ends if you lose concentration or concentrate on something else</span>
+								</div>
+							</div>
 						</div>
 
 						<!-- Effects -->
@@ -599,6 +761,56 @@ class CharacterSheetCustomAbilities {
 							<div class="custom-abilities__effects-list" id="ability-effects-list">
 								<!-- Rendered dynamically -->
 							</div>
+						</div>
+
+						<!-- Defensive Traits -->
+						<div class="custom-abilities__form-section">
+							<label class="custom-abilities__form-section-title">Defensive Traits (Optional)</label>
+							<p class="ve-muted ve-small mb-2">Grant resistance, immunity, or vulnerability to damage types and conditions</p>
+							
+							<details class="custom-abilities__grants-section">
+								<summary><span class="custom-abilities__grants-icon">🛡️</span> Damage Resistances <span class="custom-abilities__grants-count" id="defensive-resistances-count"></span></summary>
+								<div class="custom-abilities__grants-content">
+									<div class="custom-abilities__defensive-pills" id="defensive-resistances"></div>
+									<div class="custom-abilities__grants-prof-add mt-1">
+										<input type="text" class="form-control" placeholder="Custom damage type..." id="defensive-resistance-custom">
+										<button type="button" class="btn btn-xs btn-primary" id="defensive-resistance-add">+ Add</button>
+									</div>
+								</div>
+							</details>
+							
+							<details class="custom-abilities__grants-section">
+								<summary><span class="custom-abilities__grants-icon">🔰</span> Damage Immunities <span class="custom-abilities__grants-count" id="defensive-immunities-count"></span></summary>
+								<div class="custom-abilities__grants-content">
+									<div class="custom-abilities__defensive-pills" id="defensive-immunities"></div>
+									<div class="custom-abilities__grants-prof-add mt-1">
+										<input type="text" class="form-control" placeholder="Custom damage type..." id="defensive-immunity-custom">
+										<button type="button" class="btn btn-xs btn-primary" id="defensive-immunity-add">+ Add</button>
+									</div>
+								</div>
+							</details>
+							
+							<details class="custom-abilities__grants-section">
+								<summary><span class="custom-abilities__grants-icon">⚠️</span> Damage Vulnerabilities <span class="custom-abilities__grants-count" id="defensive-vulnerabilities-count"></span></summary>
+								<div class="custom-abilities__grants-content">
+									<div class="custom-abilities__defensive-pills" id="defensive-vulnerabilities"></div>
+									<div class="custom-abilities__grants-prof-add mt-1">
+										<input type="text" class="form-control" placeholder="Custom damage type..." id="defensive-vulnerability-custom">
+										<button type="button" class="btn btn-xs btn-primary" id="defensive-vulnerability-add">+ Add</button>
+									</div>
+								</div>
+							</details>
+							
+							<details class="custom-abilities__grants-section">
+								<summary><span class="custom-abilities__grants-icon">🚫</span> Condition Immunities <span class="custom-abilities__grants-count" id="defensive-conditions-count"></span></summary>
+								<div class="custom-abilities__grants-content">
+									<div class="custom-abilities__defensive-pills" id="defensive-conditions"></div>
+									<div class="custom-abilities__grants-prof-add mt-1">
+										<input type="text" class="form-control" placeholder="Custom condition..." id="defensive-condition-custom">
+										<button type="button" class="btn btn-xs btn-primary" id="defensive-condition-add">+ Add</button>
+									</div>
+								</div>
+							</details>
 						</div>
 
 						<!-- Grants -->
@@ -848,6 +1060,12 @@ class CharacterSheetCustomAbilities {
 			proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
 			features: [],
 		};
+		let defensiveTraits = existingAbility?.defensiveTraits ? JSON.parse(JSON.stringify(existingAbility.defensiveTraits)) : {
+			resistances: [],
+			immunities: [],
+			vulnerabilities: [],
+			conditionImmunities: [],
+		};
 		let currentMode = "simple";
 
 		// Get data from sheet for pickers
@@ -856,6 +1074,8 @@ class CharacterSheetCustomAbilities {
 		const skillsList = this._sheet.getSkillsList?.() || [];
 		const languagesList = this._sheet.getLanguagesList?.() || [];
 		const toolsList = this._sheet.getToolsList?.() || [];
+		const conditionsList = this._getConditionsWithSources();
+		const damageTypesList = this._getDamageTypesList();
 
 		// Helper to render grants UI
 		const renderGrantsUI = () => {
@@ -866,6 +1086,11 @@ class CharacterSheetCustomAbilities {
 			this._renderGrantsWeapons(modal, grants);
 			this._renderGrantsArmor(modal, grants);
 			this._renderGrantsFeatures(modal, grants, allOptionalFeatures);
+		};
+
+		// Helper to render defensive traits UI
+		const renderDefensiveTraitsUI = () => {
+			this._renderDefensiveTraits(modal, defensiveTraits, damageTypesList, conditionsList);
 		};
 
 		// Helper to render effects list
@@ -967,11 +1192,46 @@ class CharacterSheetCustomAbilities {
 				};
 			}
 
+			// Add defensive traits if any are selected
+			const hasDefensiveTraits = defensiveTraits.resistances.length > 0 ||
+				defensiveTraits.immunities.length > 0 ||
+				defensiveTraits.vulnerabilities.length > 0 ||
+				defensiveTraits.conditionImmunities.length > 0;
+
+			if (hasDefensiveTraits) {
+				data.defensiveTraits = {
+					resistances: [...defensiveTraits.resistances],
+					immunities: [...defensiveTraits.immunities],
+					vulnerabilities: [...defensiveTraits.vulnerabilities],
+					conditionImmunities: [...defensiveTraits.conditionImmunities],
+				};
+			}
+
 			if (data.mode === "limited") {
 				data.uses = {
 					max: parseInt(modal.querySelector("input[name='maxUses']").value) || 1,
 					recharge: modal.querySelector("select[name='recharge']").value || "long",
 				};
+			}
+
+			// Add activation action for non-passive modes
+			if (data.mode && data.mode !== "passive") {
+				const activationAction = modal.querySelector("select[name='activationAction']").value;
+				if (activationAction && activationAction !== "free") {
+					data.activationAction = activationAction;
+				}
+			}
+
+			// Add duration and concentration for toggleable mode
+			if (data.mode === "toggleable") {
+				const duration = modal.querySelector("select[name='duration']").value;
+				if (duration) {
+					data.duration = duration;
+				}
+				const concentration = modal.querySelector("input[name='concentration']").checked;
+				if (concentration) {
+					data.concentration = true;
+				}
 			}
 
 			if (existingAbility) {
@@ -994,11 +1254,23 @@ class CharacterSheetCustomAbilities {
 			modal.querySelector("select[name='category']").value = data.category || "homebrew";
 			const modeRadio = modal.querySelector(`input[name='mode'][value='${data.mode || "passive"}']`);
 			if (modeRadio) modeRadio.checked = true;
-			updateLimitedVisibility();
 
 			if (data.uses) {
 				modal.querySelector("input[name='maxUses']").value = data.uses.max || 1;
 				modal.querySelector("select[name='recharge']").value = data.uses.recharge || "long";
+			}
+
+			// Restore activation action
+			if (data.activationAction) {
+				modal.querySelector("select[name='activationAction']").value = data.activationAction;
+			}
+
+			// Restore duration and concentration
+			if (data.duration) {
+				modal.querySelector("select[name='duration']").value = data.duration;
+			}
+			if (data.concentration) {
+				modal.querySelector("input[name='concentration']").checked = true;
 			}
 
 			effects = data.effects || [];
@@ -1019,16 +1291,32 @@ class CharacterSheetCustomAbilities {
 				};
 				renderGrantsUI();
 			}
+
+			// Restore defensive traits
+			if (data.defensiveTraits) {
+				defensiveTraits = {
+					resistances: data.defensiveTraits.resistances || [],
+					immunities: data.defensiveTraits.immunities || [],
+					vulnerabilities: data.defensiveTraits.vulnerabilities || [],
+					conditionImmunities: data.defensiveTraits.conditionImmunities || [],
+				};
+			}
+			renderDefensiveTraitsUI();
+
+			// Update visibility after restoring values
+			updateModeVisibility();
 		};
 
 		// Update limited options visibility
-		const updateLimitedVisibility = () => {
+		const updateModeVisibility = () => {
 			const mode = modal.querySelector("input[name='mode']:checked")?.value;
 			modal.querySelector(".custom-abilities__limited-options").style.display = mode === "limited" ? "flex" : "none";
+			modal.querySelector(".custom-abilities__activation-options").style.display = mode && mode !== "passive" ? "flex" : "none";
+			modal.querySelector(".custom-abilities__duration-options").style.display = mode === "toggleable" ? "flex" : "none";
 		};
 
 		// Event handlers
-		modal.querySelectorAll("input[name='mode']").forEach(r => r.addEventListener("change", updateLimitedVisibility));
+		modal.querySelectorAll("input[name='mode']").forEach(r => r.addEventListener("change", updateModeVisibility));
 
 		// Icon picker
 		const iconPreview = modal.querySelector(".custom-abilities__icon-preview");
@@ -1144,6 +1432,7 @@ class CharacterSheetCustomAbilities {
 		// Initialize
 		renderEffectsList();
 		renderGrantsUI();
+		renderDefensiveTraitsUI();
 
 		// Update initial grant counts
 		this._updateGrantCount(modal, "grants-spell-count", grants.spells.length);
@@ -1766,6 +2055,285 @@ class CharacterSheetCustomAbilities {
 
 		renderFeatureList();
 		renderSelectedFeatures();
+	}
+
+	/**
+	 * Get list of standard damage types plus any custom ones from data
+	 * @returns {string[]} List of damage type names
+	 */
+	_getDamageTypesList () {
+		return [
+			"acid", "bludgeoning", "cold", "fire", "force", "lightning",
+			"necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder",
+		];
+	}
+
+	/**
+	 * Get unique condition names from all available conditions, applying priority source filtering
+	 * Returns objects with {name, source} for hover support
+	 * @returns {Array<{name: string, source: string}>} List of unique conditions with sources
+	 */
+	_getConditionsWithSources () {
+		const conditionsList = this._sheet.getConditionsList?.() || [];
+		const state = this._sheet.getState?.();
+		const prioritySources = state?.getPrioritySources?.() || [];
+		
+		// Group conditions by name, preferring priority sources, then XPHB
+		const conditionMap = new Map();
+		conditionsList.forEach(cond => {
+			const existing = conditionMap.get(cond.name.toLowerCase());
+			if (!existing) {
+				conditionMap.set(cond.name.toLowerCase(), {name: cond.name, source: cond.source});
+			} else if (prioritySources.length) {
+				// If we have priority sources, prefer those
+				const existingIsPriority = prioritySources.includes(existing.source);
+				const newIsPriority = prioritySources.includes(cond.source);
+				if (newIsPriority && !existingIsPriority) {
+					conditionMap.set(cond.name.toLowerCase(), {name: cond.name, source: cond.source});
+				}
+			} else if (cond.source === Parser.SRC_XPHB && existing.source !== Parser.SRC_XPHB) {
+				// Default: prefer XPHB
+				conditionMap.set(cond.name.toLowerCase(), {name: cond.name, source: cond.source});
+			}
+		});
+		
+		return Array.from(conditionMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * Render defensive traits section (resistances, immunities, vulnerabilities, condition immunities)
+	 * @param {Element} modal - The modal element
+	 * @param {object} defensiveTraits - The defensive traits object
+	 * @param {string[]} damageTypes - List of damage types
+	 * @param {string[]} conditions - List of condition names
+	 */
+	_renderDefensiveTraits (modal, defensiveTraits, damageTypes, conditions) {
+		// Render damage type pills for resistances
+		this._renderDamageTypePills(
+			modal,
+			"#defensive-resistances",
+			"#defensive-resistance-custom",
+			"#defensive-resistance-add",
+			"#defensive-resistances-count",
+			defensiveTraits.resistances,
+			damageTypes,
+			"resistance",
+		);
+
+		// Render damage type pills for immunities
+		this._renderDamageTypePills(
+			modal,
+			"#defensive-immunities",
+			"#defensive-immunity-custom",
+			"#defensive-immunity-add",
+			"#defensive-immunities-count",
+			defensiveTraits.immunities,
+			damageTypes,
+			"immunity",
+		);
+
+		// Render damage type pills for vulnerabilities
+		this._renderDamageTypePills(
+			modal,
+			"#defensive-vulnerabilities",
+			"#defensive-vulnerability-custom",
+			"#defensive-vulnerability-add",
+			"#defensive-vulnerabilities-count",
+			defensiveTraits.vulnerabilities,
+			damageTypes,
+			"vulnerability",
+		);
+
+		// Render condition immunity pills
+		this._renderConditionImmunityPills(
+			modal,
+			"#defensive-conditions",
+			"#defensive-condition-custom",
+			"#defensive-condition-add",
+			"#defensive-conditions-count",
+			defensiveTraits.conditionImmunities,
+			conditions,
+		);
+	}
+
+	/**
+	 * Render damage type pills for a defensive trait category
+	 */
+	_renderDamageTypePills (modal, containerSelector, customInputSelector, addBtnSelector, countSelector, selectedTypes, allTypes, traitType) {
+		const container = modal.querySelector(containerSelector);
+		const customInput = modal.querySelector(customInputSelector);
+		const addBtn = modal.querySelector(addBtnSelector);
+
+		if (!container) return;
+
+		// Combine standard types with any custom selected ones
+		const allTypesSet = new Set([...allTypes, ...selectedTypes]);
+		const sortedTypes = [...allTypesSet].sort();
+
+		// Render pills
+		container.innerHTML = sortedTypes.map(type => {
+			const isSelected = selectedTypes.includes(type);
+			const isCustom = !allTypes.includes(type);
+			return `
+				<button type="button" 
+					class="custom-abilities__defensive-pill ${isSelected ? "selected" : ""} ${isCustom ? "custom" : ""}" 
+					data-type="${type}"
+					data-trait-type="${traitType}"
+					title="${type.charAt(0).toUpperCase() + type.slice(1)}${isCustom ? " (custom)" : ""}">
+					${type.charAt(0).toUpperCase() + type.slice(1)}
+				</button>
+			`;
+		}).join("");
+
+		// Bind pill click handlers
+		container.querySelectorAll(".custom-abilities__defensive-pill").forEach(pill => {
+			pill.addEventListener("click", () => {
+				const type = pill.dataset.type;
+				const idx = selectedTypes.indexOf(type);
+				if (idx >= 0) {
+					selectedTypes.splice(idx, 1);
+					pill.classList.remove("selected");
+				} else {
+					selectedTypes.push(type);
+					pill.classList.add("selected");
+				}
+				this._updateDefensiveCount(modal, countSelector, selectedTypes.length);
+			});
+		});
+
+		// Custom type input
+		if (addBtn && customInput) {
+			addBtn.onclick = () => {
+				const customType = customInput.value.trim().toLowerCase();
+				if (customType && !selectedTypes.includes(customType)) {
+					selectedTypes.push(customType);
+					customInput.value = "";
+					// Re-render to show the new custom type
+					this._renderDamageTypePills(modal, containerSelector, customInputSelector, addBtnSelector, countSelector, selectedTypes, allTypes, traitType);
+				}
+			};
+			customInput.onkeydown = (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					addBtn.click();
+				}
+			};
+		}
+
+		this._updateDefensiveCount(modal, countSelector, selectedTypes.length);
+	}
+
+	/**
+	 * Render condition immunity pills
+	 * @param {Element} modal - The modal element
+	 * @param {string} containerSelector - Selector for the pills container
+	 * @param {string} customInputSelector - Selector for the custom input
+	 * @param {string} addBtnSelector - Selector for the add button
+	 * @param {string} countSelector - Selector for the count badge
+	 * @param {string[]} selectedConditions - Array of selected condition names
+	 * @param {Array<{name: string, source: string}>} allConditions - Array of condition objects with sources
+	 */
+	_renderConditionImmunityPills (modal, containerSelector, customInputSelector, addBtnSelector, countSelector, selectedConditions, allConditions) {
+		const container = modal.querySelector(containerSelector);
+		const customInput = modal.querySelector(customInputSelector);
+		const addBtn = modal.querySelector(addBtnSelector);
+
+		if (!container) return;
+
+		// Build map of condition names to their source info
+		const conditionSourceMap = new Map();
+		allConditions.forEach(c => conditionSourceMap.set(c.name.toLowerCase(), c));
+
+		// Get all condition names (lowercased for comparison)
+		const allConditionNames = allConditions.map(c => c.name);
+		const allConditionNamesLower = allConditionNames.map(c => c.toLowerCase());
+		const selectedLower = selectedConditions.map(c => c.toLowerCase());
+		
+		// Find custom conditions (selected but not in allConditions)
+		const customConditions = selectedConditions.filter(c => !allConditionNamesLower.includes(c.toLowerCase()));
+		
+		// Combine standard and custom
+		const allDisplayConditions = [...allConditionNames, ...customConditions].sort();
+
+		// Render pills
+		container.innerHTML = allDisplayConditions.map(condName => {
+			const isSelected = selectedLower.includes(condName.toLowerCase());
+			const condInfo = conditionSourceMap.get(condName.toLowerCase());
+			const isCustom = !condInfo;
+			
+			// Build hover attributes for known conditions
+			let hoverAttrs = "";
+			if (condInfo) {
+				try {
+					const hash = UrlUtil.encodeForHash([condInfo.name, condInfo.source].join(HASH_LIST_SEP));
+					hoverAttrs = Renderer.hover.getHoverElementAttributes({
+						page: UrlUtil.PG_CONDITIONS_DISEASES,
+						source: condInfo.source,
+						hash: hash,
+					});
+				} catch {
+					// Ignore hover errors
+				}
+			}
+			
+			return `
+				<button type="button" 
+					class="custom-abilities__defensive-pill condition ${isSelected ? "selected" : ""} ${isCustom ? "custom" : ""}" 
+					data-condition="${condName}"
+					data-trait-type="conditionImmunity"
+					${hoverAttrs}>
+					${condName}${isCustom ? " (custom)" : ""}
+				</button>
+			`;
+		}).join("");
+
+		// Bind pill click handlers
+		container.querySelectorAll(".custom-abilities__defensive-pill").forEach(pill => {
+			pill.addEventListener("click", () => {
+				const cond = pill.dataset.condition;
+				const idx = selectedConditions.findIndex(c => c.toLowerCase() === cond.toLowerCase());
+				if (idx >= 0) {
+					selectedConditions.splice(idx, 1);
+					pill.classList.remove("selected");
+				} else {
+					selectedConditions.push(cond);
+					pill.classList.add("selected");
+				}
+				this._updateDefensiveCount(modal, countSelector, selectedConditions.length);
+			});
+		});
+
+		// Custom condition input
+		if (addBtn && customInput) {
+			addBtn.onclick = () => {
+				const customCond = customInput.value.trim();
+				if (customCond && !selectedConditions.some(c => c.toLowerCase() === customCond.toLowerCase())) {
+					selectedConditions.push(customCond);
+					customInput.value = "";
+					// Re-render to show the new custom condition
+					this._renderConditionImmunityPills(modal, containerSelector, customInputSelector, addBtnSelector, countSelector, selectedConditions, allConditions);
+				}
+			};
+			customInput.onkeydown = (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					addBtn.click();
+				}
+			};
+		}
+
+		this._updateDefensiveCount(modal, countSelector, selectedConditions.length);
+	}
+
+	/**
+	 * Update defensive trait count badge
+	 */
+	_updateDefensiveCount (modal, selector, count) {
+		const countEl = modal.querySelector(selector);
+		if (countEl) {
+			countEl.textContent = count > 0 ? `(${count})` : "";
+			countEl.classList.toggle("has-items", count > 0);
+		}
 	}
 
 	// #endregion

@@ -5921,9 +5921,17 @@ class CharacterSheetPage {
 
 		let selectedCondition = null;
 		
+		// Get priority sources for filtering
+		const prioritySources = this._state.getPrioritySources() || [];
+		
 		// Get unique sources for filtering
 		const conditionSources = [...new Set(availableConditions.map(c => c.source))].sort((a, b) => {
-			// XPHB first, then PHB, then alphabetically
+			// Priority sources first
+			const aIsPriority = prioritySources.includes(a);
+			const bIsPriority = prioritySources.includes(b);
+			if (aIsPriority && !bIsPriority) return -1;
+			if (!aIsPriority && bIsPriority) return 1;
+			// Then XPHB, then PHB, then alphabetically
 			if (a === Parser.SRC_XPHB) return -1;
 			if (b === Parser.SRC_XPHB) return 1;
 			if (a === Parser.SRC_PHB) return -1;
@@ -5931,8 +5939,14 @@ class CharacterSheetPage {
 			return a.localeCompare(b);
 		});
 		
-		// Track selected sources (all selected by default)
-		const selectedSources = new Set(conditionSources);
+		// Track selected sources - if priority sources set, default to those only
+		const selectedSources = prioritySources.length
+			? new Set(conditionSources.filter(s => prioritySources.includes(s)))
+			: new Set(conditionSources);
+		// If no priority sources matched, fallback to all
+		if (selectedSources.size === 0) {
+			conditionSources.forEach(s => selectedSources.add(s));
+		}
 
 		const $search = $(`<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search conditions...">`);
 		const $list = $(`<div class="charsheet__conditions-list"></div>`);
@@ -5955,6 +5969,7 @@ class CharacterSheetPage {
 				<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__source-action-btn" data-action="all">Select All</button>
 				<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__source-action-btn" data-action="clear">Clear All</button>
 				<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__source-action-btn" data-action="official">Official Only</button>
+				${prioritySources.length ? `<button type="button" class="ve-btn ve-btn-xs ve-btn-success charsheet__source-action-btn" data-action="priority">Priority Only</button>` : ""}
 			</div>
 		`);
 		
@@ -6042,15 +6057,43 @@ class CharacterSheetPage {
 			renderList($search.val());
 		});
 		
+		// Priority Only button handler (only present if priority sources are set)
+		$sourceActions.find("[data-action='priority']").on("click", () => {
+			selectedSources.clear();
+			conditionSources.forEach(src => {
+				if (prioritySources.includes(src)) {
+					selectedSources.add(src);
+				}
+			});
+			// If no priority sources matched, fallback to all
+			if (selectedSources.size === 0) {
+				conditionSources.forEach(s => selectedSources.add(s));
+			}
+			$sourceList.find("input").each(function() {
+				const isSelected = selectedSources.has($(this).val());
+				$(this).prop("checked", isSelected);
+				$(this).siblings(".charsheet__source-multiselect-check").text(isSelected ? "✓" : "");
+			});
+			updateSourceBtnText();
+			renderList($search.val());
+		});
+		
 		const updateSourceBtnText = () => {
 			if (selectedSources.size === conditionSources.length) {
 				$sourceBtn.find(".charsheet__source-multiselect-text").text("All Sources");
 			} else if (selectedSources.size === 0) {
 				$sourceBtn.find(".charsheet__source-multiselect-text").text("No Sources");
+			} else if (prioritySources.length && 
+				prioritySources.filter(s => conditionSources.includes(s)).every(s => selectedSources.has(s)) &&
+				[...selectedSources].every(s => prioritySources.includes(s))) {
+				$sourceBtn.find(".charsheet__source-multiselect-text").text("Priority Sources");
 			} else {
 				$sourceBtn.find(".charsheet__source-multiselect-text").text(`${selectedSources.size} Source${selectedSources.size !== 1 ? "s" : ""}`);
 			}
 		};
+		
+		// Initialize button text
+		updateSourceBtnText();
 
 		const renderList = (filter = "") => {
 			$list.empty();
@@ -6064,6 +6107,21 @@ class CharacterSheetPage {
 					       cond.sourceAbbr.toLowerCase().includes(filter.toLowerCase());
 				}
 				return true;
+			});
+
+			// Sort: priority sources first, then by name
+			filtered.sort((a, b) => {
+				const aIsPriority = prioritySources.includes(a.source);
+				const bIsPriority = prioritySources.includes(b.source);
+				if (aIsPriority && !bIsPriority) return -1;
+				if (!aIsPriority && bIsPriority) return 1;
+				// Then by name
+				const nameCompare = a.name.localeCompare(b.name);
+				if (nameCompare !== 0) return nameCompare;
+				// Then XPHB first for same name
+				if (a.source === Parser.SRC_XPHB) return -1;
+				if (b.source === Parser.SRC_XPHB) return 1;
+				return a.source.localeCompare(b.source);
 			});
 
 			$count.text(`${filtered.length} conditions`);
@@ -6099,31 +6157,38 @@ class CharacterSheetPage {
 				// Show source badge to distinguish same-name conditions from different sources
 				const sourceBadge = `<span class="charsheet__condition-item-source">${cond.sourceAbbr}</span>`;
 
+				// Check if character is immune to this condition
+				const isImmune = this._state.isImmuneToCondition(cond.name);
+				const immuneBadge = isImmune ? `<span class="charsheet__condition-item-immune">🛡️ Immune</span>` : "";
+
 				const $item = $(`
-					<div class="charsheet__condition-item" data-condition-name="${cond.name}" data-condition-source="${cond.source}">
+					<div class="charsheet__condition-item ${isImmune ? "charsheet__condition-item--immune" : ""}" data-condition-name="${cond.name}" data-condition-source="${cond.source}">
 						<div class="charsheet__condition-item-header">
 							<span class="charsheet__condition-item-icon">${icon}</span>
 							<strong class="charsheet__condition-item-name">${cond.name}</strong>
 							${sourceBadge}
+							${immuneBadge}
 						</div>
 						<div class="charsheet__condition-item-desc">${description}</div>
 						${effectsPreview}
 					</div>
 				`);
 
-				$item.on("click", () => {
-					$list.find(".charsheet__condition-item").removeClass("selected");
-					$item.addClass("selected");
-					selectedCondition = cond;
-					$btnConfirm.prop("disabled", false);
-					$btnConfirm.find(".btn-text").text(`Apply ${cond.name}`);
-				});
+				if (!isImmune) {
+					$item.on("click", () => {
+						$list.find(".charsheet__condition-item").removeClass("selected");
+						$item.addClass("selected");
+						selectedCondition = cond;
+						$btnConfirm.prop("disabled", false);
+						$btnConfirm.find(".btn-text").text(`Apply ${cond.name}`);
+					});
 
-				// Double-click to apply immediately
-				$item.on("dblclick", () => {
-					selectedCondition = cond;
-					applyCondition();
-				});
+					// Double-click to apply immediately
+					$item.on("dblclick", () => {
+						selectedCondition = cond;
+						applyCondition();
+					});
+				}
 
 				$list.append($item);
 			});
@@ -8487,6 +8552,53 @@ class CharacterSheetPage {
 			}
 		});
 		return Array.from(conditionsMap.values()).sort();
+	}
+
+	/**
+	 * Get unique conditions with priority source filtering applied
+	 * Returns one version per condition name, preferring priority sources
+	 * @returns {Array<{name: string, source: string, sourceAbbr: string}>} Array of unique conditions
+	 */
+	getConditionsListUnique () {
+		const prioritySources = this._state.getPrioritySources() || [];
+		const conditionMap = new Map();
+
+		// Build map of conditions, preferring priority sources, then XPHB
+		this._conditionsData.forEach(cond => {
+			const existing = conditionMap.get(cond.name.toLowerCase());
+			if (!existing) {
+				conditionMap.set(cond.name.toLowerCase(), {
+					name: cond.name,
+					source: cond.source,
+					sourceAbbr: Parser.sourceJsonToAbv(cond.source),
+				});
+			} else if (prioritySources.length) {
+				const existingIsPriority = prioritySources.includes(existing.source);
+				const newIsPriority = prioritySources.includes(cond.source);
+				if (newIsPriority && !existingIsPriority) {
+					conditionMap.set(cond.name.toLowerCase(), {
+						name: cond.name,
+						source: cond.source,
+						sourceAbbr: Parser.sourceJsonToAbv(cond.source),
+					});
+				}
+			} else if (cond.source === Parser.SRC_XPHB && existing.source !== Parser.SRC_XPHB) {
+				conditionMap.set(cond.name.toLowerCase(), {
+					name: cond.name,
+					source: cond.source,
+					sourceAbbr: Parser.sourceJsonToAbv(cond.source),
+				});
+			}
+		});
+
+		// Sort: priority sources first, then alphabetically
+		return Array.from(conditionMap.values()).sort((a, b) => {
+			const aIsPriority = prioritySources.includes(a.source);
+			const bIsPriority = prioritySources.includes(b.source);
+			if (aIsPriority && !bIsPriority) return -1;
+			if (!aIsPriority && bIsPriority) return 1;
+			return a.name.localeCompare(b.name);
+		});
 	}
 
 	/**
