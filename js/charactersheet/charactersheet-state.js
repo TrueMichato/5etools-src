@@ -3146,8 +3146,20 @@ class CharacterSheetState {
 			stickyNotes: [],
 
 			// Custom abilities - user-created homebrew features, house rules, boons, etc.
-			// Each ability: {id, name, description, icon, category, mode, isActive, uses, activationAction, effects[]}
+			// Each ability: {id, name, description, icon, category, mode, isActive, uses, activationAction, effects[], grants?}
+			// grants: {spells: [{name, source, level, atWill, uses, recharge}], proficiencies: {skills:[], tools:[], weapons:[], armor:[], languages:[]}, features: [{name, source, featureType}]}
 			customAbilities: [],
+
+			// Granted proficiencies tracking - maps proficiency to source custom ability IDs
+			// Allows cleanup when custom abilities are removed
+			// Structure: {skills: {[skill]: [abilityId, ...]}, tools: {...}, weapons: {...}, armor: {...}, languages: {...}}
+			grantedProficiencies: {
+				skills: {},
+				tools: {},
+				weapons: {},
+				armor: {},
+				languages: {},
+			},
 
 			// Appearance
 			appearance: {
@@ -3320,6 +3332,11 @@ class CharacterSheetState {
 		// Ensure customAbilities array exists
 		if (!Array.isArray(this._data.customAbilities)) {
 			this._data.customAbilities = [];
+		}
+
+		// Ensure grantedProficiencies tracking object exists
+		if (!this._data.grantedProficiencies) {
+			this._data.grantedProficiencies = {skills: {}, tools: {}, weapons: {}, armor: {}, languages: {}};
 		}
 
 		// Re-register custom ability effects after loading (they're stored but need to be applied)
@@ -19508,6 +19525,10 @@ class CharacterSheetState {
 	 * @param {Array} [opts.effects] - Array of effect objects
 	 * @param {object} [opts.uses] - For limited mode: {max, recharge: "short"|"long"}
 	 * @param {string} [opts.activationAction] - For non-passive: "action", "bonus", "reaction", "free"
+	 * @param {object} [opts.grants] - Granted spells, proficiencies, and features
+	 * @param {Array} [opts.grants.spells] - [{name, source, level, atWill, uses, recharge}]
+	 * @param {object} [opts.grants.proficiencies] - {skills:[], tools:[], weapons:[], armor:[], languages:[]}
+	 * @param {Array} [opts.grants.features] - [{name, source, featureType}] - Optional features like invocations
 	 * @returns {string} The new ability's ID
 	 */
 	addCustomAbility (opts = {}) {
@@ -19520,6 +19541,7 @@ class CharacterSheetState {
 			mode: opts.mode || "passive",
 			isActive: opts.mode === "passive" ? true : false, // Passive abilities are always active
 			effects: opts.effects || [],
+			grants: opts.grants || null,
 			uses: opts.mode === "limited" ? {
 				current: opts.uses?.max || 1,
 				max: opts.uses?.max || 1,
@@ -19650,46 +19672,191 @@ class CharacterSheetState {
 	 * @private
 	 */
 	_registerCustomAbilityEffects (ability) {
-		if (!ability.effects || !ability.effects.length) return;
+		// Handle effects (numeric modifiers, resistances, etc.)
+		if (ability.effects?.length) {
+			for (const effect of ability.effects) {
+				// Parse the effect type to determine how to register it
+				const effectType = effect.type;
 
-		for (const effect of ability.effects) {
-			// Parse the effect type to determine how to register it
-			const effectType = effect.type;
-
-			// Handle resistance effects - add to resistances array
-			if (effectType.startsWith("resistance:")) {
-				const damageType = effectType.replace("resistance:", "");
-				if (!this._data.resistances.includes(damageType)) {
-					this._data.resistances.push(damageType);
+				// Handle resistance effects - add to resistances array
+				if (effectType.startsWith("resistance:")) {
+					const damageType = effectType.replace("resistance:", "");
+					if (!this._data.resistances.includes(damageType)) {
+						this._data.resistances.push(damageType);
+					}
+					continue;
 				}
-				continue;
-			}
 
-			// Handle advantage/disadvantage - these go to active states
-			if (effectType.startsWith("advantage:") || effectType.startsWith("disadvantage:")) {
-				// Create/update active state for the ability if toggleable
-				if (ability.mode === "toggleable") {
-					this._ensureCustomAbilityActiveState(ability);
+				// Handle advantage/disadvantage - these go to active states
+				if (effectType.startsWith("advantage:") || effectType.startsWith("disadvantage:")) {
+					// Create/update active state for the ability if toggleable
+					if (ability.mode === "toggleable") {
+						this._ensureCustomAbilityActiveState(ability);
+					}
+					continue;
 				}
-				continue;
-			}
 
-			// Standard numeric modifiers
-			this.addNamedModifier({
-				name: `${ability.name}: ${effect.name || effectType}`,
-				type: effectType,
-				value: effect.value || 0,
-				enabled: true,
-				sourceFeatureId: ability.id,
-				sourceType: "customAbility",
-				note: ability.description ? `From custom ability: ${ability.name}` : "",
-				// Pass through any special flags
-				advantage: effect.advantage,
-				disadvantage: effect.disadvantage,
-				setMinimum: effect.setMinimum,
-				setMaximum: effect.setMaximum,
-			});
+				// Standard numeric modifiers
+				this.addNamedModifier({
+					name: `${ability.name}: ${effect.name || effectType}`,
+					type: effectType,
+					value: effect.value || 0,
+					enabled: true,
+					sourceFeatureId: ability.id,
+					sourceType: "customAbility",
+					note: ability.description ? `From custom ability: ${ability.name}` : "",
+					// Pass through any special flags
+					advantage: effect.advantage,
+					disadvantage: effect.disadvantage,
+					setMinimum: effect.setMinimum,
+					setMaximum: effect.setMaximum,
+				});
+			}
 		}
+
+		// Handle grants (spells, proficiencies, features)
+		if (ability.grants) {
+			this._registerCustomAbilityGrants(ability);
+		}
+	}
+
+	/**
+	 * Register grants from a custom ability (spells, proficiencies, features)
+	 * @param {object} ability - The custom ability object
+	 * @private
+	 */
+	_registerCustomAbilityGrants (ability) {
+		const grants = ability.grants;
+		if (!grants) return;
+
+		// Grant spells as innate spells
+		if (grants.spells?.length) {
+			for (const spell of grants.spells) {
+				this.addInnateSpell({
+					name: spell.name,
+					source: spell.source || Parser.SRC_PHB,
+					level: spell.level || 0,
+					atWill: spell.atWill || false,
+					uses: spell.uses,
+					recharge: spell.recharge || "long",
+					sourceFeature: ability.name,
+					sourceClass: null,
+				});
+			}
+		}
+
+		// Grant proficiencies with source tracking
+		if (grants.proficiencies) {
+			const profs = grants.proficiencies;
+
+			// Skills - normalize to lowercase for consistency
+			// Supports both string format and object format {name, expertise}
+			if (profs.skills?.length) {
+				for (const skill of profs.skills) {
+					const skillName = typeof skill === "string" ? skill : skill.name;
+					const hasExpertise = typeof skill === "object" && skill.expertise;
+					const normalizedSkill = skillName.toLowerCase().replace(/\s+/g, "");
+					
+					if (hasExpertise) {
+						this.addExpertise(normalizedSkill);
+					} else {
+						this.addSkillProficiency(normalizedSkill);
+					}
+					this._trackGrantedProficiency("skills", normalizedSkill, ability.id);
+				}
+			}
+
+			// Tools
+			if (profs.tools?.length) {
+				for (const tool of profs.tools) {
+					this.addToolProficiency(tool);
+					this._trackGrantedProficiency("tools", tool.toLowerCase(), ability.id);
+				}
+			}
+
+			// Weapons
+			if (profs.weapons?.length) {
+				for (const weapon of profs.weapons) {
+					this.addWeaponProficiency(weapon);
+					this._trackGrantedProficiency("weapons", weapon.toLowerCase(), ability.id);
+				}
+			}
+
+			// Armor
+			if (profs.armor?.length) {
+				for (const armor of profs.armor) {
+					this.addArmorProficiency(armor);
+					this._trackGrantedProficiency("armor", armor.toLowerCase(), ability.id);
+				}
+			}
+
+			// Languages
+			if (profs.languages?.length) {
+				for (const language of profs.languages) {
+					this.addLanguage(language);
+					this._trackGrantedProficiency("languages", language.toLowerCase(), ability.id);
+				}
+			}
+		}
+
+		// Grant optional features (invocations, metamagic, fighting styles, etc.)
+		if (grants.features?.length) {
+			for (const feature of grants.features) {
+				this.addFeature({
+					name: feature.name,
+					source: feature.source,
+					level: 1,
+					featureType: "Optional Feature",
+					optionalFeatureTypes: feature.featureType ? [feature.featureType] : [],
+					entries: feature.entries,
+					description: feature.description || (feature.entries ? Renderer.get().render({entries: feature.entries}) : ""),
+					sourceAbilityId: ability.id, // Track source custom ability
+				});
+			}
+		}
+	}
+
+	/**
+	 * Track a granted proficiency for cleanup when ability is removed
+	 * @param {string} type - "skills", "tools", "weapons", "armor", "languages"
+	 * @param {string} name - The proficiency name
+	 * @param {string} abilityId - The source custom ability ID
+	 * @private
+	 */
+	_trackGrantedProficiency (type, name, abilityId) {
+		if (!this._data.grantedProficiencies) {
+			this._data.grantedProficiencies = {skills: {}, tools: {}, weapons: {}, armor: {}, languages: {}};
+		}
+		if (!this._data.grantedProficiencies[type]) {
+			this._data.grantedProficiencies[type] = {};
+		}
+		if (!this._data.grantedProficiencies[type][name]) {
+			this._data.grantedProficiencies[type][name] = [];
+		}
+		if (!this._data.grantedProficiencies[type][name].includes(abilityId)) {
+			this._data.grantedProficiencies[type][name].push(abilityId);
+		}
+	}
+
+	/**
+	 * Remove granted proficiency tracking for an ability
+	 * @param {string} type - "skills", "tools", "weapons", "armor", "languages"
+	 * @param {string} name - The proficiency name
+	 * @param {string} abilityId - The source custom ability ID
+	 * @returns {boolean} True if this was the last source and proficiency should be removed
+	 * @private
+	 */
+	_untrackGrantedProficiency (type, name, abilityId) {
+		if (!this._data.grantedProficiencies?.[type]?.[name]) return false;
+
+		const sources = this._data.grantedProficiencies[type][name];
+		const idx = sources.indexOf(abilityId);
+		if (idx !== -1) {
+			sources.splice(idx, 1);
+		}
+
+		// Return true if no more sources (should remove proficiency)
+		return sources.length === 0;
 	}
 
 	/**
@@ -19720,6 +19887,90 @@ class CharacterSheetState {
 				}
 			}
 		}
+
+		// Clean up grants
+		if (ability?.grants) {
+			this._unregisterCustomAbilityGrants(ability);
+		}
+	}
+
+	/**
+	 * Unregister grants from a custom ability
+	 * @param {object} ability - The custom ability object
+	 * @private
+	 */
+	_unregisterCustomAbilityGrants (ability) {
+		const grants = ability.grants;
+		if (!grants) return;
+
+		// Remove granted innate spells
+		if (grants.spells?.length) {
+			this.removeInnateSpellsByFeature(ability.name);
+		}
+
+		// Remove granted proficiencies (only if this was the only source)
+		if (grants.proficiencies) {
+			const profs = grants.proficiencies;
+
+			// Skills - use same normalization as registration
+			if (profs.skills?.length) {
+				for (const skill of profs.skills) {
+					const normalizedSkill = skill.toLowerCase().replace(/\s+/g, "");
+					if (this._untrackGrantedProficiency("skills", normalizedSkill, ability.id)) {
+						this.setSkillProficiency(normalizedSkill, 0);
+					}
+				}
+			}
+
+			// Tools
+			if (profs.tools?.length) {
+				for (const tool of profs.tools) {
+					if (this._untrackGrantedProficiency("tools", tool.toLowerCase(), ability.id)) {
+						this.removeToolProficiency(tool);
+					}
+				}
+			}
+
+			// Weapons
+			if (profs.weapons?.length) {
+				for (const weapon of profs.weapons) {
+					if (this._untrackGrantedProficiency("weapons", weapon.toLowerCase(), ability.id)) {
+						this.removeWeaponProficiency(weapon);
+					}
+				}
+			}
+
+			// Armor
+			if (profs.armor?.length) {
+				for (const armor of profs.armor) {
+					if (this._untrackGrantedProficiency("armor", armor.toLowerCase(), ability.id)) {
+						this.removeArmorProficiency(armor);
+					}
+				}
+			}
+
+			// Languages
+			if (profs.languages?.length) {
+				for (const language of profs.languages) {
+					if (this._untrackGrantedProficiency("languages", language.toLowerCase(), ability.id)) {
+						this.removeLanguage(language);
+					}
+				}
+			}
+		}
+
+		// Remove granted features
+		if (grants.features?.length) {
+			this.removeFeaturesBySourceAbility(ability.id);
+		}
+	}
+
+	/**
+	 * Remove all features granted by a specific custom ability
+	 * @param {string} abilityId - The source custom ability ID
+	 */
+	removeFeaturesBySourceAbility (abilityId) {
+		this._data.features = this._data.features.filter(f => f.sourceAbilityId !== abilityId);
 	}
 
 	/**

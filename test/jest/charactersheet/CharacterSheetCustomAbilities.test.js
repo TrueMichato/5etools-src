@@ -1138,4 +1138,353 @@ describe("Character Sheet Custom Abilities", () => {
 			expect(charState.getSkillMod("trapmaking")).toBe(dexMod + (profBonus * 2));
 		});
 	});
+
+	// ===================================================================
+	// Grants Tests
+	// ===================================================================
+	describe("Custom Ability Grants", () => {
+		describe("Spell Grants", () => {
+			test("should grant innate spells when adding a passive ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Fey Touched",
+					mode: "passive",
+					grants: {
+						spells: [
+							{name: "Misty Step", source: "PHB", level: 2, uses: 1, recharge: "long"},
+							{name: "Bless", source: "PHB", level: 1, uses: 1, recharge: "long"},
+						],
+						proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+						features: [],
+					},
+				});
+
+				const innateSpells = charState.getInnateSpells();
+				expect(innateSpells.length).toBe(2);
+				expect(innateSpells.some(s => s.name === "Misty Step")).toBe(true);
+				expect(innateSpells.some(s => s.name === "Bless")).toBe(true);
+
+				// Check source tracking
+				const mistyStep = innateSpells.find(s => s.name === "Misty Step");
+				expect(mistyStep.sourceFeature).toBe("Fey Touched");
+			});
+
+			test("should remove granted spells when removing ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Magic Initiate",
+					mode: "passive",
+					grants: {
+						spells: [{name: "Fireball", source: "PHB", level: 3, uses: 1}],
+						proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+						features: [],
+					},
+				});
+
+				expect(charState.getInnateSpells().length).toBe(1);
+
+				charState.removeCustomAbility(abilityId);
+
+				expect(charState.getInnateSpells().length).toBe(0);
+			});
+
+			test("should grant at-will cantrips", () => {
+				charState.addCustomAbility({
+					name: "Cantrip Master",
+					mode: "passive",
+					grants: {
+						spells: [
+							{name: "Fire Bolt", source: "PHB", level: 0, atWill: true},
+							{name: "Prestidigitation", source: "PHB", level: 0, atWill: true},
+						],
+						proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+						features: [],
+					},
+				});
+
+				const innateSpells = charState.getInnateSpells();
+				expect(innateSpells.length).toBe(2);
+				expect(innateSpells[0].atWill).toBe(true);
+				expect(innateSpells[1].atWill).toBe(true);
+			});
+		});
+
+		describe("Proficiency Grants", () => {
+			test("should grant skill proficiencies", () => {
+				charState.addCustomAbility({
+					name: "Skilled",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {
+							skills: ["Acrobatics", "Performance", "Persuasion"],
+							tools: [],
+							weapons: [],
+							armor: [],
+							languages: [],
+						},
+						features: [],
+					},
+				});
+
+				expect(charState.getSkillProficiency("acrobatics")).toBe(1);
+				expect(charState.getSkillProficiency("performance")).toBe(1);
+				expect(charState.getSkillProficiency("persuasion")).toBe(1);
+			});
+
+			test("should grant tool proficiencies", () => {
+				charState.addCustomAbility({
+					name: "Tool Proficient",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {
+							skills: [],
+							tools: ["Thieves' Tools", "Smith's Tools"],
+							weapons: [],
+							armor: [],
+							languages: [],
+						},
+						features: [],
+					},
+				});
+
+				expect(charState.hasToolProficiency("Thieves' Tools")).toBe(true);
+				expect(charState.hasToolProficiency("Smith's Tools")).toBe(true);
+			});
+
+			test("should grant language proficiencies", () => {
+				charState.addCustomAbility({
+					name: "Linguist",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {
+							skills: [],
+							tools: [],
+							weapons: [],
+							armor: [],
+							languages: ["Elvish", "Dwarvish", "Celestial"],
+						},
+						features: [],
+					},
+				});
+
+				const languages = charState.getLanguages();
+				expect(languages).toContain("Elvish");
+				expect(languages).toContain("Dwarvish");
+				expect(languages).toContain("Celestial");
+			});
+
+			test("should grant weapon proficiencies", () => {
+				charState.addCustomAbility({
+					name: "Weapon Training",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {
+							skills: [],
+							tools: [],
+							weapons: ["simple", "martial"],
+							armor: [],
+							languages: [],
+						},
+						features: [],
+					},
+				});
+
+				const weaponProfs = charState.getWeaponProficiencies();
+				expect(weaponProfs).toContain("simple");
+				expect(weaponProfs).toContain("martial");
+			});
+
+			test("should grant armor proficiencies", () => {
+				charState.addCustomAbility({
+					name: "Armor Training",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {
+							skills: [],
+							tools: [],
+							weapons: [],
+							armor: ["light", "medium", "shields"],
+							languages: [],
+						},
+						features: [],
+					},
+				});
+
+				const armorProfs = charState.getArmorProficiencies();
+				expect(armorProfs).toContain("light");
+				expect(armorProfs).toContain("medium");
+				expect(armorProfs).toContain("shields");
+			});
+
+			test("should remove granted proficiencies when removing ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Guild Membership",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {
+							skills: ["Insight"],
+							tools: ["Artisan's Tools"],
+							weapons: [],
+							armor: [],
+							languages: ["Dwarvish"],
+						},
+						features: [],
+					},
+				});
+
+				// Verify proficiencies were granted
+				expect(charState.getSkillProficiency("insight")).toBe(1);
+				expect(charState.hasToolProficiency("Artisan's Tools")).toBe(true);
+				expect(charState.getLanguages()).toContain("Dwarvish");
+
+				// Remove ability
+				charState.removeCustomAbility(abilityId);
+
+				// Proficiencies should be removed
+				expect(charState.getSkillProficiency("insight")).toBe(0);
+				expect(charState.hasToolProficiency("Artisan's Tools")).toBe(false);
+				expect(charState.getLanguages()).not.toContain("Dwarvish");
+			});
+
+			test("should not remove proficiencies if another source grants them", () => {
+				// Two abilities grant same skill
+				const ability1Id = charState.addCustomAbility({
+					name: "Background Skill",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {skills: ["Stealth"], tools: [], weapons: [], armor: [], languages: []},
+						features: [],
+					},
+				});
+
+				const ability2Id = charState.addCustomAbility({
+					name: "Class Skill",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {skills: ["Stealth"], tools: [], weapons: [], armor: [], languages: []},
+						features: [],
+					},
+				});
+
+				expect(charState.getSkillProficiency("stealth")).toBe(1);
+
+				// Remove first ability
+				charState.removeCustomAbility(ability1Id);
+
+				// Should still be proficient (second ability still grants it)
+				expect(charState.getSkillProficiency("stealth")).toBe(1);
+
+				// Remove second ability
+				charState.removeCustomAbility(ability2Id);
+
+				// Now should not be proficient
+				expect(charState.getSkillProficiency("stealth")).toBe(0);
+			});
+		});
+
+		describe("Feature Grants", () => {
+			test("should grant optional features", () => {
+				charState.addCustomAbility({
+					name: "Extra Invocation",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+						features: [
+							{name: "Agonizing Blast", source: "PHB", featureType: "EI"},
+							{name: "Devil's Sight", source: "PHB", featureType: "EI"},
+						],
+					},
+				});
+
+				const features = charState.getFeatures();
+				expect(features.some(f => f.name === "Agonizing Blast")).toBe(true);
+				expect(features.some(f => f.name === "Devil's Sight")).toBe(true);
+			});
+
+			test("should remove granted features when removing ability", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Metamagic Adept",
+					mode: "passive",
+					grants: {
+						spells: [],
+						proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+						features: [
+							{name: "Quickened Spell", source: "PHB", featureType: "MM"},
+						],
+					},
+				});
+
+				expect(charState.getFeatures().some(f => f.name === "Quickened Spell")).toBe(true);
+
+				charState.removeCustomAbility(abilityId);
+
+				expect(charState.getFeatures().some(f => f.name === "Quickened Spell")).toBe(false);
+			});
+		});
+
+		describe("Toggleable Grants", () => {
+			test("should not grant when toggleable ability is inactive", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Toggle Spell Grant",
+					mode: "toggleable",
+					grants: {
+						spells: [{name: "Shield", source: "PHB", level: 1, uses: 1}],
+						proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+						features: [],
+					},
+				});
+
+				// Not toggled on yet
+				expect(charState.getInnateSpells().length).toBe(0);
+
+				// Toggle on
+				charState.toggleCustomAbility(abilityId);
+				expect(charState.getInnateSpells().length).toBe(1);
+
+				// Toggle off
+				charState.toggleCustomAbility(abilityId);
+				expect(charState.getInnateSpells().length).toBe(0);
+			});
+		});
+
+		describe("Combined Effects and Grants", () => {
+			test("should handle ability with both effects and grants", () => {
+				const abilityId = charState.addCustomAbility({
+					name: "Shadow Touched",
+					mode: "passive",
+					effects: [
+						{type: "skill:stealth", value: 2},
+					],
+					grants: {
+						spells: [
+							{name: "Invisibility", source: "PHB", level: 2, uses: 1},
+						],
+						proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+						features: [],
+					},
+				});
+
+				// Check effect
+				const aggregated = charState.aggregateModifiers("skill:stealth");
+				expect(aggregated.bonus).toBe(2);
+
+				// Check grant
+				expect(charState.getInnateSpells().some(s => s.name === "Invisibility")).toBe(true);
+
+				// Remove and check cleanup
+				charState.removeCustomAbility(abilityId);
+
+				const afterRemoval = charState.aggregateModifiers("skill:stealth");
+				expect(afterRemoval.bonus).toBe(0);
+				expect(charState.getInnateSpells().length).toBe(0);
+			});
+		});
+	});
 });

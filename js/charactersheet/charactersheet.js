@@ -407,6 +407,11 @@ class CharacterSheetPage {
 			// Register homebrew conditions with their effects
 			CharacterSheetState.registerHomebrewConditions(brewConditions);
 		}
+
+		// Languages
+		if (brewData.language?.length) {
+			this._languagesData = [...this._languagesData, ...MiscUtil.copyFast(brewData.language)];
+		}
 	}
 
 	/**
@@ -8380,6 +8385,32 @@ class CharacterSheetPage {
 	getState () { return this._state; }
 	getLayout () { return this._layout; }
 	getNotes () { return this._notes; }
+
+	/**
+	 * Get tools list from items data (artisan tools, gaming sets, musical instruments, other tools)
+	 * @returns {Array} Array of {name, source} objects
+	 */
+	getToolsList () {
+		const toolTypes = ["AT", "GS", "INS", "T", "TK"]; // Artisan Tools, Gaming Set, Instrument, Tool, Thieves Kit
+		const toolsMap = new Map();
+
+		this._itemsData.forEach(item => {
+			// Check if item is a tool type
+			if (item.type && toolTypes.includes(item.type)) {
+				const existing = toolsMap.get(item.name);
+				// Prefer XPHB (2024) version
+				if (!existing || item.source === Parser.SRC_XPHB) {
+					toolsMap.set(item.name, {
+						name: item.name,
+						source: item.source,
+					});
+				}
+			}
+		});
+
+		// Sort alphabetically
+		return Array.from(toolsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+	}
 
 	/**
 	 * Get unique skills list, preferring 2024 (XPHB) versions, including custom skills
