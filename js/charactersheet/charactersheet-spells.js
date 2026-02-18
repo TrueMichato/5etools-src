@@ -168,6 +168,21 @@ class CharacterSheetSpells {
 			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
 			this._showSpellInfo(spellId);
 		});
+
+		// Spell note button
+		$(document).on("click", ".charsheet__spell-note", (e) => {
+			const $btn = $(e.currentTarget);
+			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+			const spell = this._state.getSpells().find(s => (s.id || `${s.name}|${s.source}`) === spellId);
+			if (!spell) return;
+			const renderFn = () => this._renderSpellList();
+			this._page.getNotes()?.showNoteModal(
+				"spell",
+				spellId,
+				spell.name,
+				renderFn,
+			);
+		});
 	}
 
 	_toggleSlot (level, $pip) {
@@ -3602,6 +3617,9 @@ class CharacterSheetSpells {
 					</button>
 					<button class="ve-btn ve-btn-xs ve-btn-default charsheet__spell-info" title="Spell Info">
 						<span class="glyphicon glyphicon-info-sign mr-1"></span>Info
+					</button>
+					<button class="ve-btn ve-btn-xs ${this._state.getSpellNote?.(spellId) ? "ve-btn-warning" : "ve-btn-default"} charsheet__spell-note" title="${this._state.getSpellNote?.(spellId) ? "Edit Note" : "Add Note"}">
+						<span class="glyphicon glyphicon-comment"></span>
 					</button>
 					${!isAlwaysPrepared ? `
 						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__spell-remove" title="Remove Spell">

@@ -130,6 +130,38 @@ class CharacterSheetFeatures {
 			this._useFeature(featureId);
 		});
 
+		// Feature note button
+		$(document).on("click", ".charsheet__feature-note", (e) => {
+			e.stopPropagation();
+			const $feature = $(e.currentTarget).closest(".charsheet__feature");
+			const featureId = $feature.data("feature-id");
+			const feature = this._state.getFeatures().find(f => f.id === featureId);
+			if (!feature) return;
+			const renderFn = () => this.render();
+			this._page.getNotes()?.showNoteModal(
+				"feature",
+				featureId,
+				feature.name,
+				renderFn,
+			);
+		});
+
+		// Feat note button
+		$(document).on("click", ".charsheet__feat-note", (e) => {
+			e.stopPropagation();
+			const $feat = $(e.currentTarget).closest(".charsheet__feat");
+			const featId = $feat.data("feat-id");
+			const feat = this._state.getFeats().find(f => f.id === featId);
+			if (!feat) return;
+			const renderFn = () => this.render();
+			this._page.getNotes()?.showNoteModal(
+				"feat",
+				featId,
+				feat.name,
+				renderFn,
+			);
+		});
+
 		// Resource management
 		$(document).on("click", ".charsheet__resource-pip", (e) => {
 			const $pip = $(e.currentTarget);
@@ -1338,6 +1370,9 @@ class CharacterSheetFeatures {
 					${hasUses ? `<span class="badge badge-info">${feature.uses.current}/${feature.uses.max}</span>` : ""}
 					<div class="charsheet__feature-actions">
 						${hasUses ? `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__feature-use" title="Use Feature">Use</button>` : ""}
+						<button class="ve-btn ve-btn-xs ${this._state.getFeatureNote?.(feature.id) ? "ve-btn-warning" : "ve-btn-default"} charsheet__feature-note" title="${this._state.getFeatureNote?.(feature.id) ? "Edit Note" : "Add Note"}">
+							<span class="glyphicon glyphicon-comment"></span>
+						</button>
 						<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__feature-remove" title="Remove">
 							<span class="glyphicon glyphicon-trash"></span>
 						</button>
@@ -1380,11 +1415,14 @@ class CharacterSheetFeatures {
 			const description = feat.description || this._getFeatDescription(feat) || "<em class='ve-muted'>No description available</em>";
 
 			const $feat = $(`
-				<div class="charsheet__feat charsheet__feature">
+				<div class="charsheet__feat charsheet__feature" data-feat-id="${feat.id}">
 					<div class="charsheet__feat-header charsheet__feature-header">
 						<span class="charsheet__feature-toggle glyphicon ${isExpanded ? "glyphicon-chevron-down" : "glyphicon-chevron-right"}"></span>
 						<span class="charsheet__feat-name charsheet__feature-name">${featNameHtml}</span>
 						<div class="charsheet__feature-actions">
+							<button class="ve-btn ve-btn-xs ${this._state.getFeatNote?.(feat.id) ? "ve-btn-warning" : "ve-btn-default"} charsheet__feat-note" title="${this._state.getFeatNote?.(feat.id) ? "Edit Note" : "Add Note"}">
+								<span class="glyphicon glyphicon-comment"></span>
+							</button>
 							<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__feat-remove" data-feat-id="${feat.id}">
 								<span class="glyphicon glyphicon-trash"></span>
 							</button>

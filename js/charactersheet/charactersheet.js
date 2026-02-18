@@ -9,6 +9,7 @@ import {CharacterSheetRest} from "./charactersheet-rest.js";
 import {CharacterSheetExport} from "./charactersheet-export.js";
 import {CharacterSheetLevelUp} from "./charactersheet-levelup.js";
 import {CharacterSheetLayout} from "./charactersheet-layout.js";
+import {CharacterSheetNotes} from "./charactersheet-notes.js";
 
 /**
  * Character Sheet - Main Controller
@@ -26,6 +27,7 @@ class CharacterSheetPage {
 		this._export = null;
 		this._levelUp = null;
 		this._layout = null;
+		this._notes = null;
 
 		this._$selCharacter = null;
 		this._currentCharacterId = null;
@@ -102,6 +104,11 @@ class CharacterSheetPage {
 			this._layout = new CharacterSheetLayout(this);
 			console.log("CharacterSheetPage.pInit: Layout module initialized");
 		} catch (e) { console.error("Failed to init layout:", e); }
+
+		try {
+			this._notes = new CharacterSheetNotes(this);
+			console.log("CharacterSheetPage.pInit: Notes module initialized");
+		} catch (e) { console.error("Failed to init notes:", e); }
 
 		try {
 			this._respec = new CharacterSheetRespec({page: this, state: this._state});
@@ -2919,6 +2926,9 @@ class CharacterSheetPage {
 						<button class="ve-btn ve-btn-xs ve-btn-danger btn-companion-damage" style="flex: 1; min-width: 80px;">
 							<span class="glyphicon glyphicon-flash"></span> Damage
 						</button>
+						<button class="ve-btn ve-btn-xs ${this._state.getCompanionNote?.(companion.id) ? "ve-btn-warning" : "ve-btn-default"} btn-companion-note" title="${this._state.getCompanionNote?.(companion.id) ? "Edit Note" : "Add Note"}">
+							<span class="glyphicon glyphicon-comment"></span>
+						</button>
 						<button class="ve-btn ve-btn-xs ve-btn-default btn-companion-edit" title="Edit companion name">
 							<span class="glyphicon glyphicon-pencil"></span>
 						</button>
@@ -3010,6 +3020,17 @@ class CharacterSheetPage {
 			// Edit name button
 			$card.find(".btn-companion-edit").on("click", () => {
 				this._onEditCompanionName(companion);
+			});
+
+			// Note button
+			const companionRenderFn = () => this._renderCompanions();
+			$card.find(".btn-companion-note").on("click", () => {
+				this.getNotes()?.showNoteModal(
+					"companion",
+					companion.id,
+					companion.customName || companion.name,
+					companionRenderFn,
+				);
 			});
 
 			// Action buttons
@@ -8232,6 +8253,7 @@ class CharacterSheetPage {
 	getConditionsData () { return this._conditionsData; }
 	getState () { return this._state; }
 	getLayout () { return this._layout; }
+	getNotes () { return this._notes; }
 
 	/**
 	 * Get unique skills list, preferring 2024 (XPHB) versions, including custom skills
