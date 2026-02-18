@@ -12167,3 +12167,269 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 .charsheet__method-picker-list::-webkit-scrollbar-thumb:hover {
 	background: var(--cs-accent, #8b5cf6);
 }
+
+/* ========================================================================
+   Sticky Notes
+   ======================================================================== */
+.charsheet__sticky-notes-container {
+	position: relative;
+	min-height: 0;
+	z-index: 100;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: 12px 0;
+	margin-bottom: 8px;
+}
+
+.charsheet__sticky-notes-container:empty {
+	display: none;
+}
+
+.charsheet__sticky-note {
+	position: relative;
+	width: 280px;
+	max-width: 320px;
+	border-radius: 6px;
+	box-shadow: 
+		0 2px 4px rgba(0, 0, 0, 0.1),
+		0 4px 8px rgba(0, 0, 0, 0.08),
+		2px 2px 0 rgba(0, 0, 0, 0.05);
+	transition: box-shadow 0.2s ease, transform 0.15s ease;
+	overflow: hidden;
+	background: var(--note-bg, #fffde7);
+	border: 2px solid var(--note-border, #fdd835);
+	font-family: var(--cs-font-family, inherit);
+}
+
+.charsheet__sticky-note:hover {
+	box-shadow: 
+		0 4px 8px rgba(0, 0, 0, 0.15),
+		0 8px 16px rgba(0, 0, 0, 0.12),
+		3px 3px 0 rgba(0, 0, 0, 0.08);
+	transform: translateY(-2px);
+}
+
+.charsheet__sticky-note--dragging {
+	z-index: 1000 !important;
+	cursor: grabbing !important;
+	box-shadow: 
+		0 8px 24px rgba(0, 0, 0, 0.25),
+		0 16px 48px rgba(0, 0, 0, 0.2);
+	transform: rotate(2deg) scale(1.02);
+}
+
+.charsheet__sticky-note-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 10px 12px;
+	background: var(--note-header-bg, #fff9c4);
+	border-bottom: 2px solid var(--note-border, #fdd835);
+	cursor: move;
+}
+
+.charsheet__sticky-note-title-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+}
+
+.charsheet__sticky-note-icon {
+	font-size: calc(1.1rem * var(--cs-text-scale, 1));
+	flex-shrink: 0;
+}
+
+.charsheet__sticky-note-title {
+	font-weight: 700;
+	font-size: calc(var(--cs-text-base, 1rem) * var(--cs-text-scale, 1));
+	color: var(--note-text, #5d4037);
+	cursor: text;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.charsheet__sticky-note-controls {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+	margin-left: 8px;
+}
+
+.charsheet__sticky-note-btn {
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	border-radius: 4px;
+	cursor: pointer;
+	opacity: 0.7;
+	transition: opacity 0.15s ease, background 0.15s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--note-text, #5d4037);
+}
+
+.charsheet__sticky-note-btn:hover {
+	opacity: 1;
+	background: rgba(0, 0, 0, 0.12);
+}
+
+.charsheet__sticky-note-btn-delete:hover {
+	background: rgba(220, 53, 69, 0.25);
+	color: #b71c1c;
+}
+
+.charsheet__sticky-note-body {
+	background: var(--note-bg, #fffde7);
+	color: var(--note-text, #5d4037);
+}
+
+.charsheet__sticky-note-content {
+	padding: 12px 14px;
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+	max-height: 200px;
+	overflow-y: auto;
+	word-wrap: break-word;
+	line-height: 1.6;
+}
+
+.charsheet__sticky-note-content p {
+	margin: 0 0 0.5em 0;
+}
+
+.charsheet__sticky-note-content p:last-child {
+	margin-bottom: 0;
+}
+
+.charsheet__sticky-note-content strong {
+	font-weight: 700;
+}
+
+.charsheet__sticky-note-content em {
+	font-style: italic;
+}
+
+.charsheet__sticky-note-content code {
+	background: rgba(0, 0, 0, 0.08);
+	padding: 2px 5px;
+	border-radius: 3px;
+	font-size: 0.9em;
+	font-family: "SF Mono", Monaco, Consolas, monospace;
+}
+
+/* Note list styling */
+.charsheet__note-list {
+	margin: 0.5em 0;
+	padding-left: 1.5em;
+	list-style-type: disc;
+}
+
+.charsheet__note-list li {
+	margin-bottom: 0.25em;
+}
+
+/* Note header styling */
+.charsheet__note-header {
+	display: block;
+	margin: 0.5em 0 0.25em 0;
+}
+
+.charsheet__note-header--1 {
+	font-size: 1.2em;
+}
+
+.charsheet__note-header--2 {
+	font-size: 1.1em;
+}
+
+.charsheet__note-header--3 {
+	font-size: 1em;
+}
+
+.charsheet__sticky-note-footer {
+	padding: 8px 14px;
+	border-top: 1px dashed var(--note-border, #fdd835);
+	font-size: calc(var(--cs-text-xs, 0.75rem) * var(--cs-text-scale, 1));
+	opacity: 0.8;
+	background: rgba(0, 0, 0, 0.03);
+}
+
+.charsheet__sticky-note-tab-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.charsheet__sticky-note--collapsed .charsheet__sticky-note-body {
+	display: none;
+}
+
+/* Note color button in modal */
+.charsheet__note-color-btn {
+	padding: 6px 12px;
+	border: 2px solid;
+	border-radius: 6px;
+	font-size: calc(var(--cs-text-sm, 0.875rem) * var(--cs-text-scale, 1));
+	font-weight: 500;
+	cursor: pointer;
+	transition: transform 0.15s ease, box-shadow 0.15s ease;
+	min-width: 70px;
+}
+
+.charsheet__note-color-btn:hover {
+	transform: scale(1.05);
+}
+
+.charsheet__note-color-btn--selected {
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5);
+	transform: scale(1.05);
+}
+
+/* Toolbar note button */
+.charsheet__tool-btn--note {
+	background: linear-gradient(135deg, #fef3c7, #fde68a);
+	border-color: #f59e0b !important;
+	color: #92400e !important;
+}
+
+/* ========================================================================
+   Entity Notes (Notes attached to items, spells, features, etc.)
+   ======================================================================== */
+.charsheet__note-indicator {
+	padding: 2px 4px;
+	font-size: 0.75rem;
+	line-height: 1;
+}
+
+.charsheet__inline-note-editor {
+	margin-top: var(--cs-space-sm, 0.5rem);
+	padding: var(--cs-space-sm, 0.5rem);
+	background: rgba(0, 0, 0, 0.1);
+	border-radius: var(--cs-radius-sm, 4px);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.1));
+}
+
+.charsheet__inline-note-editor textarea {
+	resize: vertical;
+	min-height: 60px;
+}
+
+.charsheet__note-edit-form label {
+	display: block;
+	margin-bottom: 4px;
+}
+
+/* Note indicator badge styles */
+.charsheet__entity-has-note::after {
+	content: "📝";
+	font-size: 0.7em;
+	margin-left: 4px;
+	opacity: 0.8;
+}

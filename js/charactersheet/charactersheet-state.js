@@ -3141,6 +3141,10 @@ class CharacterSheetState {
 				notes: "",
 			},
 
+			// Sticky notes - draggable notes on the character sheet
+			// Each note: {id, title, content, tab: string|null, position: {x,y}|null, color, collapsed, createdAt, updatedAt}
+			stickyNotes: [],
+
 			// Appearance
 			appearance: {
 				age: "",
@@ -3302,6 +3306,11 @@ class CharacterSheetState {
 		// Ensure levelHistory array exists (characters without it are legacy)
 		if (!Array.isArray(this._data.levelHistory)) {
 			this._data.levelHistory = [];
+		}
+
+		// Ensure stickyNotes array exists
+		if (!Array.isArray(this._data.stickyNotes)) {
+			this._data.stickyNotes = [];
 		}
 
 		// Migrate features: infer featureType for old saves that don't have it
@@ -19099,6 +19108,275 @@ class CharacterSheetState {
 	// #region Notes
 	getNote (field) { return this._data.notes[field] || ""; }
 	setNote (field, value) { this._data.notes[field] = value; }
+
+	// #region Sticky Notes
+	/**
+	 * Get all sticky notes, optionally filtered by tab
+	 * @param {string} [tab] - If provided, filter to notes on this tab (or null for all-tabs notes)
+	 * @returns {Array} Array of sticky note objects
+	 */
+	getStickyNotes (tab) {
+		if (tab === undefined) return [...this._data.stickyNotes];
+		// Return notes for this tab OR notes that appear on all tabs (tab: null)
+		return this._data.stickyNotes.filter(n => n.tab === tab || n.tab === null);
+	}
+
+	/**
+	 * Get a single sticky note by ID
+	 * @param {string} id - The note ID
+	 * @returns {object|null} The note object or null
+	 */
+	getStickyNote (id) {
+		return this._data.stickyNotes.find(n => n.id === id) || null;
+	}
+
+	/**
+	 * Add a new sticky note
+	 * @param {object} opts - Note options
+	 * @param {string} [opts.title] - Note title (default: "Note")
+	 * @param {string} [opts.content] - Note content (default: "")
+	 * @param {string|null} [opts.tab] - Tab to show on (null = all tabs)
+	 * @param {object|null} [opts.position] - {x, y} position (null = docked)
+	 * @param {string} [opts.color] - Note color (default: "yellow")
+	 * @returns {string} The new note's ID
+	 */
+	addStickyNote (opts = {}) {
+		const note = {
+			id: CryptUtil.uid(),
+			title: opts.title || "Note",
+			content: opts.content || "",
+			tab: opts.tab !== undefined ? opts.tab : null,
+			position: opts.position || null,
+			color: opts.color || "yellow",
+			collapsed: false,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+		};
+		this._data.stickyNotes.push(note);
+		return note.id;
+	}
+
+	/**
+	 * Update a sticky note
+	 * @param {string} id - The note ID
+	 * @param {object} data - Fields to update
+	 * @returns {boolean} True if note was found and updated
+	 */
+	updateStickyNote (id, data) {
+		const note = this._data.stickyNotes.find(n => n.id === id);
+		if (!note) return false;
+		Object.assign(note, data, {updatedAt: Date.now()});
+		return true;
+	}
+
+	/**
+	 * Remove a sticky note
+	 * @param {string} id - The note ID
+	 * @returns {boolean} True if note was found and removed
+	 */
+	removeStickyNote (id) {
+		const idx = this._data.stickyNotes.findIndex(n => n.id === id);
+		if (idx === -1) return false;
+		this._data.stickyNotes.splice(idx, 1);
+		return true;
+	}
+	// #endregion
+
+	// #region Entity Notes (notes attached to items, spells, features, etc.)
+	/**
+	 * Update the note for an inventory item
+	 * @param {string} itemId - The item ID
+	 * @param {string} note - The note content
+	 * @returns {boolean} True if item was found and updated
+	 */
+	updateItemNote (itemId, note) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item) return false;
+		item.note = note || "";
+		return true;
+	}
+
+	/**
+	 * Get the note for an inventory item
+	 * @param {string} itemId - The item ID
+	 * @returns {string} The note content or empty string
+	 */
+	getItemNote (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		return item?.note || "";
+	}
+
+	/**
+	 * Update the note for a spell
+	 * @param {string} spellId - The spell ID
+	 * @param {string} note - The note content
+	 * @returns {boolean} True if spell was found and updated
+	 */
+	updateSpellNote (spellId, note) {
+		// Check in spellsKnown
+		let spell = this._data.spellcasting.spellsKnown.find(s => s.id === spellId);
+		if (spell) {
+			spell.note = note || "";
+			return true;
+		}
+		// Check in cantrips
+		spell = this._data.spellcasting.cantripsKnown.find(s => s.id === spellId);
+		if (spell) {
+			spell.note = note || "";
+			return true;
+		}
+		// Check in innate spells
+		spell = this._data.spellcasting.innateSpells?.find(s => s.id === spellId);
+		if (spell) {
+			spell.note = note || "";
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Get the note for a spell
+	 * @param {string} spellId - The spell ID
+	 * @returns {string} The note content or empty string
+	 */
+	getSpellNote (spellId) {
+		let spell = this._data.spellcasting.spellsKnown.find(s => s.id === spellId);
+		if (spell) return spell.note || "";
+		spell = this._data.spellcasting.cantripsKnown.find(s => s.id === spellId);
+		if (spell) return spell.note || "";
+		spell = this._data.spellcasting.innateSpells?.find(s => s.id === spellId);
+		return spell?.note || "";
+	}
+
+	/**
+	 * Update the note for a feature
+	 * @param {string} featureId - The feature ID
+	 * @param {string} note - The note content
+	 * @returns {boolean} True if feature was found and updated
+	 */
+	updateFeatureNote (featureId, note) {
+		const feature = this._data.features.find(f => f.id === featureId);
+		if (!feature) return false;
+		feature.note = note || "";
+		return true;
+	}
+
+	/**
+	 * Get the note for a feature
+	 * @param {string} featureId - The feature ID
+	 * @returns {string} The note content or empty string
+	 */
+	getFeatureNote (featureId) {
+		const feature = this._data.features.find(f => f.id === featureId);
+		return feature?.note || "";
+	}
+
+	/**
+	 * Update the note for a feat
+	 * @param {string} featId - The feat ID
+	 * @param {string} note - The note content
+	 * @returns {boolean} True if feat was found and updated
+	 */
+	updateFeatNote (featId, note) {
+		const feat = this._data.feats.find(f => f.id === featId);
+		if (!feat) return false;
+		feat.note = note || "";
+		return true;
+	}
+
+	/**
+	 * Get the note for a feat
+	 * @param {string} featId - The feat ID
+	 * @returns {string} The note content or empty string
+	 */
+	getFeatNote (featId) {
+		const feat = this._data.feats.find(f => f.id === featId);
+		return feat?.note || "";
+	}
+
+	/**
+	 * Update the note for a companion
+	 * @param {string} companionId - The companion ID
+	 * @param {string} note - The note content
+	 * @returns {boolean} True if companion was found and updated
+	 */
+	updateCompanionNote (companionId, note) {
+		const companion = this._data.companions.find(c => c.id === companionId);
+		if (!companion) return false;
+		companion.note = note || "";
+		return true;
+	}
+
+	/**
+	 * Get the note for a companion
+	 * @param {string} companionId - The companion ID
+	 * @returns {string} The note content or empty string
+	 */
+	getCompanionNote (companionId) {
+		const companion = this._data.companions.find(c => c.id === companionId);
+		return companion?.note || "";
+	}
+
+	/**
+	 * Update the note for an attack
+	 * @param {string} attackId - The attack ID
+	 * @param {string} note - The note content
+	 * @returns {boolean} True if attack was found and updated
+	 */
+	updateAttackNote (attackId, note) {
+		const attack = this._data.attacks.find(a => a.id === attackId);
+		if (!attack) return false;
+		attack.note = note || "";
+		return true;
+	}
+
+	/**
+	 * Get the note for an attack
+	 * @param {string} attackId - The attack ID
+	 * @returns {string} The note content or empty string
+	 */
+	getAttackNote (attackId) {
+		const attack = this._data.attacks.find(a => a.id === attackId);
+		return attack?.note || "";
+	}
+
+	/**
+	 * Generic method to update entity note by type and ID
+	 * @param {string} entityType - "item", "spell", "feature", "feat", "companion", "attack"
+	 * @param {string} entityId - The entity ID
+	 * @param {string} note - The note content
+	 * @returns {boolean} True if entity was found and updated
+	 */
+	updateEntityNote (entityType, entityId, note) {
+		switch (entityType) {
+			case "item": return this.updateItemNote(entityId, note);
+			case "spell": return this.updateSpellNote(entityId, note);
+			case "feature": return this.updateFeatureNote(entityId, note);
+			case "feat": return this.updateFeatNote(entityId, note);
+			case "companion": return this.updateCompanionNote(entityId, note);
+			case "attack": return this.updateAttackNote(entityId, note);
+			default: return false;
+		}
+	}
+
+	/**
+	 * Generic method to get entity note by type and ID
+	 * @param {string} entityType - "item", "spell", "feature", "feat", "companion", "attack"
+	 * @param {string} entityId - The entity ID
+	 * @returns {string} The note content or empty string
+	 */
+	getEntityNote (entityType, entityId) {
+		switch (entityType) {
+			case "item": return this.getItemNote(entityId);
+			case "spell": return this.getSpellNote(entityId);
+			case "feature": return this.getFeatureNote(entityId);
+			case "feat": return this.getFeatNote(entityId);
+			case "companion": return this.getCompanionNote(entityId);
+			case "attack": return this.getAttackNote(entityId);
+			default: return "";
+		}
+	}
+	// #endregion
 	// #endregion
 
 	// #region Appearance

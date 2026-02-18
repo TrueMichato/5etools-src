@@ -82,6 +82,17 @@ class CharacterSheetInventory {
 			this._showItemInfo(itemId);
 		});
 
+		// Item note
+		$(document).on("click", ".charsheet__item-note", (e) => {
+			const $item = $(e.currentTarget).closest(".charsheet__item");
+			const itemId = $item.data("item-id");
+			const item = this._state.getItems().find(i => i.id === itemId);
+			const itemName = item?.name || "Item";
+			this._page.getNotes()?.showNoteModal("item", itemId, itemName, () => {
+				this._renderItemList(); // Re-render to update note indicator
+			});
+		});
+
 		// Charge buttons - use and restore
 		$(document).on("click", ".charsheet__item-use-charge", (e) => {
 			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
@@ -1900,6 +1911,7 @@ class CharacterSheetInventory {
 			|| item.type === "wondrous" || item.requiresAttunement || hasBonus;
 		const canAttune = item.requiresAttunement;
 		const hasCharges = item.charges && item.charges > 0;
+		const hasNote = !!this._state.getItemNote(item.id);
 
 		// Render item name with a 5etools hover link if it has a source
 		let itemNameHtml = item.name;
@@ -1986,6 +1998,9 @@ class CharacterSheetInventory {
 								<span class="glyphicon glyphicon-star-empty"></span> ${item.attuned ? "Attuned" : "Attune"}
 							</button>
 						` : ""}
+						<button type="button" class="ve-btn ve-btn-xs ${hasNote ? "ve-btn-primary" : "ve-btn-default"} charsheet__item-note" title="${hasNote ? "View/Edit Note" : "Add Note"}">
+							<span class="glyphicon glyphicon-${hasNote ? "comment" : "edit"}"></span>
+						</button>
 						<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__item-info" title="Item details">
 							<span class="glyphicon glyphicon-info-sign"></span>
 						</button>
