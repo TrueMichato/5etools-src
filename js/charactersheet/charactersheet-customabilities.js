@@ -153,6 +153,17 @@ class CharacterSheetCustomAbilities {
 			card.appendChild(effects);
 		}
 
+		// Grants summary
+		if (ability.grants) {
+			const grantsSummary = this._formatGrantsSummary(ability.grants);
+			if (grantsSummary) {
+				const grantsDiv = document.createElement("div");
+				grantsDiv.className = "custom-abilities__card-grants";
+				grantsDiv.innerHTML = `<span class="custom-abilities__grants-badge">🎁</span> ${grantsSummary}`;
+				card.appendChild(grantsDiv);
+			}
+		}
+
 		// Controls row
 		const controls = document.createElement("div");
 		controls.className = "custom-abilities__card-controls";
@@ -232,6 +243,45 @@ class CharacterSheetCustomAbilities {
 		if (effect.bonusDie) parts.push(`<span class="text-info">+${effect.bonusDie}</span>`);
 
 		return `${label}${parts.length ? " " + parts.join(" ") : ""}`;
+	}
+
+	/**
+	 * Format grants for display summary
+	 */
+	_formatGrantsSummary (grants) {
+		if (!grants) return "";
+
+		const parts = [];
+
+		// Spells
+		if (grants.spells?.length) {
+			const spellNames = grants.spells.slice(0, 2).map(s => s.name);
+			const spellStr = spellNames.join(", ") + (grants.spells.length > 2 ? ` +${grants.spells.length - 2}` : "");
+			parts.push(`<span class="text-info">✨${spellStr}</span>`);
+		}
+
+		// Features
+		if (grants.features?.length) {
+			const featNames = grants.features.slice(0, 2).map(f => f.name);
+			const featStr = featNames.join(", ") + (grants.features.length > 2 ? ` +${grants.features.length - 2}` : "");
+			parts.push(`<span class="text-warning">⚔️${featStr}</span>`);
+		}
+
+		// Proficiencies
+		const profs = grants.proficiencies;
+		if (profs) {
+			const profParts = [];
+			if (profs.skills?.length) profParts.push(`${profs.skills.length} skill${profs.skills.length > 1 ? "s" : ""}`);
+			if (profs.tools?.length) profParts.push(`${profs.tools.length} tool${profs.tools.length > 1 ? "s" : ""}`);
+			if (profs.languages?.length) profParts.push(`${profs.languages.length} lang${profs.languages.length > 1 ? "s" : ""}`);
+			if (profs.weapons?.length) profParts.push(`weapons`);
+			if (profs.armor?.length) profParts.push(`armor`);
+			if (profParts.length) {
+				parts.push(`<span class="text-success">📚${profParts.join(", ")}</span>`);
+			}
+		}
+
+		return parts.join(" · ");
 	}
 
 	/**
@@ -550,6 +600,179 @@ class CharacterSheetCustomAbilities {
 								<!-- Rendered dynamically -->
 							</div>
 						</div>
+
+						<!-- Grants -->
+						<div class="custom-abilities__form-section">
+							<label class="custom-abilities__form-section-title">Grants (Optional)</label>
+							<p class="ve-muted ve-small mb-2">Grant spells, proficiencies, or optional features (invocations, metamagic, fighting styles, etc.)</p>
+							
+							<!-- Spells Grant -->
+							<details class="custom-abilities__grants-section">
+								<summary><span class="custom-abilities__grants-icon">✨</span> Spells <span class="custom-abilities__grants-count" id="grants-spell-count"></span></summary>
+								<div class="custom-abilities__grants-content">
+									<div class="custom-abilities__grants-filters">
+										<input type="text" class="form-control custom-abilities__grants-search" placeholder="Search spells..." id="grants-spell-search">
+										<select class="form-control custom-abilities__grants-filter" id="grants-spell-level-filter">
+											<option value="">All Levels</option>
+											<option value="0">Cantrips</option>
+											<option value="1">1st Level</option>
+											<option value="2">2nd Level</option>
+											<option value="3">3rd Level</option>
+											<option value="4">4th Level</option>
+											<option value="5">5th Level</option>
+											<option value="6">6th Level</option>
+											<option value="7">7th Level</option>
+											<option value="8">8th Level</option>
+											<option value="9">9th Level</option>
+										</select>
+										<select class="form-control custom-abilities__grants-filter" id="grants-spell-school-filter">
+											<option value="">All Schools</option>
+											<option value="A">Abjuration</option>
+											<option value="C">Conjuration</option>
+											<option value="D">Divination</option>
+											<option value="E">Enchantment</option>
+											<option value="V">Evocation</option>
+											<option value="I">Illusion</option>
+											<option value="N">Necromancy</option>
+											<option value="T">Transmutation</option>
+										</select>
+									</div>
+									<div class="custom-abilities__grants-list" id="grants-spell-list">
+										<!-- Populated dynamically -->
+									</div>
+									<div class="custom-abilities__grants-selected" id="grants-spell-selected">
+										<!-- Selected spells with options -->
+									</div>
+								</div>
+							</details>
+
+							<!-- Proficiencies Grant -->
+							<details class="custom-abilities__grants-section">
+								<summary><span class="custom-abilities__grants-icon">📚</span> Proficiencies <span class="custom-abilities__grants-count" id="grants-prof-count"></span></summary>
+								<div class="custom-abilities__grants-content">
+									<!-- Skills -->
+									<div class="custom-abilities__grants-prof-group">
+										<label class="custom-abilities__grants-prof-label">Skills</label>
+										<div class="custom-abilities__grants-prof-pills" id="grants-skills-list">
+											<!-- Populated dynamically -->
+										</div>
+									</div>
+									<!-- Tools -->
+									<div class="custom-abilities__grants-prof-group">
+										<label class="custom-abilities__grants-prof-label">Tools</label>
+										<div class="custom-abilities__grants-prof-add">
+											<input type="text" class="form-control" placeholder="Tool name..." id="grants-tools-input" list="grants-tools-datalist">
+											<datalist id="grants-tools-datalist">
+												<option value="Thieves' Tools">
+												<option value="Alchemist's Supplies">
+												<option value="Brewer's Supplies">
+												<option value="Calligrapher's Supplies">
+												<option value="Carpenter's Tools">
+												<option value="Cartographer's Tools">
+												<option value="Cobbler's Tools">
+												<option value="Cook's Utensils">
+												<option value="Glassblower's Tools">
+												<option value="Herbalism Kit">
+												<option value="Jeweler's Tools">
+												<option value="Leatherworker's Tools">
+												<option value="Mason's Tools">
+												<option value="Navigator's Tools">
+												<option value="Painter's Supplies">
+												<option value="Poisoner's Kit">
+												<option value="Potter's Tools">
+												<option value="Smith's Tools">
+												<option value="Tinker's Tools">
+												<option value="Weaver's Tools">
+												<option value="Woodcarver's Tools">
+												<option value="Disguise Kit">
+												<option value="Forgery Kit">
+												<option value="Gaming Set">
+												<option value="Musical Instrument">
+											</datalist>
+											<button type="button" class="btn btn-xs btn-primary" id="grants-tools-add">+ Add</button>
+										</div>
+										<div class="custom-abilities__grants-selected-pills" id="grants-tools-selected"></div>
+									</div>
+									<!-- Languages -->
+									<div class="custom-abilities__grants-prof-group">
+										<label class="custom-abilities__grants-prof-label">Languages</label>
+										<div class="custom-abilities__grants-prof-add">
+											<input type="text" class="form-control" placeholder="Language name..." id="grants-languages-input" list="grants-languages-datalist">
+											<datalist id="grants-languages-datalist">
+												<option value="Common">
+												<option value="Dwarvish">
+												<option value="Elvish">
+												<option value="Giant">
+												<option value="Gnomish">
+												<option value="Goblin">
+												<option value="Halfling">
+												<option value="Orc">
+												<option value="Abyssal">
+												<option value="Celestial">
+												<option value="Draconic">
+												<option value="Deep Speech">
+												<option value="Infernal">
+												<option value="Primordial">
+												<option value="Sylvan">
+												<option value="Undercommon">
+												<option value="Thieves' Cant">
+												<option value="Druidic">
+											</datalist>
+											<button type="button" class="btn btn-xs btn-primary" id="grants-languages-add">+ Add</button>
+										</div>
+										<div class="custom-abilities__grants-selected-pills" id="grants-languages-selected"></div>
+									</div>
+									<!-- Weapons -->
+									<div class="custom-abilities__grants-prof-group">
+										<label class="custom-abilities__grants-prof-label">Weapons</label>
+										<div class="custom-abilities__grants-prof-pills">
+											<button type="button" class="custom-abilities__grants-pill" data-weapon="simple">Simple Weapons</button>
+											<button type="button" class="custom-abilities__grants-pill" data-weapon="martial">Martial Weapons</button>
+											<button type="button" class="custom-abilities__grants-pill" data-weapon="firearms">Firearms</button>
+										</div>
+										<div class="custom-abilities__grants-prof-add mt-1">
+											<input type="text" class="form-control" placeholder="Specific weapon..." id="grants-weapons-input">
+											<button type="button" class="btn btn-xs btn-primary" id="grants-weapons-add">+ Add</button>
+										</div>
+										<div class="custom-abilities__grants-selected-pills" id="grants-weapons-selected"></div>
+									</div>
+									<!-- Armor -->
+									<div class="custom-abilities__grants-prof-group">
+										<label class="custom-abilities__grants-prof-label">Armor</label>
+										<div class="custom-abilities__grants-prof-pills">
+											<button type="button" class="custom-abilities__grants-pill" data-armor="light">Light Armor</button>
+											<button type="button" class="custom-abilities__grants-pill" data-armor="medium">Medium Armor</button>
+											<button type="button" class="custom-abilities__grants-pill" data-armor="heavy">Heavy Armor</button>
+											<button type="button" class="custom-abilities__grants-pill" data-armor="shields">Shields</button>
+										</div>
+									</div>
+								</div>
+							</details>
+
+							<!-- Optional Features Grant -->
+							<details class="custom-abilities__grants-section">
+								<summary><span class="custom-abilities__grants-icon">⚔️</span> Features <span class="custom-abilities__grants-count" id="grants-feature-count"></span></summary>
+								<div class="custom-abilities__grants-content">
+									<div class="custom-abilities__grants-filters">
+										<input type="text" class="form-control custom-abilities__grants-search" placeholder="Search features..." id="grants-feature-search">
+										<select class="form-control custom-abilities__grants-filter" id="grants-feature-type-filter">
+											<option value="">All Types</option>
+											<!-- Populated dynamically with homebrew types -->
+										</select>
+										<select class="form-control custom-abilities__grants-filter" id="grants-feature-source-filter">
+											<option value="">All Sources</option>
+											<!-- Populated dynamically -->
+										</select>
+									</div>
+									<div class="custom-abilities__grants-list" id="grants-feature-list">
+										<!-- Populated dynamically -->
+									</div>
+									<div class="custom-abilities__grants-selected" id="grants-feature-selected">
+										<!-- Selected features -->
+									</div>
+								</div>
+							</details>
+						</div>
 					</div>
 
 					<!-- Advanced Mode (JSON) -->
@@ -620,7 +843,30 @@ class CharacterSheetCustomAbilities {
 
 		// State
 		let effects = existingAbility?.effects ? JSON.parse(JSON.stringify(existingAbility.effects)) : [];
+		let grants = existingAbility?.grants ? JSON.parse(JSON.stringify(existingAbility.grants)) : {
+			spells: [],
+			proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
+			features: [],
+		};
 		let currentMode = "simple";
+
+		// Get data from sheet for pickers
+		const allSpells = this._sheet.getSpells?.() || [];
+		const allOptionalFeatures = this._sheet.getOptionalFeatures?.() || [];
+		const skillsList = this._sheet.getSkillsList?.() || [];
+		const languagesList = this._sheet.getLanguagesList?.() || [];
+		const toolsList = this._sheet.getToolsList?.() || [];
+
+		// Helper to render grants UI
+		const renderGrantsUI = () => {
+			this._renderGrantsSpells(modal, grants, allSpells);
+			this._renderGrantsSkills(modal, grants, skillsList);
+			this._renderGrantsTools(modal, grants, toolsList);
+			this._renderGrantsLanguages(modal, grants, languagesList);
+			this._renderGrantsWeapons(modal, grants);
+			this._renderGrantsArmor(modal, grants);
+			this._renderGrantsFeatures(modal, grants, allOptionalFeatures);
+		};
 
 		// Helper to render effects list
 		const renderEffectsList = () => {
@@ -698,6 +944,29 @@ class CharacterSheetCustomAbilities {
 				effects: effects,
 			};
 
+			// Add grants if any are defined (grants object is maintained by UI handlers)
+			const hasGrants = grants.spells.length > 0 ||
+				grants.proficiencies.skills.length > 0 ||
+				grants.proficiencies.tools.length > 0 ||
+				grants.proficiencies.weapons.length > 0 ||
+				grants.proficiencies.armor.length > 0 ||
+				grants.proficiencies.languages.length > 0 ||
+				grants.features.length > 0;
+
+			if (hasGrants) {
+				data.grants = {
+					spells: grants.spells,
+					proficiencies: {
+						skills: grants.proficiencies.skills,
+						tools: grants.proficiencies.tools,
+						weapons: grants.proficiencies.weapons,
+						armor: grants.proficiencies.armor,
+						languages: grants.proficiencies.languages,
+					},
+					features: grants.features,
+				};
+			}
+
 			if (data.mode === "limited") {
 				data.uses = {
 					max: parseInt(modal.querySelector("input[name='maxUses']").value) || 1,
@@ -734,6 +1003,22 @@ class CharacterSheetCustomAbilities {
 
 			effects = data.effects || [];
 			renderEffectsList();
+
+			// Restore grants
+			if (data.grants) {
+				grants = {
+					spells: data.grants.spells || [],
+					proficiencies: {
+						skills: data.grants.proficiencies?.skills || [],
+						tools: data.grants.proficiencies?.tools || [],
+						weapons: data.grants.proficiencies?.weapons || [],
+						armor: data.grants.proficiencies?.armor || [],
+						languages: data.grants.proficiencies?.languages || [],
+					},
+					features: data.grants.features || [],
+				};
+				renderGrantsUI();
+			}
 		};
 
 		// Update limited options visibility
@@ -858,6 +1143,13 @@ class CharacterSheetCustomAbilities {
 
 		// Initialize
 		renderEffectsList();
+		renderGrantsUI();
+
+		// Update initial grant counts
+		this._updateGrantCount(modal, "grants-spell-count", grants.spells.length);
+		this._updateGrantCount(modal, "grants-feature-count", grants.features.length);
+		this._updateProfCount(modal, grants);
+
 		if (existingAbility) {
 			modal.querySelector(".custom-abilities__json-editor").value = JSON.stringify(existingAbility, null, 2);
 		}
@@ -865,6 +1157,618 @@ class CharacterSheetCustomAbilities {
 		// Focus name input
 		setTimeout(() => modal.querySelector("input[name='name']").focus(), 100);
 	}
+
+	// #region Grants Rendering Helpers
+
+	/**
+	 * Get hover link HTML for a spell
+	 */
+	_getSpellHoverLink (spell) {
+		try {
+			const source = spell.source || Parser.SRC_PHB;
+			const hash = UrlUtil.encodeForHash([spell.name, source].join(HASH_LIST_SEP));
+			const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_SPELLS, source, hash});
+			return `<a href="${UrlUtil.PG_SPELLS}#${hash}" ${hoverAttrs} class="custom-abilities__hover-link">${spell.name}</a>`;
+		} catch (e) {
+			return spell.name;
+		}
+	}
+
+	/**
+	 * Get hover link HTML for an optional feature
+	 */
+	_getOptFeatureHoverLink (feature) {
+		try {
+			const source = feature.source || Parser.SRC_PHB;
+			const hash = UrlUtil.encodeForHash([feature.name, source].join(HASH_LIST_SEP));
+			const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_OPT_FEATURES, source, hash});
+			return `<a href="${UrlUtil.PG_OPT_FEATURES}#${hash}" ${hoverAttrs} class="custom-abilities__hover-link">${feature.name}</a>`;
+		} catch (e) {
+			return feature.name;
+		}
+	}
+
+	/**
+	 * Update grant count badge
+	 */
+	_updateGrantCount (modal, elementId, count) {
+		const countEl = modal.querySelector(`#${elementId}`);
+		if (countEl) {
+			countEl.textContent = count > 0 ? `(${count})` : "";
+			countEl.classList.toggle("has-items", count > 0);
+		}
+	}
+
+	/**
+	 * Render spells grant section with improved UI
+	 */
+	_renderGrantsSpells (modal, grants, allSpells) {
+		const searchInput = modal.querySelector("#grants-spell-search");
+		const levelFilter = modal.querySelector("#grants-spell-level-filter");
+		const schoolFilter = modal.querySelector("#grants-spell-school-filter");
+		const listContainer = modal.querySelector("#grants-spell-list");
+		const selectedContainer = modal.querySelector("#grants-spell-selected");
+
+		const renderSpellList = () => {
+			const searchTerm = searchInput?.value.toLowerCase() || "";
+			const levelFilterVal = levelFilter?.value || "";
+			const schoolFilterVal = schoolFilter?.value || "";
+
+			let filteredSpells = allSpells.filter(s => {
+				if (searchTerm && !s.name.toLowerCase().includes(searchTerm)) return false;
+				if (levelFilterVal !== "" && String(s.level) !== levelFilterVal) return false;
+				if (schoolFilterVal && s.school !== schoolFilterVal) return false;
+				// Hide already selected spells
+				if (grants.spells.some(gs => gs.name === s.name && gs.source === s.source)) return false;
+				return true;
+			}).slice(0, 30);
+
+			if (!searchTerm && !levelFilterVal && !schoolFilterVal) {
+				listContainer.innerHTML = `<div class="custom-abilities__grants-hint">Type to search or use filters above</div>`;
+				return;
+			}
+
+			listContainer.innerHTML = filteredSpells.map(s => {
+				const levelStr = s.level === 0 ? "Cantrip" : `${s.level}${Parser.getOrdinalForm(s.level)}`;
+				const schoolStr = Parser.spSchoolAbvToFull(s.school) || "";
+				return `
+					<div class="custom-abilities__grants-item" data-name="${s.name}" data-source="${s.source}" data-level="${s.level}">
+						<div class="custom-abilities__grants-item-info">
+							${this._getSpellHoverLink(s)}
+							<span class="custom-abilities__grants-item-meta">${levelStr} ${schoolStr}</span>
+						</div>
+						<button type="button" class="btn btn-xs btn-primary custom-abilities__grants-add-btn">Add</button>
+					</div>
+				`;
+			}).join("") || `<div class="custom-abilities__grants-empty">No matching spells</div>`;
+
+			// Bind add buttons
+			listContainer.querySelectorAll(".custom-abilities__grants-add-btn").forEach(btn => {
+				btn.addEventListener("click", (e) => {
+					e.preventDefault();
+					const item = btn.closest(".custom-abilities__grants-item");
+					const name = item.dataset.name;
+					const source = item.dataset.source;
+					const level = parseInt(item.dataset.level);
+
+					if (!grants.spells.some(s => s.name === name && s.source === source)) {
+						grants.spells.push({name, source, level, atWill: level === 0, uses: level === 0 ? null : 1, recharge: "long"});
+					}
+					renderSpellList();
+					renderSelectedSpells();
+				});
+			});
+		};
+
+		const renderSelectedSpells = () => {
+			this._updateGrantCount(modal, "grants-spell-count", grants.spells.length);
+
+			if (!grants.spells.length) {
+				selectedContainer.innerHTML = `<div class="custom-abilities__grants-empty-selected">No spells selected</div>`;
+				return;
+			}
+
+			selectedContainer.innerHTML = grants.spells.map(s => {
+				const spellData = allSpells.find(sp => sp.name === s.name && sp.source === s.source) || s;
+				const levelStr = s.level === 0 ? "Cantrip" : `${s.level}${Parser.getOrdinalForm(s.level)}`;
+				const isAtWill = s.atWill || s.level === 0;
+
+				return `
+					<div class="custom-abilities__grants-selected-item" data-name="${s.name}" data-source="${s.source}">
+						<div class="custom-abilities__grants-selected-info">
+							${this._getSpellHoverLink(spellData)}
+							<span class="custom-abilities__grants-item-meta">${levelStr}</span>
+						</div>
+						<div class="custom-abilities__grants-selected-options">
+							${s.level > 0 ? `
+								<label class="custom-abilities__grants-option">
+									<input type="checkbox" class="spell-at-will" ${isAtWill ? "checked" : ""}>
+									<span>At Will</span>
+								</label>
+								${!isAtWill ? `
+									<label class="custom-abilities__grants-option">
+										<span>Uses:</span>
+										<input type="number" class="form-control spell-uses" value="${s.uses || 1}" min="1" max="10" style="width: 50px;">
+									</label>
+									<select class="form-control spell-recharge" style="width: 80px;">
+										<option value="long" ${s.recharge !== "short" ? "selected" : ""}>Long</option>
+										<option value="short" ${s.recharge === "short" ? "selected" : ""}>Short</option>
+									</select>
+								` : ""}
+							` : `<span class="ve-muted ve-small">At Will</span>`}
+						</div>
+						<button type="button" class="btn btn-xs btn-danger custom-abilities__grants-remove-btn">&times;</button>
+					</div>
+				`;
+			}).join("");
+
+			// Bind handlers
+			selectedContainer.querySelectorAll(".custom-abilities__grants-selected-item").forEach(item => {
+				const name = item.dataset.name;
+				const source = item.dataset.source;
+				const spell = grants.spells.find(s => s.name === name && s.source === source);
+				if (!spell) return;
+
+				// At-will toggle
+				const atWillCb = item.querySelector(".spell-at-will");
+				if (atWillCb) {
+					atWillCb.addEventListener("change", () => {
+						spell.atWill = atWillCb.checked;
+						renderSelectedSpells();
+					});
+				}
+
+				// Uses input
+				const usesInput = item.querySelector(".spell-uses");
+				if (usesInput) {
+					usesInput.addEventListener("change", () => {
+						spell.uses = parseInt(usesInput.value) || 1;
+					});
+				}
+
+				// Recharge select
+				const rechargeSelect = item.querySelector(".spell-recharge");
+				if (rechargeSelect) {
+					rechargeSelect.addEventListener("change", () => {
+						spell.recharge = rechargeSelect.value;
+					});
+				}
+
+				// Remove button
+				item.querySelector(".custom-abilities__grants-remove-btn")?.addEventListener("click", (e) => {
+					e.preventDefault();
+					grants.spells = grants.spells.filter(s => !(s.name === name && s.source === source));
+					renderSpellList();
+					renderSelectedSpells();
+				});
+			});
+		};
+
+		searchInput?.addEventListener("input", renderSpellList);
+		levelFilter?.addEventListener("change", renderSpellList);
+		schoolFilter?.addEventListener("change", renderSpellList);
+
+		renderSpellList();
+		renderSelectedSpells();
+	}
+
+	/**
+	 * Helper to find a skill in the grants.proficiencies.skills array
+	 * Handles both string and object formats
+	 */
+	_findGrantedSkill (skills, skillName) {
+		return skills.findIndex(s => {
+			if (typeof s === "string") return s === skillName;
+			return s.name === skillName;
+		});
+	}
+
+	/**
+	 * Helper to get skill expertise status
+	 */
+	_getGrantedSkillExpertise (skills, skillName) {
+		const skill = skills.find(s => {
+			if (typeof s === "string") return s === skillName;
+			return s.name === skillName;
+		});
+		if (!skill) return null;
+		if (typeof skill === "string") return false;
+		return skill.expertise || false;
+	}
+
+	/**
+	 * Render skills grant section with pill-based selection and expertise toggle
+	 */
+	_renderGrantsSkills (modal, grants, skillsList) {
+		const container = modal.querySelector("#grants-skills-list");
+		if (!container) return;
+
+		const render = () => {
+			container.innerHTML = skillsList.map(skill => {
+				const isSelected = this._findGrantedSkill(grants.proficiencies.skills, skill.name) >= 0;
+				const hasExpertise = this._getGrantedSkillExpertise(grants.proficiencies.skills, skill.name);
+				const stateClass = hasExpertise ? "expertise" : (isSelected ? "selected" : "");
+				const stateLabel = hasExpertise ? " (E)" : "";
+				return `
+					<button type="button" class="custom-abilities__grants-pill ${stateClass}" data-skill="${skill.name}" title="Click to add, click again for expertise, click again to remove">
+						${skill.name}${stateLabel}
+					</button>
+				`;
+			}).join("");
+
+			container.querySelectorAll(".custom-abilities__grants-pill").forEach(btn => {
+				btn.addEventListener("click", () => {
+					const skillName = btn.dataset.skill;
+					const idx = this._findGrantedSkill(grants.proficiencies.skills, skillName);
+					const hasExpertise = this._getGrantedSkillExpertise(grants.proficiencies.skills, skillName);
+
+					if (idx < 0) {
+						// Not selected -> add as proficient
+						grants.proficiencies.skills.push({name: skillName, expertise: false});
+					} else if (!hasExpertise) {
+						// Proficient -> upgrade to expertise
+						grants.proficiencies.skills[idx] = {name: skillName, expertise: true};
+					} else {
+						// Expertise -> remove
+						grants.proficiencies.skills.splice(idx, 1);
+					}
+					render();
+					this._updateProfCount(modal, grants);
+				});
+			});
+		};
+
+		render();
+	}
+
+	/**
+	 * Update proficiency count badge
+	 */
+	_updateProfCount (modal, grants) {
+		const count = grants.proficiencies.skills.length +
+			grants.proficiencies.tools.length +
+			grants.proficiencies.weapons.length +
+			grants.proficiencies.armor.length +
+			grants.proficiencies.languages.length;
+		this._updateGrantCount(modal, "grants-prof-count", count);
+	}
+
+	/**
+	 * Render proficiency input section with improved styling
+	 */
+	_renderProficiencyInputSection (modal, grants, type, inputId, addBtnId, selectedContainerId) {
+		const input = modal.querySelector(`#${inputId}`);
+		const addBtn = modal.querySelector(`#${addBtnId}`);
+		const selectedContainer = modal.querySelector(`#${selectedContainerId}`);
+
+		const renderSelected = () => {
+			const items = grants.proficiencies[type] || [];
+			selectedContainer.innerHTML = items.map(item => `
+				<span class="custom-abilities__grants-selected-pill">
+					${item}
+					<button type="button" class="custom-abilities__grants-pill-remove" data-item="${item}">&times;</button>
+				</span>
+			`).join("");
+
+			selectedContainer.querySelectorAll(".custom-abilities__grants-pill-remove").forEach(btn => {
+				btn.addEventListener("click", (e) => {
+					e.preventDefault();
+					const itemToRemove = btn.dataset.item;
+					grants.proficiencies[type] = grants.proficiencies[type].filter(i => i !== itemToRemove);
+					renderSelected();
+					this._updateProfCount(modal, grants);
+				});
+			});
+		};
+
+		const addItem = () => {
+			const value = input?.value.trim();
+			if (!value) return;
+			if (!grants.proficiencies[type].includes(value)) {
+				grants.proficiencies[type].push(value);
+			}
+			input.value = "";
+			renderSelected();
+			this._updateProfCount(modal, grants);
+		};
+
+		addBtn?.addEventListener("click", addItem);
+		input?.addEventListener("keypress", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				addItem();
+			}
+		});
+
+		renderSelected();
+	}
+
+	/**
+	 * Render tools grant section with datalist suggestions
+	 */
+	_renderGrantsTools (modal, grants, toolsList) {
+		// Populate datalist with tools
+		const datalist = modal.querySelector("#grants-tools-datalist");
+		if (datalist && toolsList.length) {
+			datalist.innerHTML = toolsList.map(t => `<option value="${t.name}">`).join("");
+		}
+		
+		this._renderProficiencyInputSection(modal, grants, "tools", "grants-tools-input", "grants-tools-add", "grants-tools-selected");
+	}
+
+	/**
+	 * Render languages grant section with datalist suggestions
+	 */
+	_renderGrantsLanguages (modal, grants, languagesList) {
+		// Populate datalist with languages (includes homebrew)
+		const datalist = modal.querySelector("#grants-languages-datalist");
+		if (datalist && languagesList.length) {
+			datalist.innerHTML = languagesList.map(l => `<option value="${l.name}">`).join("");
+		}
+		
+		this._renderProficiencyInputSection(modal, grants, "languages", "grants-languages-input", "grants-languages-add", "grants-languages-selected");
+	}
+
+	/**
+	 * Render weapons grant section with pill toggles
+	 */
+	_renderGrantsWeapons (modal, grants) {
+		// Category pills
+		modal.querySelectorAll(".custom-abilities__grants-pill[data-weapon]").forEach(btn => {
+			const weapon = btn.dataset.weapon;
+			btn.classList.toggle("selected", grants.proficiencies.weapons.includes(weapon));
+
+			btn.addEventListener("click", () => {
+				const idx = grants.proficiencies.weapons.indexOf(weapon);
+				if (idx >= 0) {
+					grants.proficiencies.weapons.splice(idx, 1);
+				} else {
+					grants.proficiencies.weapons.push(weapon);
+				}
+				btn.classList.toggle("selected", grants.proficiencies.weapons.includes(weapon));
+				this._updateProfCount(modal, grants);
+			});
+		});
+
+		// Specific weapons input - filter out category grants for display
+		const weaponCategories = ["simple", "martial", "firearms"];
+		const specificWeaponsContainer = modal.querySelector("#grants-weapons-selected");
+		const input = modal.querySelector("#grants-weapons-input");
+		const addBtn = modal.querySelector("#grants-weapons-add");
+
+		const renderSpecific = () => {
+			const specificWeapons = grants.proficiencies.weapons.filter(w => !weaponCategories.includes(w.toLowerCase()));
+			specificWeaponsContainer.innerHTML = specificWeapons.map(item => `
+				<span class="custom-abilities__grants-selected-pill">
+					${item}
+					<button type="button" class="custom-abilities__grants-pill-remove" data-item="${item}">&times;</button>
+				</span>
+			`).join("");
+
+			specificWeaponsContainer.querySelectorAll(".custom-abilities__grants-pill-remove").forEach(btn => {
+				btn.addEventListener("click", (e) => {
+					e.preventDefault();
+					const itemToRemove = btn.dataset.item;
+					grants.proficiencies.weapons = grants.proficiencies.weapons.filter(i => i !== itemToRemove);
+					renderSpecific();
+					this._updateProfCount(modal, grants);
+				});
+			});
+		};
+
+		const addSpecific = () => {
+			const value = input?.value.trim();
+			if (!value || weaponCategories.includes(value.toLowerCase())) return;
+			if (!grants.proficiencies.weapons.includes(value)) {
+				grants.proficiencies.weapons.push(value);
+			}
+			input.value = "";
+			renderSpecific();
+			this._updateProfCount(modal, grants);
+		};
+
+		addBtn?.addEventListener("click", addSpecific);
+		input?.addEventListener("keypress", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				addSpecific();
+			}
+		});
+
+		renderSpecific();
+	}
+
+	/**
+	 * Render armor grant section with pill toggles
+	 */
+	_renderGrantsArmor (modal, grants) {
+		modal.querySelectorAll(".custom-abilities__grants-pill[data-armor]").forEach(btn => {
+			const armor = btn.dataset.armor;
+			btn.classList.toggle("selected", grants.proficiencies.armor.includes(armor));
+
+			btn.addEventListener("click", () => {
+				const idx = grants.proficiencies.armor.indexOf(armor);
+				if (idx >= 0) {
+					grants.proficiencies.armor.splice(idx, 1);
+				} else {
+					grants.proficiencies.armor.push(armor);
+				}
+				btn.classList.toggle("selected", grants.proficiencies.armor.includes(armor));
+				this._updateProfCount(modal, grants);
+			});
+		});
+	}
+
+	/**
+	 * Render optional features grant section with improved UI
+	 */
+	_renderGrantsFeatures (modal, grants, allOptionalFeatures) {
+		const typeFilter = modal.querySelector("#grants-feature-type-filter");
+		const sourceFilter = modal.querySelector("#grants-feature-source-filter");
+		const searchInput = modal.querySelector("#grants-feature-search");
+		const listContainer = modal.querySelector("#grants-feature-list");
+		const selectedContainer = modal.querySelector("#grants-feature-selected");
+
+		// Build dynamic type options including homebrew
+		const typeSet = new Set();
+		const sourceSet = new Set();
+		allOptionalFeatures.forEach(f => {
+			f.featureType?.forEach(ft => typeSet.add(ft));
+			if (f.source) sourceSet.add(f.source);
+		});
+
+		// Populate type filter with homebrew types
+		if (typeFilter) {
+			const standardTypes = {
+				"EI": "Eldritch Invocation",
+				"MM": "Metamagic",
+				"FS:F": "Fighting Style (Fighter)",
+				"FS:P": "Fighting Style (Paladin)",
+				"FS:R": "Fighting Style (Ranger)",
+				"FS:B": "Fighting Style (Bard)",
+				"MV": "Maneuver",
+				"MV:B": "Maneuver (Battle Master)",
+				"AI": "Artificer Infusion",
+				"ED": "Elemental Discipline",
+				"PB": "Pact Boon",
+				"AS": "Arcane Shot",
+				"RN": "Rune Knight Rune",
+				"OR": "Onomancy Resonant",
+				"AF": "Alchemical Formula",
+				"TT": "Traveler's Trick",
+				"OTH": "Other",
+			};
+
+			let optionsHtml = '<option value="">All Types</option>';
+			// Standard types first
+			Object.entries(standardTypes).forEach(([code, name]) => {
+				if (typeSet.has(code)) {
+					optionsHtml += `<option value="${code}">${name}</option>`;
+				}
+			});
+			// Homebrew types (not in standard list)
+			typeSet.forEach(code => {
+				if (!standardTypes[code]) {
+					const fullName = Parser.optFeatureTypeToFull?.(code) || code;
+					optionsHtml += `<option value="${code}">${fullName} (Homebrew)</option>`;
+				}
+			});
+			typeFilter.innerHTML = optionsHtml;
+		}
+
+		// Populate source filter
+		if (sourceFilter) {
+			let sourceOptions = '<option value="">All Sources</option>';
+			[...sourceSet].sort().forEach(src => {
+				const srcFull = Parser.sourceJsonToFull?.(src) || src;
+				sourceOptions += `<option value="${src}">${srcFull}</option>`;
+			});
+			sourceFilter.innerHTML = sourceOptions;
+		}
+
+		const renderFeatureList = () => {
+			const typeFilterVal = typeFilter?.value || "";
+			const sourceFilterVal = sourceFilter?.value || "";
+			const searchTerm = searchInput?.value.toLowerCase() || "";
+
+			let filteredFeatures = allOptionalFeatures.filter(f => {
+				if (typeFilterVal && (!f.featureType || !f.featureType.includes(typeFilterVal))) return false;
+				if (sourceFilterVal && f.source !== sourceFilterVal) return false;
+				if (searchTerm && !f.name.toLowerCase().includes(searchTerm)) return false;
+				// Hide already selected
+				if (grants.features.some(gf => gf.name === f.name && gf.source === f.source)) return false;
+				return true;
+			}).slice(0, 30);
+
+			if (!searchTerm && !typeFilterVal && !sourceFilterVal) {
+				listContainer.innerHTML = `<div class="custom-abilities__grants-hint">Select a type or search to browse features</div>`;
+				return;
+			}
+
+			listContainer.innerHTML = filteredFeatures.map(f => {
+				const typeStr = f.featureType?.map(ft => Parser.optFeatureTypeToFull?.(ft) || ft).join(", ") || "";
+				const srcStr = Parser.sourceJsonToAbv?.(f.source) || f.source || "";
+				return `
+					<div class="custom-abilities__grants-item" data-name="${f.name}" data-source="${f.source}">
+						<div class="custom-abilities__grants-item-info">
+							${this._getOptFeatureHoverLink(f)}
+							<span class="custom-abilities__grants-item-meta">${typeStr}</span>
+							<span class="custom-abilities__grants-item-source">[${srcStr}]</span>
+						</div>
+						<button type="button" class="btn btn-xs btn-primary custom-abilities__grants-add-btn">Add</button>
+					</div>
+				`;
+			}).join("") || `<div class="custom-abilities__grants-empty">No matching features</div>`;
+
+			// Bind add buttons
+			listContainer.querySelectorAll(".custom-abilities__grants-add-btn").forEach(btn => {
+				btn.addEventListener("click", (e) => {
+					e.preventDefault();
+					const item = btn.closest(".custom-abilities__grants-item");
+					const name = item.dataset.name;
+					const source = item.dataset.source;
+
+					const fullFeature = allOptionalFeatures.find(f => f.name === name && f.source === source);
+					if (!grants.features.some(f => f.name === name && f.source === source)) {
+						grants.features.push({
+							name,
+							source,
+							featureType: fullFeature?.featureType?.[0] || "",
+							entries: fullFeature?.entries,
+							description: fullFeature?.entries ? Renderer.get().render({entries: fullFeature.entries}) : "",
+						});
+					}
+					renderFeatureList();
+					renderSelectedFeatures();
+				});
+			});
+		};
+
+		const renderSelectedFeatures = () => {
+			this._updateGrantCount(modal, "grants-feature-count", grants.features.length);
+
+			if (!grants.features.length) {
+				selectedContainer.innerHTML = `<div class="custom-abilities__grants-empty-selected">No features selected</div>`;
+				return;
+			}
+
+			selectedContainer.innerHTML = grants.features.map(f => {
+				const featureData = allOptionalFeatures.find(of => of.name === f.name && of.source === f.source) || f;
+				const typeStr = featureData.featureType?.map(ft => Parser.optFeatureTypeToFull?.(ft) || ft).join(", ") || f.featureType || "";
+				return `
+					<div class="custom-abilities__grants-selected-item" data-name="${f.name}" data-source="${f.source}">
+						<div class="custom-abilities__grants-selected-info">
+							${this._getOptFeatureHoverLink(featureData)}
+							<span class="custom-abilities__grants-item-meta">${typeStr}</span>
+						</div>
+						<button type="button" class="btn btn-xs btn-danger custom-abilities__grants-remove-btn">&times;</button>
+					</div>
+				`;
+			}).join("");
+
+			// Bind remove buttons
+			selectedContainer.querySelectorAll(".custom-abilities__grants-remove-btn").forEach(btn => {
+				btn.addEventListener("click", (e) => {
+					e.preventDefault();
+					const item = btn.closest(".custom-abilities__grants-selected-item");
+					const name = item.dataset.name;
+					const source = item.dataset.source;
+					grants.features = grants.features.filter(f => !(f.name === name && f.source === source));
+					renderFeatureList();
+					renderSelectedFeatures();
+				});
+			});
+		};
+
+		typeFilter?.addEventListener("change", renderFeatureList);
+		sourceFilter?.addEventListener("change", renderFeatureList);
+		searchInput?.addEventListener("input", renderFeatureList);
+
+		renderFeatureList();
+		renderSelectedFeatures();
+	}
+
+	// #endregion
 }
 
 // Export for ES modules
