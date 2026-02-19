@@ -1568,8 +1568,12 @@ class CharacterSheetCombat {
 			return (a.name || "").localeCompare(b.name || "");
 		});
 
-		// Hide section if no combat actions
-		if (!combatActions.length) {
+		// Get limited-use custom abilities
+		const customAbilities = this._state.getCustomAbilities?.() || [];
+		const limitedAbilities = customAbilities.filter(a => a.mode === "limited");
+
+		// Hide section if no combat actions or custom abilities
+		if (!combatActions.length && !limitedAbilities.length) {
 			$section.hide();
 			return;
 		}
@@ -1577,10 +1581,199 @@ class CharacterSheetCombat {
 		$section.show();
 		$container.empty();
 
+		// Render class/race/feat actions first
 		for (const feature of combatActions) {
 			const $action = this._createCombatActionElement(feature);
 			$container.append($action);
 		}
+
+		// Render limited-use custom abilities
+		for (const ability of limitedAbilities) {
+			const $action = this._createCustomAbilityElement(ability);
+			$container.append($action);
+		}
+	}
+
+	/**
+	 * Create an element for a limited-use custom ability
+	 */
+	_createCustomAbilityElement (ability) {
+		const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id);
+		if (!uses) return $();
+
+		const canUse = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
+
+		// Determine action type
+		const activationAction = ability.activationAction || "free";
+		let actionIcon = "✨";
+		let actionType = "Free";
+		if (activationAction === "action") {
+			actionIcon = "⚔️";
+			actionType = "Action";
+		} else if (activationAction === "bonus") {
+			actionIcon = "⚡";
+			actionType = "Bonus Action";
+		} else if (activationAction === "reaction") {
+			actionIcon = "🔄";
+			actionType = "Reaction";
+		}
+
+		// Recharge icon
+		const rechargeIcon = uses.recharge === "short" ? "☀️" : "🌙";
+
+		// Category badge
+		const categories = CharacterSheetState.CUSTOM_ABILITY_CATEGORIES || {};
+		const category = categories[ability.category];
+		const categoryBadge = category
+			? `<span class="badge badge-secondary mr-1 ve-small">${category.icon} ${category.name}</span>`
+			: "";
+
+		const $action = $(`
+			<div class="charsheet__combat-action-item charsheet__combat-action-item--custom charsheet__combat-action-clickable" 
+				data-ability-id="${ability.id}">
+				<div class="charsheet__combat-action-header">
+					<span class="charsheet__combat-action-icon" title="${actionType}">${ability.icon || actionIcon}</span>
+					<span class="charsheet__combat-action-name">${ability.name}</span>
+					${categoryBadge}
+				</div>
+				<div class="charsheet__combat-action-info">
+					<div class="charsheet__combat-action-uses">
+						<span class="charsheet__combat-action-uses-label">${uses.current}/${uses.max}</span>
+						<span class="charsheet__combat-action-uses-recharge" title="${uses.recharge} rest">${rechargeIcon}</span>
+					</div>
+					<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__combat-action-use" 
+						${!canUse ? "disabled" : ""} title="Use this ability">Use</button>
+				</div>
+			</div>
+		`);
+
+		// Click on card to show modal with description
+		$action.on("click", (e) => {
+			// Don't trigger if clicking the Use button
+			if ($(e.target).hasClass("charsheet__combat-action-use")) return;
+			this._showAbilityModal(ability);
+		});
+
+		// Use button handler
+		$action.find(".charsheet__combat-action-use").on("click", (e) => {
+			e.stopPropagation();
+			this._useCustomAbility(ability);
+		});
+
+		return $action;
+	}
+
+	/**
+	 * Use a limited-use custom ability
+	 */
+	_useCustomAbility (ability) {
+		if (!this._state.canUseCustomAbility?.(ability.id)) {
+			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${ability.name}!`});
+			return;
+		}
+
+		if (this._state.useCustomAbility(ability.id)) {
+			// Re-render
+			this.renderCombatActions();
+			this.renderCombatResources();
+			this._page?._renderResources?.();
+			this._page?._renderOverviewAbilities?.();
+			this._page?._customAbilities?.render?.();
+			this._page?._saveCurrentCharacter?.();
+
+			JqueryUtil.doToast({type: "success", content: `Used ${ability.name}!`});
+		}
+	}
+
+	/**
+	 * Show a modal with ability details
+	 */
+	_showAbilityModal (ability) {
+		const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id);
+		const categories = CharacterSheetState.CUSTOM_ABILITY_CATEGORIES || {};
+		const category = categories[ability.category];
+
+		// Build effects summary
+		let effectsSummary = "";
+		if (ability.effects?.length) {
+			const effectsList = ability.effects.map(e => {
+				if (e.type === "sizeIncrease") return `Size +${e.value || 1} category`;
+				if (e.type === "sizeDecrease") return `Size -${e.value || 1} category`;
+				if (e.type === "reach") return `Reach +${e.value || 5} ft.`;
+				if (e.type?.startsWith("extraDamage:")) return `+${e.dice || "1d6"} ${e.type.replace("extraDamage:", "")} damage`;
+				if (e.type?.startsWith("reroll:")) return `Reroll ${e.type.replace("reroll:", "")}`;
+				return `${e.type}: ${e.value > 0 ? "+" : ""}${e.value}`;
+			});
+			effectsSummary = `<div class="mt-2"><strong>Effects:</strong> ${effectsList.join(", ")}</div>`;
+		}
+
+		// Build defensive traits summary
+		let defenseSummary = "";
+		if (ability.defensiveTraits) {
+			const parts = [];
+			if (ability.defensiveTraits.resistances?.length) {
+				parts.push(`Resist: ${ability.defensiveTraits.resistances.join(", ")}`);
+			}
+			if (ability.defensiveTraits.immunities?.length) {
+				parts.push(`Immune: ${ability.defensiveTraits.immunities.join(", ")}`);
+			}
+			if (parts.length) {
+				defenseSummary = `<div class="mt-2"><strong>Defenses:</strong> ${parts.join("; ")}</div>`;
+			}
+		}
+
+		const modalContent = `
+			<div class="charsheet__ability-modal-header">
+				<span class="charsheet__ability-modal-icon">${ability.icon || "⚡"}</span>
+				<h4 class="charsheet__ability-modal-title">${ability.name}</h4>
+				${category ? `<span class="badge badge-secondary ml-2">${category.icon} ${category.name}</span>` : ""}
+			</div>
+			<div class="charsheet__ability-modal-body">
+				<div class="charsheet__ability-modal-description">
+					${Renderer.get().render(ability.description || "No description.")}
+				</div>
+				${effectsSummary}
+				${defenseSummary}
+				${uses ? `<div class="mt-2"><strong>Uses:</strong> ${uses.current}/${uses.max} (${uses.recharge} rest)</div>` : ""}
+			</div>
+		`;
+
+		// Create and show modal
+		const $modal = $(`
+			<div class="modal-overlay charsheet__ability-detail-modal">
+				<div class="modal-content charsheet__ability-detail-content">
+					<div class="modal-header">
+						<button class="modal-close" title="Close">&times;</button>
+					</div>
+					<div class="modal-body">
+						${modalContent}
+					</div>
+					<div class="modal-footer">
+						<button class="ve-btn ve-btn-primary charsheet__ability-modal-use" 
+							${!this._state.canUseCustomAbility?.(ability.id) ? "disabled" : ""}>Use Ability</button>
+						<button class="ve-btn ve-btn-default charsheet__ability-modal-close">Close</button>
+					</div>
+				</div>
+			</div>
+		`);
+
+		$modal.find(".modal-close, .charsheet__ability-modal-close").on("click", () => {
+			$modal.remove();
+		});
+
+		$modal.find(".charsheet__ability-modal-use").on("click", () => {
+			this._useCustomAbility(ability);
+			$modal.remove();
+		});
+
+		// Close on background click
+		$modal.on("click", (e) => {
+			if ($(e.target).hasClass("modal-overlay")) {
+				$modal.remove();
+			}
+		});
+
+		$("body").append($modal);
 	}
 
 	/**
@@ -2419,7 +2612,16 @@ class CharacterSheetCombat {
 
 		// Get activatable features (same as Overview tab)
 		const activatableFeatures = this._state.getActivatableFeatures?.() || [];
-		const availableFeatures = activatableFeatures.filter(af => !af.isActive);
+		// Filter out limited-use custom abilities - they're shown in Resources section
+		const availableFeatures = activatableFeatures.filter(af => {
+			if (af.isActive) return false;
+			// Exclude limited-use custom abilities (shown in Resources)
+			if (af.feature?.isCustomAbility) {
+				const customAbility = this._state.getCustomAbility?.(af.feature.id);
+				if (customAbility?.mode === "limited") return false;
+			}
+			return true;
+		});
 
 		// === Section 1: Currently Active States ===
 		const hasActiveStates = activeStates.length > 0 || concentration;
@@ -2504,7 +2706,15 @@ class CharacterSheetCombat {
 				if (isEndable) {
 					$state.find(".charsheet__state-remove").on("click", (e) => {
 						e.stopPropagation();
-						this._state.deactivateState(state.stateTypeId);
+						// Check if this is a custom ability state
+						const customAbility = state.sourceFeatureId && this._state.getCustomAbilities?.()?.find(a => a.id === state.sourceFeatureId);
+						if (customAbility) {
+							this._state.toggleCustomAbility(customAbility.id);
+							// Sync custom abilities panel
+							this._page._customAbilitiesPanel?.render?.();
+						} else {
+							this._state.deactivateState(state.stateTypeId);
+						}
 						this.renderCombatStates();
 						this.renderCombatDefenses();
 						this.renderCombatEffects();
@@ -2526,11 +2736,20 @@ class CharacterSheetCombat {
 				<div class="ve-small ve-muted mb-1">Available to Activate</div>
 			</div>`);
 
-			availableFeatures.forEach(({feature, activationInfo, resource, stateTypeId}) => {
+			availableFeatures.forEach(({feature, activationInfo, resource, stateTypeId, customAbilityId}) => {
 				const stateType = activationInfo.stateType || CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
-				const icon = stateType?.icon || "⚡";
+				// For custom abilities, get the actual ability's icon; otherwise use state type icon
+				let icon = stateType?.icon || "⚡";
+				const customAbility = feature.isCustomAbility ? this._state.getCustomAbility?.(feature.id) : null;
+				if (feature.isCustomAbility) {
+					icon = customAbility?.icon || this._getCustomAbilityIcon(feature.category);
+				}
 				const resourceCost = resource?.cost || activationInfo.exertionCost || stateType?.resourceCost || 1;
 				const hasResourceAvailable = !resource || resource.current >= resourceCost;
+
+				// Determine if this is a limited-use ability (uses up charges, doesn't stay active)
+				const isLimitedUse = customAbility?.mode === "limited";
+				const buttonText = isLimitedUse ? "Use" : "Activate";
 
 				// Get activation action type
 				const activationAction = activationInfo.activationAction || stateType?.activationAction;
@@ -2561,7 +2780,7 @@ class CharacterSheetCombat {
 							${resourceInfo ? `<span class="ve-small ve-muted mr-1" title="${resourceTooltip}">${resourceInfo}</span>` : ""}
 							<button class="ve-btn ve-btn-xs ve-btn-success charsheet__activate-btn" 
 								${!hasResourceAvailable ? `disabled title="Not enough ${resource?.name || "uses"} remaining"` : ""}>
-								Activate
+								${buttonText}
 							</button>
 						</div>
 					</div>
@@ -2572,6 +2791,10 @@ class CharacterSheetCombat {
 					// Sync both tabs
 					this.renderCombatStates();
 					this._page._renderActiveStates?.();
+					// Also sync custom abilities panel if this was a custom ability
+					if (feature.isCustomAbility) {
+						this._page._customAbilitiesPanel?.render?.();
+					}
 				});
 
 				$availableSection.append($row);
@@ -2603,6 +2826,26 @@ class CharacterSheetCombat {
 			case "free": return "✨";
 			default: return "";
 		}
+	}
+
+	/**
+	 * Get icon for custom ability category
+	 */
+	_getCustomAbilityIcon (category) {
+		const icons = {
+			"buff": "⬆️",
+			"defensive": "🛡️",
+			"offensive": "⚔️",
+			"utility": "🔧",
+			"homebrew": "🧪",
+			"houserule": "📜",
+			"boon": "✨",
+			"curse": "💀",
+			"temporary": "⏳",
+			"item": "💎",
+			"other": "⚡",
+		};
+		return icons[category] || "⚡";
 	}
 
 	/**

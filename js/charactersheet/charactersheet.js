@@ -1578,6 +1578,7 @@ class CharacterSheetPage {
 		this._renderConditions();
 		this._renderExhaustion();
 		this._renderResources();
+		this._renderOverviewAbilities();
 		this._renderActiveStates();
 		this._renderAttacks();
 		this._renderQuickSpells();
@@ -1645,7 +1646,88 @@ class CharacterSheetPage {
 			$("#charsheet-disp-background").text("—");
 		}
 		
+		// Render size and reach chips
+		this._renderSizeChip();
+		this._renderReachChip();
+		
 		$("#charsheet-disp-proficiency").text(`+${this._state.getProficiencyBonus()}`);
+	}
+
+	/**
+	 * Render the size chip - always visible to show current size
+	 */
+	_renderSizeChip () {
+		const $chip = $("#charsheet-size-chip");
+		const $value = $("#charsheet-disp-size");
+		
+		const baseSize = this._state.getBaseSize();
+		const currentSize = this._state.getSize();
+		
+		const sizeChanged = currentSize !== baseSize;
+		
+		// Always show the chip
+		$chip.removeClass("ve-hidden");
+		
+		// Build the display text
+		const sizeText = currentSize.charAt(0).toUpperCase() + currentSize.slice(1);
+		$value.text(sizeText);
+		
+		// Build tooltip
+		const tooltipParts = [`Size: ${sizeText}`];
+		if (sizeChanged) {
+			const baseSizeText = baseSize.charAt(0).toUpperCase() + baseSize.slice(1);
+			tooltipParts.push(`Base Size: ${baseSizeText}`);
+		}
+		tooltipParts.push(`Carry Capacity: ×${this._state.getSizeCarryMultiplier()}`);
+		
+		$chip.attr("title", tooltipParts.join("\n"));
+		
+		// Add visual indicator if size is modified
+		if (sizeChanged) {
+			const direction = this._state.getSizeIncreaseFromStates() > this._state.getSizeDecreaseFromStates() ? "increased" : "decreased";
+			$chip.addClass(`charsheet__info-chip--size-${direction}`);
+			$chip.removeClass(direction === "increased" ? "charsheet__info-chip--size-decreased" : "charsheet__info-chip--size-increased");
+		} else {
+			$chip.removeClass("charsheet__info-chip--size-increased charsheet__info-chip--size-decreased");
+		}
+	}
+
+	/**
+	 * Render the reach chip - always visible to show current melee reach
+	 */
+	_renderReachChip () {
+		const $chip = $("#charsheet-reach-chip");
+		const $value = $("#charsheet-disp-reach");
+		
+		const baseReach = 5; // Standard reach for Medium/Small creatures
+		const reachBonus = this._state.getReachBonus();
+		const meleeReach = this._state.getMeleeReach();
+		
+		const hasReachModifier = reachBonus !== 0;
+		
+		// Build the display text
+		$value.text(`${meleeReach} ft`);
+		
+		// Build tooltip
+		const tooltipParts = [`Melee Reach: ${meleeReach} ft`];
+		if (hasReachModifier) {
+			tooltipParts.push(`Base: ${baseReach} ft`);
+			const sign = reachBonus > 0 ? "+" : "";
+			tooltipParts.push(`Modifier: ${sign}${reachBonus} ft`);
+		}
+		
+		$chip.attr("title", tooltipParts.join("\n"));
+		
+		// Add visual indicator if reach is modified
+		if (reachBonus > 0) {
+			$chip.addClass("charsheet__info-chip--reach-bonus");
+			$chip.removeClass("charsheet__info-chip--reach-penalty");
+		} else if (reachBonus < 0) {
+			$chip.addClass("charsheet__info-chip--reach-penalty");
+			$chip.removeClass("charsheet__info-chip--reach-bonus");
+		} else {
+			$chip.removeClass("charsheet__info-chip--reach-bonus charsheet__info-chip--reach-penalty");
+		}
 	}
 
 	_renderAbilities () {
@@ -4180,9 +4262,22 @@ class CharacterSheetPage {
 
 		const resources = this._state.getResources();
 		const usesCombatSystem = this._state.usesCombatSystem?.() || false;
+		
+		// Get limited-use custom abilities (displayed in Resources section)
+		const customAbilities = this._state.getCustomAbilities?.() || [];
+		const limitedAbilities = customAbilities.filter(a => a.mode === "limited");
+		
+		// Count abilities that will be shown (exclude those linking to existing resources)
+		const visibleLimitedAbilities = limitedAbilities.filter(a => {
+			if (a.resourceSource?.type === "linked" && a.resourceSource?.resourceId !== "exertion") {
+				const linkedResource = resources.find(r => r.id === a.resourceSource.resourceId);
+				if (linkedResource) return false; // Skip - already shown in resources
+			}
+			return true;
+		});
 
 		// Update resources count badge
-		let totalResourceCount = resources.length;
+		let totalResourceCount = resources.length + visibleLimitedAbilities.length;
 		if (usesCombatSystem) {
 			const exertionMax = this._state.getExertionMax() || 0;
 			if (exertionMax > 0) totalResourceCount++;
@@ -4232,7 +4327,7 @@ class CharacterSheetPage {
 						this._saveCurrentCharacter();
 						this._renderResources();
 						this._renderActiveStates(); // Refresh active states to update Activate button states
-						if (this._features) this._features._renderResources();
+						if (this._features) this._features._renderRvisibleLsources();
 						if (this._combat) this._combat._updateExertionDisplay();
 					}
 				});
@@ -4241,7 +4336,7 @@ class CharacterSheetPage {
 			}
 		}
 
-		if (!resources.length && !usesCombatSystem) {
+		if (!resources.length && !usesCombatSystem && !limitedAbilities.length) {
 			$container.html(`<div class="ve-muted ve-text-center py-2">No limited-use features</div>`);
 			return;
 		}
@@ -4282,6 +4377,247 @@ class CharacterSheetPage {
 
 			$container.append($row);
 		});
+
+		// Render limited-use custom abilities
+		limitedAbilities.forEach(ability => {
+			// Get the uses display (handles both self-contained and linked resources)
+			const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id) || ability.uses;
+			if (!uses) return;
+			
+			// Check if this ability links to an existing resource pool (don't show duplicate)
+			if (ability.resourceSource?.type === "linked" && ability.resourceSource?.resourceId !== "exertion") {
+				const linkedResource = resources.find(r => r.id === ability.resourceSource.resourceId);
+				if (linkedResource) {
+					// Skip - the linked resource is already shown in the resources list
+					return;
+				}
+			}
+			
+			const canUse = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
+			const canRestore = uses.current < uses.max;
+			
+			const $row = $(`
+				<div class="charsheet__resource-row charsheet__resource-row--custom" data-ability-id="${ability.id}">
+					<span class="charsheet__resource-icon mr-1">${ability.icon || "⚡"}</span>
+					<span class="charsheet__resource-name">${ability.name}</span>
+					<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(${uses.recharge === "short" ? "Short" : "Long"})</span>
+					<div class="charsheet__resource-uses ml-auto">
+						<button class="ve-btn ve-btn-xs ve-btn-danger mr-2 charsheet__ability-use-btn" ${!canUse ? "disabled" : ""}>Use</button>
+						<span class="charsheet__resource-current">${uses.current}</span>
+						<span class="charsheet__resource-max">/ ${uses.max}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__ability-restore-btn" ${!canRestore ? "disabled" : ""}>+</button>
+					</div>
+				</div>
+			`);
+
+			$row.find(".charsheet__ability-use-btn").on("click", () => {
+				if (this._state.useCustomAbility(ability.id)) {
+					this._saveCurrentCharacter();
+					this._renderResources();
+					this._renderOverviewAbilities();
+					this._renderActiveStates();
+					if (this._features) this._features._renderResources();
+					if (this._customAbilities) this._customAbilities.render();
+					if (this._combat) this._combat.renderCombatActions();
+				}
+			});
+
+			$row.find(".charsheet__ability-restore-btn").on("click", () => {
+				if (this._state.restoreCustomAbilityUse(ability.id)) {
+					this._saveCurrentCharacter();
+					this._renderResources();
+					this._renderOverviewAbilities();
+					this._renderActiveStates();
+					if (this._features) this._features._renderResources();
+					if (this._customAbilities) this._customAbilities.render();
+					if (this._combat) this._combat.renderCombatActions();
+				}
+			});
+
+			$container.append($row);
+		});
+	}
+
+	_renderOverviewAbilities () {
+		const $container = $("#charsheet-overview-abilities");
+		if (!$container.length) return;
+
+		$container.empty();
+
+		// Get limited-use custom abilities
+		const customAbilities = this._state.getCustomAbilities?.() || [];
+		const limitedAbilities = customAbilities.filter(a => a.mode === "limited");
+
+		if (!limitedAbilities.length) {
+			$container.html(`
+				<div class="charsheet__empty-state">
+					<span class="charsheet__empty-icon">💫</span>
+					<span class="charsheet__empty-text">No useable abilities</span>
+				</div>
+			`);
+			return;
+		}
+
+		for (const ability of limitedAbilities) {
+			const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id);
+			if (!uses) continue;
+
+			const canUse = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
+
+			// Determine action type
+			const activationAction = ability.activationAction || "free";
+			let actionIcon = "✨";
+			let actionType = "Free";
+			if (activationAction === "action") {
+				actionIcon = "⚔️";
+				actionType = "Action";
+			} else if (activationAction === "bonus") {
+				actionIcon = "⚡";
+				actionType = "Bonus Action";
+			} else if (activationAction === "reaction") {
+				actionIcon = "🔄";
+				actionType = "Reaction";
+			}
+
+			// Recharge icon
+			const rechargeIcon = uses.recharge === "short" ? "☀️" : "🌙";
+
+			const $row = $(`
+				<div class="charsheet__ability-row" data-ability-id="${ability.id}">
+					<div class="charsheet__ability-info">
+						<span class="charsheet__ability-icon" title="${actionType}">${ability.icon || actionIcon}</span>
+						<span class="charsheet__ability-name">${ability.name}</span>
+					</div>
+					<div class="charsheet__ability-controls">
+						<span class="charsheet__ability-uses">${uses.current}/${uses.max}</span>
+						<span class="charsheet__ability-recharge" title="${uses.recharge} rest">${rechargeIcon}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__ability-use-btn" 
+							${!canUse ? "disabled" : ""}>Use</button>
+					</div>
+				</div>
+			`);
+
+			// Click on row to show modal
+			$row.on("click", (e) => {
+				if ($(e.target).hasClass("charsheet__ability-use-btn")) return;
+				this._showAbilityDetailModal(ability);
+			});
+
+			// Use button
+			$row.find(".charsheet__ability-use-btn").on("click", (e) => {
+				e.stopPropagation();
+				this._useOverviewAbility(ability);
+			});
+
+			$container.append($row);
+		}
+	}
+
+	_useOverviewAbility (ability) {
+		if (!this._state.canUseCustomAbility?.(ability.id)) {
+			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${ability.name}!`});
+			return;
+		}
+
+		if (this._state.useCustomAbility(ability.id)) {
+			this._saveCurrentCharacter();
+			this._renderResources();
+			this._renderOverviewAbilities();
+			this._renderActiveStates();
+			if (this._features) this._features._renderResources();
+			if (this._customAbilities) this._customAbilities.render();
+			if (this._combat) this._combat.renderCombatActions();
+
+			JqueryUtil.doToast({type: "success", content: `Used ${ability.name}!`});
+		}
+	}
+
+	_showAbilityDetailModal (ability) {
+		const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id);
+		const categories = CharacterSheetState?.CUSTOM_ABILITY_CATEGORIES || {};
+		const category = categories[ability.category];
+
+		// Build effects summary
+		let effectsSummary = "";
+		if (ability.effects?.length) {
+			const effectsList = ability.effects.map(e => {
+				if (e.type === "sizeIncrease") return `Size +${e.value || 1} category`;
+				if (e.type === "sizeDecrease") return `Size -${e.value || 1} category`;
+				if (e.type === "reach") return `Reach +${e.value || 5} ft.`;
+				if (e.type?.startsWith("extraDamage:")) return `+${e.dice || "1d6"} ${e.type.replace("extraDamage:", "")} damage`;
+				if (e.type?.startsWith("reroll:")) return `Reroll ${e.type.replace("reroll:", "")}`;
+				return `${e.type}: ${e.value > 0 ? "+" : ""}${e.value}`;
+			});
+			effectsSummary = `<div class="mt-2"><strong>Effects:</strong> ${effectsList.join(", ")}</div>`;
+		}
+
+		// Build defensive traits summary
+		let defenseSummary = "";
+		if (ability.defensiveTraits) {
+			const parts = [];
+			if (ability.defensiveTraits.resistances?.length) {
+				parts.push(`Resist: ${ability.defensiveTraits.resistances.join(", ")}`);
+			}
+			if (ability.defensiveTraits.immunities?.length) {
+				parts.push(`Immune: ${ability.defensiveTraits.immunities.join(", ")}`);
+			}
+			if (parts.length) {
+				defenseSummary = `<div class="mt-2"><strong>Defenses:</strong> ${parts.join("; ")}</div>`;
+			}
+		}
+
+		const modalContent = `
+			<div class="charsheet__ability-modal-header">
+				<span class="charsheet__ability-modal-icon">${ability.icon || "⚡"}</span>
+				<h4 class="charsheet__ability-modal-title">${ability.name}</h4>
+				${category ? `<span class="badge badge-secondary ml-2">${category.icon} ${category.name}</span>` : ""}
+			</div>
+			<div class="charsheet__ability-modal-body">
+				<div class="charsheet__ability-modal-description">
+					${Renderer.get().render(ability.description || "No description.")}
+				</div>
+				${effectsSummary}
+				${defenseSummary}
+				${uses ? `<div class="mt-2"><strong>Uses:</strong> ${uses.current}/${uses.max} (${uses.recharge} rest)</div>` : ""}
+			</div>
+		`;
+
+		// Create and show modal
+		const $modal = $(`
+			<div class="modal-overlay charsheet__ability-detail-modal">
+				<div class="modal-content charsheet__ability-detail-content">
+					<div class="modal-header">
+						<button class="modal-close" title="Close">&times;</button>
+					</div>
+					<div class="modal-body">
+						${modalContent}
+					</div>
+					<div class="modal-footer">
+						<button class="ve-btn ve-btn-primary charsheet__ability-modal-use" 
+							${!this._state.canUseCustomAbility?.(ability.id) ? "disabled" : ""}>Use Ability</button>
+						<button class="ve-btn ve-btn-default charsheet__ability-modal-close">Close</button>
+					</div>
+				</div>
+			</div>
+		`);
+
+		$modal.find(".modal-close, .charsheet__ability-modal-close").on("click", () => {
+			$modal.remove();
+		});
+
+		$modal.find(".charsheet__ability-modal-use").on("click", () => {
+			this._useOverviewAbility(ability);
+			$modal.remove();
+		});
+
+		// Close on background click
+		$modal.on("click", (e) => {
+			if ($(e.target).hasClass("modal-overlay")) {
+				$modal.remove();
+			}
+		});
+
+		$("body").append($modal);
 	}
 
 	_renderActiveStates () {
@@ -4339,7 +4675,16 @@ class CharacterSheetPage {
 
 		// === Section 2: Available Activatable Features ===
 		// Show features that can be activated but aren't currently active
-		const availableFeatures = activatableFeatures.filter(af => !af.isActive);
+		// Filter out limited-use custom abilities - they're shown in Resources section
+		const availableFeatures = activatableFeatures.filter(af => {
+			if (af.isActive) return false;
+			// Exclude limited-use custom abilities (shown in Resources)
+			if (af.feature?.isCustomAbility) {
+				const customAbility = this._state.getCustomAbility?.(af.feature.id);
+				if (customAbility?.mode === "limited") return false;
+			}
+			return true;
+		});
 		
 		if (availableFeatures.length > 0 || !hasActiveStates) {
 			const $availableSection = $(`<div class="charsheet__activatable-section">
@@ -4353,10 +4698,17 @@ class CharacterSheetPage {
 			} else {
 				availableFeatures.forEach(({feature, activationInfo, resource, stateTypeId}) => {
 					const stateType = activationInfo.stateType || CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
-					const icon = stateType?.icon || "⚡";
+					// For custom abilities, use the ability's icon; otherwise use state type icon
+					const isCustomAbility = feature.isCustomAbility;
+					const customAbility = isCustomAbility ? this._state.getCustomAbility?.(feature.id) : null;
+					const icon = customAbility?.icon || stateType?.icon || "⚡";
 					// Use resource cost from description detection, or resource object, or default
 					const resourceCost = resource?.cost || activationInfo.exertionCost || stateType?.resourceCost || 1;
 					const hasResourceAvailable = !resource || resource.current >= resourceCost;
+					
+					// Determine if this is a limited-use ability (uses up charges, doesn't stay active)
+					const isLimitedUse = customAbility?.mode === "limited";
+					const buttonText = isLimitedUse ? "Use" : "Activate";
 					
 					// Get activation action type
 					const activationAction = activationInfo.activationAction || stateType?.activationAction;
@@ -4388,7 +4740,7 @@ class CharacterSheetPage {
 								${resourceInfo ? `<span class="ve-small ve-muted mr-2" title="${resourceTooltip}">${resourceInfo}</span>` : ""}
 								<button class="ve-btn ve-btn-xs ve-btn-success charsheet__activate-btn" 
 									${!hasResourceAvailable ? `disabled title="Not enough ${resource?.name || 'uses'} remaining"` : ''}>
-									Activate
+									${buttonText}
 								</button>
 							</div>
 						</div>
@@ -4691,7 +5043,16 @@ class CharacterSheetPage {
 					// Remove the spell effect state
 					this._state.removeActiveState(state.id);
 				} else {
-					this._state.deactivateState(state.stateTypeId);
+					// Check if this is a custom ability state
+					const customAbility = state.sourceFeatureId && this._state.getCustomAbilities?.()?.find(a => a.id === state.sourceFeatureId);
+					if (customAbility) {
+						// Toggle off the custom ability - this properly cleans up all effects
+						this._state.toggleCustomAbility(customAbility.id);
+						// Sync custom abilities panel
+						this._customAbilitiesPanel?.render?.();
+					} else {
+						this._state.deactivateState(state.stateTypeId);
+					}
 				}
 				this._saveCurrentCharacter();
 				this._renderActiveStates();
@@ -4750,6 +5111,31 @@ class CharacterSheetPage {
 			} else {
 				this._state.setResourceCurrent(resource.id, resource.current - cost);
 			}
+		}
+		
+		// Handle custom abilities
+		if (feature.isCustomAbility && feature.id) {
+			// For limited-use custom abilities, just use (decrement) the ability
+			// For toggleable custom abilities, toggle on/off
+			const ability = this._state.getCustomAbilities?.()?.find(a => a.id === feature.id);
+			if (ability) {
+				if (ability.mode === "limited") {
+					// Use the ability (decrement uses) - resource already deducted above if it exists
+					// But if there's no external resource, use the built-in uses
+					if (!resource) {
+						this._state.useCustomAbility(feature.id);
+					}
+				} else if (ability.mode === "toggleable") {
+					this._state.toggleCustomAbility(feature.id);
+				}
+			}
+			this._saveCurrentCharacter();
+			this._renderResources();
+			this._renderActiveStates();
+			this._customAbilitiesPanel?.render?.();
+			this._combatModule?.renderCombatStates?.();
+			this._renderCharacter();
+			return;
 		}
 		
 		// Determine if we need to parse effects from description

@@ -2952,6 +2952,52 @@
 	color: var(--cs-text-primary, var(--rgb-text));
 }
 
+/* Size chip variants */
+.charsheet__info-chip--size {
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+}
+
+.charsheet__info-chip--size-increased {
+	border-color: var(--cs-success, #22c55e);
+	background: rgba(34, 197, 94, 0.1);
+}
+
+.charsheet__info-chip--size-increased .charsheet__chip-icon {
+	color: var(--cs-success, #22c55e);
+}
+
+.charsheet__info-chip--size-decreased {
+	border-color: var(--cs-warning, #f59e0b);
+	background: rgba(245, 158, 11, 0.1);
+}
+
+.charsheet__info-chip--size-decreased .charsheet__chip-icon {
+	color: var(--cs-warning, #f59e0b);
+}
+
+/* Reach chip variants */
+.charsheet__info-chip--reach {
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+}
+
+.charsheet__info-chip--reach-bonus {
+	border-color: var(--cs-info, #3b82f6);
+	background: rgba(59, 130, 246, 0.1);
+}
+
+.charsheet__info-chip--reach-bonus .charsheet__chip-icon {
+	color: var(--cs-info, #3b82f6);
+}
+
+.charsheet__info-chip--reach-penalty {
+	border-color: var(--cs-danger, #ef4444);
+	background: rgba(239, 68, 68, 0.1);
+}
+
+.charsheet__info-chip--reach-penalty .charsheet__chip-icon {
+	color: var(--cs-danger, #ef4444);
+}
+
 .charsheet__ipt-name {
 	font-family: var(--cs-font-display, 'Cinzel', serif);
 	font-size: var(--cs-text-2xl, 1.75rem);
@@ -4812,6 +4858,117 @@
 
 .charsheet__combat-action-uses-recharge {
 	font-size: 0.7rem;
+}
+
+.charsheet__combat-action-item--custom {
+	border-left: 3px solid var(--cs-primary, #3b82f6);
+}
+
+/* Overview Abilities Section */
+.charsheet__section--abilities {
+	background: linear-gradient(135deg, var(--cs-bg-surface, var(--rgb-bg-alt)) 0%, rgba(139, 92, 246, 0.05) 100%);
+}
+
+.charsheet__abilities-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.charsheet__ability-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.5rem 0.75rem;
+	background: var(--cs-bg-card, rgba(30, 41, 59, 0.5));
+	border-radius: 0.375rem;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.charsheet__ability-row:hover {
+	background: var(--cs-bg-card-hover, rgba(30, 41, 59, 0.7));
+}
+
+.charsheet__ability-info {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+}
+
+.charsheet__ability-icon {
+	font-size: 1rem;
+	flex-shrink: 0;
+}
+
+.charsheet__ability-name {
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.charsheet__ability-controls {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-shrink: 0;
+}
+
+.charsheet__ability-uses {
+	font-weight: 600;
+	font-size: 0.85rem;
+}
+
+.charsheet__ability-recharge {
+	font-size: 0.7rem;
+}
+
+/* Ability Detail Modal */
+.charsheet__ability-detail-modal {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.6);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;
+}
+
+.charsheet__ability-detail-content {
+	max-width: 500px;
+	width: 90%;
+	max-height: 80vh;
+	overflow-y: auto;
+	background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b));
+	border-radius: 0.5rem;
+	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.charsheet__ability-modal-header {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0;
+}
+
+.charsheet__ability-modal-icon {
+	font-size: 1.5rem;
+}
+
+.charsheet__ability-modal-title {
+	margin: 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+}
+
+.charsheet__ability-modal-body {
+	padding: 0.5rem 0;
+}
+
+.charsheet__ability-modal-description {
+	line-height: 1.6;
 }
 
 /* Conditions Section */
@@ -12535,6 +12692,60 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 	margin-top: var(--cs-space-sm, 0.5rem);
 }
 
+/* Filter/Search Bar */
+.custom-abilities__filter-bar {
+	display: flex;
+	gap: var(--cs-space-sm, 0.5rem);
+	align-items: center;
+	padding: var(--cs-space-sm, 0.5rem);
+	background: rgba(0, 0, 0, 0.2);
+	border-radius: var(--cs-radius, 6px);
+	margin-bottom: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__search-input {
+	flex: 1;
+	min-width: 120px;
+	padding: 6px 10px;
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	font-size: calc(var(--cs-font-base, 14px) * 0.9);
+}
+
+.custom-abilities__search-input::placeholder {
+	color: var(--cs-text-muted, #888);
+}
+
+.custom-abilities__search-input:focus {
+	outline: none;
+	border-color: rgba(59, 130, 246, 0.5);
+}
+
+.custom-abilities__category-filter {
+	width: auto;
+	min-width: 140px;
+	padding: 6px 10px;
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	font-size: calc(var(--cs-font-base, 14px) * 0.9);
+	cursor: pointer;
+}
+
+.custom-abilities__category-filter:focus {
+	outline: none;
+	border-color: rgba(59, 130, 246, 0.5);
+}
+
+.custom-abilities__filter-count {
+	font-size: calc(var(--cs-font-base, 14px) * 0.85);
+	color: var(--cs-text-muted, #888);
+	white-space: nowrap;
+}
+
 /* Category sections */
 .custom-abilities__category {
 	margin-bottom: var(--cs-space-md, 1rem);
@@ -12794,6 +13005,10 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 
 .custom-abilities__action-btn--delete:hover {
 	color: #ef4444;
+}
+
+.custom-abilities__action-btn--duplicate:hover {
+	color: #3b82f6;
 }
 
 /* Modal styles */
@@ -14171,4 +14386,193 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 
 .custom-abilities__condition-immune {
 	color: #c084fc;
+}
+
+/* Size & Movement Section */
+.custom-abilities__size-reach-row {
+	display: flex;
+	gap: var(--cs-space-lg, 1.5rem);
+	flex-wrap: wrap;
+}
+
+.custom-abilities__size-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-xs, 0.25rem);
+}
+
+.custom-abilities__size-buttons {
+	display: flex;
+	gap: var(--cs-space-xs, 0.25rem);
+}
+
+.custom-abilities__size-btn {
+	padding: 6px 12px;
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius, 6px);
+	color: var(--cs-text-muted, #888);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.custom-abilities__size-btn:hover {
+	background: rgba(255, 255, 255, 0.05);
+	border-color: rgba(255, 255, 255, 0.25);
+	color: var(--cs-text, #f5f5f5);
+}
+
+.custom-abilities__size-btn--active {
+	background: rgba(99, 102, 241, 0.2);
+	border-color: rgba(99, 102, 241, 0.5);
+	color: #818cf8;
+}
+
+.custom-abilities__size-btn--active[data-size="increase"] {
+	background: rgba(34, 197, 94, 0.2);
+	border-color: rgba(34, 197, 94, 0.5);
+	color: #4ade80;
+}
+
+.custom-abilities__size-btn--active[data-size="decrease"] {
+	background: rgba(245, 158, 11, 0.2);
+	border-color: rgba(245, 158, 11, 0.5);
+	color: #fbbf24;
+}
+
+.custom-abilities__size-preview {
+	font-size: calc(var(--cs-font-base, 14px) * 0.85);
+	min-height: 1.2em;
+}
+
+.custom-abilities__reach-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-xs, 0.25rem);
+}
+
+/* Bonus Damage Section */
+.custom-abilities__bonus-damage-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-sm, 0.5rem);
+	margin-bottom: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__bonus-damage-row {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__bonus-damage-row input,
+.custom-abilities__bonus-damage-row select {
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	padding: 6px 10px;
+	font-size: calc(var(--cs-font-base, 14px) * 0.9);
+}
+
+.custom-abilities__add-damage-btn,
+.custom-abilities__add-reroll-btn {
+	border: 1px dashed var(--cs-border, rgba(255, 255, 255, 0.2));
+	background: transparent;
+	color: var(--cs-text-muted, #888);
+	padding: 8px 16px;
+	border-radius: var(--cs-radius, 6px);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.custom-abilities__add-damage-btn:hover,
+.custom-abilities__add-reroll-btn:hover {
+	border-color: rgba(99, 102, 241, 0.4);
+	color: #818cf8;
+	background: rgba(99, 102, 241, 0.1);
+}
+
+/* Reroll Effects Section */
+.custom-abilities__reroll-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-sm, 0.5rem);
+	margin-bottom: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__reroll-row {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	flex-wrap: wrap;
+}
+
+.custom-abilities__reroll-row select {
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	padding: 6px 10px;
+	font-size: calc(var(--cs-font-base, 14px) * 0.9);
+}
+
+/* Size & Reach Controls */
+.custom-abilities__size-control,
+.custom-abilities__reach-control {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-xs, 0.25rem);
+}
+
+.custom-abilities__size-control button,
+.custom-abilities__reach-control button {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text-muted, #888);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	font-size: 1.1em;
+	font-weight: bold;
+}
+
+.custom-abilities__size-control button:hover,
+.custom-abilities__reach-control button:hover {
+	background: rgba(99, 102, 241, 0.2);
+	border-color: rgba(99, 102, 241, 0.4);
+	color: #818cf8;
+}
+
+.custom-abilities__size-value,
+.custom-abilities__reach-value {
+	min-width: 40px;
+	text-align: center;
+	font-weight: 600;
+	font-size: calc(var(--cs-font-base, 14px) * 1.1);
+	padding: 4px 8px;
+	background: rgba(0, 0, 0, 0.2);
+	border-radius: var(--cs-radius-sm, 4px);
+}
+
+.custom-abilities__size-value--positive,
+.custom-abilities__reach-value--positive {
+	color: #4ade80;
+	background: rgba(34, 197, 94, 0.15);
+}
+
+.custom-abilities__reach-value--negative {
+	color: #f87171;
+	background: rgba(239, 68, 68, 0.15);
+}
+
+.custom-abilities__size-value--negative {
+	color: #fbbf24;
+	background: rgba(245, 158, 11, 0.15);
 }

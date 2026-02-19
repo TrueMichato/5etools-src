@@ -3614,11 +3614,50 @@ class CharacterSheetState {
 	getSize () {
 		const baseSize = this._data.size || "medium";
 		const increase = this.getSizeIncreaseFromStates();
-		if (increase <= 0) return baseSize;
+		const decrease = this.getSizeDecreaseFromStates();
+		const netChange = increase - decrease;
+		if (netChange === 0) return baseSize;
 		const sizeOrder = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 		const idx = sizeOrder.indexOf(baseSize);
 		if (idx < 0) return baseSize;
-		return sizeOrder[Math.min(idx + increase, sizeOrder.length - 1)];
+		return sizeOrder[Math.max(0, Math.min(idx + netChange, sizeOrder.length - 1))];
+	}
+
+	/**
+	 * Get base size (without active state modifications)
+	 */
+	getBaseSize () {
+		return this._data.size || "medium";
+	}
+
+	/**
+	 * Get reach bonus from active states and named modifiers
+	 * @returns {number} Total reach bonus in feet (default is 0, base reach is 5ft)
+	 */
+	getReachBonus () {
+		// Check named modifiers for reach bonuses
+		let total = 0;
+		for (const mod of this._data.namedModifiers) {
+			if (mod.type === "reach" && mod.enabled) {
+				total += mod.value || 0;
+			}
+		}
+		// Also check active state effects
+		const effects = this.getActiveStateEffects();
+		for (const e of effects) {
+			if (e.type === "reach" || e.target === "reach") {
+				total += e.value || 0;
+			}
+		}
+		return total;
+	}
+
+	/**
+	 * Get effective melee reach (base 5ft + bonuses, minimum 0)
+	 * @returns {number} Total reach in feet
+	 */
+	getMeleeReach () {
+		return Math.max(0, 5 + this.getReachBonus());
 	}
 
 	getRaceName () {
@@ -15355,9 +15394,30 @@ class CharacterSheetState {
 			baseCapacity = this.getAbilityScore("str") * 15;
 		}
 
+		// Apply size multiplier (RAW 5e rules)
+		const sizeMultiplier = this.getSizeCarryMultiplier();
+
 		const flatBonus = this._data.customModifiers.carryCapacity || 0;
 		const multiplier = this._data.customModifiers.carryCapacityMultiplier || 1;
-		return (baseCapacity + flatBonus) * multiplier;
+		return (baseCapacity + flatBonus) * multiplier * sizeMultiplier;
+	}
+
+	/**
+	 * Get the carry capacity multiplier based on creature size
+	 * RAW 5e: Tiny=0.5, Small/Medium=1, Large=2, Huge=4, Gargantuan=8
+	 * @returns {number} The size multiplier for carry capacity
+	 */
+	getSizeCarryMultiplier () {
+		const size = this.getSize();
+		const multipliers = {
+			"tiny": 0.5,
+			"small": 1,
+			"medium": 1,
+			"large": 2,
+			"huge": 4,
+			"gargantuan": 8,
+		};
+		return multipliers[size] || 1;
 	}
 
 	/**
@@ -19560,16 +19620,50 @@ class CharacterSheetState {
 			effects: opts.effects || [],
 			grants: opts.grants || null,
 			defensiveTraits: opts.defensiveTraits || null,
-			uses: opts.mode === "limited" ? {
-				current: opts.uses?.max || 1,
-				max: opts.uses?.max || 1,
-				recharge: opts.uses?.recharge || "long",
-			} : null,
 			activationAction: opts.activationAction || "free",
 			duration: opts.duration || null,
 			concentration: opts.concentration || false,
+			resourceCost: opts.resourceCost || null, // For toggleable abilities
+			resourceSource: opts.resourceSource || null, // For limited abilities
 			createdAt: Date.now(),
 		};
+
+		// Handle limited mode uses based on resource source type
+		if (opts.mode === "limited") {
+			const sourceType = opts.resourceSource?.type || "self";
+			
+			if (sourceType === "self") {
+				ability.uses = {
+					current: opts.uses?.max || 1,
+					max: opts.uses?.max || 1,
+					recharge: opts.uses?.recharge || "long",
+				};
+			} else if (sourceType === "new") {
+				// Create a new resource pool for this ability
+				const newResourceName = opts.resourceSource.newResourceName || `${opts.name} Charges`;
+				const newResourceMax = opts.resourceSource.newResourceMax || 3;
+				const newResourceRecharge = opts.resourceSource.newResourceRecharge || "long";
+				
+				// Add the new resource pool
+				const resourceId = CryptUtil.uid();
+				this._data.resources.push({
+					id: resourceId,
+					name: newResourceName,
+					current: newResourceMax,
+					max: newResourceMax,
+					recharge: newResourceRecharge,
+					customAbilityId: ability.id, // Link back to ability
+				});
+				
+				// Update the resource source to link to the newly created pool
+				ability.resourceSource = {
+					type: "linked",
+					resourceId: resourceId,
+					cost: opts.resourceSource.cost || 1,
+				};
+			}
+			// For "linked" type, resourceSource is already set correctly from opts
+		}
 
 		this._data.customAbilities.push(ability);
 
@@ -19641,11 +19735,27 @@ class CharacterSheetState {
 	/**
 	 * Toggle a toggleable custom ability on/off
 	 * @param {string} id - The ability ID
+	 * @param {boolean} [skipResourceCost=false] - Skip resource cost check (for re-activating)
 	 * @returns {boolean} The new active state, or null if not found/not toggleable
 	 */
-	toggleCustomAbility (id) {
+	toggleCustomAbility (id, skipResourceCost = false) {
 		const ability = this._data.customAbilities.find(a => a.id === id);
 		if (!ability || ability.mode !== "toggleable") return null;
+
+		// If we're activating and there's a resource cost, deduct it first
+		if (!ability.isActive && !skipResourceCost && ability.resourceCost) {
+			const { resourceId, cost } = ability.resourceCost;
+			
+			if (resourceId === "exertion") {
+				const current = this.getExertionCurrent() || 0;
+				if (current < cost) return null; // Can't afford
+				this.setExertionCurrent(current - cost);
+			} else {
+				const resource = this._data.resources.find(r => r.id === resourceId);
+				if (!resource || resource.current < cost) return null; // Can't afford
+				resource.current = Math.max(0, resource.current - cost);
+			}
+		}
 
 		ability.isActive = !ability.isActive;
 
@@ -19661,6 +19771,18 @@ class CharacterSheetState {
 				};
 			}
 			this._registerCustomAbilityEffects(ability);
+
+			// Handle duration - set on active state if in combat
+			if (ability.duration) {
+				const activeState = this._data.activeStates.find(s => s.sourceFeatureId === id);
+				if (activeState) {
+					activeState.duration = ability.duration;
+					activeState.activatedAtRound = this._data.combatRound || null;
+					if (this._data.inCombat) {
+						activeState.roundsRemaining = CharacterSheetState.parseDurationToRounds(ability.duration);
+					}
+				}
+			}
 		} else {
 			// Clear concentration if this ability was concentrating
 			if (ability.concentration && this._data.concentrating?.customAbilityId === id) {
@@ -19673,17 +19795,130 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Check if a toggleable ability can be activated (has required resources)
+	 * @param {string} id - The ability ID
+	 * @returns {boolean} True if ability can be activated
+	 */
+	canActivateCustomAbility (id) {
+		const ability = this._data.customAbilities.find(a => a.id === id);
+		if (!ability || ability.mode !== "toggleable") return false;
+		
+		// If already active, can always deactivate
+		if (ability.isActive) return true;
+
+		// Check resource cost
+		if (ability.resourceCost) {
+			const { resourceId, cost } = ability.resourceCost;
+			
+			if (resourceId === "exertion") {
+				return (this.getExertionCurrent() || 0) >= cost;
+			}
+			
+			const resource = this._data.resources.find(r => r.id === resourceId);
+			return resource && resource.current >= cost;
+		}
+
+		return true;
+	}
+
+	/**
 	 * Use a limited-use custom ability (decrement uses)
 	 * @param {string} id - The ability ID
 	 * @returns {boolean} True if use was successful, false if no uses remaining or not limited
 	 */
 	useCustomAbility (id) {
 		const ability = this._data.customAbilities.find(a => a.id === id);
-		if (!ability || ability.mode !== "limited" || !ability.uses) return false;
-		if (ability.uses.current <= 0) return false;
+		if (!ability || ability.mode !== "limited") return false;
 
+		// Check if ability uses a linked resource pool
+		if (ability.resourceSource?.type === "linked" && ability.resourceSource?.resourceId) {
+			const cost = ability.resourceSource.cost || 1;
+			
+			// Handle exertion specially
+			if (ability.resourceSource.resourceId === "exertion") {
+				const current = this.getExertionCurrent() || 0;
+				if (current < cost) return false;
+				this.setExertionCurrent(current - cost);
+				return true;
+			}
+			
+			// Find and deduct from the linked resource
+			const resource = this._data.resources.find(r => r.id === ability.resourceSource.resourceId);
+			if (!resource || resource.current < cost) return false;
+			resource.current = Math.max(0, resource.current - cost);
+			return true;
+		}
+
+		// Self-contained uses
+		if (!ability.uses || ability.uses.current <= 0) return false;
 		ability.uses.current--;
 		return true;
+	}
+
+	/**
+	 * Check if a custom ability can be used (has available uses/resources)
+	 * @param {string} id - The ability ID
+	 * @returns {boolean} True if ability can be used
+	 */
+	canUseCustomAbility (id) {
+		const ability = this._data.customAbilities.find(a => a.id === id);
+		if (!ability || ability.mode !== "limited") return false;
+
+		// Check linked resource
+		if (ability.resourceSource?.type === "linked" && ability.resourceSource?.resourceId) {
+			const cost = ability.resourceSource.cost || 1;
+			
+			if (ability.resourceSource.resourceId === "exertion") {
+				return (this.getExertionCurrent() || 0) >= cost;
+			}
+			
+			const resource = this._data.resources.find(r => r.id === ability.resourceSource.resourceId);
+			return resource && resource.current >= cost;
+		}
+
+		// Self-contained uses
+		return ability.uses && ability.uses.current > 0;
+	}
+
+	/**
+	 * Get the current/max uses display for a limited ability
+	 * @param {string} id - The ability ID
+	 * @returns {{current: number, max: number, recharge: string}|null}
+	 */
+	getCustomAbilityUsesDisplay (id) {
+		const ability = this._data.customAbilities.find(a => a.id === id);
+		if (!ability || ability.mode !== "limited") return null;
+
+		// Linked resource - show the resource's current/max
+		if (ability.resourceSource?.type === "linked" && ability.resourceSource?.resourceId) {
+			if (ability.resourceSource.resourceId === "exertion") {
+				return {
+					current: this.getExertionCurrent() || 0,
+					max: this.getExertionMax() || 0,
+					recharge: "short",
+				};
+			}
+			
+			const resource = this._data.resources.find(r => r.id === ability.resourceSource.resourceId);
+			if (resource) {
+				return {
+					current: resource.current,
+					max: resource.max,
+					recharge: resource.recharge || "long",
+				};
+			}
+		}
+
+		// Self-contained uses
+		if (ability.uses) {
+			return {
+				current: ability.uses.current,
+				max: ability.uses.max,
+				recharge: ability.uses.recharge || "long",
+			};
+		}
+
+		return null;
 	}
 
 	/**
@@ -19698,6 +19933,39 @@ class CharacterSheetState {
 				ability.uses.current = ability.uses.max;
 			}
 		}
+	}
+
+	/**
+	 * Restore a single use for a limited custom ability
+	 * @param {string} id - The ability ID
+	 * @returns {boolean} True if restore was successful
+	 */
+	restoreCustomAbilityUse (id) {
+		const ability = this._data.customAbilities.find(a => a.id === id);
+		if (!ability || ability.mode !== "limited") return false;
+
+		// Check if ability uses a linked resource pool
+		if (ability.resourceSource?.type === "linked" && ability.resourceSource?.resourceId) {
+			// Handle exertion specially
+			if (ability.resourceSource.resourceId === "exertion") {
+				const current = this.getExertionCurrent() || 0;
+				const max = this.getExertionMax() || 0;
+				if (current >= max) return false;
+				this.setExertionCurrent(current + 1);
+				return true;
+			}
+			
+			// Find and restore to the linked resource
+			const resource = this._data.resources.find(r => r.id === ability.resourceSource.resourceId);
+			if (!resource || resource.current >= resource.max) return false;
+			resource.current = Math.min(resource.max, resource.current + 1);
+			return true;
+		}
+
+		// Self-contained uses
+		if (!ability.uses || ability.uses.current >= ability.uses.max) return false;
+		ability.uses.current++;
+		return true;
 	}
 
 	/**
@@ -19753,6 +20021,40 @@ class CharacterSheetState {
 					continue;
 				}
 
+				// Handle extra damage effects - these go to active states for combat integration
+				if (effectType.startsWith("extraDamage:")) {
+					const damageType = effectType.replace("extraDamage:", "");
+					// These need to be in active states to work with combat calculations
+					this._ensureCustomAbilityActiveState(ability);
+					continue;
+				}
+
+				// Handle size change effects - these go to active states
+				if (effectType === "sizeIncrease" || effectType === "sizeDecrease") {
+					this._ensureCustomAbilityActiveState(ability);
+					continue;
+				}
+
+				// Handle reroll effects - these go to active states
+				if (effectType.startsWith("reroll:") || effectType.startsWith("damage:reroll:")) {
+					this._ensureCustomAbilityActiveState(ability);
+					continue;
+				}
+
+				// Handle reach modifier
+				if (effectType === "reach") {
+					// Register as a named modifier that can be picked up
+					this.addNamedModifier({
+						name: `${ability.name}: Reach`,
+						type: "reach",
+						value: effect.value || 5,
+						enabled: true,
+						sourceFeatureId: ability.id,
+						sourceType: "customAbility",
+					});
+					continue;
+				}
+
 				// Standard numeric modifiers
 				this.addNamedModifier({
 					name: `${ability.name}: ${effect.name || effectType}`,
@@ -19779,6 +20081,12 @@ class CharacterSheetState {
 		// Handle defensive traits (new format)
 		if (ability.defensiveTraits) {
 			this._registerCustomAbilityDefensiveTraits(ability);
+		}
+
+		// Always ensure toggleable abilities have an active state when active
+		// This makes them visible in the "Currently Active" section
+		if (ability.mode === "toggleable" && ability.isActive) {
+			this._ensureCustomAbilityActiveState(ability);
 		}
 	}
 
@@ -20205,34 +20513,105 @@ class CharacterSheetState {
 		const existing = this._data.activeStates.find(s => s.sourceFeatureId === ability.id);
 		if (existing) {
 			existing.active = ability.isActive;
+			// Update effects in case they changed
+			existing.customEffects = this._buildCustomAbilityEffects(ability);
 			return;
 		}
 
-		// Create new active state for toggleable abilities with advantage/disadvantage effects
-		const customEffects = ability.effects
-			.filter(e => e.type.startsWith("advantage:") || e.type.startsWith("disadvantage:"))
-			.map(e => {
-				const parts = e.type.split(":");
-				const effectType = parts[0]; // "advantage" or "disadvantage"
-				const target = parts.slice(1).join(":"); // e.g., "save:dex" or "attack"
-				return {
-					type: effectType,
-					target: target,
-				};
-			});
+		// Build custom effects array
+		const customEffects = this._buildCustomAbilityEffects(ability);
 
-		if (customEffects.length) {
-			this._data.activeStates.push({
-				id: `cas_${ability.id}`,
-				stateTypeId: "customAbility",
-				name: ability.name,
-				icon: ability.icon,
-				description: ability.description,
-				active: ability.isActive,
-				sourceFeatureId: ability.id,
-				customEffects,
-			});
+		// Always create an active state for toggleable abilities when active
+		// Even if they have no effects, they should appear in the "Currently Active" section
+		this._data.activeStates.push({
+			id: `cas_${ability.id}`,
+			stateTypeId: "customAbility",
+			name: ability.name,
+			icon: ability.icon || "✨",
+			description: ability.description,
+			active: ability.isActive,
+			sourceFeatureId: ability.id,
+			customEffects: customEffects.length ? customEffects : null,
+		});
+	}
+
+	/**
+	 * Build the custom effects array for an ability's active state
+	 * @param {object} ability - The custom ability
+	 * @returns {Array} Array of effect objects
+	 * @private
+	 */
+	_buildCustomAbilityEffects (ability) {
+		if (!ability.effects?.length) return [];
+
+		const customEffects = [];
+
+		for (const e of ability.effects) {
+			const effectType = e.type;
+
+			// Advantage/disadvantage effects
+			if (effectType.startsWith("advantage:") || effectType.startsWith("disadvantage:")) {
+				const parts = effectType.split(":");
+				const type = parts[0]; // "advantage" or "disadvantage"
+				const target = parts.slice(1).join(":"); // e.g., "save:dex" or "attack"
+				customEffects.push({type, target});
+				continue;
+			}
+
+			// Extra damage effects (e.g., "extraDamage:fire")
+			if (effectType.startsWith("extraDamage:")) {
+				const damageType = effectType.replace("extraDamage:", "");
+				customEffects.push({
+					type: "extraDamage",
+					dice: e.bonusDie || e.value || "1d6",
+					damageType: damageType,
+					stateName: ability.name,
+				});
+				continue;
+			}
+
+			// Size change effects
+			if (effectType === "sizeIncrease") {
+				customEffects.push({
+					type: "sizeIncrease",
+					value: e.value || 1,
+				});
+				continue;
+			}
+			if (effectType === "sizeDecrease") {
+				customEffects.push({
+					type: "sizeIncrease", // Use negative value for decrease
+					value: -(e.value || 1),
+				});
+				continue;
+			}
+
+			// Reroll effects (d20 rerolls)
+			if (effectType.startsWith("reroll:")) {
+				const parts = effectType.split(":");
+				// Format: reroll:{threshold}:{rollType} e.g., "reroll:1:attack"
+				customEffects.push({
+					type: "reroll",
+					threshold: parseInt(parts[1]) || 1,
+					target: parts.slice(2).join(":") || "all",
+				});
+				continue;
+			}
+
+			// Damage die reroll effects (Great Weapon Fighting style)
+			if (effectType.startsWith("damage:reroll:")) {
+				const parts = effectType.split(":");
+				// Format: damage:reroll:{threshold}:{weaponType} e.g., "damage:reroll:1or2:twoHanded"
+				customEffects.push({
+					type: "damageReroll",
+					threshold: parts[2] || "1or2",
+					weaponType: parts[3] || "all",
+				});
+				continue;
+			}
 		}
+
+		return customEffects;
 	}
 
 	/**
@@ -23570,6 +23949,52 @@ class CharacterSheetState {
 			}
 		}
 
+		// Add toggleable and limited-use custom abilities
+		const customAbilities = this._data.customAbilities || [];
+		for (const ability of customAbilities) {
+			// Skip passive abilities - they're always-on
+			if (ability.mode === "passive") continue;
+
+			// Build activation info from ability properties
+			const activationInfo = {
+				stateTypeId: "custom",
+				stateType: null,
+				activationAction: ability.activationAction || "free",
+				duration: ability.duration || null,
+				concentration: ability.concentration || false,
+				isCustomAbility: true,
+			};
+
+			// Check for limited uses resource
+			let resource = null;
+			if (ability.uses) {
+				resource = {
+					id: `custom-ability-${ability.id}`,
+					name: ability.name,
+					current: ability.uses.current,
+					max: ability.uses.max,
+					cost: 1,
+					recharge: ability.uses.recharge,
+				};
+			}
+
+			activatables.push({
+				feature: {
+					id: ability.id,
+					name: ability.name,
+					description: ability.description,
+					category: ability.category,
+					isCustomAbility: true,
+				},
+				activationInfo,
+				resource,
+				stateTypeId: "custom",
+				isActive: ability.isActive || false,
+				customAbilityId: ability.id,
+				effects: ability.effects || null,
+			});
+		}
+
 		return activatables;
 	}
 
@@ -23943,6 +24368,20 @@ class CharacterSheetState {
 					const concState = this._data.activeStates.find(s => s.stateTypeId === "concentration");
 					if (concState) this.removeActiveState(concState.id);
 				}
+
+				// If this was a custom ability state, toggle off the ability
+				if (state.sourceFeatureId) {
+					const ability = this._data.customAbilities?.find(a => a.id === state.sourceFeatureId);
+					if (ability && ability.isActive) {
+						ability.isActive = false;
+						// Clear concentration if this ability was concentrating
+						if (ability.concentration && this._data.concentrating?.customAbilityId === ability.id) {
+							this._data.concentrating = null;
+						}
+						// Unregister effects (named modifiers)
+						this._unregisterCustomAbilityEffects(ability.id);
+					}
+				}
 			}
 		}
 
@@ -24233,6 +24672,21 @@ class CharacterSheetState {
 			}
 		}
 		return increase;
+	}
+
+	/**
+	 * Get size decrease steps from active states
+	 * @returns {number} Total size decrease steps (e.g., 1 = one size smaller)
+	 */
+	getSizeDecreaseFromStates () {
+		const effects = this.getActiveStateEffects();
+		let decrease = 0;
+		for (const e of effects) {
+			if (e.type === "sizeDecrease") {
+				decrease += e.value || 1;
+			}
+		}
+		return decrease;
 	}
 
 	/**
