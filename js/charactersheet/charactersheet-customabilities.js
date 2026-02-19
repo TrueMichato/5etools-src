@@ -56,6 +56,12 @@ class CharacterSheetCustomAbilities {
 
 		container.innerHTML = "";
 
+		// Add search/filter bar if there are abilities
+		if (abilities.length > 0) {
+			const filterBar = this._buildFilterBar(abilities);
+			container.appendChild(filterBar);
+		}
+
 		if (!abilities.length) {
 			container.innerHTML = `
 				<div class="custom-abilities__empty">
@@ -65,11 +71,114 @@ class CharacterSheetCustomAbilities {
 			return;
 		}
 
+		// Content container for filtered results
+		const contentContainer = document.createElement("div");
+		contentContainer.id = "custom-abilities__content";
+		container.appendChild(contentContainer);
+
+		// Initial render with no filter
+		this._renderFilteredAbilities(contentContainer, abilities, "", "all");
+	}
+
+	/**
+	 * Build the search/filter bar
+	 */
+	_buildFilterBar (abilities) {
+		const bar = document.createElement("div");
+		bar.className = "custom-abilities__filter-bar";
+
+		// Search input
+		const searchInput = document.createElement("input");
+		searchInput.type = "text";
+		searchInput.className = "form-control custom-abilities__search-input";
+		searchInput.placeholder = "🔍 Search abilities...";
+		searchInput.id = "custom-abilities-search";
+
+		// Category filter
+		const categorySelect = document.createElement("select");
+		categorySelect.className = "form-control custom-abilities__category-filter";
+		categorySelect.id = "custom-abilities-category-filter";
+
+		const categories = CharacterSheetState.CUSTOM_ABILITY_CATEGORIES;
+		categorySelect.innerHTML = `
+			<option value="all">All Categories</option>
+			${Object.entries(categories).map(([id, cat]) => 
+				`<option value="${id}">${cat.icon} ${cat.name}</option>`
+			).join("")}
+		`;
+
+		// Count display
+		const countDisplay = document.createElement("span");
+		countDisplay.className = "custom-abilities__filter-count";
+		countDisplay.id = "custom-abilities-count";
+		countDisplay.textContent = `${abilities.length} abilities`;
+
+		bar.appendChild(searchInput);
+		bar.appendChild(categorySelect);
+		bar.appendChild(countDisplay);
+
+		// Bind filter events
+		const updateFilter = () => {
+			const searchTerm = searchInput.value.toLowerCase();
+			const categoryFilter = categorySelect.value;
+			const contentContainer = document.getElementById("custom-abilities__content");
+			if (contentContainer) {
+				const state = this._sheet.getState();
+				const allAbilities = state.getCustomAbilities();
+				this._renderFilteredAbilities(contentContainer, allAbilities, searchTerm, categoryFilter);
+			}
+		};
+
+		searchInput.addEventListener("input", updateFilter);
+		categorySelect.addEventListener("change", updateFilter);
+
+		return bar;
+	}
+
+	/**
+	 * Render filtered abilities list
+	 */
+	_renderFilteredAbilities (container, abilities, searchTerm, categoryFilter) {
+		container.innerHTML = "";
+
+		// Filter abilities
+		let filtered = abilities;
+		if (categoryFilter !== "all") {
+			filtered = filtered.filter(a => a.category === categoryFilter);
+		}
+		if (searchTerm) {
+			filtered = filtered.filter(a => {
+				const nameMatch = a.name.toLowerCase().includes(searchTerm);
+				const descMatch = (a.description || "").toLowerCase().includes(searchTerm);
+				const effectMatch = (a.effects || []).some(e => 
+					(e.type || "").toLowerCase().includes(searchTerm)
+				);
+				return nameMatch || descMatch || effectMatch;
+			});
+		}
+
+		// Update count
+		const countEl = document.getElementById("custom-abilities-count");
+		if (countEl) {
+			const total = abilities.length;
+			const showing = filtered.length;
+			countEl.textContent = showing === total ? `${total} abilities` : `${showing} of ${total}`;
+		}
+
+		if (!filtered.length) {
+			container.innerHTML = `
+				<div class="custom-abilities__empty">
+					<p class="ve-muted ve-text-center py-2">No abilities match your search.</p>
+				</div>
+			`;
+			return;
+		}
+
 		// Group abilities by category
 		const categories = CharacterSheetState.CUSTOM_ABILITY_CATEGORIES;
 		const grouped = {};
 
-		for (const ability of abilities) {
+		for (const ability of filtered) {
 			if (!grouped[ability.category]) grouped[ability.category] = [];
 			grouped[ability.category].push(ability);
 		}
@@ -235,13 +344,18 @@ class CharacterSheetCustomAbilities {
 
 		controls.appendChild(leftControls);
 
-		// Right side: edit/delete
+		// Right side: duplicate/edit/delete
 		const rightControls = document.createElement("div");
 		rightControls.className = "custom-abilities__card-controls-right";
 		rightControls.innerHTML = `
+			<button class="custom-abilities__action-btn custom-abilities__action-btn--duplicate" title="Duplicate">📋</button>
 			<button class="custom-abilities__action-btn custom-abilities__action-btn--edit" title="Edit">✏️</button>
 			<button class="custom-abilities__action-btn custom-abilities__action-btn--delete" title="Delete">🗑️</button>
 		`;
+		rightControls.querySelector(".custom-abilities__action-btn--duplicate").addEventListener("click", (e) => {
+			e.stopPropagation();
+			this._duplicateAbility(ability.id);
+		});
 		rightControls.querySelector(".custom-abilities__action-btn--edit").addEventListener("click", (e) => {
 			e.stopPropagation();
 			this._showAbilityModal(ability.id);
@@ -576,6 +690,11 @@ class CharacterSheetCustomAbilities {
 		state.toggleCustomAbility(id);
 		this.render();
 		this._sheet._updateAllCalculations?.();
+		this._sheet._renderActiveStates?.();
+		this._sheet._renderOverviewAbilities?.();
+		this._sheet._combatModule?.renderCombatStates?.();
+		this._sheet._combat?.renderCombatActions?.();
+		this._sheet._renderCharacter?.(); // Update size/reach display
 		this._sheet._saveCurrentCharacter?.();
 	}
 
@@ -584,6 +703,9 @@ class CharacterSheetCustomAbilities {
 		if (state.useCustomAbility(id)) {
 			this.render();
 			this._sheet._updateAllCalculations?.();
+			this._sheet._renderOverviewAbilities?.();
+			this._sheet._renderResources?.();
+			this._sheet._combat?.renderCombatActions?.();
 			this._sheet._saveCurrentCharacter?.();
 		}
 	}
@@ -594,7 +716,45 @@ class CharacterSheetCustomAbilities {
 		if (state.removeCustomAbility(id)) {
 			this.render();
 			this._sheet._updateAllCalculations?.();
+			this._sheet._renderOverviewAbilities?.();
+			this._sheet._renderResources?.();
+			this._sheet._combat?.renderCombatActions?.();
 			this._sheet._saveCurrentCharacter?.();
+		}
+	}
+
+	/**
+	 * Duplicate an existing ability
+	 */
+	_duplicateAbility (id) {
+		const state = this._sheet.getState();
+		const original = state.getCustomAbility(id);
+		if (!original) return;
+
+		// Deep clone the ability
+		const cloned = JSON.parse(JSON.stringify(original));
+		
+		// Remove id and reset state
+		delete cloned.id;
+		cloned.name = `${cloned.name} (Copy)`;
+		cloned.isActive = false;
+		if (cloned.uses) {
+			cloned.uses.current = cloned.uses.max;
+		}
+
+		// Add as new ability
+		const newId = state.addCustomAbility(cloned);
+		
+		if (newId) {
+			this.render();
+			this._sheet._updateAllCalculations?.();
+			this._sheet._renderOverviewAbilities?.();
+			this._sheet._renderResources?.();
+			this._sheet._combat?.renderCombatActions?.();
+			this._sheet._saveCurrentCharacter?.();
+			
+			// Open the modal for editing the new copy
+			this._showAbilityModal(newId);
 		}
 	}
 
@@ -617,6 +777,14 @@ class CharacterSheetCustomAbilities {
 		const categoryOptionsHtml = Object.entries(categories).map(([id, cat]) =>
 			`<option value="${id}" ${existingAbility?.category === id ? "selected" : ""}>${cat.icon} ${cat.name}</option>`,
 		).join("");
+
+		// Build resource pool options for linking
+		const resources = state.getResources?.() || [];
+		const hasExertion = state.usesCombatSystem?.() && (state.getExertionMax?.() || 0) > 0;
+		const resourceOptionsHtml = [
+			hasExertion ? `<option value="exertion" ${existingAbility?.resourceSource?.resourceId === "exertion" ? "selected" : ""}>Exertion</option>` : "",
+			...resources.map(r => `<option value="${r.id}" ${existingAbility?.resourceSource?.resourceId === r.id ? "selected" : ""}>${r.name}</option>`),
+		].filter(Boolean).join("");
 
 		// Create modal
 		const modal = document.createElement("div");
@@ -703,16 +871,55 @@ class CharacterSheetCustomAbilities {
 								</label>
 							</div>
 							<div class="custom-abilities__limited-options" style="display: ${existingAbility?.mode === "limited" ? "flex" : "none"};">
-								<div class="custom-abilities__form-field">
-									<label>Max Uses</label>
-									<input type="number" class="form-control" name="maxUses" min="1" value="${existingAbility?.uses?.max || 1}">
-								</div>
-								<div class="custom-abilities__form-field">
-									<label>Recharges On</label>
-									<select class="form-control" name="recharge">
-										<option value="long" ${existingAbility?.uses?.recharge !== "short" ? "selected" : ""}>🌙 Long Rest</option>
-										<option value="short" ${existingAbility?.uses?.recharge === "short" ? "selected" : ""}>⚡ Short Rest</option>
+								<div class="custom-abilities__form-field custom-abilities__resource-source-field">
+									<label>Resource Source</label>
+									<select class="form-control" name="resourceSource">
+										<option value="self" ${!existingAbility?.resourceSource?.type || existingAbility?.resourceSource?.type === "self" ? "selected" : ""}>Self-contained Uses</option>
+										<option value="linked" ${existingAbility?.resourceSource?.type === "linked" ? "selected" : ""}>Link to Existing Resource</option>
+										<option value="new" ${existingAbility?.resourceSource?.type === "new" ? "selected" : ""}>Create New Resource Pool</option>
 									</select>
+								</div>
+								<div class="custom-abilities__self-uses-options" style="display: ${!existingAbility?.resourceSource?.type || existingAbility?.resourceSource?.type === "self" ? "flex" : "none"};">
+									<div class="custom-abilities__form-field">
+										<label>Max Uses</label>
+										<input type="number" class="form-control" name="maxUses" min="1" value="${existingAbility?.uses?.max || 1}">
+									</div>
+									<div class="custom-abilities__form-field">
+										<label>Recharges On</label>
+										<select class="form-control" name="recharge">
+											<option value="long" ${existingAbility?.uses?.recharge !== "short" ? "selected" : ""}>🌙 Long Rest</option>
+											<option value="short" ${existingAbility?.uses?.recharge === "short" ? "selected" : ""}>⚡ Short Rest</option>
+										</select>
+									</div>
+								</div>
+								<div class="custom-abilities__linked-resource-options" style="display: ${existingAbility?.resourceSource?.type === "linked" ? "flex" : "none"};">
+									<div class="custom-abilities__form-field" style="flex: 2;">
+										<label>Resource Pool</label>
+										<select class="form-control" name="linkedResourceId">
+											${resourceOptionsHtml || '<option value="" disabled>No resources available</option>'}
+										</select>
+									</div>
+									<div class="custom-abilities__form-field">
+										<label>Cost</label>
+										<input type="number" class="form-control" name="linkedResourceCost" min="1" value="${existingAbility?.resourceSource?.cost || 1}">
+									</div>
+								</div>
+								<div class="custom-abilities__new-resource-options" style="display: ${existingAbility?.resourceSource?.type === "new" ? "flex" : "none"};">
+									<div class="custom-abilities__form-field" style="flex: 2;">
+										<label>Resource Name</label>
+										<input type="text" class="form-control" name="newResourceName" placeholder="e.g., Divine Charges" value="${existingAbility?.resourceSource?.newResourceName || ""}">
+									</div>
+									<div class="custom-abilities__form-field">
+										<label>Max</label>
+										<input type="number" class="form-control" name="newResourceMax" min="1" value="${existingAbility?.resourceSource?.newResourceMax || 3}">
+									</div>
+									<div class="custom-abilities__form-field">
+										<label>Recharges</label>
+										<select class="form-control" name="newResourceRecharge">
+											<option value="long" ${existingAbility?.resourceSource?.newResourceRecharge !== "short" ? "selected" : ""}>🌙 Long</option>
+											<option value="short" ${existingAbility?.resourceSource?.newResourceRecharge === "short" ? "selected" : ""}>⚡ Short</option>
+										</select>
+									</div>
 								</div>
 							</div>
 							<div class="custom-abilities__activation-options" style="display: ${existingAbility?.mode && existingAbility.mode !== "passive" ? "flex" : "none"};">
@@ -747,6 +954,26 @@ class CharacterSheetCustomAbilities {
 										<span>Requires Concentration</span>
 									</label>
 									<span class="ve-muted ve-small">Ends if you lose concentration or concentrate on something else</span>
+								</div>
+							</div>
+							<div class="custom-abilities__toggleable-resource-options" style="display: ${existingAbility?.mode === "toggleable" ? "block" : "none"};">
+								<div class="custom-abilities__form-field">
+									<label class="custom-abilities__checkbox-label">
+										<input type="checkbox" name="hasResourceCost" ${existingAbility?.resourceCost ? "checked" : ""}>
+										<span>Costs a Resource to Activate</span>
+									</label>
+								</div>
+								<div class="custom-abilities__toggleable-resource-details" style="display: ${existingAbility?.resourceCost ? "flex" : "none"};">
+									<div class="custom-abilities__form-field" style="flex: 2;">
+										<label>Resource Pool</label>
+										<select class="form-control" name="toggleResourceId">
+											${resourceOptionsHtml || '<option value="" disabled>No resources available</option>'}
+										</select>
+									</div>
+									<div class="custom-abilities__form-field">
+										<label>Cost</label>
+										<input type="number" class="form-control" name="toggleResourceCost" min="1" value="${existingAbility?.resourceCost?.cost || 1}">
+									</div>
 								</div>
 							</div>
 						</div>
@@ -811,6 +1038,59 @@ class CharacterSheetCustomAbilities {
 									</div>
 								</div>
 							</details>
+						</div>
+
+						<!-- Size & Movement -->
+						<div class="custom-abilities__form-section">
+							<label class="custom-abilities__form-section-title">Size & Movement (Optional)</label>
+							<p class="ve-muted ve-small mb-2">Modify creature size (affects carry capacity) or melee reach</p>
+							
+							<div class="custom-abilities__size-reach-row">
+								<div class="custom-abilities__size-section">
+									<label class="ve-small ve-muted">Size Change (categories)</label>
+									<div class="custom-abilities__size-control">
+										<button type="button" class="btn btn-xs custom-abilities__size-dec" title="Decrease size">−</button>
+										<span class="custom-abilities__size-value" id="size-value">0</span>
+										<button type="button" class="btn btn-xs custom-abilities__size-inc" title="Increase size">+</button>
+									</div>
+									<span class="ve-muted ve-small custom-abilities__size-preview" id="size-preview"></span>
+								</div>
+								<div class="custom-abilities__reach-section">
+									<label class="ve-small ve-muted">Reach Bonus (feet)</label>
+									<div class="custom-abilities__reach-control">
+										<button type="button" class="btn btn-xs custom-abilities__reach-dec" title="Decrease reach">−</button>
+										<span class="custom-abilities__reach-value" id="reach-value">0</span>
+										<button type="button" class="btn btn-xs custom-abilities__reach-inc" title="Increase reach">+</button>
+									</div>
+									<span class="ve-muted ve-small">Each increment = +5 ft melee reach</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- Bonus Damage -->
+						<div class="custom-abilities__form-section">
+							<label class="custom-abilities__form-section-title">Bonus Damage (Optional)</label>
+							<p class="ve-muted ve-small mb-2">Add extra damage on hits (like Hex, Hunter's Mark, Flame Tongue)</p>
+							
+							<div class="custom-abilities__bonus-damage-list" id="bonus-damage-list">
+								<!-- Dynamically populated -->
+							</div>
+							<button type="button" class="btn btn-sm btn-outline-primary custom-abilities__add-damage-btn" id="add-bonus-damage-btn">
+								+ Add Bonus Damage
+							</button>
+						</div>
+
+						<!-- Reroll Effects -->
+						<div class="custom-abilities__form-section">
+							<label class="custom-abilities__form-section-title">Reroll Effects (Optional)</label>
+							<p class="ve-muted ve-small mb-2">Grant rerolls on certain dice (like Lucky feat or Great Weapon Fighting)</p>
+							
+							<div class="custom-abilities__reroll-list" id="reroll-list">
+								<!-- Dynamically populated -->
+							</div>
+							<button type="button" class="btn btn-sm btn-outline-primary custom-abilities__add-reroll-btn" id="add-reroll-btn">
+								+ Add Reroll Effect
+							</button>
 						</div>
 
 						<!-- Grants -->
@@ -1054,7 +1334,6 @@ class CharacterSheetCustomAbilities {
 		document.body.appendChild(modal);
 
 		// State
-		let effects = existingAbility?.effects ? JSON.parse(JSON.stringify(existingAbility.effects)) : [];
 		let grants = existingAbility?.grants ? JSON.parse(JSON.stringify(existingAbility.grants)) : {
 			spells: [],
 			proficiencies: {skills: [], tools: [], weapons: [], armor: [], languages: []},
@@ -1066,6 +1345,39 @@ class CharacterSheetCustomAbilities {
 			vulnerabilities: [],
 			conditionImmunities: [],
 		};
+		
+		// Size, reach, bonus damage, rerolls - extracted from effects array
+		let sizeChange = 0; // Positive = enlarge, negative = reduce
+		let reachBonus = 0; // In increments of 5 ft
+		let bonusDamage = []; // [{type: "fire", dice: "1d6"}, ...]
+		let rerolls = []; // [{trigger: "1", rollType: "attack"}, ...]
+		let effects = []; // General effects (not size/reach/damage/reroll)
+		
+		// Initialize from existing effects - extract special types and keep others
+		if (existingAbility?.effects) {
+			for (const e of existingAbility.effects) {
+				if (e.type === "sizeIncrease") {
+					sizeChange += (e.value || 1);
+				} else if (e.type === "sizeDecrease") {
+					sizeChange -= (e.value || 1);
+				} else if (e.type === "reach") {
+					reachBonus += Math.floor((e.value || 5) / 5);
+				} else if (e.type?.startsWith("extraDamage:")) {
+					bonusDamage.push({type: e.type.replace("extraDamage:", ""), dice: e.dice || "1d6"});
+				} else if (e.type?.startsWith("reroll:")) {
+					// Parse reroll:TRIGGER:ROLLTYPE format
+					const parts = e.type.split(":");
+					rerolls.push({trigger: parts[1] || "1", rollType: parts[2] || "all"});
+				} else if (e.type?.startsWith("damage:reroll:")) {
+					// Parse damage:reroll:TRIGGER:RESTRICTION format
+					const parts = e.type.split(":");
+					rerolls.push({trigger: parts[2] || "1or2", rollType: "damage", restriction: parts[3] || ""});
+				} else {
+					// Keep as general effect
+					effects.push(JSON.parse(JSON.stringify(e)));
+				}
+			}
+		}
 		let currentMode = "simple";
 
 		// Get data from sheet for pickers
@@ -1091,6 +1403,141 @@ class CharacterSheetCustomAbilities {
 		// Helper to render defensive traits UI
 		const renderDefensiveTraitsUI = () => {
 			this._renderDefensiveTraits(modal, defensiveTraits, damageTypesList, conditionsList);
+		};
+
+		// Helper to render size/reach section
+		const renderSizeReachUI = () => {
+			// Update size value display
+			const sizeValueEl = modal.querySelector("#size-value");
+			if (sizeValueEl) {
+				const sign = sizeChange > 0 ? "+" : "";
+				sizeValueEl.textContent = sizeChange === 0 ? "0" : `${sign}${sizeChange}`;
+				sizeValueEl.className = "custom-abilities__size-value" + 
+					(sizeChange > 0 ? " custom-abilities__size-value--positive" : "") +
+					(sizeChange < 0 ? " custom-abilities__size-value--negative" : "");
+			}
+			
+			// Update size preview
+			const state = this._sheet.getState();
+			const baseSize = state.getBaseSize();
+			const preview = modal.querySelector("#size-preview");
+			if (preview) {
+				if (sizeChange !== 0) {
+					const sizes = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
+					const baseIdx = sizes.indexOf(baseSize);
+					const newIdx = Math.max(0, Math.min(baseIdx + sizeChange, sizes.length - 1));
+					const baseName = baseSize.charAt(0).toUpperCase() + baseSize.slice(1);
+					const newName = sizes[newIdx].charAt(0).toUpperCase() + sizes[newIdx].slice(1);
+					preview.textContent = `${baseName} → ${newName}`;
+				} else {
+					preview.textContent = "";
+				}
+			}
+			
+			// Update reach value display
+			const reachValueEl = modal.querySelector("#reach-value");
+			if (reachValueEl) {
+				const reachFt = reachBonus * 5;
+				const sign = reachFt > 0 ? "+" : "";
+				reachValueEl.textContent = reachFt === 0 ? "0" : `${sign}${reachFt}`;
+				reachValueEl.className = "custom-abilities__reach-value" + 
+					(reachBonus > 0 ? " custom-abilities__reach-value--positive" : "") +
+					(reachBonus < 0 ? " custom-abilities__reach-value--negative" : "");
+			}
+		};
+
+		// Helper to render bonus damage list
+		const renderBonusDamageList = () => {
+			const list = modal.querySelector("#bonus-damage-list");
+			list.innerHTML = "";
+			
+			if (!bonusDamage.length) {
+				list.innerHTML = `<div class="ve-muted ve-small py-1">No bonus damage added</div>`;
+				return;
+			}
+
+			const damageTypeOptions = damageTypesList.map(t => `<option value="${t}">${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join("");
+			
+			bonusDamage.forEach((dmg, idx) => {
+				const row = document.createElement("div");
+				row.className = "custom-abilities__bonus-damage-row";
+				row.innerHTML = `
+					<input type="text" class="form-control" placeholder="1d6" value="${dmg.dice || "1d6"}" style="width: 70px;">
+					<select class="form-control" style="flex: 1;">${damageTypeOptions}</select>
+					<button type="button" class="btn btn-xs btn-danger">&times;</button>
+				`;
+				row.querySelector("select").value = dmg.type || "fire";
+				row.querySelector("input").addEventListener("change", e => { bonusDamage[idx].dice = e.target.value.trim() || "1d6"; });
+				row.querySelector("select").addEventListener("change", e => { bonusDamage[idx].type = e.target.value; });
+				row.querySelector("button").addEventListener("click", () => { bonusDamage.splice(idx, 1); renderBonusDamageList(); });
+				list.appendChild(row);
+			});
+		};
+
+		// Helper to render reroll effects list
+		const renderRerollsUI = () => {
+			const list = modal.querySelector("#reroll-list");
+			if (!list) return;
+			list.innerHTML = "";
+			
+			if (!rerolls.length) {
+				list.innerHTML = `<div class="ve-muted ve-small py-1">No reroll effects added</div>`;
+				return;
+			}
+			
+			rerolls.forEach((r, idx) => {
+				const row = document.createElement("div");
+				row.className = "custom-abilities__reroll-row";
+				
+				const isDamage = r.rollType === "damage";
+				
+				row.innerHTML = `
+					<span class="ve-small">Reroll</span>
+					<select class="form-control custom-abilities__reroll-trigger" style="width: 100px;">
+						<option value="1" ${r.trigger === "1" ? "selected" : ""}>1s</option>
+						<option value="1or2" ${r.trigger === "1or2" ? "selected" : ""}>1s and 2s</option>
+						<option value="1to3" ${r.trigger === "1to3" ? "selected" : ""}>1s to 3s</option>
+					</select>
+					<span class="ve-small">on</span>
+					<select class="form-control custom-abilities__reroll-type" style="flex: 1;">
+						<option value="attack" ${r.rollType === "attack" ? "selected" : ""}>Attack Rolls</option>
+						<option value="save" ${r.rollType === "save" ? "selected" : ""}>Saving Throws</option>
+						<option value="ability" ${r.rollType === "ability" ? "selected" : ""}>Ability Checks</option>
+						<option value="all" ${r.rollType === "all" ? "selected" : ""}>All d20 Rolls</option>
+						<option value="damage" ${r.rollType === "damage" ? "selected" : ""}>Damage Dice</option>
+					</select>
+					${isDamage ? `
+						<select class="form-control custom-abilities__reroll-restrict" style="width: 120px;">
+							<option value="" ${!r.restriction ? "selected" : ""}>All Damage</option>
+							<option value="melee" ${r.restriction === "melee" ? "selected" : ""}>Melee Only</option>
+							<option value="twoHanded" ${r.restriction === "twoHanded" ? "selected" : ""}>Two-Handed</option>
+							<option value="spell" ${r.restriction === "spell" ? "selected" : ""}>Spell Damage</option>
+						</select>
+					` : ""}
+					<button type="button" class="btn btn-xs btn-danger">&times;</button>
+				`;
+				
+				row.querySelector(".custom-abilities__reroll-trigger").addEventListener("change", e => {
+					rerolls[idx].trigger = e.target.value;
+				});
+				row.querySelector(".custom-abilities__reroll-type").addEventListener("change", e => {
+					rerolls[idx].rollType = e.target.value;
+					// Re-render to show/hide restriction dropdown
+					renderRerollsUI();
+				});
+				const restrictEl = row.querySelector(".custom-abilities__reroll-restrict");
+				if (restrictEl) {
+					restrictEl.addEventListener("change", e => {
+						rerolls[idx].restriction = e.target.value;
+					});
+				}
+				row.querySelector("button").addEventListener("click", () => {
+					rerolls.splice(idx, 1);
+					renderRerollsUI();
+				});
+				
+				list.appendChild(row);
+			});
 		};
 
 		// Helper to render effects list
@@ -1160,13 +1607,47 @@ class CharacterSheetCustomAbilities {
 
 		// Sync form to JSON
 		const syncFormToJson = () => {
+			// Build complete effects array from all sources
+			const allEffects = [...effects];
+			
+			// Add size change effects (supports multiple increments)
+			if (sizeChange > 0) {
+				allEffects.push({type: "sizeIncrease", value: sizeChange});
+			} else if (sizeChange < 0) {
+				allEffects.push({type: "sizeDecrease", value: Math.abs(sizeChange)});
+			}
+			
+			// Add reach bonus effect (supports multiple increments)
+			if (reachBonus > 0) {
+				allEffects.push({type: "reach", value: reachBonus * 5});
+			}
+			
+			// Add bonus damage effects
+			for (const dmg of bonusDamage) {
+				allEffects.push({type: `extraDamage:${dmg.type}`, dice: dmg.dice || "1d6"});
+			}
+			
+			// Add reroll effects
+			for (const r of rerolls) {
+				if (r.rollType === "damage") {
+					// Format: damage:reroll:TRIGGER:RESTRICTION
+					const type = r.restriction 
+						? `damage:reroll:${r.trigger}:${r.restriction}`
+						: `damage:reroll:${r.trigger}`;
+					allEffects.push({type});
+				} else {
+					// Format: reroll:TRIGGER:ROLLTYPE
+					allEffects.push({type: `reroll:${r.trigger}:${r.rollType}`});
+				}
+			}
+			
 			const data = {
 				name: modal.querySelector("input[name='name']").value,
 				description: modal.querySelector("textarea[name='description']").value,
 				icon: modal.querySelector("input[name='icon']").value || "⚡",
 				category: modal.querySelector("select[name='category']").value,
 				mode: modal.querySelector("input[name='mode']:checked")?.value || "passive",
-				effects: effects,
+				effects: allEffects,
 			};
 
 			// Add grants if any are defined (grants object is maintained by UI handlers)
@@ -1208,10 +1689,22 @@ class CharacterSheetCustomAbilities {
 			}
 
 			if (data.mode === "limited") {
-				data.uses = {
-					max: parseInt(modal.querySelector("input[name='maxUses']").value) || 1,
-					recharge: modal.querySelector("select[name='recharge']").value || "long",
-				};
+				const resourceSource = modal.querySelector("select[name='resourceSource']").value || "self";
+				data.resourceSource = { type: resourceSource };
+				
+				if (resourceSource === "self") {
+					data.uses = {
+						max: parseInt(modal.querySelector("input[name='maxUses']").value) || 1,
+						recharge: modal.querySelector("select[name='recharge']").value || "long",
+					};
+				} else if (resourceSource === "linked") {
+					data.resourceSource.resourceId = modal.querySelector("select[name='linkedResourceId']").value;
+					data.resourceSource.cost = parseInt(modal.querySelector("input[name='linkedResourceCost']").value) || 1;
+				} else if (resourceSource === "new") {
+					data.resourceSource.newResourceName = modal.querySelector("input[name='newResourceName']").value;
+					data.resourceSource.newResourceMax = parseInt(modal.querySelector("input[name='newResourceMax']").value) || 3;
+					data.resourceSource.newResourceRecharge = modal.querySelector("select[name='newResourceRecharge']").value || "long";
+				}
 			}
 
 			// Add activation action for non-passive modes
@@ -1231,6 +1724,14 @@ class CharacterSheetCustomAbilities {
 				const concentration = modal.querySelector("input[name='concentration']").checked;
 				if (concentration) {
 					data.concentration = true;
+				}
+				// Add resource cost if enabled
+				const hasResourceCost = modal.querySelector("input[name='hasResourceCost']").checked;
+				if (hasResourceCost) {
+					data.resourceCost = {
+						resourceId: modal.querySelector("select[name='toggleResourceId']").value,
+						cost: parseInt(modal.querySelector("input[name='toggleResourceCost']").value) || 1,
+					};
 				}
 			}
 
@@ -1255,6 +1756,20 @@ class CharacterSheetCustomAbilities {
 			const modeRadio = modal.querySelector(`input[name='mode'][value='${data.mode || "passive"}']`);
 			if (modeRadio) modeRadio.checked = true;
 
+			// Restore resource source for limited mode
+			if (data.resourceSource) {
+				modal.querySelector("select[name='resourceSource']").value = data.resourceSource.type || "self";
+				if (data.resourceSource.type === "linked") {
+					const linkedSelect = modal.querySelector("select[name='linkedResourceId']");
+					if (linkedSelect) linkedSelect.value = data.resourceSource.resourceId || "";
+					modal.querySelector("input[name='linkedResourceCost']").value = data.resourceSource.cost || 1;
+				} else if (data.resourceSource.type === "new") {
+					modal.querySelector("input[name='newResourceName']").value = data.resourceSource.newResourceName || "";
+					modal.querySelector("input[name='newResourceMax']").value = data.resourceSource.newResourceMax || 3;
+					modal.querySelector("select[name='newResourceRecharge']").value = data.resourceSource.newResourceRecharge || "long";
+				}
+			}
+
 			if (data.uses) {
 				modal.querySelector("input[name='maxUses']").value = data.uses.max || 1;
 				modal.querySelector("select[name='recharge']").value = data.uses.recharge || "long";
@@ -1273,8 +1788,48 @@ class CharacterSheetCustomAbilities {
 				modal.querySelector("input[name='concentration']").checked = true;
 			}
 
-			effects = data.effects || [];
+			// Restore resource cost for toggleable mode
+			if (data.resourceCost) {
+				modal.querySelector("input[name='hasResourceCost']").checked = true;
+				const toggleSelect = modal.querySelector("select[name='toggleResourceId']");
+				if (toggleSelect) toggleSelect.value = data.resourceCost.resourceId || "";
+				modal.querySelector("input[name='toggleResourceCost']").value = data.resourceCost.cost || 1;
+			}
+
+			// Parse effects array to extract special effect types
+			sizeChange = 0;
+			reachBonus = 0;
+			bonusDamage = [];
+			rerolls = [];
+			effects = [];
+			
+			for (const e of (data.effects || [])) {
+				if (e.type === "sizeIncrease") {
+					sizeChange += (e.value || 1);
+				} else if (e.type === "sizeDecrease") {
+					sizeChange -= (e.value || 1);
+				} else if (e.type === "reach") {
+					reachBonus += Math.floor((e.value || 5) / 5);
+				} else if (e.type?.startsWith("extraDamage:")) {
+					bonusDamage.push({type: e.type.replace("extraDamage:", ""), dice: e.dice || "1d6"});
+				} else if (e.type?.startsWith("reroll:")) {
+					// Parse reroll:TRIGGER:ROLLTYPE format
+					const parts = e.type.split(":");
+					rerolls.push({trigger: parts[1] || "1", rollType: parts[2] || "all"});
+				} else if (e.type?.startsWith("damage:reroll:")) {
+					// Parse damage:reroll:TRIGGER:RESTRICTION format
+					const parts = e.type.split(":");
+					rerolls.push({trigger: parts[2] || "1or2", rollType: "damage", restriction: parts[3] || ""});
+				} else {
+					// Keep other effects in the regular effects array
+					effects.push(e);
+				}
+			}
+			
 			renderEffectsList();
+			renderSizeReachUI();
+			renderBonusDamageList();
+			renderRerollsUI();
 
 			// Restore grants
 			if (data.grants) {
@@ -1305,6 +1860,8 @@ class CharacterSheetCustomAbilities {
 
 			// Update visibility after restoring values
 			updateModeVisibility();
+			updateResourceSourceVisibility();
+			updateToggleableResourceVisibility();
 		};
 
 		// Update limited options visibility
@@ -1313,10 +1870,27 @@ class CharacterSheetCustomAbilities {
 			modal.querySelector(".custom-abilities__limited-options").style.display = mode === "limited" ? "flex" : "none";
 			modal.querySelector(".custom-abilities__activation-options").style.display = mode && mode !== "passive" ? "flex" : "none";
 			modal.querySelector(".custom-abilities__duration-options").style.display = mode === "toggleable" ? "flex" : "none";
+			modal.querySelector(".custom-abilities__toggleable-resource-options").style.display = mode === "toggleable" ? "block" : "none";
+		};
+
+		// Update resource source visibility (for limited mode)
+		const updateResourceSourceVisibility = () => {
+			const sourceType = modal.querySelector("select[name='resourceSource']")?.value || "self";
+			modal.querySelector(".custom-abilities__self-uses-options").style.display = sourceType === "self" ? "flex" : "none";
+			modal.querySelector(".custom-abilities__linked-resource-options").style.display = sourceType === "linked" ? "flex" : "none";
+			modal.querySelector(".custom-abilities__new-resource-options").style.display = sourceType === "new" ? "flex" : "none";
+		};
+
+		// Update toggleable resource cost visibility
+		const updateToggleableResourceVisibility = () => {
+			const hasResourceCost = modal.querySelector("input[name='hasResourceCost']")?.checked;
+			modal.querySelector(".custom-abilities__toggleable-resource-details").style.display = hasResourceCost ? "flex" : "none";
 		};
 
 		// Event handlers
 		modal.querySelectorAll("input[name='mode']").forEach(r => r.addEventListener("change", updateModeVisibility));
+		modal.querySelector("select[name='resourceSource']")?.addEventListener("change", updateResourceSourceVisibility);
+		modal.querySelector("input[name='hasResourceCost']")?.addEventListener("change", updateToggleableResourceVisibility);
 
 		// Icon picker
 		const iconPreview = modal.querySelector(".custom-abilities__icon-preview");
@@ -1426,13 +2000,51 @@ class CharacterSheetCustomAbilities {
 			closeModal();
 			this.render();
 			this._sheet._updateAllCalculations?.();
+			this._sheet._renderOverviewAbilities?.();
+			this._sheet._renderResources?.();
+			this._sheet._combat?.renderCombatActions?.();
 			this._sheet._saveCurrentCharacter?.();
+		});
+
+		// Size increment/decrement handlers
+		modal.querySelector(".custom-abilities__size-inc")?.addEventListener("click", () => {
+			sizeChange = Math.min(sizeChange + 1, 5); // Max 5 size categories
+			renderSizeReachUI();
+		});
+		modal.querySelector(".custom-abilities__size-dec")?.addEventListener("click", () => {
+			sizeChange = Math.max(sizeChange - 1, -5); // Min -5 size categories
+			renderSizeReachUI();
+		});
+
+		// Reach increment/decrement handlers
+		modal.querySelector(".custom-abilities__reach-inc")?.addEventListener("click", () => {
+			reachBonus = Math.min(reachBonus + 1, 10); // Max +50 ft reach
+			renderSizeReachUI();
+		});
+		modal.querySelector(".custom-abilities__reach-dec")?.addEventListener("click", () => {
+			reachBonus = Math.max(reachBonus - 1, -10); // Min -50 ft (for curses)
+			renderSizeReachUI();
+		});
+
+		// Add bonus damage handler
+		modal.querySelector("#add-bonus-damage-btn")?.addEventListener("click", () => {
+			bonusDamage.push({type: "fire", dice: "1d6"});
+			renderBonusDamageList();
+		});
+
+		// Add reroll handler
+		modal.querySelector("#add-reroll-btn")?.addEventListener("click", () => {
+			rerolls.push({trigger: "1", rollType: "attack"});
+			renderRerollsUI();
 		});
 
 		// Initialize
 		renderEffectsList();
 		renderGrantsUI();
 		renderDefensiveTraitsUI();
+		renderSizeReachUI();
+		renderBonusDamageList();
+		renderRerollsUI();
 
 		// Update initial grant counts
 		this._updateGrantCount(modal, "grants-spell-count", grants.spells.length);
@@ -2059,13 +2671,22 @@ class CharacterSheetCustomAbilities {
 
 	/**
 	 * Get list of standard damage types plus any custom ones from data
-	 * @returns {string[]} List of damage type names
+	 * @returns {string[]} List of damage type strings
 	 */
 	_getDamageTypesList () {
 		return [
 			"acid", "bludgeoning", "cold", "fire", "force", "lightning",
 			"necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder",
 		];
+	}
+
+	/**
+	 * Generate HTML options for damage type dropdown selects
+	 * @returns {string} HTML string of option elements
+	 */
+	_getDamageTypeOptionsHtml () {
+		const types = this._getDamageTypesList();
+		return types.map(t => `<option value="${t}">${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join("");
 	}
 
 	/**

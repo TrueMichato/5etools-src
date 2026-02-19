@@ -1561,6 +1561,65 @@ class CharacterSheetFeatures {
 
 			$container.append($row);
 		});
+
+		// Add limited-use custom abilities
+		const customAbilities = this._state.getCustomAbilities?.() || [];
+		const limitedAbilities = customAbilities.filter(a => a.mode === "limited");
+		
+		limitedAbilities.forEach(ability => {
+			// Get the uses display (handles both self-contained and linked resources)
+			const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id);
+			if (!uses) return;
+			
+			// Skip if this ability links to an existing resource pool (already shown above)
+			if (ability.resourceSource?.type === "linked" && ability.resourceSource?.resourceId !== "exertion") {
+				const linkedResource = resources.find(r => r.id === ability.resourceSource.resourceId);
+				if (linkedResource) return;
+			}
+			
+			const canUse = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
+			const canRestore = uses.current < uses.max;
+			
+			const $row = $(`
+				<div class="charsheet__resource-row charsheet__resource-row--custom" data-ability-id="${ability.id}">
+					<span class="charsheet__resource-icon mr-1">${ability.icon || "⚡"}</span>
+					<span class="charsheet__resource-name">${ability.name}</span>
+					<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(${uses.recharge === "short" ? "Short" : "Long"})</span>
+					<div class="charsheet__resource-uses ml-auto">
+						<button class="ve-btn ve-btn-xs ve-btn-danger mr-2 charsheet__ability-use-btn" ${!canUse ? "disabled" : ""}>Use</button>
+						<span class="charsheet__resource-current">${uses.current}</span>
+						<span class="charsheet__resource-max">/ ${uses.max}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__ability-restore-btn" ${!canRestore ? "disabled" : ""}>+</button>
+					</div>
+				</div>
+			`);
+
+			$row.find(".charsheet__ability-use-btn").on("click", () => {
+				if (this._state.useCustomAbility(ability.id)) {
+					this._renderResources();
+					if (this._page) {
+						this._page._saveCurrentCharacter?.();
+						this._page._renderResources?.();
+						this._page._renderActiveStates?.();
+						this._page._customAbilities?.render?.();
+					}
+				}
+			});
+
+			$row.find(".charsheet__ability-restore-btn").on("click", () => {
+				if (this._state.restoreCustomAbilityUse(ability.id)) {
+					this._renderResources();
+					if (this._page) {
+						this._page._saveCurrentCharacter?.();
+						this._page._renderResources?.();
+						this._page._renderActiveStates?.();
+						this._page._customAbilities?.render?.();
+					}
+				}
+			});
+
+			$container.append($row);
+		});
 	}
 
 	_renderProficiencies () {
