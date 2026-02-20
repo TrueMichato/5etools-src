@@ -827,6 +827,37 @@ class CharacterSheetInventory {
 		return isNaN(parsed) ? 0 : parsed;
 	}
 
+	/**
+	 * Detect vestige tier from item name or properties
+	 * Vestiges of Divergence (EGW) and Arms of the Betrayers have dormant/awakened/exalted states
+	 * @param {object} item - The item data
+	 * @returns {string|null} "dormant", "awakened", "exalted", or null
+	 */
+	_detectVestigeTier (item) {
+		const name = item.name?.toLowerCase() || "";
+		if (name.includes("(dormant)")) return "dormant";
+		if (name.includes("(awakened)")) return "awakened";
+		if (name.includes("(exalted)")) return "exalted";
+
+		// Check for Vestige property tag
+		if (item.property?.includes("Vst|EGW")) return "dormant";
+
+		return null;
+	}
+
+	/**
+	 * Check if item is a spell-storing item (like Ring of Spell Storing)
+	 * @param {object} item - The item data
+	 * @returns {number|null} Max spell levels storable, or null if not spell-storing
+	 */
+	_detectSpellStoringCapacity (item) {
+		const name = item.name?.toLowerCase() || "";
+		// Ring of Spell Storing stores up to 5 levels
+		if (name.includes("ring of spell storing")) return 5;
+		// Could add more spell-storing items here
+		return item.maxSpellLevels || null;
+	}
+
 	_addItem (item) {
 		// Check if item is armor by type (LA, MA, HA) or armor flag
 		const itemTypeBase = item.type?.split("|")[0];
@@ -874,6 +905,9 @@ class CharacterSheetInventory {
 			armor: isArmor,
 			armorType: armorType,
 			ac: item.ac || null,
+			dexterityMax: item.dexterityMax ?? null, // Max DEX bonus for medium armor (null = unlimited for light, 0 for heavy)
+			stealth: item.stealth || false, // true = disadvantage on stealth
+			strength: item.strength || null, // Min STR requirement (e.g., "15" for plate)
 			shield: isShield,
 			bonusAc: this._parseBonus(item.bonusAc),
 			// Spell bonuses
@@ -889,6 +923,26 @@ class CharacterSheetInventory {
 			bonusSavingThrowCha: this._parseBonus(item.bonusSavingThrow_cha),
 			// Ability bonuses
 			bonusAbilityCheck: this._parseBonus(item.bonusAbilityCheck),
+			// Additional bonus types
+			bonusProficiencyBonus: this._parseBonus(item.bonusProficiencyBonus),
+			bonusSavingThrowConcentration: this._parseBonus(item.bonusSavingThrowConcentration),
+			bonusSpellDamage: this._parseBonus(item.bonusSpellDamage),
+			bonusWeaponCritDamage: this._parseBonus(item.bonusWeaponCritDamage),
+			// Critical hit threshold (e.g., 19 for critting on 19-20)
+			critThreshold: item.critThreshold || null,
+			// Defensive properties
+			resist: item.resist || null,
+			immune: item.immune || null,
+			vulnerable: item.vulnerable || null,
+			conditionImmune: item.conditionImmune || null,
+			// Speed modification
+			modifySpeed: item.modifySpeed || null,
+			// Ability score modifications from items (e.g., Gauntlets of Ogre Power, Belt of Giant Strength)
+			ability: item.ability || null,
+			// Item-granted spells (e.g., Staff of the Magi, Wand of Fireballs)
+			attachedSpells: item.attachedSpells || null,
+			// Spellcasting focus for classes
+			focus: item.focus || null,
 			// Charges
 			charges: maxCharges,
 			chargesCurrent: maxCharges, // Start fully charged
@@ -896,6 +950,18 @@ class CharacterSheetInventory {
 			rechargeAmount: item.rechargeAmount || null, // e.g., "{@dice 1d6 + 1}" or a number
 			// Magic item properties
 			rarity: item.rarity,
+			// Special item flags
+			curse: item.curse || false, // true = item is cursed
+			sentient: item.sentient || false, // true = item is sentient
+			grantsProficiency: item.grantsProficiency || false, // true = grants proficiency when equipped
+			// Container properties (e.g., Bag of Holding, Portable Hole)
+			containerCapacity: item.containerCapacity || null, // {weight: [500], volume: [64], weightless: true}
+			containedItems: [], // Array of item IDs stored inside this container
+			// Vestige of Divergence tier (items that progress in power)
+			vestigeTier: this._detectVestigeTier(item), // "dormant", "awakened", "exalted", or null
+			// Spell storing (e.g., Ring of Spell Storing)
+			storedSpells: [], // [{spell, level, saveDc, attackBonus, ability, casterName}]
+			maxSpellLevels: this._detectSpellStoringCapacity(item), // Max total spell levels (5 for Ring of Spell Storing)
 		};
 
 		this._state.addItem(newItem);
@@ -928,8 +994,30 @@ class CharacterSheetInventory {
 			stealth: options.stealth,
 			// Magic properties
 			rarity: options.rarity,
-			bonusAc: options.bonusAc,
-			bonusWeapon: options.bonusWeapon,
+			bonusAc: options.bonusAc || 0,
+			bonusWeapon: options.bonusWeapon || 0,
+			bonusWeaponAttack: options.bonusWeaponAttack || 0,
+			bonusWeaponDamage: options.bonusWeaponDamage || 0,
+			bonusWeaponCritDamage: options.bonusWeaponCritDamage || 0,
+			bonusSpellAttack: options.bonusSpellAttack || 0,
+			bonusSpellSaveDc: options.bonusSpellSaveDc || 0,
+			bonusSpellDamage: options.bonusSpellDamage || 0,
+			bonusSavingThrow: options.bonusSavingThrow || 0,
+			bonusSavingThrowStr: options.bonusSavingThrowStr || 0,
+			bonusSavingThrowDex: options.bonusSavingThrowDex || 0,
+			bonusSavingThrowCon: options.bonusSavingThrowCon || 0,
+			bonusSavingThrowInt: options.bonusSavingThrowInt || 0,
+			bonusSavingThrowWis: options.bonusSavingThrowWis || 0,
+			bonusSavingThrowCha: options.bonusSavingThrowCha || 0,
+			bonusAbilityCheck: options.bonusAbilityCheck || 0,
+			bonusProficiencyBonus: options.bonusProficiencyBonus || 0,
+			bonusSavingThrowConcentration: options.bonusSavingThrowConcentration || 0,
+			critThreshold: options.critThreshold || null,
+			resist: options.resist || null,
+			immune: options.immune || null,
+			vulnerable: options.vulnerable || null,
+			conditionImmune: options.conditionImmune || null,
+			modifySpeed: options.modifySpeed || null,
 			// Charges
 			charges: options.charges,
 			chargesCurrent: options.charges,
@@ -1587,12 +1675,30 @@ class CharacterSheetInventory {
 			const magicBonus = equippedArmor.bonusAc || 0;
 			const armorAC = baseAC + magicBonus;
 
+			// Get armor properties for mechanics - try stored values first, then look up
+			let dexterityMax = equippedArmor.dexterityMax;
+			let stealth = equippedArmor.stealth;
+			let strength = equippedArmor.strength;
+
+			// If properties not on stored item, look up from full item data
+			if (dexterityMax === undefined || stealth === undefined || strength === undefined) {
+				const armorData = this._allItems.find(i => i.name === equippedArmor.name && i.source === equippedArmor.source);
+				if (armorData) {
+					if (dexterityMax === undefined) dexterityMax = armorData.dexterityMax ?? null;
+					if (stealth === undefined) stealth = armorData.stealth || false;
+					if (strength === undefined) strength = armorData.strength || null;
+				}
+			}
+
 			// Update state with armor info
 			this._state.setArmor({
 				ac: armorAC,
 				type: armorType,
 				name: equippedArmor.name,
 				magicBonus: magicBonus,
+				dexterityMax: dexterityMax ?? null,
+				stealth: stealth || false,
+				strength: strength || null,
 			});
 		} else {
 			// No armor equipped
@@ -1640,16 +1746,279 @@ class CharacterSheetInventory {
 	 */
 	_updateItemBonuses (items) {
 		// Calculate various bonuses
+		// NOTE: AC bonuses are NOT included here — they are handled separately
+		// by setItemAcBonus() (which properly excludes armor/shield to avoid double-counting)
 		const bonuses = {
-			ac: this._calculateItemBonuses("bonusAc", items, []),
 			savingThrow: this._calculateItemBonuses("bonusSavingThrow", items, []),
 			spellAttack: this._calculateItemBonuses("bonusSpellAttack", items, []),
 			spellSaveDc: this._calculateItemBonuses("bonusSpellSaveDc", items, []),
 			abilityCheck: this._calculateItemBonuses("bonusAbilityCheck", items, []),
+			// Per-ability saving throw bonuses
+			savingThrowStr: this._calculateItemBonuses("bonusSavingThrowStr", items, []),
+			savingThrowDex: this._calculateItemBonuses("bonusSavingThrowDex", items, []),
+			savingThrowCon: this._calculateItemBonuses("bonusSavingThrowCon", items, []),
+			savingThrowInt: this._calculateItemBonuses("bonusSavingThrowInt", items, []),
+			savingThrowWis: this._calculateItemBonuses("bonusSavingThrowWis", items, []),
+			savingThrowCha: this._calculateItemBonuses("bonusSavingThrowCha", items, []),
+			// Additional bonus types
+			proficiencyBonus: this._calculateItemBonuses("bonusProficiencyBonus", items, []),
+			savingThrowConcentration: this._calculateItemBonuses("bonusSavingThrowConcentration", items, []),
+			spellDamage: this._calculateItemBonuses("bonusSpellDamage", items, []),
 		};
 
-		// Store bonuses in state for use by other modules
+		// Calculate the lowest critThreshold from equipped/attuned items (if any)
+		const critItems = items.filter(item => {
+			if (!item.equipped) return false;
+			if (item.requiresAttunement && !item.attuned) return false;
+			return item.critThreshold && item.critThreshold < 20;
+		});
+		if (critItems.length > 0) {
+			bonuses.critThreshold = Math.min(...critItems.map(i => i.critThreshold));
+		}
+
+		// Collect speed modifications from equipped/attuned items
+		const speedMods = this._getItemSpeedModifications(items);
+		if (speedMods) {
+			bonuses.speedBonus = speedMods.bonus || {};
+			bonuses.speedStatic = speedMods.static || {};
+			if (Object.keys(speedMods.equal || {}).length) bonuses.speedEqual = speedMods.equal;
+			if (Object.keys(speedMods.multiply || {}).length) bonuses.speedMultiply = speedMods.multiply;
+		}
+
+		// Collect ability score overrides from equipped/attuned items
+		const abilityOverrides = this._getItemAbilityOverrides(items);
+
+		// Collect item-granted spells from equipped/attuned items
+		const itemSpells = this._getItemGrantedSpells(items);
+
+		// Collect defensive properties from equipped/attuned items
+		const defenses = this._getItemDefenses(items);
+
+		// Store bonuses and defenses in state for use by other modules
 		this._state.setItemBonuses(bonuses);
+		this._state.setItemDefenses(defenses);
+		this._state.setItemAbilityOverrides(abilityOverrides);
+		this._state.setItemGrantedSpells(itemSpells);
+	}
+
+	/**
+	 * Collect defensive properties (resist, immune, vulnerable, conditionImmune) from equipped/attuned items
+	 * @param {Array} items - All inventory items
+	 * @returns {object} { resist: [{type, source}], immune: [{type, source}], vulnerable: [{type, source}], conditionImmune: [{type, source}] }
+	 */
+	_getItemDefenses (items) {
+		const defenses = {resist: [], immune: [], vulnerable: [], conditionImmune: []};
+
+		for (const item of items) {
+			if (!item.equipped) continue;
+			if (item.requiresAttunement && !item.attuned) continue;
+
+			const source = item.name || "Magic Item";
+
+			// Each can be an array of strings or an array of objects with type/note
+			if (item.resist?.length) {
+				for (const r of item.resist) {
+					const type = typeof r === "string" ? r : r?.resist || r?.type || r;
+					if (type && typeof type === "string") defenses.resist.push({type, source});
+				}
+			}
+			if (item.immune?.length) {
+				for (const i of item.immune) {
+					const type = typeof i === "string" ? i : i?.immune || i?.type || i;
+					if (type && typeof type === "string") defenses.immune.push({type, source});
+				}
+			}
+			if (item.vulnerable?.length) {
+				for (const v of item.vulnerable) {
+					const type = typeof v === "string" ? v : v?.vulnerable || v?.type || v;
+					if (type && typeof type === "string") defenses.vulnerable.push({type, source});
+				}
+			}
+			if (item.conditionImmune?.length) {
+				for (const c of item.conditionImmune) {
+					const type = typeof c === "string" ? c : c?.conditionImmune || c?.type || c;
+					if (type && typeof type === "string") defenses.conditionImmune.push({type, source});
+				}
+			}
+		}
+
+		return defenses;
+	}
+
+	/**
+	 * Collect speed modifications from equipped/attuned items
+	 * Items use the modifySpeed schema: { bonus: {walk: N, fly: N, ...}, static: {fly: N, ...} }
+	 * @param {Array} items - All inventory items
+	 * @returns {object|null} Merged speed modifications or null if none
+	 */
+	_getItemSpeedModifications (items) {
+		const bonus = {}; // Additive speed bonuses
+		const staticSpeeds = {}; // Static speed grants (e.g., fly 30)
+		const equal = {}; // Equal-to speeds (e.g., fly = walk)
+		const multiply = {}; // Speed multipliers (e.g., walk x2)
+
+		let hasAny = false;
+
+		for (const item of items) {
+			if (!item.equipped) continue;
+			if (item.requiresAttunement && !item.attuned) continue;
+			if (!item.modifySpeed) continue;
+
+			hasAny = true;
+
+			// Process bonus speeds (additive)
+			if (item.modifySpeed.bonus) {
+				for (const [type, value] of Object.entries(item.modifySpeed.bonus)) {
+					bonus[type] = (bonus[type] || 0) + value;
+				}
+			}
+
+			// Process static speeds (take the highest)
+			if (item.modifySpeed.static) {
+				for (const [type, value] of Object.entries(item.modifySpeed.static)) {
+					staticSpeeds[type] = Math.max(staticSpeeds[type] || 0, value);
+				}
+			}
+
+			// Process equal speeds (e.g., fly = walk) — store target type
+			if (item.modifySpeed.equal) {
+				for (const [type, equalTo] of Object.entries(item.modifySpeed.equal)) {
+					equal[type] = equalTo; // e.g., {fly: "walk", swim: "walk"}
+				}
+			}
+
+			// Process multiply speeds (e.g., walk x2) — take highest multiplier
+			if (item.modifySpeed.multiply) {
+				for (const [type, value] of Object.entries(item.modifySpeed.multiply)) {
+					multiply[type] = Math.max(multiply[type] || 1, value);
+				}
+			}
+		}
+
+		return hasAny ? {bonus, static: staticSpeeds, equal, multiply} : null;
+	}
+
+	/**
+	 * Collect ability score overrides from equipped/attuned items
+	 * Handles: ability.static (set score to X), direct bonuses (ability.str = +2), ability.choose
+	 * @param {Array} items - All inventory items
+	 * @returns {object} { static: {str: 19, ...}, bonus: {con: 2, ...} }
+	 */
+	_getItemAbilityOverrides (items) {
+		const staticOverrides = {}; // "Set score to X" (take highest per ability)
+		const bonuses = {}; // Additive bonuses (stack)
+
+		for (const item of items) {
+			if (!item.equipped) continue;
+			if (item.requiresAttunement && !item.attuned) continue;
+			if (!item.ability) continue;
+
+			// Handle static overrides: ability.static = {str: 19}
+			if (item.ability.static) {
+				for (const [ab, value] of Object.entries(item.ability.static)) {
+					staticOverrides[ab] = Math.max(staticOverrides[ab] || 0, value);
+				}
+			}
+
+			// Handle direct bonuses: ability.str = 2 (top-level ability keys)
+			const abilityKeys = ["str", "dex", "con", "int", "wis", "cha"];
+			for (const ab of abilityKeys) {
+				if (item.ability[ab] && !item.ability.static) {
+					bonuses[ab] = (bonuses[ab] || 0) + item.ability[ab];
+				}
+			}
+		}
+
+		const hasAny = Object.keys(staticOverrides).length > 0 || Object.keys(bonuses).length > 0;
+		return hasAny ? {static: staticOverrides, bonus: bonuses} : null;
+	}
+
+	/**
+	 * Collect spells granted by equipped/attuned items
+	 * Handles both array format and object format (with daily/charges/will/etc.)
+	 * @param {Array} items - All inventory items
+	 * @returns {Array} Array of { name, source (item name), usageType, usesMax, usesCurrent, chargesCost, itemId }
+	 */
+	_getItemGrantedSpells (items) {
+		const spells = [];
+
+		for (const item of items) {
+			if (!item.equipped) continue;
+			if (item.requiresAttunement && !item.attuned) continue;
+			if (!item.attachedSpells) continue;
+
+			const source = item.name || "Magic Item";
+			const itemId = item.id;
+
+			if (Array.isArray(item.attachedSpells)) {
+				// Simple array format — "other" usage type
+				for (const spellName of item.attachedSpells) {
+					spells.push({
+						name: typeof spellName === "string" ? spellName : spellName.name || String(spellName),
+						sourceItem: source,
+						itemId,
+						usageType: "other",
+					});
+				}
+			} else if (typeof item.attachedSpells === "object") {
+				// Object format with usage categories
+				const obj = item.attachedSpells;
+
+				// At-will spells
+				if (obj.will) {
+					for (const s of obj.will) {
+						spells.push({name: s, sourceItem: source, itemId, usageType: "will"});
+					}
+				}
+
+				// Ritual spells
+				if (obj.ritual) {
+					for (const s of obj.ritual) {
+						spells.push({name: s, sourceItem: source, itemId, usageType: "ritual"});
+					}
+				}
+
+				// Daily spells: { "1": ["spell1"], "1e": ["spell2", "spell3"] }
+				if (obj.daily) {
+					for (const [uses, spellList] of Object.entries(obj.daily)) {
+						const isEach = uses.endsWith("e");
+						const maxUses = parseInt(isEach ? uses.slice(0, -1) : uses);
+						for (const s of spellList) {
+							spells.push({name: s, sourceItem: source, itemId, usageType: "daily", usesMax: maxUses, isEach});
+						}
+					}
+				}
+
+				// Rest-based spells
+				if (obj.rest) {
+					for (const [uses, spellList] of Object.entries(obj.rest)) {
+						const isEach = uses.endsWith("e");
+						const maxUses = parseInt(isEach ? uses.slice(0, -1) : uses);
+						for (const s of spellList) {
+							spells.push({name: s, sourceItem: source, itemId, usageType: "rest", usesMax: maxUses, isEach});
+						}
+					}
+				}
+
+				// Charge-cost spells: { "3": ["spell1"] } — costs 3 charges
+				if (obj.charges) {
+					for (const [cost, spellList] of Object.entries(obj.charges)) {
+						for (const s of spellList) {
+							spells.push({name: s, sourceItem: source, itemId, usageType: "charges", chargesCost: parseInt(cost)});
+						}
+					}
+				}
+
+				// Other spells
+				if (obj.other) {
+					for (const s of obj.other) {
+						spells.push({name: s, sourceItem: source, itemId, usageType: "other"});
+					}
+				}
+			}
+		}
+
+		return spells;
 	}
 
 	// #region Rendering
@@ -1906,7 +2275,12 @@ class CharacterSheetInventory {
 		// Items that can be equipped: weapons, armor, gear, wondrous items,
 		// items requiring attunement, and items with any bonus properties
 		const hasBonus = item.bonusAc || item.bonusSavingThrow || item.bonusSpellAttack
-			|| item.bonusSpellSaveDc || item.bonusAbilityCheck || item.bonusWeapon;
+			|| item.bonusSpellSaveDc || item.bonusAbilityCheck || item.bonusWeapon
+			|| item.bonusWeaponAttack || item.bonusWeaponDamage || item.bonusProficiencyBonus
+			|| item.bonusSavingThrowConcentration || item.bonusSpellDamage
+			|| item.bonusWeaponCritDamage || item.critThreshold
+			|| item.resist?.length || item.immune?.length || item.vulnerable?.length
+			|| item.conditionImmune?.length || item.modifySpeed;
 		const canEquip = item.weapon || item.armor || item.shield || item.type === "gear"
 			|| item.type === "wondrous" || item.requiresAttunement || hasBonus;
 		const canAttune = item.requiresAttunement;
@@ -2276,11 +2650,28 @@ class CharacterSheetInventory {
 			const baseAC = equippedArmor.ac || 10;
 			const magicBonus = equippedArmor.bonusAc || 0;
 
+			// Get armor properties - try stored values first, then look up
+			let dexterityMax = equippedArmor.dexterityMax;
+			let stealth = equippedArmor.stealth;
+			let strength = equippedArmor.strength;
+
+			if (dexterityMax === undefined || stealth === undefined || strength === undefined) {
+				const armorData = this._allItems.find(i => i.name === equippedArmor.name && i.source === equippedArmor.source);
+				if (armorData) {
+					if (dexterityMax === undefined) dexterityMax = armorData.dexterityMax ?? null;
+					if (stealth === undefined) stealth = armorData.stealth || false;
+					if (strength === undefined) strength = armorData.strength || null;
+				}
+			}
+
 			this._state.setArmor({
 				ac: baseAC + magicBonus,
 				type: armorType,
 				name: equippedArmor.name,
 				magicBonus: magicBonus,
+				dexterityMax: dexterityMax ?? null,
+				stealth: stealth || false,
+				strength: strength || null,
 			});
 		} else {
 			this._state.setArmor(null);

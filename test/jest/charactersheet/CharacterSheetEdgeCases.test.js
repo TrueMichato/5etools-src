@@ -328,7 +328,7 @@ describe("Edge Cases and Stress Tests", () => {
 		it("should stack magic item AC bonuses", () => {
 			state.setAbilityBase("dex", 14); // +2
 			state.setArmor({name: "Leather", ac: 11, type: "light", source: "PHB"});
-			state.setItemBonus("ac", 2); // Ring of Protection or similar
+			state.setItemAcBonus(2); // Ring of Protection or similar
 
 			// Light armor (11) + DEX (+2) + item (+2) = 15
 			expect(state.getAC()).toBe(15);

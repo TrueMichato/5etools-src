@@ -3047,12 +3047,43 @@ class CharacterSheetState {
 
 			// Item bonuses from equipped/attuned magic items
 			itemBonuses: {
-				ac: 0,
 				savingThrow: 0,
 				spellAttack: 0,
 				spellSaveDc: 0,
 				abilityCheck: 0,
+				// Per-ability saving throw bonuses
+				savingThrowStr: 0, savingThrowDex: 0, savingThrowCon: 0,
+				savingThrowInt: 0, savingThrowWis: 0, savingThrowCha: 0,
+				// Additional bonus types
+				proficiencyBonus: 0,
+				savingThrowConcentration: 0,
+				spellDamage: 0,
+				// critThreshold: null (only set when items provide it)
+				// Class ability save DC bonuses
+				kiSaveDc: 0, // Dragonhide Belt, etc.
 			},
+
+			// Defensive properties from equipped/attuned magic items
+			itemDefenses: {
+				resist: [],
+				immune: [],
+				vulnerable: [],
+				conditionImmune: [],
+			},
+
+			// Mental protection from items (Ring of Mind Shielding, etc.)
+			itemMentalProtection: {
+				immuneThoughtReading: false,
+				immuneLieDetection: false,
+				immuneTelepathy: false, // Must allow telepathic contact
+				immuneAlignmentDetection: false,
+			},
+
+			// Ability score overrides from magic items (e.g., Gauntlets of Ogre Power)
+			itemAbilityOverrides: null, // {static: {str: 19}, bonus: {con: 2}}
+
+			// Spells granted by magic items (e.g., Staff of the Magi)
+			itemGrantedSpells: [], // [{name, sourceItem, itemId, usageType, usesMax, ...}]
 
 			// Speed
 			speed: {
@@ -3970,7 +4001,8 @@ class CharacterSheetState {
 	getProficiencyBonus () {
 		const level = Math.max(1, this.getTotalLevel()); // Treat level 0 as level 1 for prof bonus
 		const baseProfBonus = Math.floor((level - 1) / 4) + 2;
-		return baseProfBonus + (this._data.customModifiers.proficiencyBonus || 0);
+		const itemBonus = this._data.itemBonuses?.proficiencyBonus || 0;
+		return baseProfBonus + (this._data.customModifiers.proficiencyBonus || 0) + itemBonus;
 	}
 
 	/**
@@ -4369,7 +4401,20 @@ class CharacterSheetState {
 		const racialBonus = this._data.abilityBonuses[ability] || 0;
 		const featureBonus = this._data.customModifiers.abilityScores?.[ability] || 0;
 		const directBonus = this._data.directAbilityBonuses?.[ability] || 0;
-		return base + racialBonus + featureBonus + directBonus;
+		let computed = base + racialBonus + featureBonus + directBonus;
+
+		// Apply item ability bonuses (e.g., Belt of Dwarvenkind +2 CON)
+		const itemBonus = this._data.itemAbilityOverrides?.bonus?.[ability] || 0;
+		computed += itemBonus;
+
+		// Apply item static overrides (e.g., Gauntlets of Ogre Power STR = 19)
+		// Per RAW: "your score becomes X" — only applies if X is higher
+		const itemStatic = this._data.itemAbilityOverrides?.static?.[ability];
+		if (itemStatic && itemStatic > computed) {
+			computed = itemStatic;
+		}
+
+		return computed;
 	}
 
 	// Alias for compatibility
@@ -4919,11 +4964,14 @@ class CharacterSheetState {
 		// Add item bonuses (general saving throw bonus from magic items)
 		// Check both naming conventions: "savingThrow" and "saves"
 		const itemBonus = this._data.itemBonuses?.savingThrow || this._data.itemBonuses?.saves || 0;
+		// Add per-ability item bonus (e.g., Ring of Protection for STR saves only)
+		const abilityKey = `savingThrow${ability.charAt(0).toUpperCase() + ability.slice(1)}`;
+		const perAbilityItemBonus = this._data.itemBonuses?.[abilityKey] || 0;
 		// Add bonus from active states (e.g., Bless spell, Paladin's Aura)
 		const stateBonus = this.getSaveBonusFromStates(ability);
 		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
 		const exhaustionPenalty = this._getExhaustionD20Penalty();
-		return mod + prof + custom + itemBonus + stateBonus - exhaustionPenalty;
+		return mod + prof + custom + itemBonus + perAbilityItemBonus + stateBonus - exhaustionPenalty;
 	}
 
 	// Alias for test compatibility
@@ -5246,7 +5294,9 @@ class CharacterSheetState {
 			if (this._data.ac.armor.type === "light") {
 				ac += dexMod;
 			} else if (this._data.ac.armor.type === "medium") {
-				ac += Math.min(2, dexMod);
+				// Medium armor caps DEX bonus (default +2, but can vary)
+				const maxDex = this._getMediumArmorMaxDex();
+				ac += Math.min(maxDex, dexMod);
 			}
 			// Heavy armor: no DEX bonus
 
@@ -5286,10 +5336,8 @@ class CharacterSheetState {
 		}
 
 		// Bonuses from other equipped magic items (e.g., Cloak of Protection, Ring of Protection)
-		// Note: Armor and shield bonuses are already included above, this is for OTHER items
-		// Check both the legacy ac.itemBonus and the itemBonuses.ac paths
+		// Note: Armor and shield bonuses are already included above, this is for OTHER items only
 		ac += this._data.ac.itemBonus || 0;
-		ac += this._data.itemBonuses?.ac || 0;
 
 		// Custom bonuses
 		ac += this._data.customModifiers.ac || 0;
@@ -5576,6 +5624,147 @@ class CharacterSheetState {
 		if (!this._data.itemBonuses) this._data.itemBonuses = {};
 		this._data.itemBonuses[type] = value || 0;
 	}
+
+	/**
+	 * Recalculate aggregated bonuses from all equipped items
+	 * Called when items are added, removed, equipped, or unequipped
+	 */
+	_recalculateItemBonuses () {
+		if (!this._data.itemBonuses) this._data.itemBonuses = {};
+
+		// Aggregate Ki save DC bonus (take highest from all items)
+		let maxKiDcBonus = 0;
+		for (const invItem of this._data.inventory) {
+			const bonus = invItem.item?.kiSaveDcBonus || 0;
+			if (bonus > maxKiDcBonus) maxKiDcBonus = bonus;
+		}
+		this._data.itemBonuses.kiSaveDc = maxKiDcBonus;
+	}
+
+	// Defensive properties from equipped/attuned magic items
+	setItemDefenses (defenses) {
+		this._data.itemDefenses = defenses || {resist: [], immune: [], vulnerable: [], conditionImmune: []};
+	}
+
+	getItemDefenses () {
+		return this._data.itemDefenses || {resist: [], immune: [], vulnerable: [], conditionImmune: []};
+	}
+
+	// Ability score overrides from equipped/attuned magic items
+	setItemAbilityOverrides (overrides) {
+		this._data.itemAbilityOverrides = overrides;
+	}
+
+	getItemAbilityOverrides () {
+		return this._data.itemAbilityOverrides;
+	}
+
+	// Spells granted by equipped/attuned magic items
+	setItemGrantedSpells (spells) {
+		this._data.itemGrantedSpells = spells || [];
+	}
+
+	getItemGrantedSpells () {
+		return this._data.itemGrantedSpells || [];
+	}
+
+	/**
+	 * Get the maximum DEX bonus for medium armor
+	 * Base is 2, but can be modified by:
+	 * - The armor's dexterityMax property (null = unlimited, like mithral armor)
+	 * - Medium Armor Master feat (increases to +3)
+	 * @returns {number} Maximum DEX bonus to AC in medium armor
+	 */
+	_getMediumArmorMaxDex () {
+		const armor = this._data.ac.armor;
+
+		// If armor explicitly sets dexterityMax to null, that means unlimited (mithral)
+		if (armor?.dexterityMax === null) {
+			return 99; // Effectively unlimited
+		}
+
+		// Start with armor's dexterityMax if set, otherwise default to 2
+		let maxDex = (armor?.dexterityMax !== undefined)
+			? armor.dexterityMax
+			: 2;
+
+		// Check for Medium Armor Master feat modifier (ac:mediumArmorMaxDex)
+		// The feat sets max DEX to 3
+		const featModifiers = this._data.namedModifiers?.filter(m =>
+			m.enabled && m.type === "ac:mediumArmorMaxDex",
+		) || [];
+		if (featModifiers.length > 0) {
+			// Use the highest value from modifiers
+			maxDex = Math.max(maxDex, ...featModifiers.map(m => m.value || 3));
+		}
+
+		return maxDex;
+	}
+
+	/**
+	 * Check if the character has disadvantage on Stealth checks from armor
+	 * @returns {boolean} True if armor imposes stealth disadvantage
+	 */
+	hasArmorStealthDisadvantage () {
+		const armor = this._data.ac.armor;
+		if (!armor || !armor.stealth) return false;
+
+		// Check for Medium Armor Master (removes stealth disadvantage from medium armor)
+		if (armor.type === "medium") {
+			const noStealthDisadv = this._data.namedModifiers?.some(m =>
+				m.enabled && m.type === "armor:medium:noStealthDisadvantage",
+			);
+			if (noStealthDisadv) return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Get speed penalty from armor STR requirement not being met
+	 * @returns {number} Speed penalty in feet (0 or -10)
+	 */
+	getArmorStrengthPenalty () {
+		const armor = this._data.ac.armor;
+		if (!armor || !armor.strength) return 0;
+
+		// Parse strength requirement (e.g., "15" or 15)
+		const requiredStr = typeof armor.strength === "string"
+			? parseInt(armor.strength)
+			: armor.strength;
+
+		if (isNaN(requiredStr)) return 0;
+
+		// Check character's STR score
+		const charStr = this.getAbilityScore("str");
+		if (charStr < requiredStr) {
+			return -10; // Per PHB rules, speed reduced by 10 ft
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Get armor strength requirement info
+	 * @returns {object|null} {required: number, current: number, met: boolean} or null if no requirement
+	 */
+	getArmorStrengthRequirement () {
+		const armor = this._data.ac.armor;
+		if (!armor || !armor.strength) return null;
+
+		const required = typeof armor.strength === "string"
+			? parseInt(armor.strength)
+			: armor.strength;
+
+		if (isNaN(required)) return null;
+
+		const current = this.getAbilityScore("str");
+		return {
+			required,
+			current,
+			met: current >= required,
+		};
+	}
 	// #endregion
 
 	// #region Speed
@@ -5613,13 +5802,20 @@ class CharacterSheetState {
 		// Apply condition-based speed multiplier (Grappled/Restrained → 0, Slowed → ×0.5)
 		const speedMultiplier = this.getSpeedMultiplierFromConditions();
 
+		// Item speed bonuses from equipped/attuned magic items (e.g., Boots of Speed)
+		const itemSpeedBonus = this._data.itemBonuses?.speedBonus || {};
+		const itemSpeedStatic = this._data.itemBonuses?.speedStatic || {};
+		const itemSpeedEqual = this._data.itemBonuses?.speedEqual || {};
+		const itemSpeedMultiply = this._data.itemBonuses?.speedMultiply || {};
+
 		// Otherwise return the formatted string for display
 		const speedMods = this._data.customModifiers.speed || {walk: 0, fly: 0, swim: 0, climb: 0, burrow: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
 		const unarmoredBonus = this.getUnarmoredMovementBonus();
-		const rawWalk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
+		const rawWalk = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus + (itemSpeedBonus.walk || 0) + (itemSpeedBonus["*"] || 0);
+		const walkMultiplier = (itemSpeedMultiply.walk || 1) * (itemSpeedMultiply["*"] || 1);
 		const exhaustionSpeedPenalty = this._getExhaustionSpeedPenalty();
-		const walk = Math.max(0, Math.floor(rawWalk * speedMultiplier) - exhaustionSpeedPenalty);
+		const walk = Math.max(0, Math.floor(rawWalk * walkMultiplier * speedMultiplier) - exhaustionSpeedPenalty);
 		const parts = [`${walk} ft.`];
 
 		// Check for "equal to walk" modifiers for each speed type
@@ -5639,10 +5835,36 @@ class CharacterSheetState {
 		const baseClimb = this._data.speed.climb || 0;
 		const baseBurrow = this._data.speed.burrow || 0;
 
-		const fly = baseFly > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("fly", baseFly, (speedMods.fly || 0) + this.getSpeedBonusFromStates("fly")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
-		const swim = baseSwim > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("swim", baseSwim, (speedMods.swim || 0) + this.getSpeedBonusFromStates("swim")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
-		const climb = baseClimb > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("climb", baseClimb, (speedMods.climb || 0) + this.getSpeedBonusFromStates("climb")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
-		const burrow = baseBurrow > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("burrow", baseBurrow, (speedMods.burrow || 0) + this.getSpeedBonusFromStates("burrow")) * speedMultiplier) - exhaustionSpeedPenalty) : 0;
+		// Apply item "equal to" speed grants (e.g., Winged Boots: fly = walk speed)
+		// These grant a movement type equal to another type's speed
+		const applyEqual = (speedType) => {
+			if (itemSpeedEqual[speedType]) {
+				const equalTo = itemSpeedEqual[speedType];
+				const equalToSpeed = equalTo === "walk" ? rawWalk : (this._data.speed[equalTo] || 0);
+				return equalToSpeed;
+			}
+			return 0;
+		};
+
+		// Apply item static speed overrides (e.g., Boots of Elvenkind granting fly 30)
+		let effectiveFly = itemSpeedStatic.fly ? Math.max(baseFly, itemSpeedStatic.fly) : baseFly;
+		let effectiveSwim = itemSpeedStatic.swim ? Math.max(baseSwim, itemSpeedStatic.swim) : baseSwim;
+		let effectiveClimb = itemSpeedStatic.climb ? Math.max(baseClimb, itemSpeedStatic.climb) : baseClimb;
+		let effectiveBurrow = itemSpeedStatic.burrow ? Math.max(baseBurrow, itemSpeedStatic.burrow) : baseBurrow;
+
+		// Apply equal-to grants (take highest between existing and equal-to speed)
+		effectiveFly = Math.max(effectiveFly, applyEqual("fly"));
+		effectiveSwim = Math.max(effectiveSwim, applyEqual("swim"));
+		effectiveClimb = Math.max(effectiveClimb, applyEqual("climb"));
+		effectiveBurrow = Math.max(effectiveBurrow, applyEqual("burrow"));
+
+		// Compute each movement type with per-type multipliers
+		const getTypeMultiplier = (speedType) => (itemSpeedMultiply[speedType] || 1) * (itemSpeedMultiply["*"] || 1);
+
+		const fly = effectiveFly > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("fly", effectiveFly, (speedMods.fly || 0) + this.getSpeedBonusFromStates("fly") + (itemSpeedBonus.fly || 0) + (itemSpeedBonus["*"] || 0)) * getTypeMultiplier("fly") * speedMultiplier) - exhaustionSpeedPenalty) : 0;
+		const swim = effectiveSwim > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("swim", effectiveSwim, (speedMods.swim || 0) + this.getSpeedBonusFromStates("swim") + (itemSpeedBonus.swim || 0) + (itemSpeedBonus["*"] || 0)) * getTypeMultiplier("swim") * speedMultiplier) - exhaustionSpeedPenalty) : 0;
+		const climb = effectiveClimb > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("climb", effectiveClimb, (speedMods.climb || 0) + this.getSpeedBonusFromStates("climb") + (itemSpeedBonus.climb || 0) + (itemSpeedBonus["*"] || 0)) * getTypeMultiplier("climb") * speedMultiplier) - exhaustionSpeedPenalty) : 0;
+		const burrow = effectiveBurrow > 0 ? Math.max(0, Math.floor(getSpeedWithEqualToWalk("burrow", effectiveBurrow, (speedMods.burrow || 0) + this.getSpeedBonusFromStates("burrow") + (itemSpeedBonus.burrow || 0) + (itemSpeedBonus["*"] || 0)) * getTypeMultiplier("burrow") * speedMultiplier) - exhaustionSpeedPenalty) : 0;
 
 		if (fly > 0) parts.push(`fly ${fly} ft.`);
 		if (swim > 0) parts.push(`swim ${swim} ft.`);
@@ -5660,14 +5882,31 @@ class CharacterSheetState {
 		const speedMods = this._data.customModifiers.speed || {walk: 0};
 		const stateBonus = this.getSpeedBonusFromStates();
 		const unarmoredBonus = this.getUnarmoredMovementBonus();
-		const raw = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus;
+		const armorPenalty = this.getArmorStrengthPenalty(); // -10 if STR requirement not met
+		const raw = (this._data.speed.walk || 30) + (speedMods.walk || 0) + stateBonus + unarmoredBonus + armorPenalty;
 		return Math.max(0, Math.floor(raw * this.getSpeedMultiplierFromConditions()) - this._getExhaustionSpeedPenalty());
 	}
 
 	getSpeedByType (type) {
 		const speedMods = this._data.customModifiers.speed || {};
+		const itemSpeedBonus = this._data.itemBonuses?.speedBonus || {};
+		const itemSpeedStatic = this._data.itemBonuses?.speedStatic || {};
+		const itemSpeedEqual = this._data.itemBonuses?.speedEqual || {};
+		const itemSpeedMultiply = this._data.itemBonuses?.speedMultiply || {};
+		const armorPenalty = this.getArmorStrengthPenalty(); // -10 if STR requirement not met
+
 		let base = this._data.speed[type] || 0;
-		const bonus = (speedMods[type] || 0) + this.getSpeedBonusFromStates(type);
+		// Apply static speed from items (e.g., Winged Boots granting fly 30)
+		if (itemSpeedStatic[type]) base = Math.max(base, itemSpeedStatic[type]);
+
+		// Apply equal-to from items (e.g., Mariner's Armor: swim = walk)
+		if (itemSpeedEqual[type]) {
+			const equalTo = itemSpeedEqual[type];
+			const equalToSpeed = equalTo === "walk" ? this.getWalkSpeed() : (this._data.speed[equalTo] || 0);
+			base = Math.max(base, equalToSpeed);
+		}
+
+		const bonus = (speedMods[type] || 0) + this.getSpeedBonusFromStates(type) + (itemSpeedBonus[type] || 0) + (itemSpeedBonus["*"] || 0);
 
 		// Check for "equal to walk" modifiers (e.g., "swimming speed equal to your walking speed")
 		const equalToWalkMod = this._data.namedModifiers?.find(m =>
@@ -5684,7 +5923,11 @@ class CharacterSheetState {
 			return 0;
 		}
 
-		return Math.max(0, Math.floor((base + bonus) * this.getSpeedMultiplierFromConditions()) - this._getExhaustionSpeedPenalty());
+		// Apply item speed multiplier (e.g., Boots of Speed x2)
+		const typeMultiplier = (itemSpeedMultiply[type] || 1) * (itemSpeedMultiply["*"] || 1);
+
+		// Armor strength penalty applies to all movement types
+		return Math.max(0, Math.floor((base + bonus + armorPenalty) * typeMultiplier * this.getSpeedMultiplierFromConditions()) - this._getExhaustionSpeedPenalty());
 	}
 	// #endregion
 
@@ -5726,7 +5969,25 @@ class CharacterSheetState {
 	 * @returns {boolean} True if proficient
 	 */
 	hasArmorProficiency (armor) {
-		return this._data.armorProficiencies.some(a => a.toLowerCase() === armor.toLowerCase());
+		// Check normal proficiencies
+		if (this._data.armorProficiencies.some(a => a.toLowerCase() === armor.toLowerCase())) {
+			return true;
+		}
+
+		// Check for proficiency granted by equipped items (e.g., Dwarven Plate)
+		const armorLower = armor.toLowerCase();
+		return this.getItems().some(item => {
+			if (!item.grantsProficiency) return false;
+			if (!item.equipped) return false;
+			// Item grants proficiency in its own armor type
+			if (item.armorType?.toLowerCase() === armorLower) return true;
+			// Or check by armor type category
+			if (armorLower === "heavy" && item.armorType === "heavy") return true;
+			if (armorLower === "medium" && item.armorType === "medium") return true;
+			if (armorLower === "light" && item.armorType === "light") return true;
+			if (armorLower === "shields" && item.shield) return true;
+			return false;
+		});
 	}
 
 	/**
@@ -5736,7 +5997,49 @@ class CharacterSheetState {
 	 */
 	hasWeaponProficiency (weapon) {
 		const weaponLower = weapon.toLowerCase();
-		return this._data.weaponProficiencies.some(w => w.toLowerCase() === weaponLower);
+		// Check normal proficiencies
+		if (this._data.weaponProficiencies.some(w => w.toLowerCase() === weaponLower)) {
+			return true;
+		}
+
+		// Check for proficiency granted by equipped/attuned items (e.g., Sun Blade)
+		return this.getItems().some(item => {
+			if (!item.grantsProficiency) return false;
+			if (!item.equipped) return false;
+			// If item requires attunement, must be attuned
+			if (item.requiresAttunement && !item.attuned) return false;
+			// Item grants proficiency in its own weapon type
+			const itemName = item.name?.toLowerCase();
+			if (itemName === weaponLower) return true;
+			// Check for weapon category matches
+			if (item.weaponCategory?.toLowerCase() === weaponLower) return true;
+			return false;
+		});
+	}
+
+	/**
+	 * Get proficiencies granted by equipped/attuned items
+	 * @returns {object} {armor: [], weapons: []}
+	 */
+	getItemGrantedProficiencies () {
+		const armor = [];
+		const weapons = [];
+
+		this.getItems().forEach(item => {
+			if (!item.grantsProficiency || !item.equipped) return;
+			// If requires attunement, must be attuned
+			if (item.requiresAttunement && !item.attuned) return;
+
+			if (item.armor && item.armorType) {
+				armor.push(item.armorType);
+			} else if (item.shield) {
+				armor.push("shields");
+			} else if (item.weapon) {
+				weapons.push(item.name);
+			}
+		});
+
+		return {armor, weapons};
 	}
 
 	addArmorProficiency (armor) {
@@ -7501,8 +7804,9 @@ class CharacterSheetState {
 					calculations.kiPoints = kiPoints;
 					calculations.focusPoints = kiPoints; // XPHB name
 
-					// Ki/Focus Save DC: 8 + prof + WIS
-					const kiDc = 8 + profBonus + this.getAbilityMod("wis") - exhaustionPenalty;
+					// Ki/Focus Save DC: 8 + prof + WIS + item bonuses
+					const kiItemBonus = this._data.itemBonuses?.kiSaveDc || 0;
+					const kiDc = 8 + profBonus + this.getAbilityMod("wis") + kiItemBonus - exhaustionPenalty;
 					calculations.kiSaveDc = kiDc;
 					calculations.focusSaveDc = kiDc; // 2024 PHB name
 
@@ -15077,6 +15381,58 @@ class CharacterSheetState {
 		}));
 	}
 
+	/**
+	 * Get all cursed items in inventory
+	 * @param {object} options - Options
+	 * @param {boolean} options.equippedOnly - Only return equipped cursed items
+	 * @param {boolean} options.attunedOnly - Only return attuned cursed items
+	 * @returns {Array} Cursed items
+	 */
+	getCursedItems (options = {}) {
+		return this.getItems().filter(item => {
+			if (!item.curse) return false;
+			if (options.equippedOnly && !item.equipped) return false;
+			if (options.attunedOnly && !item.attuned) return false;
+			return true;
+		});
+	}
+
+	/**
+	 * Check if character has any active (equipped/attuned) cursed items
+	 * @returns {boolean}
+	 */
+	hasActiveCursedItem () {
+		return this.getItems().some(item =>
+			item.curse && (item.equipped || item.attuned),
+		);
+	}
+
+	/**
+	 * Get all sentient items in inventory
+	 * @param {object} options - Options
+	 * @param {boolean} options.equippedOnly - Only return equipped sentient items
+	 * @param {boolean} options.attunedOnly - Only return attuned sentient items
+	 * @returns {Array} Sentient items
+	 */
+	getSentientItems (options = {}) {
+		return this.getItems().filter(item => {
+			if (!item.sentient) return false;
+			if (options.equippedOnly && !item.equipped) return false;
+			if (options.attunedOnly && !item.attuned) return false;
+			return true;
+		});
+	}
+
+	/**
+	 * Check if character has any active (equipped/attuned) sentient items
+	 * @returns {boolean}
+	 */
+	hasActiveSentientItem () {
+		return this.getItems().some(item =>
+			item.sentient && (item.equipped || item.attuned),
+		);
+	}
+
 	addItem (item, quantity = 1, equipped = false, attuned = false) {
 		// Handle flat item structure (from inventory module or tests)
 		// Check for any of the wrapper properties
@@ -15086,7 +15442,9 @@ class CharacterSheetState {
 			attuned = item.attuned ?? attuned;
 		}
 
-		const existing = this._data.inventory.find(
+		// Don't merge if incoming item is marked as custom
+		const isIncomingCustom = item._isCustom;
+		const existing = isIncomingCustom ? null : this._data.inventory.find(
 			i => i.item.name === item.name && i.item.source === item.source && !i.item._isCustom,
 		);
 		if (existing) {
@@ -15096,6 +15454,45 @@ class CharacterSheetState {
 			const {quantity: _q, equipped: _e, attuned: _a, ...itemProps} = item;
 			// Use provided id if present, otherwise generate one
 			const itemId = item.id || CryptUtil.uid();
+
+			// Auto-detect special item properties if not already set
+			// Vestige/Dragon tier detection from item name
+			if (itemProps.vestigeTier === undefined) {
+				itemProps.vestigeTier = this._detectVestigeTier(itemProps);
+			}
+			// Tier system type (vestige for EGW, dragon for FTD)
+			if (itemProps.itemTierType === undefined) {
+				itemProps.itemTierType = this._detectItemTierType(itemProps);
+			}
+
+			// Spell storing capacity detection
+			if (itemProps.maxSpellLevels === undefined) {
+				itemProps.maxSpellLevels = this._detectSpellStoringCapacity(itemProps);
+			}
+
+			// Ki save DC bonus detection (Dragonhide Belt)
+			if (itemProps.kiSaveDcBonus === undefined) {
+				itemProps.kiSaveDcBonus = this._detectKiSaveDcBonus(itemProps);
+			}
+
+			// Resource restoration detection
+			if (itemProps.resourceRestoration === undefined) {
+				itemProps.resourceRestoration = this._detectResourceRestoration(itemProps);
+			}
+			// Track whether restoration has been used today
+			if (itemProps.resourceRestoration && itemProps.resourceRestorationUsed === undefined) {
+				itemProps.resourceRestorationUsed = false;
+			}
+
+			// Mental protection detection (Ring of Mind Shielding)
+			if (itemProps.mentalProtection === undefined) {
+				itemProps.mentalProtection = this._detectMentalProtection(itemProps);
+			}
+
+			// Initialize arrays for complex item features
+			if (!itemProps.containedItems) itemProps.containedItems = [];
+			if (!itemProps.storedSpells) itemProps.storedSpells = [];
+
 			this._data.inventory.push({
 				id: itemId,
 				item: {...itemProps},
@@ -15103,6 +15500,9 @@ class CharacterSheetState {
 				equipped,
 				attuned,
 			});
+
+			// Update aggregated item bonuses
+			this._recalculateItemBonuses();
 
 			// If item is equipped, also set it in appropriate AC slot
 			if (equipped && item.type === "armor") {
@@ -15116,6 +15516,146 @@ class CharacterSheetState {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Detect item tier from item name (supports both EGW vestiges and FTD dragon items)
+	 * @param {object} item - The item data
+	 * @returns {string|null} tier name or null
+	 */
+	_detectVestigeTier (item) {
+		const name = item.name?.toLowerCase() || "";
+		
+		// EGW Vestiges of Divergence: Dormant → Awakened → Exalted
+		if (name.includes("(dormant)")) return "dormant";
+		if (name.includes("(awakened)")) return "awakened";
+		if (name.includes("(exalted)")) return "exalted";
+		if (item.property?.includes("Vst|EGW")) return "dormant";
+		
+		// FTD Dragon Items: Slumbering → Stirring → Wakened → Ascendant
+		if (name.includes("slumbering")) return "slumbering";
+		if (name.includes("stirring")) return "stirring";
+		if (name.includes("wakened")) return "wakened";
+		if (name.includes("ascendant")) return "ascendant";
+		
+		return null;
+	}
+
+	/**
+	 * Detect the tier system type for an item
+	 * @param {object} item - The item data
+	 * @returns {string|null} "vestige" (EGW) or "dragon" (FTD) or null
+	 */
+	_detectItemTierType (item) {
+		const name = item.name?.toLowerCase() || "";
+		
+		// EGW Vestiges
+		if (name.includes("(dormant)") || name.includes("(awakened)") || name.includes("(exalted)")) {
+			return "vestige";
+		}
+		if (item.property?.includes("Vst|EGW")) return "vestige";
+		
+		// FTD Dragon Items
+		if (name.includes("slumbering") || name.includes("stirring") ||
+			name.includes("wakened") || name.includes("ascendant")) {
+			return "dragon";
+		}
+		
+		return null;
+	}
+
+	/**
+	 * Detect Ki save DC bonus from item name (e.g., Dragonhide Belt +1/+2/+3)
+	 * @param {object} item - The item data
+	 * @returns {number} The Ki save DC bonus
+	 */
+	_detectKiSaveDcBonus (item) {
+		const name = item.name?.toLowerCase() || "";
+		if (!name.includes("dragonhide belt")) return 0;
+		
+		// Match "+1", "+2", "+3" patterns in name
+		const match = item.name?.match(/\+(\d)/);
+		if (match) return parseInt(match[1], 10);
+		
+		return 0;
+	}
+
+	/**
+	 * Detect resource restoration ability from item
+	 * @param {object} item - The item data
+	 * @returns {object|null} {type, amount, trigger, recharge} or null
+	 */
+	_detectResourceRestoration (item) {
+		const name = item.name?.toLowerCase() || "";
+		
+		// Dragonhide Belt: regain ki points equal to a roll of your Martial Arts die
+		if (name.includes("dragonhide belt")) {
+			return {
+				type: "ki",
+				amount: 1, // Simplified: martial arts die average
+				trigger: "action",
+				recharge: "dawn",
+				used: false,
+			};
+		}
+		
+		// Bloodwell Vial: regain 5 sorcery points when you roll Hit Dice
+		if (name.includes("bloodwell vial")) {
+			return {
+				type: "sorceryPoints",
+				amount: 5,
+				trigger: "hitDice", // When rolling hit dice
+				recharge: "dawn",
+				used: false,
+			};
+		}
+		
+		// Rhythm-Maker's Drum: regain one use of Bardic Inspiration
+		if (name.includes("rhythm-maker")) {
+			return {
+				type: "bardicInspiration",
+				amount: 1,
+				trigger: "action",
+				recharge: "dawn",
+				used: false,
+			};
+		}
+		
+		return null;
+	}
+
+	/**
+	 * Detect mental protection from item
+	 * @param {object} item - The item data
+	 * @returns {object|null} Mental protection flags or null
+	 */
+	_detectMentalProtection (item) {
+		const name = item.name?.toLowerCase() || "";
+		
+		// Ring of Mind Shielding
+		if (name.includes("ring of mind shielding")) {
+			return {
+				telepathyImmune: true,
+				thoughtReadingImmune: true,
+				lieDetectionImmune: true,
+				alignmentDetectionImmune: true,
+				soulTrapped: true,
+			};
+		}
+		
+		return null;
+	}
+
+	/**
+	 * Detect spell storing capacity from item
+	 * @param {object} item - The item data
+	 * @returns {number|null} Max spell levels, or null
+	 */
+	_detectSpellStoringCapacity (item) {
+		if (item.maxSpellLevels) return item.maxSpellLevels;
+		const name = item.name?.toLowerCase() || "";
+		if (name.includes("ring of spell storing")) return 5;
+		return null;
 	}
 
 	/**
@@ -15135,6 +15675,15 @@ class CharacterSheetState {
 	}
 
 	removeItem (itemId) {
+		// Remove item from any container it might be in
+		this.removeItemFromContainer(itemId);
+
+		// If item is a container, "uncontain" all its items first
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (item?.item?.containedItems?.length) {
+			item.item.containedItems = [];
+		}
+
 		this._data.inventory = this._data.inventory.filter(i => i.id !== itemId);
 	}
 
@@ -15286,6 +15835,466 @@ class CharacterSheetState {
 		return true;
 	}
 
+	// ==========================================
+	// Container System (Bag of Holding, etc.)
+	// ==========================================
+
+	/**
+	 * Put an item inside a container
+	 * @param {string} itemId - The item to put in container
+	 * @param {string} containerId - The container item ID
+	 * @returns {object} {success: boolean, error?: string}
+	 */
+	putItemInContainer (itemId, containerId) {
+		const container = this._data.inventory.find(i => i.id === containerId);
+		const item = this._data.inventory.find(i => i.id === itemId);
+
+		if (!container?.item?.containerCapacity) {
+			return {success: false, error: "Target is not a container"};
+		}
+		if (!item) {
+			return {success: false, error: "Item not found"};
+		}
+		if (itemId === containerId) {
+			return {success: false, error: "Cannot put container inside itself"};
+		}
+
+		// Check capacity
+		const capacity = this.getContainerCapacity(containerId);
+		const itemWeight = (item.item?.weight || 0) * (item.quantity || 1);
+		if (capacity.weightMax && (capacity.weightUsed + itemWeight > capacity.weightMax)) {
+			return {success: false, error: "Container is full (weight limit exceeded)"};
+		}
+
+		// Initialize containedItems array if needed
+		if (!container.item.containedItems) container.item.containedItems = [];
+
+		// Add to container
+		container.item.containedItems.push(itemId);
+		return {success: true};
+	}
+
+	/**
+	 * Remove an item from its container
+	 * @param {string} itemId - The item to remove
+	 * @returns {boolean} True if item was removed from a container
+	 */
+	removeItemFromContainer (itemId) {
+		for (const entry of this._data.inventory) {
+			if (entry.item?.containedItems?.includes(itemId)) {
+				entry.item.containedItems = entry.item.containedItems.filter(id => id !== itemId);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Get the container an item is in (if any)
+	 * @param {string} itemId - The item ID
+	 * @returns {object|null} The container inventory entry, or null
+	 */
+	getItemContainer (itemId) {
+		for (const entry of this._data.inventory) {
+			if (entry.item?.containedItems?.includes(itemId)) {
+				return entry;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Get container capacity info
+	 * @param {string} containerId - The container item ID
+	 * @returns {object} {weightMax, weightUsed, volumeMax, volumeUsed, weightless}
+	 */
+	getContainerCapacity (containerId) {
+		const container = this._data.inventory.find(i => i.id === containerId);
+		if (!container?.item?.containerCapacity) {
+			return {weightMax: 0, weightUsed: 0, volumeMax: 0, volumeUsed: 0, weightless: false};
+		}
+
+		const cap = container.item.containerCapacity;
+		const containedItems = container.item.containedItems || [];
+
+		// Calculate used weight
+		let weightUsed = 0;
+		containedItems.forEach(itemId => {
+			const item = this._data.inventory.find(i => i.id === itemId);
+			if (item) {
+				weightUsed += (item.item?.weight || 0) * (item.quantity || 1);
+			}
+		});
+
+		return {
+			weightMax: cap.weight?.[0] || null,
+			weightUsed,
+			volumeMax: cap.volume?.[0] || null,
+			volumeUsed: 0, // Volume tracking not implemented yet
+			weightless: cap.weightless || false,
+		};
+	}
+
+	/**
+	 * Get items contained in a container
+	 * @param {string} containerId - The container item ID
+	 * @returns {Array} Array of inventory entries
+	 */
+	getContainedItems (containerId) {
+		const container = this._data.inventory.find(i => i.id === containerId);
+		if (!container?.item?.containedItems?.length) return [];
+
+		return container.item.containedItems
+			.map(id => this._data.inventory.find(i => i.id === id))
+			.filter(Boolean);
+	}
+
+	/**
+	 * Check if an item is a container
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	isContainer (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		return !!item?.item?.containerCapacity;
+	}
+
+	// ==========================================
+	// Tiered Item Progression (Vestiges & Dragon Items)
+	// ==========================================
+
+	/**
+	 * Get item tier for a tiered item
+	 * @param {string} itemId - The item ID
+	 * @returns {string|null} tier name or null
+	 */
+	getVestigeTier (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		return item?.item?.vestigeTier || null;
+	}
+
+	// Alias for consistency
+	getItemTier (itemId) { return this.getVestigeTier(itemId); }
+
+	/**
+	 * Get tier system type for an item
+	 * @param {string} itemId - The item ID
+	 * @returns {string|null} "vestige" or "dragon" or null
+	 */
+	getItemTierType (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		return item?.item?.itemTierType || null;
+	}
+
+	/**
+	 * Set item tier
+	 * @param {string} itemId - The item ID
+	 * @param {string} tier - The tier to set
+	 * @returns {boolean} True if set successfully
+	 */
+	setVestigeTier (itemId, tier) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item?.vestigeTier) return false;
+
+		const tierType = item.item.itemTierType;
+		const validTiers = tierType === "dragon"
+			? ["slumbering", "stirring", "wakened", "ascendant"]
+			: ["dormant", "awakened", "exalted"];
+
+		if (!validTiers.includes(tier)) return false;
+		item.item.vestigeTier = tier;
+		return true;
+	}
+
+	// Alias
+	setItemTier (itemId, tier) { return this.setVestigeTier(itemId, tier); }
+
+	/**
+	 * Upgrade a tiered item to the next tier
+	 * @param {string} itemId - The item ID
+	 * @returns {object} {success: boolean, newTier?: string, error?: string}
+	 */
+	upgradeVestige (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item?.vestigeTier) {
+			return {success: false, error: "Item is not a tiered item"};
+		}
+
+		const tierType = item.item.itemTierType;
+		const tiers = tierType === "dragon"
+			? ["slumbering", "stirring", "wakened", "ascendant"]
+			: ["dormant", "awakened", "exalted"];
+
+		const currentIndex = tiers.indexOf(item.item.vestigeTier);
+		if (currentIndex === -1 || currentIndex >= tiers.length - 1) {
+			return {success: false, error: "Item is already at maximum tier"};
+		}
+
+		const newTier = tiers[currentIndex + 1];
+		item.item.vestigeTier = newTier;
+
+		// Update item name to reflect new tier
+		const oldName = item.item.name;
+		if (tierType === "dragon") {
+			// FTD pattern: "Slumbering Dragon's Wrath" → "Stirring Dragon's Wrath"
+			const tierNames = {
+				"slumbering": "Slumbering",
+				"stirring": "Stirring",
+				"wakened": "Wakened",
+				"ascendant": "Ascendant",
+			};
+			const oldTierName = tierNames[tiers[currentIndex]];
+			const newTierName = tierNames[newTier];
+			if (oldName.includes(oldTierName)) {
+				item.item.name = oldName.replace(oldTierName, newTierName);
+			}
+		} else {
+			// EGW pattern: "Blade (Dormant)" → "Blade (Awakened)"
+			const tierNames = {"dormant": "(Dormant)", "awakened": "(Awakened)", "exalted": "(Exalted)"};
+			const oldTierName = tierNames[tiers[currentIndex]];
+			const newTierName = tierNames[newTier];
+			if (oldName.includes(oldTierName)) {
+				item.item.name = oldName.replace(oldTierName, newTierName);
+			}
+		}
+
+		return {success: true, newTier};
+	}
+
+	// Alias
+	upgradeItemTier (itemId) { return this.upgradeVestige(itemId); }
+
+	/**
+	 * Get all tiered items (vestiges and dragon items)
+	 * @param {string} tierType - Optional filter: "vestige" or "dragon"
+	 * @returns {Array} Array of tiered inventory entries
+	 */
+	getVestiges (tierType = null) {
+		return this._data.inventory.filter(i => {
+			if (!i.item?.vestigeTier) return false;
+			if (tierType && i.item?.itemTierType !== tierType) return false;
+			return true;
+		});
+	}
+
+	// Alias
+	getTieredItems (tierType = null) { return this.getVestiges(tierType); }
+
+	// ==========================================
+	// Resource Restoration (Ki, Sorcery Points, etc.)
+	// ==========================================
+
+	/**
+	 * Get all items that can restore class resources
+	 * @param {string} resourceType - Optional filter: "ki", "sorceryPoints", "bardicInspiration"
+	 * @returns {Array} Array of inventory entries with resource restoration
+	 */
+	getResourceRestorationItems (resourceType = null) {
+		return this._data.inventory.filter(i => {
+			const restoration = i.item?.resourceRestoration;
+			if (!restoration) return false;
+			if (resourceType && restoration.type !== resourceType) return false;
+			return true;
+		});
+	}
+
+	/**
+	 * Mark a resource restoration as used
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean} True if marked successfully
+	 */
+	useResourceRestoration (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item?.resourceRestoration) return false;
+		item.item.resourceRestoration.used = true;
+		return true;
+	}
+
+	/**
+	 * Reset all resource restoration items (typically on long rest)
+	 */
+	resetResourceRestorations () {
+		for (const item of this._data.inventory) {
+			if (item.item?.resourceRestoration) {
+				item.item.resourceRestoration.used = false;
+			}
+		}
+	}
+
+	/**
+	 * Check if a resource restoration is available
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean} True if available to use
+	 */
+	isResourceRestorationAvailable (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item?.resourceRestoration) return false;
+		return !item.item.resourceRestoration.used;
+	}
+
+	// ==========================================
+	// Mental Protection (Ring of Mind Shielding, etc.)
+	// ==========================================
+
+	/**
+	 * Get all mental protection flags from equipped items
+	 * @returns {object} Mental protection flags and sources
+	 */
+	getMentalProtections () {
+		const protections = {
+			telepathyImmune: {active: false, sources: []},
+			thoughtReadingImmune: {active: false, sources: []},
+			lieDetectionImmune: {active: false, sources: []},
+			alignmentDetectionImmune: {active: false, sources: []},
+			soulTrapped: {active: false, itemId: null},
+		};
+
+		for (const item of this._data.inventory) {
+			const mental = item.item?.mentalProtection;
+			if (!mental || !item.equipped) continue;
+
+			if (mental.telepathyImmune) {
+				protections.telepathyImmune.active = true;
+				protections.telepathyImmune.sources.push(item.item.name);
+			}
+			if (mental.thoughtReadingImmune) {
+				protections.thoughtReadingImmune.active = true;
+				protections.thoughtReadingImmune.sources.push(item.item.name);
+			}
+			if (mental.lieDetectionImmune) {
+				protections.lieDetectionImmune.active = true;
+				protections.lieDetectionImmune.sources.push(item.item.name);
+			}
+			if (mental.alignmentDetectionImmune) {
+				protections.alignmentDetectionImmune.active = true;
+				protections.alignmentDetectionImmune.sources.push(item.item.name);
+			}
+			if (mental.soulTrapped) {
+				protections.soulTrapped.active = true;
+				protections.soulTrapped.itemId = item.id;
+			}
+		}
+
+		return protections;
+	}
+
+	/**
+	 * Check if character has a specific mental protection
+	 * @param {string} protectionType - e.g., "telepathyImmune", "thoughtReadingImmune"
+	 * @returns {boolean} True if protected
+	 */
+	hasMentalProtection (protectionType) {
+		const protections = this.getMentalProtections();
+		return protections[protectionType]?.active || false;
+	}
+
+	/**
+	 * Get items with soul trapping capability
+	 * @returns {Array} Array of items that can trap souls
+	 */
+	getSoulTrappingItems () {
+		return this._data.inventory.filter(i =>
+			i.item?.mentalProtection?.soulTrapped && i.equipped,
+		);
+	}
+
+	// ==========================================
+	// Spell Storing (Ring of Spell Storing, etc.)
+	// ==========================================
+
+	/**
+	 * Store a spell in a spell-storing item
+	 * @param {string} itemId - The item ID (e.g., Ring of Spell Storing)
+	 * @param {object} spellData - {spell, level, saveDc, attackBonus, ability, casterName}
+	 * @returns {object} {success: boolean, error?: string}
+	 */
+	storeSpell (itemId, spellData) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item?.maxSpellLevels) {
+			return {success: false, error: "Item cannot store spells"};
+		}
+
+		// Initialize stored spells array
+		if (!item.item.storedSpells) item.item.storedSpells = [];
+
+		// Check capacity
+		const currentLevels = item.item.storedSpells.reduce((sum, s) => sum + (s.level || 0), 0);
+		const newLevel = spellData.level || 1;
+		if (currentLevels + newLevel > item.item.maxSpellLevels) {
+			return {success: false, error: `Not enough space. ${item.item.maxSpellLevels - currentLevels} levels available.`};
+		}
+
+		item.item.storedSpells.push({
+			spell: spellData.spell,
+			level: newLevel,
+			saveDc: spellData.saveDc || 13,
+			attackBonus: spellData.attackBonus || 5,
+			ability: spellData.ability || "int",
+			casterName: spellData.casterName || "Unknown",
+		});
+
+		return {success: true};
+	}
+
+	/**
+	 * Cast (remove) a stored spell from an item
+	 * @param {string} itemId - The item ID
+	 * @param {number} spellIndex - Index of spell in storedSpells array
+	 * @returns {object|null} The cast spell data, or null if failed
+	 */
+	castStoredSpell (itemId, spellIndex) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item?.storedSpells?.length) return null;
+
+		if (spellIndex < 0 || spellIndex >= item.item.storedSpells.length) return null;
+
+		// Remove and return the spell
+		const [spell] = item.item.storedSpells.splice(spellIndex, 1);
+		return spell;
+	}
+
+	/**
+	 * Get stored spells in an item
+	 * @param {string} itemId - The item ID
+	 * @returns {Array} Array of stored spell objects
+	 */
+	getStoredSpells (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		return item?.item?.storedSpells || [];
+	}
+
+	/**
+	 * Get spell storing capacity info
+	 * @param {string} itemId - The item ID
+	 * @returns {object} {maxLevels, usedLevels, remainingLevels, spells}
+	 */
+	getSpellStoringCapacity (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		if (!item?.item?.maxSpellLevels) {
+			return {maxLevels: 0, usedLevels: 0, remainingLevels: 0, spells: []};
+		}
+
+		const spells = item.item.storedSpells || [];
+		const usedLevels = spells.reduce((sum, s) => sum + (s.level || 0), 0);
+
+		return {
+			maxLevels: item.item.maxSpellLevels,
+			usedLevels,
+			remainingLevels: item.item.maxSpellLevels - usedLevels,
+			spells,
+		};
+	}
+
+	/**
+	 * Check if item can store spells
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	canStoreSpells (itemId) {
+		const item = this._data.inventory.find(i => i.id === itemId);
+		return !!item?.item?.maxSpellLevels;
+	}
+
 	getAttunedCount () {
 		return this._data.inventory.filter(i => i.attuned).length;
 	}
@@ -15433,7 +16442,20 @@ class CharacterSheetState {
 	}
 
 	getTotalWeight () {
+		// Get all items that are inside weightless containers (their weight shouldn't count)
+		const itemsInWeightlessContainers = new Set();
+		this._data.inventory.forEach(entry => {
+			const item = entry.item || entry;
+			// If this item is a weightless container, mark all its contained items
+			if (item.containerCapacity?.weightless && item.containedItems?.length) {
+				item.containedItems.forEach(id => itemsInWeightlessContainers.add(id));
+			}
+		});
+
 		return this._data.inventory.reduce((sum, i) => {
+			// Skip items that are inside weightless containers
+			if (itemsInWeightlessContainers.has(i.id)) return sum;
+
 			const weight = i.item.weight || 0;
 			return sum + (weight * i.quantity);
 		}, 0);
@@ -17823,6 +18845,12 @@ class CharacterSheetState {
 			critRange = calcs.criticalRange;
 		}
 
+		// Check magic item critThreshold (e.g., Sword of Sharpness with critThreshold: 19)
+		const itemCrit = this._data.itemBonuses?.critThreshold;
+		if (itemCrit && itemCrit < critRange) {
+			critRange = itemCrit;
+		}
+
 		// Check active state effects for expanded crit range (e.g., Hexblade's Curse, homebrew)
 		const effects = this.getActiveStateEffects();
 		for (const e of effects) {
@@ -19117,40 +20145,45 @@ class CharacterSheetState {
 		const base = [...this._data.resistances];
 		// Merge in resistances from active states (e.g., Rage, Stoneskin)
 		const stateResistances = this._getResistancesFromStates();
-		const combined = new Set([...base, ...stateResistances]);
+		// Merge in resistances from magic items
+		const itemResistances = (this._data.itemDefenses?.resist || []).map(d => d.type);
+		const combined = new Set([...base, ...stateResistances, ...itemResistances]);
 		return [...combined];
 	}
 
 	/**
-	 * Get all effective immunities, combining base immunities with active state immunities.
+	 * Get all effective immunities, combining base immunities with active state and item immunities.
 	 * @returns {string[]} Combined unique immunity types
 	 */
 	getImmunities () {
 		const base = [...this._data.immunities];
 		const stateImmunities = this._getImmunitiesFromStates();
-		const combined = new Set([...base, ...stateImmunities]);
+		const itemImmunities = (this._data.itemDefenses?.immune || []).map(d => d.type);
+		const combined = new Set([...base, ...stateImmunities, ...itemImmunities]);
 		return [...combined];
 	}
 
 	/**
-	 * Get all effective vulnerabilities, combining base vulnerabilities with active state vulnerabilities.
+	 * Get all effective vulnerabilities, combining base vulnerabilities with active state and item vulnerabilities.
 	 * @returns {string[]} Combined unique vulnerability types
 	 */
 	getVulnerabilities () {
 		const base = [...this._data.vulnerabilities];
 		const stateVulnerabilities = this._getVulnerabilitiesFromStates();
-		const combined = new Set([...base, ...stateVulnerabilities]);
+		const itemVulnerabilities = (this._data.itemDefenses?.vulnerable || []).map(d => d.type);
+		const combined = new Set([...base, ...stateVulnerabilities, ...itemVulnerabilities]);
 		return [...combined];
 	}
 
 	/**
-	 * Get all effective condition immunities, combining base with active state condition immunities.
+	 * Get all effective condition immunities, combining base with active state and item condition immunities.
 	 * @returns {string[]} Combined unique condition immunity names
 	 */
 	getConditionImmunities () {
 		const base = [...this._data.conditionImmunities];
 		const stateConditionImmunities = this._getConditionImmunitiesFromStates();
-		const combined = new Set([...base, ...stateConditionImmunities]);
+		const itemConditionImmunities = (this._data.itemDefenses?.conditionImmune || []).map(d => d.type);
+		const combined = new Set([...base, ...stateConditionImmunities, ...itemConditionImmunities]);
 		return [...combined];
 	}
 
@@ -25412,6 +26445,9 @@ class CharacterSheetState {
 		// a bonus specifically to concentration saves
 		const concMods = this.aggregateModifiers("concentration");
 		bonus += concMods.bonus || 0;
+
+		// Add item bonus for concentration saves (e.g., War Caster's Staff, homebrew items)
+		bonus += this._data.itemBonuses?.savingThrowConcentration || 0;
 
 		return bonus;
 	}
