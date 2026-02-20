@@ -14767,3 +14767,94 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 	padding: 6px 10px;
 	font-size: calc(var(--cs-font-base, 14px) * 0.9);
 }
+
+/* Temp HP Section */
+.custom-abilities__temphp-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__temphp-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	cursor: pointer;
+}
+
+.custom-abilities__temphp-toggle input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	cursor: pointer;
+}
+
+.custom-abilities__temphp-config {
+	margin-left: var(--cs-space-md, 1rem);
+	padding: var(--cs-space-sm, 0.5rem);
+	background: rgba(0, 0, 0, 0.15);
+	border-radius: var(--cs-radius-sm, 4px);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.1));
+}
+
+.custom-abilities__temphp-mode {
+	display: flex;
+	gap: var(--cs-space-md, 1rem);
+	margin-bottom: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__temphp-mode-option {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-xs, 0.25rem);
+	cursor: pointer;
+}
+
+.custom-abilities__temphp-mode-option input[type="radio"] {
+	cursor: pointer;
+}
+
+.custom-abilities__temphp-value-row {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	flex-wrap: wrap;
+}
+
+.custom-abilities__temphp-value-row input {
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	padding: 6px 10px;
+	font-size: calc(var(--cs-font-base, 14px) * 0.9);
+}
+
+.custom-abilities__temphp-timing {
+	padding-top: var(--cs-space-xs, 0.25rem);
+	border-top: 1px dashed var(--cs-border, rgba(255, 255, 255, 0.1));
+}
+
+.custom-abilities__temphp-timing-option {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-xs, 0.25rem);
+	cursor: pointer;
+}
+
+/* Effect Row Conditional */
+.custom-abilities__effect-row-conditional {
+	display: flex;
+	gap: var(--cs-space-sm, 0.5rem);
+	padding-top: var(--cs-space-xs, 0.25rem);
+	margin-top: var(--cs-space-xs, 0.25rem);
+	border-top: 1px dashed var(--cs-border, rgba(255, 255, 255, 0.1));
+}
+
+.custom-abilities__effect-conditional-text {
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	padding: 4px 8px;
+	font-size: calc(var(--cs-font-base, 14px) * 0.85);
+}
