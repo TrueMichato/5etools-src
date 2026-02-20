@@ -1069,6 +1069,52 @@ class CharacterSheetCustomAbilities {
 							</div>
 						</div>
 
+						<!-- Temporary HP -->
+						<div class="custom-abilities__form-section">
+							<label class="custom-abilities__form-section-title">Temporary HP (Optional)</label>
+							<p class="ve-muted ve-small mb-2">Grant temporary hit points (like False Life, Inspiring Leader, Armor of Agathys)</p>
+							
+							<div class="custom-abilities__temphp-section" id="temphp-section">
+								<label class="custom-abilities__temphp-toggle">
+									<input type="checkbox" id="temphp-enabled" name="tempHpEnabled">
+									<span>Grant Temporary HP</span>
+								</label>
+								
+								<div class="custom-abilities__temphp-config" id="temphp-config" style="display: none;">
+									<div class="custom-abilities__temphp-mode">
+										<label class="custom-abilities__temphp-mode-option">
+											<input type="radio" name="tempHpMode" value="static" checked>
+											<span>Fixed Amount</span>
+										</label>
+										<label class="custom-abilities__temphp-mode-option">
+											<input type="radio" name="tempHpMode" value="dice">
+											<span>Roll Dice</span>
+										</label>
+									</div>
+									
+									<div class="custom-abilities__temphp-value-row" id="temphp-static-row">
+										<span class="ve-small">Amount:</span>
+										<input type="number" class="form-control" id="temphp-static-value" min="1" value="5" style="width: 80px;">
+										<span class="ve-muted ve-small">temp HP</span>
+									</div>
+									
+									<div class="custom-abilities__temphp-value-row" id="temphp-dice-row" style="display: none;">
+										<span class="ve-small">Roll:</span>
+										<input type="text" class="form-control" id="temphp-dice-value" placeholder="1d4+4" value="1d4+4" style="width: 100px;">
+										<span class="ve-muted ve-small">(e.g., 1d4+4, 2d10, 5+level)</span>
+									</div>
+									
+									<div class="custom-abilities__temphp-timing mt-2">
+										<label class="custom-abilities__temphp-timing-option">
+											<input type="checkbox" id="temphp-on-activation" checked>
+											<span class="ve-small">Grant on activation only</span>
+										</label>
+										<span class="ve-muted ve-small d-block">When unchecked, temp HP persists while ability is active</span>
+									</div>
+								</div>
+							</div>
+						</div>
+
 						<!-- Bonus Damage -->
 						<div class="custom-abilities__form-section">
 							<label class="custom-abilities__form-section-title">Bonus Damage (Optional)</label>
@@ -1358,7 +1404,7 @@ class CharacterSheetCustomAbilities {
 									</ul>
 
 									<h5>Effect Types</h5>
-									<p class="ve-small ve-muted">ac, initiative, attack, attack:melee, attack:ranged, attack:spell, damage, damage:melee, damage:ranged, damage:spell, critRange (set absolute, e.g. 19), critRange:expand (expand by amount), speed, speed:fly, speed:swim, speed:climb, spellDc, spellAttack, save:all, save:str/dex/con/int/wis/cha, check:all, check:str/dex/con/int/wis/cha, skill:all, skill:[skillname], passive:[skillname], hp:max, ability:str/dex/con/int/wis/cha, sense:darkvision/blindsight/tremorsense/truesight, resistance:[damage type], proficiencyBonus, carryCapacity, deathSave</p>
+									<p class="ve-small ve-muted">ac, initiative, attack, attack:melee, attack:ranged, attack:spell, damage, damage:melee, damage:ranged, damage:spell, critRange (set absolute, e.g. 19), critRange:expand (expand by amount), tempHp (static amount), tempHp:dice (roll dice like "1d4+4"), speed, speed:fly, speed:swim, speed:climb, spellDc, spellAttack, save:all, save:str/dex/con/int/wis/cha, check:all, check:str/dex/con/int/wis/cha, skill:all, skill:[skillname], passive:[skillname], hp:max, ability:str/dex/con/int/wis/cha, sense:darkvision/blindsight/tremorsense/truesight, resistance:[damage type], proficiencyBonus, carryCapacity, deathSave</p>
 
 									<h5>Example</h5>
 									<pre>{
@@ -1399,13 +1445,14 @@ class CharacterSheetCustomAbilities {
 			conditionImmunities: [],
 		};
 		
-		// Size, reach, bonus damage, rerolls, crit range - extracted from effects array
+		// Size, reach, bonus damage, rerolls, crit range, temp HP - extracted from effects array
 		let sizeChange = 0; // Positive = enlarge, negative = reduce
 		let reachBonus = 0; // In increments of 5 ft
 		let bonusDamage = []; // [{type: "fire", dice: "1d6"}, ...]
 		let rerolls = []; // [{trigger: "1", rollType: "attack"}, ...]
 		let critRangeConfig = {enabled: false, mode: "set", value: 19, expand: 1}; // Critical range config
-		let effects = []; // General effects (not size/reach/damage/reroll/critRange)
+		let tempHpConfig = {enabled: false, mode: "static", value: 5, dice: "1d4+4", onActivation: true}; // Temp HP config
+		let effects = []; // General effects (not size/reach/damage/reroll/critRange/tempHp)
 		
 		// Initialize from existing effects - extract special types and keep others
 		if (existingAbility?.effects) {
@@ -1436,6 +1483,17 @@ class CharacterSheetCustomAbilities {
 					critRangeConfig.enabled = true;
 					critRangeConfig.mode = "expand";
 					critRangeConfig.expand = e.value || 1;
+				} else if (e.type === "tempHp" || e.type === "tempHp:dice") {
+					// Temporary HP grant
+					tempHpConfig.enabled = true;
+					if (e.type === "tempHp:dice") {
+						tempHpConfig.mode = "dice";
+						tempHpConfig.dice = e.dice || "1d4+4";
+					} else {
+						tempHpConfig.mode = "static";
+						tempHpConfig.value = e.value || 5;
+					}
+					tempHpConfig.onActivation = e.onActivation !== false;
 				} else {
 					// Keep as general effect
 					effects.push(JSON.parse(JSON.stringify(e)));
@@ -1641,6 +1699,40 @@ class CharacterSheetCustomAbilities {
 			expandPreview.textContent = `${expandedRange}-20`;
 		};
 
+		// Helper to render temp HP UI
+		const renderTempHpUI = () => {
+			const enabledCheckbox = modal.querySelector("#temphp-enabled");
+			const configSection = modal.querySelector("#temphp-config");
+			const staticRow = modal.querySelector("#temphp-static-row");
+			const diceRow = modal.querySelector("#temphp-dice-row");
+			const staticValue = modal.querySelector("#temphp-static-value");
+			const diceValue = modal.querySelector("#temphp-dice-value");
+			const onActivationCheckbox = modal.querySelector("#temphp-on-activation");
+			const modeRadios = modal.querySelectorAll("input[name='tempHpMode']");
+			
+			if (!enabledCheckbox) return;
+			
+			// Set checkbox state
+			enabledCheckbox.checked = tempHpConfig.enabled;
+			
+			// Show/hide config section
+			configSection.style.display = tempHpConfig.enabled ? "block" : "none";
+			
+			// Set mode radio
+			modeRadios.forEach(r => {
+				r.checked = r.value === tempHpConfig.mode;
+			});
+			
+			// Show/hide appropriate row
+			staticRow.style.display = tempHpConfig.mode === "static" ? "flex" : "none";
+			diceRow.style.display = tempHpConfig.mode === "dice" ? "flex" : "none";
+			
+			// Set values
+			staticValue.value = tempHpConfig.value;
+			diceValue.value = tempHpConfig.dice;
+			onActivationCheckbox.checked = tempHpConfig.onActivation;
+		};
+
 		// Helper to render effects list
 		const renderEffectsList = () => {
 			const list = modal.querySelector("#ability-effects-list");
@@ -1667,8 +1759,30 @@ class CharacterSheetCustomAbilities {
 						</select>
 						<input type="number" class="form-control custom-abilities__effect-minimum" placeholder="Min" value="${effect.setMinimum ?? ""}" style="width: 65px;" title="Minimum roll (like Reliable Talent)">
 						<input type="text" class="form-control custom-abilities__effect-bonusdie" placeholder="e.g. 1d4" value="${effect.bonusDie || ""}" style="width: 75px;" title="Bonus dice">
+						<select class="form-control custom-abilities__effect-conditional" style="width: 140px;" title="When does this effect apply?">
+							<option value="">Always</option>
+							<option value="against:undead" ${effect.conditional === "against:undead" ? "selected" : ""}>vs Undead</option>
+							<option value="against:fiend" ${effect.conditional === "against:fiend" ? "selected" : ""}>vs Fiends</option>
+							<option value="against:aberration" ${effect.conditional === "against:aberration" ? "selected" : ""}>vs Aberrations</option>
+							<option value="against:fey" ${effect.conditional === "against:fey" ? "selected" : ""}>vs Fey</option>
+							<option value="against:dragon" ${effect.conditional === "against:dragon" ? "selected" : ""}>vs Dragons</option>
+							<option value="against:giant" ${effect.conditional === "against:giant" ? "selected" : ""}>vs Giants</option>
+							<option value="against:beast" ${effect.conditional === "against:beast" ? "selected" : ""}>vs Beasts</option>
+							<option value="against:humanoid" ${effect.conditional === "against:humanoid" ? "selected" : ""}>vs Humanoids</option>
+							<option value="in:dim" ${effect.conditional === "in:dim" ? "selected" : ""}>In Dim Light</option>
+							<option value="in:darkness" ${effect.conditional === "in:darkness" ? "selected" : ""}>In Darkness</option>
+							<option value="while:bloodied" ${effect.conditional === "while:bloodied" ? "selected" : ""}>While Bloodied</option>
+							<option value="while:hidden" ${effect.conditional === "while:hidden" ? "selected" : ""}>While Hidden</option>
+							<option value="first:attack" ${effect.conditional === "first:attack" ? "selected" : ""}>First Attack/Turn</option>
+							<option value="custom" ${effect.conditional?.startsWith("custom:") ? "selected" : ""}>Custom...</option>
+						</select>
 						<button class="btn btn-sm btn-danger custom-abilities__effect-remove" title="Remove">&times;</button>
 					</div>
+					${effect.conditional?.startsWith("custom:") ? `
+						<div class="custom-abilities__effect-row-conditional">
+							<input type="text" class="form-control custom-abilities__effect-conditional-text" placeholder="Custom condition..." value="${effect.conditional.replace("custom:", "")}" style="flex: 1;">
+						</div>
+					` : ""}
 				`;
 
 				// Set selected type
@@ -1697,6 +1811,24 @@ class CharacterSheetCustomAbilities {
 					if (val) effects[idx].bonusDie = val;
 					else delete effects[idx].bonusDie;
 				});
+				row.querySelector(".custom-abilities__effect-conditional").addEventListener("change", (e) => {
+					const val = e.target.value;
+					if (val === "custom") {
+						effects[idx].conditional = "custom:";
+						renderEffectsList(); // Re-render to show custom input
+					} else if (val) {
+						effects[idx].conditional = val;
+					} else {
+						delete effects[idx].conditional;
+					}
+				});
+				const conditionalText = row.querySelector(".custom-abilities__effect-conditional-text");
+				if (conditionalText) {
+					conditionalText.addEventListener("change", (e) => {
+						const val = e.target.value.trim();
+						effects[idx].conditional = val ? `custom:${val}` : "";
+					});
+				}
 				row.querySelector(".custom-abilities__effect-remove").addEventListener("click", () => {
 					effects.splice(idx, 1);
 					renderEffectsList();
@@ -1748,6 +1880,23 @@ class CharacterSheetCustomAbilities {
 					allEffects.push({type: "critRange", value: critRangeConfig.value});
 				} else if (critRangeConfig.mode === "expand") {
 					allEffects.push({type: "critRange:expand", value: critRangeConfig.expand});
+				}
+			}
+			
+			// Add temp HP effect
+			if (tempHpConfig.enabled) {
+				if (tempHpConfig.mode === "dice") {
+					allEffects.push({
+						type: "tempHp:dice",
+						dice: tempHpConfig.dice,
+						onActivation: tempHpConfig.onActivation,
+					});
+				} else {
+					allEffects.push({
+						type: "tempHp",
+						value: tempHpConfig.value,
+						onActivation: tempHpConfig.onActivation,
+					});
 				}
 			}
 			
@@ -1941,6 +2090,17 @@ class CharacterSheetCustomAbilities {
 					critRangeConfig.enabled = true;
 					critRangeConfig.mode = "expand";
 					critRangeConfig.expand = e.value || 1;
+				} else if (e.type === "tempHp" || e.type === "tempHp:dice") {
+					// Temporary HP grant
+					tempHpConfig.enabled = true;
+					if (e.type === "tempHp:dice") {
+						tempHpConfig.mode = "dice";
+						tempHpConfig.dice = e.dice || "1d4+4";
+					} else {
+						tempHpConfig.mode = "static";
+						tempHpConfig.value = e.value || 5;
+					}
+					tempHpConfig.onActivation = e.onActivation !== false;
 				} else {
 					// Keep other effects in the regular effects array
 					effects.push(e);
@@ -1952,6 +2112,7 @@ class CharacterSheetCustomAbilities {
 			renderBonusDamageList();
 			renderRerollsUI();
 			renderCritRangeUI();
+			renderTempHpUI();
 
 			// Restore grants
 			if (data.grants) {
@@ -2179,6 +2340,27 @@ class CharacterSheetCustomAbilities {
 			renderCritRangeUI();
 		});
 
+		// Temp HP handlers
+		modal.querySelector("#temphp-enabled")?.addEventListener("change", e => {
+			tempHpConfig.enabled = e.target.checked;
+			renderTempHpUI();
+		});
+		modal.querySelectorAll("input[name='tempHpMode']").forEach(radio => {
+			radio.addEventListener("change", e => {
+				tempHpConfig.mode = e.target.value;
+				renderTempHpUI();
+			});
+		});
+		modal.querySelector("#temphp-static-value")?.addEventListener("change", e => {
+			tempHpConfig.value = Math.max(1, parseInt(e.target.value) || 5);
+		});
+		modal.querySelector("#temphp-dice-value")?.addEventListener("change", e => {
+			tempHpConfig.dice = e.target.value.trim() || "1d4+4";
+		});
+		modal.querySelector("#temphp-on-activation")?.addEventListener("change", e => {
+			tempHpConfig.onActivation = e.target.checked;
+		});
+
 		// Initialize
 		renderEffectsList();
 		renderGrantsUI();
@@ -2187,6 +2369,7 @@ class CharacterSheetCustomAbilities {
 		renderBonusDamageList();
 		renderRerollsUI();
 		renderCritRangeUI();
+		renderTempHpUI();
 
 		// Update initial grant counts
 		this._updateGrantCount(modal, "grants-spell-count", grants.spells.length);

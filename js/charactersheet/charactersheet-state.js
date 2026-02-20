@@ -20116,6 +20116,18 @@ class CharacterSheetState {
 					continue;
 				}
 
+				// Handle temp HP effects
+				if (effectType === "tempHp" || effectType === "tempHp:dice") {
+					// For toggleable abilities, grant temp HP when toggled on
+					// For passive abilities, this is just stored (user decides when to apply)
+					this._ensureCustomAbilityActiveState(ability);
+					// If this is a toggleable ability being activated, grant the temp HP now
+					if (ability.mode === "toggleable" && ability.isActive && effect.onActivation !== false) {
+						this._grantTempHpFromEffect(effect, ability);
+					}
+					continue;
+				}
+
 				// Handle reach modifier
 				if (effectType === "reach") {
 					// Register as a named modifier that can be picked up
@@ -20144,6 +20156,8 @@ class CharacterSheetState {
 					disadvantage: effect.disadvantage,
 					setMinimum: effect.setMinimum,
 					setMaximum: effect.setMaximum,
+					conditional: effect.conditional, // Conditional trigger (e.g., "against:undead", "in:darkness")
+					bonusDie: effect.bonusDie,
 				});
 			}
 		}
@@ -20702,9 +20716,104 @@ class CharacterSheetState {
 				});
 				continue;
 			}
+
+			// Temporary HP effects
+			if (effectType === "tempHp") {
+				customEffects.push({
+					type: "tempHp",
+					value: e.value || 5,
+					onActivation: e.onActivation !== false,
+				});
+				continue;
+			}
+			if (effectType === "tempHp:dice") {
+				customEffects.push({
+					type: "tempHp:dice",
+					dice: e.dice || "1d4+4",
+					onActivation: e.onActivation !== false,
+				});
+				continue;
+			}
 		}
 
 		return customEffects;
+	}
+
+	/**
+	 * Grant temporary HP from an effect
+	 * @param {object} effect - The tempHp effect object
+	 * @param {object} ability - The source ability
+	 * @private
+	 */
+	_grantTempHpFromEffect (effect, ability) {
+		let tempHp = 0;
+		
+		if (effect.type === "tempHp:dice") {
+			// Roll dice for temp HP
+			const diceExpression = effect.dice || "1d4+4";
+			tempHp = this._rollDiceExpression(diceExpression);
+		} else {
+			// Static temp HP value
+			tempHp = effect.value || 5;
+		}
+		
+		// Only apply if higher than current temp HP (temp HP doesn't stack per RAW)
+		const currentTempHp = this.getTempHp() || 0;
+		if (tempHp > currentTempHp) {
+			this.setTempHp(tempHp);
+			// Track the source for display
+			this._data.tempHpSource = ability.name;
+		}
+	}
+
+	/**
+	 * Roll a dice expression and return the total
+	 * @param {string} expression - Dice expression like "1d4+4", "2d10", "5+level"
+	 * @returns {number} The rolled total
+	 * @private
+	 */
+	_rollDiceExpression (expression) {
+		// Handle "level" keyword
+		const totalLevel = this.getTotalLevel();
+		let expr = expression.toLowerCase().replace(/level/g, totalLevel.toString());
+		
+		// Parse dice expressions like "1d4+4", "2d10+5"
+		const diceRegex = /(\d+)d(\d+)/gi;
+		let total = 0;
+		let lastIndex = 0;
+		let match;
+		
+		while ((match = diceRegex.exec(expr)) !== null) {
+			// Add any constant before this dice
+			const beforeDice = expr.substring(lastIndex, match.index);
+			if (beforeDice) {
+				const num = parseInt(beforeDice.replace(/[+\-]/g, "").trim());
+				if (!isNaN(num)) {
+					total += beforeDice.includes("-") ? -num : num;
+				}
+			}
+			
+			// Roll the dice
+			const count = parseInt(match[1]);
+			const sides = parseInt(match[2]);
+			for (let i = 0; i < count; i++) {
+				total += Math.floor(Math.random() * sides) + 1;
+			}
+			
+			lastIndex = diceRegex.lastIndex;
+		}
+		
+		// Add any remaining constant
+		const remaining = expr.substring(lastIndex).trim();
+		if (remaining) {
+			// Handle +X or -X at the end
+			const constMatch = remaining.match(/([+-]?\d+)/);
+			if (constMatch) {
+				total += parseInt(constMatch[1]);
+			}
+		}
+		
+		return Math.max(0, total);
 	}
 
 	/**
@@ -20752,10 +20861,56 @@ class CharacterSheetState {
 	/**
 	 * Get enabled named modifiers of a specific type
 	 * @param {string} type - The modifier type (e.g., "ac", "save:str", "skill:all")
+	 * @param {object} options - Options for filtering
+	 * @param {boolean} options.includeConditional - Include conditional modifiers (default: true)
 	 * @returns {Array} Array of enabled modifier objects matching the type
 	 */
-	getNamedModifiersByType (type) {
-		return this._data.namedModifiers.filter(m => m.enabled && m.type === type);
+	getNamedModifiersByType (type, options = {}) {
+		const includeConditional = options.includeConditional !== false;
+		return this._data.namedModifiers.filter(m => {
+			if (!m.enabled || m.type !== type) return false;
+			if (!includeConditional && m.conditional) return false;
+			return true;
+		});
+	}
+
+	/**
+	 * Get conditional modifiers of a specific type
+	 * @param {string} type - The modifier type
+	 * @returns {Array} Array of conditional modifier objects
+	 */
+	getConditionalModifiersByType (type) {
+		return this._data.namedModifiers.filter(m => m.enabled && m.type === type && m.conditional);
+	}
+
+	/**
+	 * Format a conditional modifier for display
+	 * @param {object} modifier - The modifier with conditional property
+	 * @returns {string} Human-readable condition text
+	 */
+	formatConditionalText (modifier) {
+		if (!modifier.conditional) return "";
+		
+		const cond = modifier.conditional;
+		if (cond.startsWith("against:")) {
+			const type = cond.replace("against:", "");
+			return `vs ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+		}
+		if (cond.startsWith("in:")) {
+			const env = cond.replace("in:", "");
+			if (env === "dim") return "in dim light";
+			if (env === "darkness") return "in darkness";
+			return `in ${env}`;
+		}
+		if (cond.startsWith("while:")) {
+			const state = cond.replace("while:", "");
+			return `while ${state}`;
+		}
+		if (cond === "first:attack") return "first attack each turn";
+		if (cond.startsWith("custom:")) {
+			return cond.replace("custom:", "");
+		}
+		return cond;
 	}
 
 	/**

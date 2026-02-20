@@ -2387,8 +2387,44 @@ class CharacterSheetCombat {
 			$container.append($critSection);
 		}
 
+		// Temp HP display with source
+		const tempHp = this._state.getTempHp?.() || 0;
+		const tempHpSource = this._state._data?.tempHpSource;
+		if (tempHp > 0 && tempHpSource) {
+			const $tempHpSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$tempHpSection.append(`<div class="ve-small ve-bold text-info mb-1">💙 Temporary HP:</div>`);
+			$tempHpSection.append(`
+				<div class="charsheet__effect-item badge badge-info mr-1 mb-1" title="From: ${tempHpSource}">
+					${tempHp} THP (${tempHpSource})
+				</div>
+			`);
+			$container.append($tempHpSection);
+		}
+
+		// Conditional modifiers section (show available conditional bonuses)
+		const conditionalAttack = this._state.getConditionalModifiersByType?.("attack") || [];
+		const conditionalDamage = this._state.getConditionalModifiersByType?.("damage") || [];
+		const allConditionals = [...conditionalAttack, ...conditionalDamage];
+		if (allConditionals.length > 0) {
+			const $conditionalSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$conditionalSection.append(`<div class="ve-small ve-bold text-secondary mb-1">📝 Conditional Bonuses:</div>`);
+			for (const mod of allConditionals) {
+				const condText = this._state.formatConditionalText?.(mod) || mod.conditional;
+				const sign = mod.value >= 0 ? "+" : "";
+				const typeLabel = mod.type === "attack" ? "atk" : "dmg";
+				$conditionalSection.append(`
+					<div class="charsheet__effect-item badge badge-secondary mr-1 mb-1" title="From: ${mod.name}">
+						${sign}${mod.value} ${typeLabel} (${condText})
+					</div>
+				`);
+			}
+			$container.append($conditionalSection);
+		}
+
 		// If no effects, show placeholder
-		const hasAnyEffects = advantageTypes.size > 0 || disadvantageTypes.size > 0 || bonusEffects.length > 0 || otherEffects.length > 0 || enemyAdvantageAgainst.size > 0 || enemyDisadvantageAgainst.size > 0 || critRange < 20;
+		const hasTempHpDisplay = tempHp > 0 && tempHpSource;
+		const hasConditionals = allConditionals.length > 0;
+		const hasAnyEffects = advantageTypes.size > 0 || disadvantageTypes.size > 0 || bonusEffects.length > 0 || otherEffects.length > 0 || enemyAdvantageAgainst.size > 0 || enemyDisadvantageAgainst.size > 0 || critRange < 20 || hasTempHpDisplay || hasConditionals;
 		if (!hasAnyEffects) {
 			$container.html(`<div class="ve-muted ve-text-center py-2">No active effects</div>`);
 		}
