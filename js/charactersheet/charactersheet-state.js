@@ -2960,6 +2960,7 @@ class CharacterSheetState {
 		return {
 			id: null,
 			name: "",
+			xp: 0,
 			race: null,
 			subrace: null,
 			size: "medium", // "tiny", "small", "medium", "large", "huge", "gargantuan"
@@ -3287,6 +3288,9 @@ class CharacterSheetState {
 			...MiscUtil.copyFast(data),
 		};
 
+		this._data.xp = Math.max(0, Math.floor(Number(this._data.xp) || 0));
+		this._syncXpToCurrentLevelFloor();
+
 		// Ensure nested objects exist
 		this._data.abilities = {...this._getDefaultState().abilities, ...this._data.abilities};
 		this._data.abilityBonuses = {...this._getDefaultState().abilityBonuses, ...this._data.abilityBonuses};
@@ -3581,6 +3585,58 @@ class CharacterSheetState {
 	// #region Basic Info
 	setName (name) { this._data.name = name; }
 	getName () { return this._data.name; }
+	setXp (xp) { this._data.xp = Math.max(0, Math.floor(Number(xp) || 0)); }
+	getXp () { return Math.max(0, Math.floor(Number(this._data.xp) || 0)); }
+	addXp (xpToAdd) {
+		const amount = Math.max(0, Math.floor(Number(xpToAdd) || 0));
+		if (!amount) return this.getXp();
+		this._data.xp = this.getXp() + amount;
+		return this.getXp();
+	}
+
+	getXpRequiredForLevel (level) {
+		const xpTable = Parser?.LEVEL_XP_REQUIRED || [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
+		if (level <= 1) return 0;
+		if (level > 20) return null;
+		return xpTable[level - 1] ?? null;
+	}
+
+	getXpRequiredForCurrentLevel () {
+		const totalLevel = this.getTotalLevel();
+		if (totalLevel <= 0) return 0;
+		return this.getXpRequiredForLevel(totalLevel) ?? 0;
+	}
+
+	getXpRequiredForNextLevel () {
+		const nextLevel = this.getTotalLevel() + 1;
+		if (nextLevel > 20) return null;
+		return this.getXpRequiredForLevel(nextLevel);
+	}
+
+	getXpToNextLevel () {
+		const xpRequired = this.getXpRequiredForNextLevel();
+		if (xpRequired == null) return null;
+		return Math.max(0, xpRequired - this.getXp());
+	}
+
+	canLevelUpFromXp () {
+		const totalLevel = this.getTotalLevel();
+		if (totalLevel <= 0 || totalLevel >= 20) return false;
+		const xpRequired = this.getXpRequiredForNextLevel();
+		if (xpRequired == null) return false;
+		return this.getXp() >= xpRequired;
+	}
+
+	ensureXpMatchesLevel () {
+		return this._syncXpToCurrentLevelFloor();
+	}
+
+	_syncXpToCurrentLevelFloor () {
+		const xpFloor = this.getXpRequiredForCurrentLevel();
+		if (this.getXp() >= xpFloor) return false;
+		this._data.xp = xpFloor;
+		return true;
+	}
 	// Aliases for character name
 	setCharacterName (name) { this.setName(name); }
 	getCharacterName () { return this.getName(); }
@@ -3799,6 +3855,7 @@ class CharacterSheetState {
 		} else {
 			this._data.classes.push({...classData});
 		}
+		this._syncXpToCurrentLevelFloor();
 		this._recalculateMaxHp();
 		this._recalculateHitDice();
 		// Ensure unarmed strike is added/updated (especially for monks)
@@ -3825,6 +3882,7 @@ class CharacterSheetState {
 
 		// Increase level
 		classEntry.level = (classEntry.level || 1) + 1;
+		this._syncXpToCurrentLevelFloor();
 
 		this._recalculateMaxHp();
 		this._recalculateHitDice();
