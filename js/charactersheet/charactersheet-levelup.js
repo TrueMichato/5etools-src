@@ -3578,6 +3578,7 @@ class CharacterSheetLevelUp {
 				}
 			}
 		}
+		this._state.ensureXpMatchesLevel();
 
 		// Update unarmed strike (monk martial arts die progression)
 		this._state.ensureUnarmedStrike();

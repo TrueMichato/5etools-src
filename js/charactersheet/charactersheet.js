@@ -33,6 +33,7 @@ class CharacterSheetPage {
 
 		this._$selCharacter = null;
 		this._currentCharacterId = null;
+		this._isLevelUpBannerDismissed = false;
 
 		// Data caches
 		this._races = [];
@@ -536,6 +537,14 @@ class CharacterSheetPage {
 		// Import/Export/Print handled by CharacterSheetExport module
 		$("#charsheet-btn-levelup").on("click", () => this._levelUp?.showLevelUp());
 		$("#charsheet-btn-multiclass").on("click", () => this._levelUp?.showMulticlass());
+		$("#charsheet-btn-xp-add").on("click", () => this._onXpAdd());
+		$("#charsheet-ipt-xp-add").on("keydown", (e) => {
+			if (e.key !== "Enter") return;
+			e.preventDefault();
+			this._onXpAdd();
+		});
+		$("#charsheet-levelup-banner-btn-now").on("click", () => this._onLevelUpBannerNow());
+		$("#charsheet-levelup-banner-btn-later").on("click", () => this._onLevelUpBannerLater());
 
 		// Character name
 		$("#charsheet-ipt-name").on("change", (e) => {
@@ -695,6 +704,7 @@ class CharacterSheetPage {
 
 		if (character) {
 			this._currentCharacterId = charId;
+			this._isLevelUpBannerDismissed = false;
 			this._state.loadFromJson(character);
 
 			// Ensure Linguistics skill exists if Thelemar linguistics bonus is enabled
@@ -721,6 +731,7 @@ class CharacterSheetPage {
 
 	_createNewCharacter () {
 		this._currentCharacterId = CryptUtil.uid();
+		this._isLevelUpBannerDismissed = false;
 		this._state.reset();
 		this._state.setId(this._currentCharacterId);
 		this._renderCharacter();
@@ -746,6 +757,7 @@ class CharacterSheetPage {
 		charData.name = `${charData.name || "Character"} (Copy)`;
 
 		this._currentCharacterId = newId;
+		this._isLevelUpBannerDismissed = false;
 		this._state.loadFromJson(charData);
 		await this._saveCurrentCharacter();
 		await this._pLoadCharacters();
@@ -767,9 +779,32 @@ class CharacterSheetPage {
 
 		// Load the new character
 		this._currentCharacterId = newId;
+		this._isLevelUpBannerDismissed = false;
 		this._state.loadFromJson(charData);
 		await this._pLoadCharacters();
 		this._$selCharacter.val(newId);
+	}
+
+	_onXpAdd () {
+		const rawXpToAdd = $("#charsheet-ipt-xp-add").val();
+		const xpToAdd = Math.max(0, Math.floor(Number(rawXpToAdd) || 0));
+		if (!xpToAdd) return;
+
+		this._state.addXp(xpToAdd);
+		$("#charsheet-ipt-xp-add").val(0);
+		this._saveCurrentCharacter();
+		this._renderXpTracking();
+		this._renderLevelUpBanner();
+	}
+
+	_onLevelUpBannerNow () {
+		this._isLevelUpBannerDismissed = false;
+		this._levelUp?.showLevelUp();
+	}
+
+	_onLevelUpBannerLater () {
+		this._isLevelUpBannerDismissed = true;
+		this._renderLevelUpBanner();
 	}
 
 	async _onDeleteCharacter () {
@@ -1600,6 +1635,7 @@ class CharacterSheetPage {
 
 	_renderBasicInfo () {
 		$("#charsheet-ipt-name").val(this._state.getName());
+		this._renderXpTracking();
 		
 		// Render race with hover link
 		const race = this._state.getRace();
@@ -1651,6 +1687,56 @@ class CharacterSheetPage {
 		this._renderReachChip();
 		
 		$("#charsheet-disp-proficiency").text(`+${this._state.getProficiencyBonus()}`);
+		this._renderLevelUpBanner();
+	}
+
+	_renderXpTracking () {
+		const currentXp = this._state.getXp();
+		$("#charsheet-disp-xp-current").text(currentXp.toLocaleString());
+
+		const totalLevel = this._state.getTotalLevel();
+		if (totalLevel <= 0) {
+			$("#charsheet-disp-xp-progress").text("Add a class to track level progression.");
+			return;
+		}
+
+		if (totalLevel >= 20) {
+			$("#charsheet-disp-xp-progress").text("Maximum level reached.");
+			return;
+		}
+
+		const nextLevel = totalLevel + 1;
+		const xpToNext = this._state.getXpToNextLevel();
+		const xpRequired = this._state.getXpRequiredForNextLevel();
+		if (xpToNext <= 0) {
+			$("#charsheet-disp-xp-progress").text(`Ready for level ${nextLevel} (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`);
+			return;
+		}
+
+		$("#charsheet-disp-xp-progress").text(`${xpToNext.toLocaleString()} XP to level ${nextLevel} (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`);
+	}
+
+	_renderLevelUpBanner () {
+		const $banner = $("#charsheet-levelup-banner");
+		const $text = $("#charsheet-levelup-banner-text");
+		if (!$banner.length || !$text.length) return;
+
+		const totalLevel = this._state.getTotalLevel();
+		if (this._isLevelUpBannerDismissed || totalLevel <= 0 || totalLevel >= 20) {
+			$banner.addClass("ve-hidden");
+			return;
+		}
+
+		if (!this._state.canLevelUpFromXp()) {
+			$banner.addClass("ve-hidden");
+			return;
+		}
+
+		const nextLevel = totalLevel + 1;
+		const xpRequired = this._state.getXpRequiredForNextLevel();
+		const currentXp = this._state.getXp();
+		$text.text(`You can level up to ${nextLevel} now (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`);
+		$banner.removeClass("ve-hidden");
 	}
 
 	/**

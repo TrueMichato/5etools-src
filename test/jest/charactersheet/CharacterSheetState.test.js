@@ -8,6 +8,10 @@ import "../../../js/charactersheet/charactersheet-state.js";
 
 const CharacterSheetState = globalThis.CharacterSheetState;
 
+if (!globalThis.Parser.LEVEL_XP_REQUIRED) {
+	globalThis.Parser.LEVEL_XP_REQUIRED = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
+}
+
 describe("CharacterSheetState", () => {
 	let state;
 
@@ -142,6 +146,85 @@ describe("CharacterSheetState", () => {
 				subclass: {name: "Champion", source: "PHB"},
 			});
 			expect(state.getClassSummary()).toBe("Fighter 3 (Champion)");
+		});
+	});
+
+	// ==========================================================================
+	// Experience and XP Leveling
+	// ==========================================================================
+	describe("Experience and XP Leveling", () => {
+		it("should initialize XP to 0", () => {
+			expect(state.getXp()).toBe(0);
+		});
+
+		it("should set and sanitize XP values", () => {
+			state.setXp(1234.9);
+			expect(state.getXp()).toBe(1234);
+
+			state.setXp(-50);
+			expect(state.getXp()).toBe(0);
+		});
+
+		it("should add XP without overwriting current XP", () => {
+			state.setXp(300);
+			state.addXp(450);
+			expect(state.getXp()).toBe(750);
+		});
+
+		it("should return XP requirement for next level", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 1});
+			expect(state.getXpRequiredForNextLevel()).toBe(300);
+		});
+
+		it("should report XP remaining to next level", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 1});
+			state.setXp(250);
+			expect(state.getXpToNextLevel()).toBe(50);
+		});
+
+		it("should allow leveling when XP reaches threshold", () => {
+			state.addClass({name: "Rogue", source: "PHB", level: 1});
+			state.setXp(300);
+			expect(state.canLevelUpFromXp()).toBe(true);
+		});
+
+		it("should not allow leveling below threshold", () => {
+			state.addClass({name: "Rogue", source: "PHB", level: 1});
+			state.setXp(299);
+			expect(state.canLevelUpFromXp()).toBe(false);
+		});
+
+		it("should not allow XP leveling with no class levels", () => {
+			state.setXp(100000);
+			expect(state.canLevelUpFromXp()).toBe(false);
+		});
+
+		it("should auto-sync XP floor when class level is set directly", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 2});
+			expect(state.getXp()).toBe(300);
+		});
+
+		it("should auto-sync XP floor when leveling up", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 1});
+			expect(state.getXp()).toBe(0);
+			state.levelUp("Fighter");
+			expect(state.getXp()).toBe(300);
+		});
+
+		it("should auto-sync XP floor when loading saved data", () => {
+			state.loadFromJson({
+				name: "XP Sync Test",
+				classes: [{name: "Rogue", source: "PHB", level: 3}],
+				xp: 150,
+			});
+			expect(state.getXp()).toBe(900);
+		});
+
+		it("should return null next-level requirement at level 20", () => {
+			state.addClass({name: "Wizard", source: "PHB", level: 20});
+			expect(state.getXpRequiredForNextLevel()).toBeNull();
+			expect(state.getXpToNextLevel()).toBeNull();
+			expect(state.canLevelUpFromXp()).toBe(false);
 		});
 	});
 
