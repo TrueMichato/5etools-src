@@ -510,6 +510,8 @@ class CharacterSheetCustomAbilities {
 					{value: "damage:ranged", label: "Ranged Damage"},
 					{value: "damage:weapon", label: "Weapon Damage"},
 					{value: "damage:spell", label: "Spell Damage"},
+					{value: "critRange", label: "Critical Hit Range (Set)"},
+					{value: "critRange:expand", label: "Critical Hit Range (Expand)"},
 				],
 			},
 			{
@@ -1093,6 +1095,57 @@ class CharacterSheetCustomAbilities {
 							</button>
 						</div>
 
+						<!-- Critical Range -->
+						<div class="custom-abilities__form-section">
+							<label class="custom-abilities__form-section-title">Critical Hit Range (Optional)</label>
+							<p class="ve-muted ve-small mb-2">Modify critical hit range (like Champion Fighter's Improved Critical or Hexblade's Curse)</p>
+							
+							<div class="custom-abilities__critrange-section" id="critrange-section">
+								<label class="custom-abilities__critrange-toggle">
+									<input type="checkbox" id="critrange-enabled" name="critRangeEnabled">
+									<span>Enable Critical Range Modification</span>
+								</label>
+								
+								<div class="custom-abilities__critrange-config" id="critrange-config" style="display: none;">
+									<div class="custom-abilities__critrange-mode">
+										<label class="custom-abilities__critrange-mode-option">
+											<input type="radio" name="critRangeMode" value="set" checked>
+											<span>Set Range To</span>
+										</label>
+										<label class="custom-abilities__critrange-mode-option">
+											<input type="radio" name="critRangeMode" value="expand">
+											<span>Expand Range By</span>
+										</label>
+									</div>
+									
+									<div class="custom-abilities__critrange-value-row" id="critrange-set-row">
+										<span class="ve-small">Critical on:</span>
+										<select class="form-control" id="critrange-set-value" style="width: 100px;">
+											<option value="19">19-20</option>
+											<option value="18">18-20</option>
+											<option value="17">17-20</option>
+											<option value="16">16-20</option>
+											<option value="15">15-20</option>
+											<option value="14">14-20</option>
+											<option value="13">13-20</option>
+											<option value="12">12-20</option>
+											<option value="11">11-20</option>
+											<option value="10">10-20</option>
+											<option value="5">5-20</option>
+											<option value="2">2-20</option>
+										</select>
+										<span class="ve-muted ve-small">(like Champion Fighter)</span>
+									</div>
+									
+									<div class="custom-abilities__critrange-value-row" id="critrange-expand-row" style="display: none;">
+										<span class="ve-small">Expand by:</span>
+										<input type="number" class="form-control" id="critrange-expand-value" min="1" max="19" value="1" style="width: 70px;">
+										<span class="ve-muted ve-small">→ Preview: <span id="critrange-expand-preview">19-20</span></span>
+									</div>
+								</div>
+							</div>
+						</div>
+
 						<!-- Grants -->
 						<div class="custom-abilities__form-section">
 							<label class="custom-abilities__form-section-title">Grants (Optional)</label>
@@ -1305,7 +1358,7 @@ class CharacterSheetCustomAbilities {
 									</ul>
 
 									<h5>Effect Types</h5>
-									<p class="ve-small ve-muted">ac, initiative, attack, attack:melee, attack:ranged, attack:spell, damage, damage:melee, damage:ranged, damage:spell, speed, speed:fly, speed:swim, speed:climb, spellDc, spellAttack, save:all, save:str/dex/con/int/wis/cha, check:all, check:str/dex/con/int/wis/cha, skill:all, skill:[skillname], passive:[skillname], hp:max, ability:str/dex/con/int/wis/cha, sense:darkvision/blindsight/tremorsense/truesight, resistance:[damage type], proficiencyBonus, carryCapacity, deathSave</p>
+									<p class="ve-small ve-muted">ac, initiative, attack, attack:melee, attack:ranged, attack:spell, damage, damage:melee, damage:ranged, damage:spell, critRange (set absolute, e.g. 19), critRange:expand (expand by amount), speed, speed:fly, speed:swim, speed:climb, spellDc, spellAttack, save:all, save:str/dex/con/int/wis/cha, check:all, check:str/dex/con/int/wis/cha, skill:all, skill:[skillname], passive:[skillname], hp:max, ability:str/dex/con/int/wis/cha, sense:darkvision/blindsight/tremorsense/truesight, resistance:[damage type], proficiencyBonus, carryCapacity, deathSave</p>
 
 									<h5>Example</h5>
 									<pre>{
@@ -1346,12 +1399,13 @@ class CharacterSheetCustomAbilities {
 			conditionImmunities: [],
 		};
 		
-		// Size, reach, bonus damage, rerolls - extracted from effects array
+		// Size, reach, bonus damage, rerolls, crit range - extracted from effects array
 		let sizeChange = 0; // Positive = enlarge, negative = reduce
 		let reachBonus = 0; // In increments of 5 ft
 		let bonusDamage = []; // [{type: "fire", dice: "1d6"}, ...]
 		let rerolls = []; // [{trigger: "1", rollType: "attack"}, ...]
-		let effects = []; // General effects (not size/reach/damage/reroll)
+		let critRangeConfig = {enabled: false, mode: "set", value: 19, expand: 1}; // Critical range config
+		let effects = []; // General effects (not size/reach/damage/reroll/critRange)
 		
 		// Initialize from existing effects - extract special types and keep others
 		if (existingAbility?.effects) {
@@ -1372,6 +1426,16 @@ class CharacterSheetCustomAbilities {
 					// Parse damage:reroll:TRIGGER:RESTRICTION format
 					const parts = e.type.split(":");
 					rerolls.push({trigger: parts[2] || "1or2", rollType: "damage", restriction: parts[3] || ""});
+				} else if (e.type === "critRange") {
+					// Absolute critical range (set to a specific value)
+					critRangeConfig.enabled = true;
+					critRangeConfig.mode = "set";
+					critRangeConfig.value = e.value || 19;
+				} else if (e.type === "critRange:expand") {
+					// Expand critical range by amount
+					critRangeConfig.enabled = true;
+					critRangeConfig.mode = "expand";
+					critRangeConfig.expand = e.value || 1;
 				} else {
 					// Keep as general effect
 					effects.push(JSON.parse(JSON.stringify(e)));
@@ -1540,6 +1604,43 @@ class CharacterSheetCustomAbilities {
 			});
 		};
 
+		// Helper to render critical range UI
+		const renderCritRangeUI = () => {
+			const enabledCheckbox = modal.querySelector("#critrange-enabled");
+			const configSection = modal.querySelector("#critrange-config");
+			const setRow = modal.querySelector("#critrange-set-row");
+			const expandRow = modal.querySelector("#critrange-expand-row");
+			const setValue = modal.querySelector("#critrange-set-value");
+			const expandValue = modal.querySelector("#critrange-expand-value");
+			const expandPreview = modal.querySelector("#critrange-expand-preview");
+			const modeRadios = modal.querySelectorAll("input[name='critRangeMode']");
+			
+			if (!enabledCheckbox) return;
+			
+			// Set checkbox state
+			enabledCheckbox.checked = critRangeConfig.enabled;
+			
+			// Show/hide config section
+			configSection.style.display = critRangeConfig.enabled ? "block" : "none";
+			
+			// Set mode radio
+			modeRadios.forEach(r => {
+				r.checked = r.value === critRangeConfig.mode;
+			});
+			
+			// Show/hide appropriate row
+			setRow.style.display = critRangeConfig.mode === "set" ? "flex" : "none";
+			expandRow.style.display = critRangeConfig.mode === "expand" ? "flex" : "none";
+			
+			// Set values
+			setValue.value = critRangeConfig.value;
+			expandValue.value = critRangeConfig.expand;
+			
+			// Update expand preview
+			const expandedRange = 20 - critRangeConfig.expand;
+			expandPreview.textContent = `${expandedRange}-20`;
+		};
+
 		// Helper to render effects list
 		const renderEffectsList = () => {
 			const list = modal.querySelector("#ability-effects-list");
@@ -1638,6 +1739,15 @@ class CharacterSheetCustomAbilities {
 				} else {
 					// Format: reroll:TRIGGER:ROLLTYPE
 					allEffects.push({type: `reroll:${r.trigger}:${r.rollType}`});
+				}
+			}
+			
+			// Add critical range effect
+			if (critRangeConfig.enabled) {
+				if (critRangeConfig.mode === "set") {
+					allEffects.push({type: "critRange", value: critRangeConfig.value});
+				} else if (critRangeConfig.mode === "expand") {
+					allEffects.push({type: "critRange:expand", value: critRangeConfig.expand});
 				}
 			}
 			
@@ -1801,6 +1911,7 @@ class CharacterSheetCustomAbilities {
 			reachBonus = 0;
 			bonusDamage = [];
 			rerolls = [];
+			critRangeConfig = {enabled: false, mode: "set", value: 19, expand: 1};
 			effects = [];
 			
 			for (const e of (data.effects || [])) {
@@ -1820,6 +1931,16 @@ class CharacterSheetCustomAbilities {
 					// Parse damage:reroll:TRIGGER:RESTRICTION format
 					const parts = e.type.split(":");
 					rerolls.push({trigger: parts[2] || "1or2", rollType: "damage", restriction: parts[3] || ""});
+				} else if (e.type === "critRange") {
+					// Absolute critical range
+					critRangeConfig.enabled = true;
+					critRangeConfig.mode = "set";
+					critRangeConfig.value = e.value || 19;
+				} else if (e.type === "critRange:expand") {
+					// Expand critical range
+					critRangeConfig.enabled = true;
+					critRangeConfig.mode = "expand";
+					critRangeConfig.expand = e.value || 1;
 				} else {
 					// Keep other effects in the regular effects array
 					effects.push(e);
@@ -1830,6 +1951,7 @@ class CharacterSheetCustomAbilities {
 			renderSizeReachUI();
 			renderBonusDamageList();
 			renderRerollsUI();
+			renderCritRangeUI();
 
 			// Restore grants
 			if (data.grants) {
@@ -2038,6 +2160,25 @@ class CharacterSheetCustomAbilities {
 			renderRerollsUI();
 		});
 
+		// Critical range handlers
+		modal.querySelector("#critrange-enabled")?.addEventListener("change", e => {
+			critRangeConfig.enabled = e.target.checked;
+			renderCritRangeUI();
+		});
+		modal.querySelectorAll("input[name='critRangeMode']").forEach(radio => {
+			radio.addEventListener("change", e => {
+				critRangeConfig.mode = e.target.value;
+				renderCritRangeUI();
+			});
+		});
+		modal.querySelector("#critrange-set-value")?.addEventListener("change", e => {
+			critRangeConfig.value = parseInt(e.target.value) || 19;
+		});
+		modal.querySelector("#critrange-expand-value")?.addEventListener("change", e => {
+			critRangeConfig.expand = Math.max(1, Math.min(19, parseInt(e.target.value) || 1));
+			renderCritRangeUI();
+		});
+
 		// Initialize
 		renderEffectsList();
 		renderGrantsUI();
@@ -2045,6 +2186,7 @@ class CharacterSheetCustomAbilities {
 		renderSizeReachUI();
 		renderBonusDamageList();
 		renderRerollsUI();
+		renderCritRangeUI();
 
 		// Update initial grant counts
 		this._updateGrantCount(modal, "grants-spell-count", grants.spells.length);
