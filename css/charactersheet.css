@@ -14705,3 +14705,65 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 	color: #fbbf24;
 	background: rgba(245, 158, 11, 0.15);
 }
+
+/* Critical Range Section */
+.custom-abilities__critrange-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__critrange-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	cursor: pointer;
+}
+
+.custom-abilities__critrange-toggle input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	cursor: pointer;
+}
+
+.custom-abilities__critrange-config {
+	margin-left: var(--cs-space-md, 1rem);
+	padding: var(--cs-space-sm, 0.5rem);
+	background: rgba(0, 0, 0, 0.15);
+	border-radius: var(--cs-radius-sm, 4px);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.1));
+}
+
+.custom-abilities__critrange-mode {
+	display: flex;
+	gap: var(--cs-space-md, 1rem);
+	margin-bottom: var(--cs-space-sm, 0.5rem);
+}
+
+.custom-abilities__critrange-mode-option {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-xs, 0.25rem);
+	cursor: pointer;
+}
+
+.custom-abilities__critrange-mode-option input[type="radio"] {
+	cursor: pointer;
+}
+
+.custom-abilities__critrange-value-row {
+	display: flex;
+	align-items: center;
+	gap: var(--cs-space-sm, 0.5rem);
+	flex-wrap: wrap;
+}
+
+.custom-abilities__critrange-value-row select,
+.custom-abilities__critrange-value-row input[type="number"] {
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--cs-border, rgba(255, 255, 255, 0.15));
+	border-radius: var(--cs-radius-sm, 4px);
+	color: var(--cs-text, #f5f5f5);
+	padding: 6px 10px;
+	font-size: calc(var(--cs-font-base, 14px) * 0.9);
+}

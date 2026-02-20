@@ -17810,11 +17810,12 @@ class CharacterSheetState {
 
 	/**
 	 * Get the critical hit range (lowest number that crits)
-	 * Considers Champion Fighter, Battle Tactics, and other sources
+	 * Considers Champion Fighter, Battle Tactics, custom abilities, and other sources
 	 * @returns {number} The lowest roll that scores a critical hit (default 20)
 	 */
 	getCriticalRange () {
 		let critRange = 20;
+		let totalExpansion = 0;
 
 		// Check Champion Fighter (already in getFeatureCalculations)
 		const calcs = this.getFeatureCalculations();
@@ -17825,9 +17826,19 @@ class CharacterSheetState {
 		// Check active state effects for expanded crit range (e.g., Hexblade's Curse, homebrew)
 		const effects = this.getActiveStateEffects();
 		for (const e of effects) {
+			// Absolute critical range (takes minimum)
 			if (e.type === "critRange" && typeof e.value === "number" && e.value < critRange) {
 				critRange = e.value;
 			}
+			// Expansion mode (accumulative)
+			if (e.type === "critRange:expand" && typeof e.value === "number") {
+				totalExpansion += e.value;
+			}
+		}
+
+		// Apply expansion to current range
+		if (totalExpansion > 0) {
+			critRange = Math.max(1, critRange - totalExpansion);
 		}
 
 		return critRange;
@@ -20099,6 +20110,12 @@ class CharacterSheetState {
 					continue;
 				}
 
+				// Handle critical range effects - these go to active states
+				if (effectType === "critRange" || effectType === "critRange:expand") {
+					this._ensureCustomAbilityActiveState(ability);
+					continue;
+				}
+
 				// Handle reach modifier
 				if (effectType === "reach") {
 					// Register as a named modifier that can be picked up
@@ -20664,6 +20681,24 @@ class CharacterSheetState {
 					type: "damageReroll",
 					threshold: parts[2] || "1or2",
 					weaponType: parts[3] || "all",
+				});
+				continue;
+			}
+
+			// Critical range effects
+			if (effectType === "critRange") {
+				// Absolute critical range (set to a specific value like 19 for 19-20)
+				customEffects.push({
+					type: "critRange",
+					value: e.value || 19,
+				});
+				continue;
+			}
+			if (effectType === "critRange:expand") {
+				// Expand critical range by amount (e.g., +1 expands 20→19, +2 expands 20→18)
+				customEffects.push({
+					type: "critRange:expand",
+					value: e.value || 1,
 				});
 				continue;
 			}
