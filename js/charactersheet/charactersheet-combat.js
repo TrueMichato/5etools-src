@@ -895,7 +895,19 @@ class CharacterSheetCombat {
 			sneakAttackDice = sneakAttackInfo.dice;
 		}
 
-		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus + stateDamageBonus;
+		// Magic item crit damage bonus (e.g., bonusWeaponCritDamage on the weapon)
+		let critDamageBonus = 0;
+		if (isCrit && attack.sourceItem?.bonusWeaponCritDamage) {
+			critDamageBonus = attack.sourceItem.bonusWeaponCritDamage;
+		}
+
+		// Spell damage bonus from magic items (e.g., Wand of the War Mage, Rod of the Pact Keeper)
+		let spellDamageBonus = 0;
+		if (attack.isSpell) {
+			spellDamageBonus = this._state.getItemBonus?.("spellDamage") || 0;
+		}
+
+		const totalBonus = abilityMod + (attack.damageBonus || 0) + featureDamageBonus + rageBonus + stateDamageBonus + critDamageBonus + spellDamageBonus;
 
 		// Get extra damage dice from active states (e.g., Hex, Flame Tongue)
 		const extraDamageEntries = this._state.getExtraDamageFromStates?.() || [];
@@ -915,6 +927,8 @@ class CharacterSheetCombat {
 		if (featureDamageBonus) subtitle += ` + ${featureDamageBonus} (features)`;
 		if (rageBonus) subtitle += ` + ${rageBonus} (rage)`;
 		if (stateDamageBonus) subtitle += ` + ${stateDamageBonus} (states)`;
+		if (critDamageBonus) subtitle += ` + ${critDamageBonus} (crit bonus)`;
+		if (spellDamageBonus) subtitle += ` + ${spellDamageBonus} (spell item)`;
 		if (sneakAttackDamage) subtitle += ` + ${sneakAttackDamage} (sneak attack ${sneakAttackDice})`;
 		for (const ep of extraDamageParts) {
 			subtitle += ` + ${ep.total} (${ep.source}${ep.type ? " " + ep.type : ""})`;
@@ -2421,10 +2435,57 @@ class CharacterSheetCombat {
 			$container.append($conditionalSection);
 		}
 
+		// Item-granted defenses display (resistances, immunities, etc. from magic items)
+		const itemDefenses = this._state.getItemDefenses?.() || {};
+		const hasItemDefenses = (itemDefenses.resist?.length > 0) || (itemDefenses.immune?.length > 0) || (itemDefenses.vulnerable?.length > 0) || (itemDefenses.conditionImmune?.length > 0);
+		if (hasItemDefenses) {
+			const $defSection = $(`<div class="charsheet__effect-group mb-2"></div>`);
+			$defSection.append(`<div class="ve-small ve-bold text-info mb-1">🛡️ Magic Item Defenses:</div>`);
+
+			if (itemDefenses.resist?.length) {
+				for (const d of itemDefenses.resist) {
+					$defSection.append(`
+						<div class="charsheet__effect-item badge badge-info mr-1 mb-1" title="From: ${d.source}">
+							Resist ${d.type.toTitleCase()} (${d.source})
+						</div>
+					`);
+				}
+			}
+			if (itemDefenses.immune?.length) {
+				for (const d of itemDefenses.immune) {
+					$defSection.append(`
+						<div class="charsheet__effect-item badge badge-success mr-1 mb-1" title="From: ${d.source}">
+							Immune ${d.type.toTitleCase()} (${d.source})
+						</div>
+					`);
+				}
+			}
+			if (itemDefenses.vulnerable?.length) {
+				for (const d of itemDefenses.vulnerable) {
+					$defSection.append(`
+						<div class="charsheet__effect-item badge badge-danger mr-1 mb-1" title="From: ${d.source}">
+							Vulnerable ${d.type.toTitleCase()} (${d.source})
+						</div>
+					`);
+				}
+			}
+			if (itemDefenses.conditionImmune?.length) {
+				for (const d of itemDefenses.conditionImmune) {
+					$defSection.append(`
+						<div class="charsheet__effect-item badge badge-warning mr-1 mb-1" title="From: ${d.source}">
+							Immune to ${d.type.toTitleCase()} (${d.source})
+						</div>
+					`);
+				}
+			}
+
+			$container.append($defSection);
+		}
+
 		// If no effects, show placeholder
 		const hasTempHpDisplay = tempHp > 0 && tempHpSource;
 		const hasConditionals = allConditionals.length > 0;
-		const hasAnyEffects = advantageTypes.size > 0 || disadvantageTypes.size > 0 || bonusEffects.length > 0 || otherEffects.length > 0 || enemyAdvantageAgainst.size > 0 || enemyDisadvantageAgainst.size > 0 || critRange < 20 || hasTempHpDisplay || hasConditionals;
+		const hasAnyEffects = advantageTypes.size > 0 || disadvantageTypes.size > 0 || bonusEffects.length > 0 || otherEffects.length > 0 || enemyAdvantageAgainst.size > 0 || enemyDisadvantageAgainst.size > 0 || critRange < 20 || hasTempHpDisplay || hasConditionals || hasItemDefenses;
 		if (!hasAnyEffects) {
 			$container.html(`<div class="ve-muted ve-text-center py-2">No active effects</div>`);
 		}
