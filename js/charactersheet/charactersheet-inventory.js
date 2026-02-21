@@ -104,6 +104,12 @@ class CharacterSheetInventory {
 			this._restoreCharge(itemId);
 		});
 
+		// Use consumable (potions, scrolls)
+		$(document).on("click", ".charsheet__item-use", (e) => {
+			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
+			this._useConsumable(itemId);
+		});
+
 		// Star/favorite button
 		$(document).on("click", ".charsheet__item-star", (e) => {
 			e.stopPropagation();
@@ -1495,6 +1501,194 @@ class CharacterSheetInventory {
 		this._page.saveCharacter();
 	}
 
+	/**
+	 * Use a consumable item (potion or scroll)
+	 * @param {string} itemId - The item ID
+	 */
+	async _useConsumable (itemId) {
+		const items = this._state.getItems();
+		const item = items.find(i => i.id === itemId);
+		if (!item) return;
+
+		let consumed = false;
+		if (item.type === "P") {
+			consumed = await this._usePotion(item);
+		} else if (item.type === "SC") {
+			consumed = await this._useScroll(item);
+		}
+
+		if (consumed) {
+			this._state.consumeItem(itemId);
+			this._renderItemList();
+			this._updateEncumbrance();
+			this._page.saveCharacter();
+		}
+	}
+
+	/**
+	 * Use a potion
+	 * @param {object} item - The item data
+	 * @returns {boolean} True if potion was used
+	 */
+	async _usePotion (item) {
+		const healing = this._state.getItemHealingEffect(item.id);
+
+		if (healing) {
+			// Roll healing dice
+			let healAmount = 0;
+			const settings = this._state.getSettings?.() || {};
+
+			if (healing.dice) {
+				// Parse dice string and roll
+				const diceMatch = healing.dice.match(/(\d+)d(\d+)(?:\s*\+\s*(\d+))?/);
+				if (diceMatch) {
+					const [, numDice, dieSize, modifier] = diceMatch;
+					const mod = parseInt(modifier) || 0;
+
+					if (settings.thelemar_itemUtilization) {
+						// Max healing when using action (Thelemar house rule)
+						healAmount = parseInt(numDice) * parseInt(dieSize) + mod;
+					} else {
+						// Roll normally
+						for (let i = 0; i < parseInt(numDice); i++) {
+							healAmount += Math.floor(Math.random() * parseInt(dieSize)) + 1;
+						}
+						healAmount += mod;
+					}
+				}
+			}
+
+			if (healAmount > 0) {
+				this._state.heal(healAmount);
+				JqueryUtil.doToast({
+					type: "success",
+					content: `Drank ${item.name}. Healed ${healAmount} HP!`,
+				});
+				return true;
+			}
+		}
+
+		// Non-healing potion - just confirm usage
+		const confirmed = await InputUiUtil.pGetUserBoolean({
+			title: `Use ${item.name}?`,
+			htmlDescription: `<p>Use this potion? It will be consumed.</p>`,
+			textYes: "Use",
+			textNo: "Cancel",
+		});
+
+		if (confirmed) {
+			JqueryUtil.doToast({
+				type: "info",
+				content: `Used ${item.name}.`,
+			});
+		}
+
+		return confirmed;
+	}
+
+	/**
+	 * Use a spell scroll
+	 * @param {object} item - The item data
+	 * @returns {boolean} True if scroll was used
+	 */
+	async _useScroll (item) {
+		const scrollSpell = this._state.getScrollSpell(item.id);
+
+		if (!scrollSpell) {
+			// Unknown scroll - just confirm usage
+			const confirmed = await InputUiUtil.pGetUserBoolean({
+				title: `Use ${item.name}?`,
+				htmlDescription: `<p>Use this scroll? It will be consumed.</p>`,
+				textYes: "Use",
+				textNo: "Cancel",
+			});
+
+			if (confirmed) {
+				JqueryUtil.doToast({
+					type: "info",
+					content: `Used ${item.name}.`,
+				});
+			}
+			return confirmed;
+		}
+
+		// Get spell level from scroll data
+		let spellLevel = scrollSpell.level;
+		if (spellLevel === undefined) {
+			// Try to determine from scroll name or loaded spell data
+			const spellData = await this._loadSpellDataByName(scrollSpell.name, scrollSpell.source);
+			spellLevel = spellData?.level ?? 0;
+		}
+
+		// Check if character can cast without ability check
+		const canCastWithoutCheck = this._state.canCastScrollWithoutCheck(spellLevel);
+
+		if (!canCastWithoutCheck && spellLevel > 0) {
+			// Need to make an ability check
+			const dc = this._state.getScrollAbilityCheckDc(spellLevel);
+			const arcanaBonus = this._state.getSkillMod("arcana");
+
+			const confirmed = await InputUiUtil.pGetUserBoolean({
+				title: "Arcana Check Required",
+				htmlDescription: `
+					<p>This scroll contains a level ${spellLevel} spell, which is above your casting ability.</p>
+					<p>You must succeed on a <strong>DC ${dc}</strong> Intelligence (Arcana) check to use it.</p>
+					<p>Your Arcana modifier: <strong>${arcanaBonus >= 0 ? "+" : ""}${arcanaBonus}</strong></p>
+					<p class="ve-muted ve-small">On a failed check, the spell disappears from the scroll with no other effect.</p>
+				`,
+				textYes: "Roll Arcana Check",
+				textNo: "Cancel",
+			});
+
+			if (!confirmed) return false;
+
+			// Roll the check
+			const roll = Math.floor(Math.random() * 20) + 1;
+			const total = roll + arcanaBonus;
+
+			if (total < dc) {
+				JqueryUtil.doToast({
+					type: "danger",
+					content: `Arcana check failed! Rolled ${roll}${arcanaBonus >= 0 ? "+" : ""}${arcanaBonus} = ${total} vs DC ${dc}. The scroll crumbles to dust!`,
+				});
+				return true; // Still consumed, just failed
+			}
+
+			JqueryUtil.doToast({
+				type: "success",
+				content: `Arcana check succeeded! Rolled ${roll}${arcanaBonus >= 0 ? "+" : ""}${arcanaBonus} = ${total} vs DC ${dc}.`,
+			});
+		}
+
+		// Cast the spell
+		JqueryUtil.doToast({
+			type: "success",
+			content: `Cast ${scrollSpell.name} from ${item.name}!`,
+		});
+
+		return true;
+	}
+
+	/**
+	 * Load spell data by name
+	 * @param {string} name - Spell name
+	 * @param {string} source - Optional source
+	 * @returns {object|null} Spell data or null
+	 */
+	async _loadSpellDataByName (name, source) {
+		// Try to find in any loaded spell data
+		if (this._page?._spells?._allSpells) {
+			const spell = this._page._spells._allSpells.find(s =>
+				s.name.toLowerCase() === name.toLowerCase()
+				&& (!source || s.source === source),
+			);
+			if (spell) return spell;
+		}
+
+		// Could add fallback loading here if needed
+		return null;
+	}
+
 	_removeItem (itemId) {
 		this._state.removeItem(itemId);
 		this._renderItemList();
@@ -2352,6 +2546,7 @@ class CharacterSheetInventory {
 		const canAttune = item.requiresAttunement;
 		const hasCharges = item.charges && item.charges > 0;
 		const hasNote = !!this._state.getItemNote(item.id);
+		const isConsumable = item.type === "P" || item.type === "SC"; // Potion or Scroll
 
 		// Render item name with a 5etools hover link if it has a source
 		let itemNameHtml = item.name;
@@ -2436,6 +2631,11 @@ class CharacterSheetInventory {
 						${canAttune ? `
 							<button type="button" class="ve-btn ve-btn-xs ${item.attuned ? "ve-btn-warning" : "ve-btn-default"} charsheet__item-attune" title="${item.attuned ? "End attunement" : "Attune"}">
 								<span class="glyphicon glyphicon-star-empty"></span> ${item.attuned ? "Attuned" : "Attune"}
+							</button>
+						` : ""}
+						${isConsumable ? `
+							<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__item-use" title="Use ${item.name}">
+								<span class="glyphicon glyphicon-play"></span> Use
 							</button>
 						` : ""}
 						<button type="button" class="ve-btn ve-btn-xs ${hasNote ? "ve-btn-primary" : "ve-btn-default"} charsheet__item-note" title="${hasNote ? "View/Edit Note" : "Add Note"}">
