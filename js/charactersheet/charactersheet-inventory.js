@@ -1433,12 +1433,26 @@ class CharacterSheetInventory {
 		const item = items.find(i => i.id === itemId);
 		if (!item || !item.requiresAttunement) return;
 
-		// Check attunement limit (base 3, can be higher for Artificers)
-		const currentAttuned = this._state.getAttunedCount();
-		const maxAttuned = this._state.getMaxAttunement();
-		if (!item.attuned && currentAttuned >= maxAttuned) {
-			JqueryUtil.doToast({type: "warning", content: `Cannot attune to more than ${maxAttuned} items!`});
-			return;
+		// If trying to attune (not un-attune), check requirements
+		if (!item.attuned) {
+			// Check attunement limit (base 3, can be higher for Artificers)
+			const currentAttuned = this._state.getAttunedCount();
+			const maxAttuned = this._state.getMaxAttunement();
+			if (currentAttuned >= maxAttuned) {
+				JqueryUtil.doToast({type: "warning", content: `Cannot attune to more than ${maxAttuned} items!`});
+				return;
+			}
+
+			// Check attunement requirements (class, race, spellcasting, etc.)
+			const itemData = item.item || item;
+			const {canAttune, reasons} = this._state.meetsAttunementRequirements(itemData);
+			if (!canAttune && reasons.length > 0) {
+				JqueryUtil.doToast({
+					type: "warning",
+					content: `Cannot attune to ${item.name}: ${reasons.join(", ")}`,
+				});
+				return;
+			}
 		}
 
 		this._state.setItemAttuned(itemId, !item.attuned);
@@ -1785,6 +1799,12 @@ class CharacterSheetInventory {
 			if (Object.keys(speedMods.multiply || {}).length) bonuses.speedMultiply = speedMods.multiply;
 		}
 
+		// Collect bonus spell slots from equipped/attuned items
+		const spellSlotBonuses = this._getItemSpellSlotBonuses(items);
+		if (Object.keys(spellSlotBonuses).length) {
+			bonuses.spellSlots = spellSlotBonuses;
+		}
+
 		// Collect ability score overrides from equipped/attuned items
 		const abilityOverrides = this._getItemAbilityOverrides(items);
 
@@ -1896,6 +1916,52 @@ class CharacterSheetInventory {
 		}
 
 		return hasAny ? {bonus, static: staticSpeeds, equal, multiply} : null;
+	}
+
+	/**
+	 * Collect bonus spell slots from equipped/attuned items
+	 * Parses item entries for phrases like "gain an additional 3rd level spell slot"
+	 * @param {Array} items - All inventory items
+	 * @returns {object} Keyed by spell level, e.g., {3: 1, 5: 2} for +1 3rd-level slot, +2 5th-level slots
+	 */
+	_getItemSpellSlotBonuses (items) {
+		const slotBonuses = {};
+
+		for (const item of items) {
+			if (!item.equipped) continue;
+			if (item.requiresAttunement && !item.attuned) continue;
+
+			// Parse item entries for spell slot modifiers
+			const entriesText = this._getItemEntriesTextForParsing(item);
+			if (!entriesText) continue;
+
+			const modifiers = FeatureModifierParser.parseModifiers(entriesText, item.name || "Item");
+			for (const mod of modifiers) {
+				if (mod.isSpellSlot && mod.slotLevel && mod.slotCount) {
+					slotBonuses[mod.slotLevel] = (slotBonuses[mod.slotLevel] || 0) + mod.slotCount;
+				}
+			}
+		}
+
+		return slotBonuses;
+	}
+
+	/**
+	 * Get entries text from an item for parsing
+	 * @param {object} item - The item object
+	 * @returns {string} Plain text from entries
+	 */
+	_getItemEntriesTextForParsing (item) {
+		if (!item.entries?.length) return "";
+
+		// Convert entries to plain text
+		return item.entries
+			.map(e => typeof e === "string" ? e : (e?.entries ? e.entries.join(" ") : JSON.stringify(e)))
+			.join(" ")
+			.replace(/<[^>]*>/g, " ")
+			.replace(/\{@[^}]+\s+([^}|]+)(?:\|[^}]*)?\}/g, "$1") // Strip {@tag text|...} to text
+			.replace(/\s+/g, " ")
+			.trim();
 	}
 
 	/**

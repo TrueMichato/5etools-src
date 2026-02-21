@@ -8,6 +8,7 @@ import "./setup.js";
 import "../../../js/charactersheet/charactersheet-state.js";
 
 const CharacterSheetState = globalThis.CharacterSheetState;
+const FeatureModifierParser = globalThis.FeatureModifierParser;
 
 function makeWeapon (overrides = {}) {
 	return {
@@ -843,6 +844,704 @@ describe("Magic Item Bonuses", () => {
 			const shouldApply = added.equipped
 				&& (!added.requiresAttunement || added.attuned);
 			expect(shouldApply).toBe(true);
+		});
+	});
+
+	// ======================================================================
+	// Attunement Requirements Validation
+	// ======================================================================
+	describe("Attunement Requirements Validation", () => {
+		it("should allow attunement when no requirements specified", () => {
+			const item = {name: "Generic Ring", requiresAttunement: true};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+			expect(result.reasons).toEqual([]);
+		});
+
+		it("should allow attunement when empty reqAttuneTags", () => {
+			const item = {name: "Ring", reqAttuneTags: []};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should fail when class requirement not met", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 5});
+			const item = {
+				name: "+1 All-Purpose Tool",
+				reqAttuneTags: [{class: "artificer|tce"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires Artificer class");
+		});
+
+		it("should pass when class requirement met", () => {
+			state.addClass({name: "Artificer", source: "TCE", level: 5});
+			const item = {
+				name: "+1 All-Purpose Tool",
+				reqAttuneTags: [{class: "artificer|tce"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should fail when race requirement not met", () => {
+			state.setRace({name: "Human", source: "PHB"});
+			const item = {
+				name: "Elven Thrower",
+				reqAttuneTags: [{race: "elf"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires Elf race");
+		});
+
+		it("should pass race requirement with partial match (High Elf matches elf)", () => {
+			state.setRace({name: "High Elf", source: "PHB"});
+			const item = {
+				name: "Elven Thrower",
+				reqAttuneTags: [{race: "elf"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should fail when spellcasting requirement not met", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 1});
+			const item = {
+				name: "+1 Wand of the War Mage",
+				reqAttuneTags: [{spellcasting: true}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires spellcasting ability");
+		});
+
+		it("should pass spellcasting requirement when has spellcasting", () => {
+			state.addClass({name: "Wizard", source: "PHB", level: 1});
+			const item = {
+				name: "+1 Wand of the War Mage",
+				reqAttuneTags: [{spellcasting: true}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should fail when ability score requirement not met", () => {
+			state.setAbilityBase("str", 10);
+			const item = {
+				name: "Belt of Fire Giant Strength",
+				reqAttuneTags: [{str: 15}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires Strength 15+");
+		});
+
+		it("should pass ability score requirement when met", () => {
+			state.setAbilityBase("int", 18);
+			const item = {
+				name: "Smart Item",
+				reqAttuneTags: [{int: 15}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should check alignment requirements", () => {
+			state.setAlignment("LE"); // Lawful Evil
+			const item = {
+				name: "Holy Avenger",
+				reqAttuneTags: [{alignment: ["G"]}], // Good alignments only (LG, NG, CG match "G")
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires specific alignment");
+		});
+
+		it("should pass alignment when character matches", () => {
+			state.setAlignment("LG"); // Lawful Good
+			const item = {
+				name: "Holy Avenger",
+				reqAttuneTags: [{alignment: ["G"]}], // "G" matches any good alignment
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should handle OR logic with multiple reqAttuneTags", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 5});
+			// Item can be attuned by fighter OR wizard
+			const item = {
+				name: "Versatile Weapon",
+				reqAttuneTags: [
+					{class: "fighter"},
+					{class: "wizard"},
+				],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true); // Fighter matches first tag
+		});
+
+		it("should require ALL conditions in a single tag (AND logic)", () => {
+			state.addClass({name: "Fighter", source: "PHB", level: 5});
+			// Item requires fighter AND spellcasting (like Eldritch Knight)
+			const item = {
+				name: "Fighter Caster Item",
+				reqAttuneTags: [{class: "fighter", spellcasting: true}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			// Plain fighter doesn't have spellcasting
+			expect(result.canAttune).toBe(false);
+		});
+
+		it("should bypass requirements with Use Magic Device", () => {
+			state.addClass({name: "Rogue", source: "PHB", level: 13});
+			state.addFeature({name: "Use Magic Device", source: "PHB"});
+			const item = {
+				name: "Holy Avenger",
+				reqAttuneTags: [{class: "paladin"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true); // UMD bypasses class requirement
+		});
+
+		it("should check skill proficiency requirement", () => {
+			const item = {
+				name: "Musical Item",
+				reqAttuneTags: [{skillProficiency: "performance"}],
+			};
+			// No performance proficiency
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires Performance proficiency");
+		});
+
+		it("should pass skill proficiency when proficient", () => {
+			state.setSkillProficiency("performance", 1);
+			const item = {
+				name: "Musical Item",
+				reqAttuneTags: [{skillProficiency: "performance"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should check language proficiency requirement", () => {
+			const item = {
+				name: "Elvish Item",
+				reqAttuneTags: [{languageProficiency: "elvish"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires Elvish language");
+		});
+
+		it("should pass language requirement when known", () => {
+			state.addLanguage("Elvish");
+			const item = {
+				name: "Elvish Item",
+				reqAttuneTags: [{languageProficiency: "elvish"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+
+		it("should check creature type requirement", () => {
+			state.setRace({name: "Human", source: "PHB", creatureTypes: ["humanoid"]});
+			const item = {
+				name: "Fey Item",
+				reqAttuneTags: [{creatureType: "fey"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires Fey creature type");
+		});
+
+		it("should check background requirement", () => {
+			state.setBackground({name: "Sailor", source: "PHB"});
+			const item = {
+				name: "Azorius Keyrune",
+				reqAttuneTags: [{background: "Azorius Functionary|GGR"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(false);
+			expect(result.reasons).toContain("Requires Azorius Functionary background");
+		});
+
+		it("should pass background requirement when matched", () => {
+			state.setBackground({name: "Azorius Functionary", source: "GGR"});
+			const item = {
+				name: "Azorius Keyrune",
+				reqAttuneTags: [{background: "Azorius Functionary|GGR"}],
+			};
+			const result = state.meetsAttunementRequirements(item);
+			expect(result.canAttune).toBe(true);
+		});
+	});
+
+	// ======================================================================
+	// Item-Granted Proficiencies
+	// ======================================================================
+	describe("Item-Granted Proficiencies", () => {
+		it("should grant language proficiency from Belt of Dwarvenkind when equipped+attuned", () => {
+			const belt = {
+				id: "belt-dwarvenkind",
+				name: "Belt of Dwarvenkind",
+				requiresAttunement: true,
+				entries: [
+					"While wearing this belt, you gain the following benefits:",
+					"You can speak, read, and write Dwarvish.",
+				],
+			};
+			state.addItem(belt);
+
+			// Not equipped - no language
+			expect(state.getLanguages()).not.toContain("Dwarvish");
+
+			// Equip but not attuned
+			state.setItemEquipped("belt-dwarvenkind", true);
+			expect(state.getLanguages()).not.toContain("Dwarvish");
+
+			// Attune - should now have language
+			state.setItemAttuned("belt-dwarvenkind", true);
+			expect(state.getLanguages()).toContain("Dwarvish");
+		});
+
+		it("should remove language proficiency when item unattuned", () => {
+			const belt = {
+				id: "belt-lang",
+				name: "Language Belt",
+				requiresAttunement: true,
+				entries: ["You can speak, read, and write Elvish."],
+			};
+			state.addItem(belt);
+			state.setItemEquipped("belt-lang", true);
+			state.setItemAttuned("belt-lang", true);
+			expect(state.getLanguages()).toContain("Elvish");
+
+			// Unattune - language should be removed
+			state.setItemAttuned("belt-lang", false);
+			expect(state.getLanguages()).not.toContain("Elvish");
+		});
+
+		it("should not remove language if also granted by another source", () => {
+			// Add language from character background
+			state.addLanguage("Dwarvish");
+
+			const belt = {
+				id: "belt-dwarv2",
+				name: "Belt of Dwarvenkind",
+				requiresAttunement: true,
+				entries: ["You can speak, read, and write Dwarvish."],
+			};
+			state.addItem(belt);
+			state.setItemEquipped("belt-dwarv2", true);
+			state.setItemAttuned("belt-dwarv2", true);
+
+			// Unattune - language should persist (from background)
+			state.setItemAttuned("belt-dwarv2", false);
+			expect(state.getLanguages()).toContain("Dwarvish");
+		});
+
+		it("should grant skill proficiency from item", () => {
+			const item = {
+				id: "skill-item",
+				name: "Helm of Knowledge",
+				requiresAttunement: true,
+				entries: ["You gain proficiency in the History skill."],
+			};
+			state.addItem(item);
+			state.setItemEquipped("skill-item", true);
+			state.setItemAttuned("skill-item", true);
+
+			expect(state.isProficientInSkill("history")).toBe(true);
+		});
+
+		it("should remove skill proficiency when item unequipped", () => {
+			const item = {
+				id: "skill-item2",
+				name: "Stealth Cloak",
+				requiresAttunement: false, // No attunement needed
+				entries: ["You gain proficiency in the Stealth skill."],
+			};
+			state.addItem(item);
+			state.setItemEquipped("skill-item2", true);
+			expect(state.isProficientInSkill("stealth")).toBe(true);
+
+			// Unequip
+			state.setItemEquipped("skill-item2", false);
+			expect(state.isProficientInSkill("stealth")).toBe(false);
+		});
+
+		it("should grant tool proficiency from item", () => {
+			const item = {
+				id: "tool-item",
+				name: "Artisan's Belt",
+				requiresAttunement: true,
+				entries: ["You gain proficiency with smith's tools."],
+			};
+			state.addItem(item);
+			state.setItemEquipped("tool-item", true);
+			state.setItemAttuned("tool-item", true);
+
+			expect(state.hasToolProficiency("smith's tools")).toBe(true);
+		});
+
+		it("should not apply proficiencies from non-equipped items", () => {
+			const item = {
+				id: "inactive-item",
+				name: "Inactive Ring",
+				requiresAttunement: false,
+				entries: ["You gain proficiency in the Arcana skill."],
+			};
+			state.addItem(item);
+			// Item is in inventory but not equipped
+			expect(state.isProficientInSkill("arcana")).toBe(false);
+		});
+
+		it("should handle items with multiple proficiency grants", () => {
+			const item = {
+				id: "multi-prof",
+				name: "Ring of Many Talents",
+				requiresAttunement: true,
+				entries: [
+					"You gain proficiency in the Performance skill.",
+					"You can speak, read, and write Celestial.",
+				],
+			};
+			state.addItem(item);
+			state.setItemEquipped("multi-prof", true);
+			state.setItemAttuned("multi-prof", true);
+
+			expect(state.isProficientInSkill("performance")).toBe(true);
+			expect(state.getLanguages()).toContain("Celestial");
+
+			// Remove both when unattuned
+			state.setItemAttuned("multi-prof", false);
+			expect(state.isProficientInSkill("performance")).toBe(false);
+			expect(state.getLanguages()).not.toContain("Celestial");
+		});
+	});
+
+	// ======================================================================
+	// Bonus Spell Slots from Items
+	// ======================================================================
+	describe("Bonus Spell Slots from Items", () => {
+		beforeEach(() => {
+			// Set up a wizard with base spell slots
+			state.addClass({name: "Wizard", level: 5, casterProgression: "full"});
+			state.calculateSpellSlots();
+		});
+
+		it("should parse 'gain an additional Xth level spell slot' text", () => {
+			const modifiers = FeatureModifierParser.parseModifiers(
+				"You gain an additional 3rd level spell slot.",
+				"Test Item"
+			);
+			const slotMod = modifiers.find(m => m.isSpellSlot);
+			expect(slotMod).toBeDefined();
+			expect(slotMod.slotLevel).toBe(3);
+			expect(slotMod.slotCount).toBe(1);
+		});
+
+		it("should parse 'gain N additional Xth level spell slots' text", () => {
+			const modifiers = FeatureModifierParser.parseModifiers(
+				"You gain 2 additional 2nd level spell slots.",
+				"Test Item"
+			);
+			const slotMod = modifiers.find(m => m.isSpellSlot);
+			expect(slotMod).toBeDefined();
+			expect(slotMod.slotLevel).toBe(2);
+			expect(slotMod.slotCount).toBe(2);
+		});
+
+		it("should apply bonus spell slots when set via itemBonuses", () => {
+			// Level 5 wizard has 4/3/2/0/0... slots
+			expect(state.getSpellSlotsMax(3)).toBe(2);
+
+			// Apply +1 3rd level slot from item
+			state.setItemBonuses({spellSlots: {3: 1}});
+			state.calculateSpellSlots();
+
+			expect(state.getSpellSlotsMax(3)).toBe(3);
+			expect(state.getSpellSlotsCurrent(3)).toBe(3);
+		});
+
+		it("should apply bonus slots to multiple levels", () => {
+			// Level 5 wizard: 4/3/2/0/0
+			expect(state.getSpellSlotsMax(1)).toBe(4);
+			expect(state.getSpellSlotsMax(2)).toBe(3);
+			expect(state.getSpellSlotsMax(3)).toBe(2);
+
+			// Apply +1 to levels 1, 2, and 3
+			state.setItemBonuses({spellSlots: {1: 1, 2: 1, 3: 1}});
+			state.calculateSpellSlots();
+
+			expect(state.getSpellSlotsMax(1)).toBe(5);
+			expect(state.getSpellSlotsMax(2)).toBe(4);
+			expect(state.getSpellSlotsMax(3)).toBe(3);
+		});
+
+		it("should stack bonus slots from multiple items", () => {
+			// Level 5 wizard has 2 3rd level slots
+			expect(state.getSpellSlotsMax(3)).toBe(2);
+
+			// Apply +2 3rd level slots combined from items
+			state.setItemBonuses({spellSlots: {3: 2}});
+			state.calculateSpellSlots();
+
+			expect(state.getSpellSlotsMax(3)).toBe(4);
+		});
+
+		it("should create slots for non-casters when item grants them", () => {
+			// Create a non-caster state
+			const fighterState = new CharacterSheetState();
+			fighterState.addClass({name: "Fighter", level: 5});
+			fighterState.calculateSpellSlots();
+
+			// Fighter has no 3rd level slots
+			expect(fighterState.getSpellSlotsMax(3)).toBeFalsy();
+
+			// Item grants 3rd level slot
+			fighterState.setItemBonuses({spellSlots: {3: 1}});
+			fighterState.calculateSpellSlots();
+
+			expect(fighterState.getSpellSlotsMax(3)).toBe(1);
+			expect(fighterState.getSpellSlotsCurrent(3)).toBe(1);
+		});
+
+		it("should remove bonus slots when item bonuses are cleared", () => {
+			// Apply bonus slot
+			state.setItemBonuses({spellSlots: {3: 1}});
+			state.calculateSpellSlots();
+			expect(state.getSpellSlotsMax(3)).toBe(3);
+
+			// Clear bonus slots
+			state.setItemBonuses({spellSlots: {}});
+			state.calculateSpellSlots();
+			expect(state.getSpellSlotsMax(3)).toBe(2);
+		});
+
+		it("should not affect pact magic slots", () => {
+			// Create warlock state
+			const warlockState = new CharacterSheetState();
+			warlockState.addClass({name: "Warlock", level: 5, casterProgression: "pact"});
+			warlockState.calculateSpellSlots();
+
+			// Level 5 warlock has 2 pact slots at 3rd level
+			const pactSlots = warlockState.getPactSlots();
+			expect(pactSlots.max).toBe(2);
+			expect(pactSlots.level).toBe(3);
+
+			// Item grants regular 3rd level slot (not pact)
+			warlockState.setItemBonuses({spellSlots: {3: 1}});
+			warlockState.calculateSpellSlots();
+
+			// Pact slots unchanged
+			const newPactSlots = warlockState.getPactSlots();
+			expect(newPactSlots.max).toBe(2);
+
+			// But regular slots gained
+			expect(warlockState.getSpellSlotsMax(3)).toBe(1);
+		});
+	});
+
+	// ======================================================================
+	// Item Activation Actions
+	// ======================================================================
+	describe("Item Activation Actions", () => {
+		it("should detect 'as an action' activation", () => {
+			const wand = {
+				id: "wand-fireballs",
+				name: "Wand of Fireballs",
+				entries: ["This wand has 7 charges. While holding it, you can use an action to expend 1 or more charges to cast the {@spell fireball} spell."],
+			};
+			state.addItem(wand);
+			const items = state.getItems();
+			const addedWand = items.find(i => i.id === "wand-fireballs");
+
+			expect(addedWand.activation.length).toBeGreaterThan(0);
+			expect(addedWand.activation[0].type).toBe("action");
+		});
+
+		it("should detect 'as a bonus action' activation", () => {
+			const shield = {
+				id: "animated-shield",
+				name: "Animated Shield",
+				entries: ["While holding this shield, you can speak its command word as a bonus action to cause it to animate."],
+			};
+			state.addItem(shield);
+			const items = state.getItems();
+			const addedShield = items.find(i => i.id === "animated-shield");
+
+			expect(addedShield.activation.length).toBeGreaterThan(0);
+			expect(addedShield.activation[0].type).toBe("bonus");
+		});
+
+		it("should detect 'as a reaction' activation", () => {
+			const ring = {
+				id: "ring-protection",
+				name: "Ring of Reaction",
+				entries: ["When you are hit by an attack, you can use your reaction to gain a +2 bonus to AC against that attack."],
+			};
+			state.addItem(ring);
+			const items = state.getItems();
+			const addedRing = items.find(i => i.id === "ring-protection");
+
+			expect(addedRing.activation.length).toBeGreaterThan(0);
+			expect(addedRing.activation[0].type).toBe("reaction");
+		});
+
+		it("should detect 'no action required' / passive activation", () => {
+			const ring = {
+				id: "ring-mind",
+				name: "Ring of Mind Shielding",
+				entries: ["While wearing this ring, you are immune to magic that reads your thoughts (no action required)."],
+			};
+			state.addItem(ring);
+			const items = state.getItems();
+			const addedRing = items.find(i => i.id === "ring-mind");
+
+			expect(addedRing.activation.length).toBeGreaterThan(0);
+			expect(addedRing.activation[0].type).toBe("none");
+		});
+
+		it("should detect timed activations (minutes)", () => {
+			const orb = {
+				id: "crystal-ball",
+				name: "Crystal Ball",
+				entries: ["You can use an action to gaze into the ball. The gazing takes 10 minutes to complete."],
+			};
+			state.addItem(orb);
+			const items = state.getItems();
+			const addedOrb = items.find(i => i.id === "crystal-ball");
+
+			// Should detect both action and minute
+			const minuteActivation = addedOrb.activation.find(a => a.type === "minute");
+			expect(minuteActivation).toBeDefined();
+			expect(minuteActivation.cost).toBe(10);
+		});
+
+		it("should return empty array for items without activation text", () => {
+			const cloak = {
+				id: "cloak-protection",
+				name: "Cloak of Protection",
+				entries: ["You gain a +1 bonus to AC and saving throws while you wear this cloak."],
+			};
+			state.addItem(cloak);
+			const items = state.getItems();
+			const addedCloak = items.find(i => i.id === "cloak-protection");
+
+			expect(addedCloak.activation).toEqual([]);
+		});
+
+		it("should detect multiple activation types from same item", () => {
+			const staff = {
+				id: "staff-power",
+				name: "Staff of Power",
+				entries: [
+					"You can use an action to expend charges to cast one of the following spells.",
+					"As a reaction when you are hit, you can expend 1 charge to gain a +2 bonus to AC.",
+				],
+			};
+			state.addItem(staff);
+			const items = state.getItems();
+			const addedStaff = items.find(i => i.id === "staff-power");
+
+			expect(addedStaff.activation.length).toBeGreaterThanOrEqual(2);
+			expect(addedStaff.activation.some(a => a.type === "action")).toBe(true);
+			expect(addedStaff.activation.some(a => a.type === "reaction")).toBe(true);
+		});
+
+		it("should get item activation by itemId", () => {
+			const wand = {
+				id: "test-wand",
+				name: "Test Wand",
+				entries: ["Use an action to activate."],
+			};
+			state.addItem(wand);
+
+			const activation = state.getItemActivation("test-wand");
+			expect(activation.length).toBeGreaterThan(0);
+			expect(activation[0].type).toBe("action");
+		});
+
+		it("should filter items by activation type", () => {
+			// Add action item
+			state.addItem({
+				id: "item-action",
+				name: "Action Item",
+				equipped: true,
+				entries: ["As an action, you can use this."],
+			});
+			state.setItemEquipped("item-action", true);
+
+			// Add bonus action item
+			state.addItem({
+				id: "item-bonus",
+				name: "Bonus Item",
+				equipped: true,
+				entries: ["As a bonus action, you can use this."],
+			});
+			state.setItemEquipped("item-bonus", true);
+
+			const actionItems = state.getItemsByActivationType("action", {equippedOnly: true});
+			expect(actionItems.length).toBeGreaterThanOrEqual(1);
+			expect(actionItems.some(i => i.id === "item-action")).toBe(true);
+			expect(actionItems.some(i => i.id === "item-bonus")).toBe(false);
+
+			const bonusItems = state.getItemsByActivationType("bonus", {equippedOnly: true});
+			expect(bonusItems.some(i => i.id === "item-bonus")).toBe(true);
+		});
+
+		it("should get all activatable items", () => {
+			// Add activatable item
+			state.addItem({
+				id: "activatable",
+				name: "Activatable Item",
+				entries: ["As an action, you can use this."],
+			});
+
+			// Add passive item
+			state.addItem({
+				id: "passive",
+				name: "Passive Item",
+				entries: ["You gain +1 to AC."],
+			});
+
+			const activatable = state.getActivatableItems();
+			expect(activatable.some(i => i.id === "activatable")).toBe(true);
+			expect(activatable.some(i => i.id === "passive")).toBe(false);
+		});
+
+		it("should check if item has specific activation type", () => {
+			state.addItem({
+				id: "check-item",
+				name: "Check Item",
+				entries: ["As a bonus action, you can use this."],
+			});
+
+			expect(state.itemHasActivationType("check-item", "bonus")).toBe(true);
+			expect(state.itemHasActivationType("check-item", "action")).toBe(false);
+			expect(state.itemHasActivationType("check-item", "reaction")).toBe(false);
+		});
+
+		it("should use explicit activation if provided", () => {
+			const item = {
+				id: "explicit-activation",
+				name: "Explicit Item",
+				entries: ["This text says action but we override it."],
+				activation: [{type: "bonus", cost: 1, description: "Custom"}],
+			};
+			state.addItem(item);
+			const items = state.getItems();
+			const addedItem = items.find(i => i.id === "explicit-activation");
+
+			// Should use explicitly provided activation, not parsed
+			expect(addedItem.activation.length).toBe(1);
+			expect(addedItem.activation[0].type).toBe("bonus");
+			expect(addedItem.activation[0].description).toBe("Custom");
 		});
 	});
 
@@ -2135,6 +2834,161 @@ describe("Magic Item Bonuses", () => {
 
 		it("should return false for non-existent protection types", () => {
 			expect(state.hasMentalProtection("unknownProtection")).toBe(false);
+		});
+	});
+
+	// ======================================================================
+	// Ammunition Tracking
+	// ======================================================================
+	describe("Ammunition Tracking", () => {
+		beforeEach(() => {
+			// Add a longbow that uses arrows
+			state.addItem({
+				id: "longbow",
+				name: "Longbow",
+				weapon: true,
+				ammoType: "arrow|phb",
+			});
+			// Add some arrows
+			state.addItem({
+				id: "arrows",
+				name: "Arrow",
+				type: "A",
+				arrow: true,
+				quantity: 20,
+			});
+		});
+
+		it("should have ammunition tracking disabled by default", () => {
+			expect(state.isAmmunitionTrackingEnabled()).toBe(false);
+		});
+
+		it("should enable ammunition tracking via settings", () => {
+			state.setSetting("ammunitionTracking", true);
+			expect(state.isAmmunitionTrackingEnabled()).toBe(true);
+		});
+
+		it("should find ammunition items", () => {
+			const ammoItems = state.getAmmunitionItems();
+			expect(ammoItems.length).toBeGreaterThanOrEqual(1);
+			expect(ammoItems.some(a => a.name === "Arrow")).toBe(true);
+		});
+
+		it("should get compatible ammunition for weapon", () => {
+			const ammo = state.getAmmunitionForWeapon("longbow");
+			expect(ammo.length).toBe(1);
+			expect(ammo[0].name).toBe("Arrow");
+		});
+
+		it("should return empty array for weapon without ammo type", () => {
+			state.addItem({
+				id: "sword",
+				name: "Longsword",
+				weapon: true,
+			});
+			const ammo = state.getAmmunitionForWeapon("sword");
+			expect(ammo).toEqual([]);
+		});
+
+		it("should consume ammunition", () => {
+			expect(state.consumeAmmunition("arrows", 1)).toBe(true);
+			const items = state.getItems();
+			const arrows = items.find(i => i.id === "arrows");
+			expect(arrows.quantity).toBe(19);
+		});
+
+		it("should track consumed ammunition", () => {
+			state.consumeAmmunition("arrows", 3);
+			const consumed = state.getAmmunitionConsumed();
+			expect(consumed["arrows"]).toBe(3);
+		});
+
+		it("should not consume more ammunition than available", () => {
+			expect(state.consumeAmmunition("arrows", 25)).toBe(false);
+			const items = state.getItems();
+			const arrows = items.find(i => i.id === "arrows");
+			expect(arrows.quantity).toBe(20);
+		});
+
+		it("should recover 50% of ammunition after combat", () => {
+			// Consume 10 arrows
+			for (let i = 0; i < 10; i++) {
+				state.consumeAmmunition("arrows", 1);
+			}
+			const items = state.getItems();
+			const arrowsBefore = items.find(i => i.id === "arrows");
+			expect(arrowsBefore.quantity).toBe(10);
+
+			// Recover
+			const recovered = state.recoverAmmunition();
+			expect(recovered["arrows"]).toBe(5); // 50% of 10
+
+			// Check new quantity
+			const itemsAfter = state.getItems();
+			const arrowsAfter = itemsAfter.find(i => i.id === "arrows");
+			expect(arrowsAfter.quantity).toBe(15);
+		});
+
+		it("should not recover magic ammunition", () => {
+			// Add magic arrows
+			state.addItem({
+				id: "magic-arrows",
+				name: "+1 Arrow",
+				type: "A",
+				arrow: true,
+				quantity: 5,
+				bonusWeapon: 1,
+			});
+
+			// Consume all magic arrows
+			for (let i = 0; i < 5; i++) {
+				state.consumeAmmunition("magic-arrows", 1);
+			}
+
+			// Recover
+			const recovered = state.recoverAmmunition();
+			expect(recovered["magic-arrows"]).toBeUndefined();
+		});
+
+		it("should detect magic ammunition by rarity", () => {
+			state.addItem({
+				id: "rare-arrows",
+				name: "Arrow of Slaying",
+				type: "A",
+				arrow: true,
+				quantity: 1,
+				rarity: "rare",
+			});
+			expect(state.isMagicAmmunition("rare-arrows")).toBe(true);
+		});
+
+		it("should clear ammunition tracking", () => {
+			state.consumeAmmunition("arrows", 5);
+			expect(Object.keys(state.getAmmunitionConsumed()).length).toBeGreaterThan(0);
+
+			state.clearAmmunitionTracking();
+			expect(Object.keys(state.getAmmunitionConsumed()).length).toBe(0);
+		});
+
+		it("should match different ammo types", () => {
+			// Add crossbow and bolts
+			state.addItem({
+				id: "crossbow",
+				name: "Heavy Crossbow",
+				weapon: true,
+				ammoType: "bolt|xphb",
+			});
+			state.addItem({
+				id: "bolts",
+				name: "Crossbow Bolt",
+				type: "A",
+				bolt: true,
+				quantity: 20,
+			});
+
+			const ammo = state.getAmmunitionForWeapon("crossbow");
+			expect(ammo.length).toBe(1);
+			expect(ammo[0].name).toBe("Crossbow Bolt");
 		});
 	});
 });
