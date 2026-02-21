@@ -2906,9 +2906,12 @@ class CharacterSheetSpells {
 
 		// Roll the damage
 		try {
-			const total = Renderer.dice.parseRandomise2(baseDice);
+			const baseDamage = Renderer.dice.parseRandomise2(baseDice);
+			const spellDamageBonus = this._state.getItemBonus?.("spellDamage") || 0;
+			const total = baseDamage + spellDamageBonus;
 			const damageType = damageTypes[0] || "damage";
-			return `<br>Damage: <strong>${total}</strong> ${damageType} (${baseDice})`;
+			const bonusStr = spellDamageBonus ? ` + ${spellDamageBonus} item` : "";
+			return `<br>Damage: <strong>${total}</strong> ${damageType} (${baseDice}${bonusStr})`;
 		} catch (e) {
 			return "";
 		}
@@ -2932,10 +2935,13 @@ class CharacterSheetSpells {
 		}
 
 		try {
-			const total = Renderer.dice.parseRandomise2(dice);
+			const baseDamage = Renderer.dice.parseRandomise2(dice);
+			const spellDamageBonus = this._state.getItemBonus?.("spellDamage") || 0;
+			const total = baseDamage + spellDamageBonus;
 			const damageTypes = spellData.damageInflict || [];
 			const damageType = damageTypes[0] || "damage";
-			return `<br>Damage: <strong>${total}</strong> ${damageType} (${dice})`;
+			const bonusStr = spellDamageBonus ? ` + ${spellDamageBonus} item` : "";
+			return `<br>Damage: <strong>${total}</strong> ${damageType} (${dice}${bonusStr})`;
 		} catch (e) {
 			return "";
 		}

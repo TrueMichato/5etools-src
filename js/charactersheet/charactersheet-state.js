@@ -897,7 +897,7 @@ class FeatureModifierParser {
 		// SPELL SLOTS
 		// ===================
 		const spellSlotPatterns = [
-			{pattern: /gain(?:s)?\s*(?:an?\s*)?(?:additional|extra)\s*(\d+)(?:st|nd|rd|th)?\s*level\s*spell\s*slots?/gi, positive: true, spellSlot: true},
+			{pattern: /gain(?:s)?\s*(?:an?\s*)?(?:additional|extra)\s*(\d+)(?:st|nd|rd|th)?\s*level\s*spell\s*slots?/gi, spellSlot: true},
 			{pattern: /(\d+)\s*(?:additional|extra)\s*(\d+)(?:st|nd|rd|th)?\s*level\s*spell\s*slots?/gi, spellSlotCount: true},
 		];
 		this._applyPatterns(plainText, spellSlotPatterns, "spellSlots", sourceName, modifiers, parseSignedValue);
@@ -1091,6 +1091,36 @@ class FeatureModifierParser {
 				isProficiency: true,
 			});
 		}
+
+		// ===================
+		// LANGUAGE PROFICIENCIES
+		// ===================
+		const commonLanguages = [
+			"common", "dwarvish", "elvish", "giant", "gnomish", "goblin", "halfling", "orc",
+			"abyssal", "celestial", "deep speech", "draconic", "infernal", "primordial",
+			"sylvan", "undercommon", "druidic", "thieves' cant", "thieves cant",
+			"aquan", "auran", "ignan", "terran", // Primordial dialects
+		];
+		commonLanguages.forEach(language => {
+			const langPattern = new RegExp(
+				// "can speak, read, and write Dwarvish" / "you can speak and understand Dwarvish"
+				`(?:can|gain\\s+the\\s+ability\\s+to)\\s+speak(?:[,\\s]+read)?(?:[,\\s]+and\\s+write)?\\s+${language.replace(/'/g, ".?")}` +
+				// Or "you know Dwarvish" / "you learn Dwarvish"
+				`|(?:you\\s+)?(?:know|learn)\\s+${language.replace(/'/g, ".?")}` +
+				// Or "grants you the ability to speak Dwarvish"
+				`|grants?\\s+(?:you\\s+)?(?:the\\s+ability\\s+to\\s+)?speak\\s+${language.replace(/'/g, ".?")}`,
+				"gi"
+			);
+			if (langPattern.test(plainText)) {
+				modifiers.push({
+					type: `proficiency:language:${language.replace(/[.']\s*/g, "").replace(/\s+/g, "")}`,
+					value: 1,
+					note: sourceName,
+					isProficiency: true,
+					languageName: language.charAt(0).toUpperCase() + language.slice(1),
+				});
+			}
+		});
 
 		// ===================
 		// ADVANTAGE ON SAVING THROWS (Conditional)
@@ -1728,7 +1758,7 @@ class FeatureModifierParser {
 	 * Helper to apply multiple patterns and extract modifiers
 	 */
 	static _applyPatterns (text, patterns, type, sourceName, modifiers, parseSignedValue) {
-		patterns.forEach(({pattern, signed, positive, negative, defaultPositive, setValue, perLevel, sizeIncrease, maybeDouble, maybeHalve, abilityMod, equalToWalk, proficiencyBonus}) => {
+		patterns.forEach(({pattern, signed, positive, negative, defaultPositive, setValue, perLevel, sizeIncrease, maybeDouble, maybeHalve, abilityMod, equalToWalk, proficiencyBonus, spellSlot, spellSlotCount}) => {
 			let match;
 			while ((match = pattern.exec(text)) !== null) {
 				let value;
@@ -1742,6 +1772,39 @@ class FeatureModifierParser {
 						proficiencyBonus: true,
 						conditional: this._extractCondition(text, match.index),
 					});
+					continue;
+				}
+
+				if (spellSlot) {
+					// "gain an additional 3rd level spell slot" - match[1] is the spell level
+					const slotLevel = parseInt(match[1]);
+					if (slotLevel >= 1 && slotLevel <= 9) {
+						modifiers.push({
+							type: `spellSlots:${slotLevel}`,
+							value: 1,
+							note: sourceName,
+							isSpellSlot: true,
+							slotLevel,
+							slotCount: 1,
+						});
+					}
+					continue;
+				}
+
+				if (spellSlotCount) {
+					// "gain 2 additional 3rd level spell slots" - match[1] is count, match[2] is level
+					const slotCount = parseInt(match[1]);
+					const slotLevel = parseInt(match[2]);
+					if (slotLevel >= 1 && slotLevel <= 9 && slotCount > 0) {
+						modifiers.push({
+							type: `spellSlots:${slotLevel}`,
+							value: slotCount,
+							note: sourceName,
+							isSpellSlot: true,
+							slotLevel,
+							slotCount,
+						});
+					}
 					continue;
 				}
 
@@ -2964,6 +3027,7 @@ class CharacterSheetState {
 			race: null,
 			subrace: null,
 			size: "medium", // "tiny", "small", "medium", "large", "huge", "gargantuan"
+			alignment: null, // "LG", "NG", "CG", "LN", "N", "CN", "LE", "NE", "CE", or null
 			classes: [], // [{name, source, level, subclass}]
 			background: null,
 
@@ -3061,6 +3125,8 @@ class CharacterSheetState {
 				// critThreshold: null (only set when items provide it)
 				// Class ability save DC bonuses
 				kiSaveDc: 0, // Dragonhide Belt, etc.
+				// Bonus spell slots from items (keyed by level, e.g., {3: 1} for +1 3rd-level slot)
+				spellSlots: {},
 			},
 
 			// Defensive properties from equipped/attuned magic items
@@ -3281,7 +3347,12 @@ class CharacterSheetState {
 				thelemar_asiFeat: true,
 				thelemar_itemUtilization: true,
 				thelemar_spellRarity: true, // Apply Thelemar spell rarity/legality tags
+				// Ammunition tracking - disabled by default
+				ammunitionTracking: false,
 			},
+
+			// Ammunition consumption tracking for current combat
+			ammunitionConsumed: {}, // {ammoId: countConsumed}
 		};
 	}
 
@@ -3761,6 +3832,18 @@ class CharacterSheetState {
 	setBackground (background) { this._data.background = background; }
 	getBackground () { return this._data.background; }
 	getBackgroundName () { return this._data.background?.name || null; }
+
+	/**
+	 * Set character alignment
+	 * @param {string} alignment - "LG", "NG", "CG", "LN", "N", "CN", "LE", "NE", "CE", or null
+	 */
+	setAlignment (alignment) { this._data.alignment = alignment; }
+
+	/**
+	 * Get character alignment
+	 * @returns {string|null} "LG", "NG", "CG", "LN", "N", "CN", "LE", "NE", "CE", or null
+	 */
+	getAlignment () { return this._data.alignment; }
 
 	/**
 	 * Get the origin feat granted by the current background (2024 XPHB backgrounds).
@@ -6078,13 +6161,15 @@ class CharacterSheetState {
 	 * @returns {boolean} True if proficient
 	 */
 	hasToolProficiency (tool) {
-		const toolLower = tool.toLowerCase();
-		return this._data.toolProficiencies.some(t => t.toLowerCase() === toolLower);
+		// Normalize tool name the same way as parser: remove apostrophes and whitespace
+		const toolNormalized = tool.toLowerCase().replace(/['\s]+/g, "");
+		return this._data.toolProficiencies.some(t => t.toLowerCase().replace(/['\s]+/g, "") === toolNormalized);
 	}
 
 	removeToolProficiency (tool) {
-		const toolLower = tool.toLowerCase();
-		const idx = this._data.toolProficiencies.findIndex(t => t.toLowerCase() === toolLower);
+		// Normalize tool name the same way as parser: remove apostrophes and whitespace
+		const toolNormalized = tool.toLowerCase().replace(/['\s]+/g, "");
+		const idx = this._data.toolProficiencies.findIndex(t => t.toLowerCase().replace(/['\s]+/g, "") === toolNormalized);
 		if (idx >= 0) this._data.toolProficiencies.splice(idx, 1);
 	}
 
@@ -6095,7 +6180,9 @@ class CharacterSheetState {
 	}
 
 	removeLanguage (language) {
-		const idx = this._data.languages.indexOf(language);
+		// Case-insensitive match
+		const langLower = language.toLowerCase();
+		const idx = this._data.languages.findIndex(l => l.toLowerCase() === langLower);
 		if (idx >= 0) this._data.languages.splice(idx, 1);
 	}
 	// #endregion
@@ -6547,6 +6634,23 @@ class CharacterSheetState {
 					// Keep current value
 				} else {
 					this._data.spellcasting.spellSlots[level] = {current: max, max: max};
+				}
+			}
+		}
+
+		// Apply bonus spell slots from items
+		const itemBonusSlots = this._data.itemBonuses?.spellSlots || {};
+		for (const [levelStr, bonus] of Object.entries(itemBonusSlots)) {
+			const level = parseInt(levelStr);
+			if (level >= 1 && level <= 9 && bonus > 0) {
+				// Initialize slot if not present (even for non-casters with slot-granting items)
+				if (!this._data.spellcasting.spellSlots[level]) {
+					this._data.spellcasting.spellSlots[level] = {current: bonus, max: bonus};
+				} else {
+					// Add bonus to existing slots
+					this._data.spellcasting.spellSlots[level].max += bonus;
+					// Also add to current (freshly granted slots are available)
+					this._data.spellcasting.spellSlots[level].current += bonus;
 				}
 			}
 		}
@@ -15433,6 +15537,209 @@ class CharacterSheetState {
 		);
 	}
 
+	/**
+	 * Get activation requirements for a specific item
+	 * @param {string} itemId - The item ID
+	 * @returns {Array<object>} Array of activation abilities or empty array
+	 */
+	getItemActivation (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		return invItem?.item?.activation || [];
+	}
+
+	/**
+	 * Get items filtered by activation type
+	 * @param {string} type - Activation type: "action", "bonus", "reaction", "none", "minute", "hour"
+	 * @param {object} options - Filter options
+	 * @param {boolean} options.equippedOnly - Only return equipped items
+	 * @param {boolean} options.attunedOnly - Only return items that are attuned (if they require it)
+	 * @returns {Array} Items with matching activation type
+	 */
+	getItemsByActivationType (type, options = {}) {
+		return this.getItems().filter(item => {
+			if (!item.activation?.length) return false;
+			if (options.equippedOnly && !item.equipped) return false;
+			if (options.attunedOnly && item.requiresAttunement && !item.attuned) return false;
+			return item.activation.some(a => a.type === type);
+		});
+	}
+
+	/**
+	 * Get all items that have activatable abilities
+	 * @param {object} options - Filter options
+	 * @param {boolean} options.equippedOnly - Only return equipped items
+	 * @param {boolean} options.activeOnly - Only return items that are active (equipped and attuned if required)
+	 * @returns {Array} Items with activation abilities
+	 */
+	getActivatableItems (options = {}) {
+		return this.getItems().filter(item => {
+			if (!item.activation?.length) return false;
+			if (options.equippedOnly && !item.equipped) return false;
+			if (options.activeOnly) {
+				if (!item.equipped) return false;
+				if (item.requiresAttunement && !item.attuned) return false;
+			}
+			return true;
+		});
+	}
+
+	/**
+	 * Check if an item has a specific activation type
+	 * @param {string} itemId - The item ID
+	 * @param {string} type - Activation type to check for
+	 * @returns {boolean}
+	 */
+	itemHasActivationType (itemId, type) {
+		const activation = this.getItemActivation(itemId);
+		return activation.some(a => a.type === type);
+	}
+
+	// ======================================================================
+	// Ammunition Tracking
+	// ======================================================================
+
+	/**
+	 * Check if ammunition tracking is enabled
+	 * @returns {boolean}
+	 */
+	isAmmunitionTrackingEnabled () {
+		return this._data.settings?.ammunitionTracking === true;
+	}
+
+	/**
+	 * Get all ammunition items in inventory
+	 * @returns {Array} Ammunition items with id, name, quantity, etc.
+	 */
+	getAmmunitionItems () {
+		return this.getItems().filter(item => {
+			// Type "A" or "AF" (ammunition, ammunition for firearms)
+			const itemType = item.type?.toUpperCase() || "";
+			return itemType.startsWith("A") || item.arrow || item.bolt || item.bullet;
+		});
+	}
+
+	/**
+	 * Get compatible ammunition for a weapon
+	 * @param {string} weaponId - The weapon item ID
+	 * @returns {Array} Compatible ammunition items
+	 */
+	getAmmunitionForWeapon (weaponId) {
+		const invItem = this._data.inventory.find(i => i.id === weaponId);
+		if (!invItem) return [];
+
+		const weapon = invItem.item || invItem;
+		const ammoType = weapon.ammoType;
+
+		// If weapon doesn't use ammo, return empty
+		if (!ammoType) return [];
+
+		return this.getAmmunitionItems().filter(ammo =>
+			this._matchesAmmoType(ammo, ammoType),
+		);
+	}
+
+	/**
+	 * Check if an ammunition item matches a weapon's ammo type
+	 * @param {object} ammoItem - The ammunition item
+	 * @param {string} ammoType - The weapon's ammoType (e.g., "arrow|phb", "bolt|xphb")
+	 * @returns {boolean}
+	 */
+	_matchesAmmoType (ammoItem, ammoType) {
+		if (!ammoType) return false;
+
+		// Parse the ammoType (format: "arrow|phb" or just "arrow")
+		const [baseType] = ammoType.toLowerCase().split("|");
+
+		// Check for type-specific booleans (arrow, bolt, bullet, dart)
+		if (baseType.includes("arrow") && ammoItem.arrow) return true;
+		if ((baseType.includes("bolt") || baseType.includes("crossbow")) && ammoItem.bolt) return true;
+		if (baseType.includes("bullet") && ammoItem.bullet) return true;
+		if (baseType.includes("dart") && ammoItem.dart) return true;
+		if (baseType.includes("needle") && ammoItem.needle) return true;
+		if (baseType.includes("sling") && ammoItem.sling) return true;
+
+		// Fallback: check name match
+		const ammoName = (ammoItem.name || "").toLowerCase();
+		return ammoName.includes(baseType);
+	}
+
+	/**
+	 * Consume ammunition
+	 * @param {string} ammoId - The ammunition item ID
+	 * @param {number} count - Number to consume (default 1)
+	 * @returns {boolean} True if successfully consumed
+	 */
+	consumeAmmunition (ammoId, count = 1) {
+		const invItem = this._data.inventory.find(i => i.id === ammoId);
+		if (!invItem || invItem.quantity < count) return false;
+
+		// Track consumed for recovery
+		if (!this._data.ammunitionConsumed) this._data.ammunitionConsumed = {};
+		this._data.ammunitionConsumed[ammoId] = (this._data.ammunitionConsumed[ammoId] || 0) + count;
+
+		// Decrement quantity
+		this.setItemQuantity(ammoId, invItem.quantity - count);
+		return true;
+	}
+
+	/**
+	 * Check if ammunition is magic (no recovery)
+	 * @param {string} ammoId - The ammunition item ID
+	 * @returns {boolean} True if magic ammunition
+	 */
+	isMagicAmmunition (ammoId) {
+		const invItem = this._data.inventory.find(i => i.id === ammoId);
+		if (!invItem) return false;
+		const item = invItem.item || invItem;
+		// Check for magic indicators: rarity, bonusWeapon, +X in name
+		return item.rarity && item.rarity !== "none" && item.rarity !== "common"
+			|| item.bonusWeapon || item.bonusWeaponDamage
+			|| /\+\d/.test(item.name || "");
+	}
+
+	/**
+	 * Recover ammunition after combat (50% of non-magic ammo)
+	 * @returns {object} Map of ammoId to recovered amount
+	 */
+	recoverAmmunition () {
+		const recovered = {};
+		if (!this._data.ammunitionConsumed) return recovered;
+
+		for (const [ammoId, consumed] of Object.entries(this._data.ammunitionConsumed)) {
+			// Skip magic ammunition (destroyed on hit)
+			if (this.isMagicAmmunition(ammoId)) continue;
+
+			// Recover 50% (round down)
+			const toRecover = Math.floor(consumed / 2);
+			if (toRecover > 0) {
+				const invItem = this._data.inventory.find(i => i.id === ammoId);
+				if (invItem) {
+					invItem.quantity += toRecover;
+					recovered[ammoId] = toRecover;
+				}
+			}
+		}
+
+		// Clear consumed tracking
+		this._data.ammunitionConsumed = {};
+		return recovered;
+	}
+
+	/**
+	 * Clear ammunition consumption tracking (e.g., when combat ends without recovery)
+	 */
+	clearAmmunitionTracking () {
+		this._data.ammunitionConsumed = {};
+	}
+
+	/**
+	 * Get current ammunition consumed this combat
+	 * @returns {object} Map of ammoId to consumed count
+	 */
+	getAmmunitionConsumed () {
+		return this._data.ammunitionConsumed || {};
+	}
+
 	addItem (item, quantity = 1, equipped = false, attuned = false) {
 		// Handle flat item structure (from inventory module or tests)
 		// Check for any of the wrapper properties
@@ -15487,6 +15794,11 @@ class CharacterSheetState {
 			// Mental protection detection (Ring of Mind Shielding)
 			if (itemProps.mentalProtection === undefined) {
 				itemProps.mentalProtection = this._detectMentalProtection(itemProps);
+			}
+
+			// Item activation requirements detection (action economy costs)
+			if (itemProps.activation === undefined) {
+				itemProps.activation = this._detectItemActivation(itemProps);
 			}
 
 			// Initialize arrays for complex item features
@@ -15647,6 +15959,93 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Detect item activation requirements from entries text
+	 * Parses for action economy costs (action, bonus action, reaction, etc.)
+	 * @param {object} item - The item data
+	 * @returns {Array<object>} Array of activation abilities: [{type, cost, name, description}]
+	 */
+	_detectItemActivation (item) {
+		if (item.activation) return item.activation; // Already set explicitly
+
+		const activations = [];
+		const entries = item.entries || [];
+		if (!entries.length) return activations;
+
+		// Convert entries to plain text for parsing
+		const entriesText = entries
+			.map(e => typeof e === "string" ? e : (e?.entries ? e.entries.join(" ") : JSON.stringify(e)))
+			.join("\n")
+			.replace(/<[^>]*>/g, " ")
+			.replace(/\{@[^}]+\s+([^}|]+)(?:\|[^}]*)?\}/g, "$1")
+			.trim();
+
+		// Split into sentences for context
+		const sentences = entriesText.split(/(?<=[.!?])\s+/);
+
+		// Activation patterns - order matters (more specific first)
+		const patterns = [
+			// Action patterns
+			{regex: /\bas an action\b/i, type: "action"},
+			{regex: /\buse (?:an |your )?action\b/i, type: "action"},
+			{regex: /\busing (?:an |your )?action\b/i, type: "action"},
+			{regex: /\btakes? (?:an |1 )?action\b/i, type: "action"},
+
+			// Bonus action patterns
+			{regex: /\bas a bonus action\b/i, type: "bonus"},
+			{regex: /\buse (?:a |your )?bonus action\b/i, type: "bonus"},
+			{regex: /\busing (?:a |your )?bonus action\b/i, type: "bonus"},
+			{regex: /\bspeak (?:its|the) command word(?:\s+as a bonus action)?\b/i, type: "bonus"},
+
+			// Reaction patterns
+			{regex: /\bas a reaction\b/i, type: "reaction"},
+			{regex: /\buse (?:a |your )?reaction\b/i, type: "reaction"},
+			{regex: /\busing (?:a |your )?reaction\b/i, type: "reaction"},
+			{regex: /\byou can use your reaction\b/i, type: "reaction"},
+
+			// No action / free activation
+			{regex: /\bno action required\b/i, type: "none"},
+			{regex: /\bwithout (?:using )?an action\b/i, type: "none"},
+			{regex: /\b(?:on your turn[,]?\s+)?you can[,]?\s+(?:without using an action|freely)\b/i, type: "none"},
+
+			// Timed activations
+			{regex: /\btakes?\s+(\d+)\s+minutes?\b/i, type: "minute", capture: true},
+			{regex: /\bspend(?:ing)?\s+(\d+)\s+minutes?\b/i, type: "minute", capture: true},
+			{regex: /\bover\s+(?:the\s+)?(?:course\s+of\s+)?(\d+)\s+minutes?\b/i, type: "minute", capture: true},
+			{regex: /\btakes?\s+(\d+)\s+hours?\b/i, type: "hour", capture: true},
+			{regex: /\bspend(?:ing)?\s+(\d+)\s+hours?\b/i, type: "hour", capture: true},
+		];
+
+		// Track what we've found to avoid duplicates
+		const foundTypes = new Set();
+
+		for (const sentence of sentences) {
+			for (const {regex, type, capture} of patterns) {
+				const match = sentence.match(regex);
+				if (match) {
+					const key = capture ? `${type}:${match[1]}` : type;
+					if (!foundTypes.has(key)) {
+						foundTypes.add(key);
+
+						const activation = {
+							type,
+							cost: capture ? parseInt(match[1], 10) : 1,
+							description: sentence.trim().substring(0, 100) + (sentence.length > 100 ? "..." : ""),
+						};
+
+						// Try to extract ability name from context
+						const nameMatch = sentence.match(/(?:you can|allows you to)\s+(\w+(?:\s+\w+)?)/i);
+						if (nameMatch) activation.name = nameMatch[1];
+
+						activations.push(activation);
+					}
+				}
+			}
+		}
+
+		return activations;
+	}
+
+	/**
 	 * Detect spell storing capacity from item
 	 * @param {object} item - The item data
 	 * @returns {number|null} Max spell levels, or null
@@ -15700,7 +16099,17 @@ class CharacterSheetState {
 
 	setItemEquipped (itemId, equipped) {
 		const item = this._data.inventory.find(i => i.id === itemId);
-		if (item) item.equipped = equipped;
+		if (item) {
+			const wasActive = this._isItemProficienciesActive(item);
+			item.equipped = equipped;
+			const isActive = this._isItemProficienciesActive(item);
+			// Apply or remove proficiencies if activation state changed
+			if (!wasActive && isActive) {
+				this._applyItemProficiencies(itemId);
+			} else if (wasActive && !isActive) {
+				this._removeItemProficiencies(itemId);
+			}
+		}
 	}
 
 	/**
@@ -15747,7 +16156,17 @@ class CharacterSheetState {
 
 	setItemAttuned (itemId, attuned) {
 		const item = this._data.inventory.find(i => i.id === itemId);
-		if (item) item.attuned = attuned;
+		if (item) {
+			const wasActive = this._isItemProficienciesActive(item);
+			item.attuned = attuned;
+			const isActive = this._isItemProficienciesActive(item);
+			// Apply or remove proficiencies if activation state changed
+			if (!wasActive && isActive) {
+				this._applyItemProficiencies(itemId);
+			} else if (wasActive && !isActive) {
+				this._removeItemProficiencies(itemId);
+			}
+		}
 	}
 
 	/**
@@ -16403,6 +16822,205 @@ class CharacterSheetState {
 		if (this._data._classFeatureIgnoreAttunementRequirements) return true;
 
 		return false;
+	}
+
+	/**
+	 * Check if character meets the attunement requirements for an item
+	 * @param {object} item - The item object (may have reqAttuneTags array)
+	 * @returns {{canAttune: boolean, reasons: string[]}} Whether can attune and why not if failed
+	 */
+	meetsAttunementRequirements (item) {
+		// If character ignores requirements (Use Magic Device), always pass
+		if (this.ignoresAttunementRequirements()) {
+			return {canAttune: true, reasons: []};
+		}
+
+		// If no requirements, anyone can attune
+		const reqTags = item?.reqAttuneTags;
+		if (!reqTags || !Array.isArray(reqTags) || reqTags.length === 0) {
+			return {canAttune: true, reasons: []};
+		}
+
+		// reqAttuneTags is an OR array - any single tag matching = valid
+		// Each tag object has AND properties - all must match within a tag
+		const failedTags = [];
+
+		for (const tag of reqTags) {
+			const tagFailures = this._checkAttunementTag(tag);
+			if (tagFailures.length === 0) {
+				// This tag fully matches - character can attune
+				return {canAttune: true, reasons: []};
+			}
+			failedTags.push(tagFailures);
+		}
+
+		// No tags matched - compile all unique failure reasons
+		const allReasons = [...new Set(failedTags.flat())];
+		return {canAttune: false, reasons: allReasons};
+	}
+
+	/**
+	 * Check a single attunement requirement tag
+	 * @param {object} tag - A requirement tag object from reqAttuneTags
+	 * @returns {string[]} Array of failure reasons (empty if tag matches)
+	 * @private
+	 */
+	_checkAttunementTag (tag) {
+		const failures = [];
+
+		// Class requirement (e.g., "artificer|tce" or "wizard")
+		if (tag.class) {
+			const reqClass = tag.class.split("|")[0].toLowerCase();
+			const hasClass = this._data.classes?.some(c => c.name?.toLowerCase() === reqClass);
+			if (!hasClass) {
+				failures.push(`Requires ${this._toTitleCase(reqClass)} class`);
+			}
+		}
+
+		// Race requirement (e.g., "elf" - partial match for "High Elf", etc.)
+		if (tag.race) {
+			const reqRace = tag.race.split("|")[0].toLowerCase();
+			const raceName = this.getRaceName()?.toLowerCase() || "";
+			const baseRaceName = this._data.race?.name?.toLowerCase() || "";
+			if (!raceName.includes(reqRace) && !baseRaceName.includes(reqRace)) {
+				failures.push(`Requires ${this._toTitleCase(reqRace)} race`);
+			}
+		}
+
+		// Background requirement (e.g., "Azorius Functionary|GGR")
+		if (tag.background) {
+			const [reqBgName, reqBgSource] = tag.background.split("|");
+			const bgName = this._data.background?.name?.toLowerCase() || "";
+			const bgSource = this._data.background?.source?.toUpperCase() || "";
+			const matches = bgName === reqBgName.toLowerCase() &&
+				(!reqBgSource || bgSource === reqBgSource.toUpperCase());
+			if (!matches) {
+				failures.push(`Requires ${reqBgName} background`);
+			}
+		}
+
+		// Spellcasting requirement
+		if (tag.spellcasting === true) {
+			const calcs = this.getFeatureCalculations();
+			if (!calcs.hasSpellcasting) {
+				failures.push("Requires spellcasting ability");
+			}
+		}
+
+		// Psionics requirement
+		if (tag.psionics === true) {
+			// Check for psionic subclasses or features
+			const hasPsionics = this._data.classes?.some(c =>
+				c.subclass?.name?.toLowerCase().includes("psi") ||
+				c.subclass?.name?.toLowerCase().includes("soul knife") ||
+				c.subclass?.name?.toLowerCase().includes("aberrant mind")
+			) || this._data.features?.some(f =>
+				f.name?.toLowerCase().includes("psionic") ||
+				f.name?.toLowerCase().includes("psionics")
+			);
+			if (!hasPsionics) {
+				failures.push("Requires psionic abilities");
+			}
+		}
+
+		// Ability score requirements (str, dex, con, int, wis, cha)
+		for (const ability of ["str", "dex", "con", "int", "wis", "cha"]) {
+			if (typeof tag[ability] === "number") {
+				const score = this.getAbilityScore(ability);
+				if (score < tag[ability]) {
+					const abilityName = {str: "Strength", dex: "Dexterity", con: "Constitution",
+						int: "Intelligence", wis: "Wisdom", cha: "Charisma"}[ability];
+					failures.push(`Requires ${abilityName} ${tag[ability]}+`);
+				}
+			}
+		}
+
+		// Alignment requirement (array of valid alignments like ["L", "G", "LG"])
+		if (tag.alignment && Array.isArray(tag.alignment)) {
+			const charAlign = this._data.alignment;
+			if (!charAlign) {
+				// No alignment set - can't verify
+				failures.push("Requires specific alignment (set your alignment)");
+			} else {
+				// Parse character alignment into components
+				const alignComponents = this._parseAlignmentComponents(charAlign);
+				// Check if any required alignment matches
+				const matches = tag.alignment.some(reqAlign => {
+					// "A" = any alignment
+					if (reqAlign === "A") return true;
+					// Exact match
+					if (reqAlign === charAlign) return true;
+					// Component match ("L" matches "LG", "LN", "LE")
+					if (alignComponents.includes(reqAlign)) return true;
+					// NX = neutral on law-chaos axis
+					if (reqAlign === "NX" && ["N", "NG", "NE"].includes(charAlign)) return true;
+					// NY = neutral on good-evil axis
+					if (reqAlign === "NY" && ["N", "LN", "CN"].includes(charAlign)) return true;
+					return false;
+				});
+				if (!matches) {
+					failures.push(`Requires specific alignment`);
+				}
+			}
+		}
+
+		// Skill proficiency requirement
+		if (tag.skillProficiency) {
+			const skill = tag.skillProficiency.toLowerCase();
+			if (this.getSkillProficiency(skill) < 1) {
+				failures.push(`Requires ${this._toTitleCase(skill)} proficiency`);
+			}
+		}
+
+		// Language proficiency requirement
+		if (tag.languageProficiency) {
+			const reqLang = tag.languageProficiency.toLowerCase();
+			const hasLang = this._data.languages?.some(l => l.toLowerCase() === reqLang);
+			if (!hasLang) {
+				failures.push(`Requires ${this._toTitleCase(reqLang)} language`);
+			}
+		}
+
+		// Creature type requirement (e.g., "humanoid")
+		if (tag.creatureType) {
+			const reqType = tag.creatureType.toLowerCase();
+			const charTypes = this._data.race?.creatureTypes || ["humanoid"];
+			const hasType = charTypes.some(t => t.toLowerCase() === reqType);
+			if (!hasType) {
+				failures.push(`Requires ${this._toTitleCase(reqType)} creature type`);
+			}
+		}
+
+		// Size requirement
+		if (tag.size) {
+			const reqSize = tag.size.toLowerCase();
+			const charSize = this.getSize()?.toLowerCase() || "medium";
+			if (charSize !== reqSize) {
+				failures.push(`Requires ${this._toTitleCase(reqSize)} size`);
+			}
+		}
+
+		return failures;
+	}
+
+	/**
+	 * Parse alignment code into its components
+	 * @param {string} alignment - "LG", "NG", "CG", "LN", "N", "CN", "LE", "NE", "CE"
+	 * @returns {string[]} Array of alignment components
+	 * @private
+	 */
+	_parseAlignmentComponents (alignment) {
+		if (!alignment) return [];
+		const components = [];
+		// Law-Chaos axis
+		if (alignment.includes("L")) components.push("L");
+		else if (alignment.includes("C")) components.push("C");
+		else if (alignment === "N" || alignment === "NG" || alignment === "NE") components.push("NX");
+		// Good-Evil axis
+		if (alignment.includes("G")) components.push("G");
+		else if (alignment.includes("E")) components.push("E");
+		else if (alignment === "N" || alignment === "LN" || alignment === "CN") components.push("NY");
+		return components;
 	}
 
 	/**
@@ -21349,6 +21967,180 @@ class CharacterSheetState {
 				});
 			}
 		}
+	}
+
+	// =========================================================================
+	// Item-Granted Proficiencies
+	// =========================================================================
+
+	/**
+	 * Check if an item's proficiency grants should be active
+	 * (equipped AND (doesn't require attunement OR is attuned))
+	 * @param {object} item - The inventory item (has .item nested object)
+	 * @returns {boolean} True if item proficiencies should be active
+	 * @private
+	 */
+	_isItemProficienciesActive (item) {
+		if (!item?.equipped) return false;
+		// requiresAttunement can be on item wrapper or nested item data
+		const requiresAttunement = item.requiresAttunement || item.item?.requiresAttunement;
+		if (requiresAttunement && !item.attuned) return false;
+		return true;
+	}
+
+	/**
+	 * Apply proficiencies granted by an item
+	 * Parses item entries for skill/tool/language proficiency grants
+	 * @param {string} itemId - The item ID
+	 * @private
+	 */
+	_applyItemProficiencies (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem) return;
+
+		const itemData = invItem.item || invItem;
+		const itemName = itemData.name || invItem.name || "Unknown Item";
+		const sourceId = `item:${itemId}`;
+
+		// Get entries text to parse
+		const entriesText = this._getItemEntriesText(itemData);
+		if (!entriesText) return;
+
+		// Parse for proficiency modifiers
+		const modifiers = FeatureModifierParser.parseModifiers(entriesText, itemName, {isItem: true});
+
+		// Apply proficiencies
+		for (const mod of modifiers) {
+			if (!mod.isProficiency) continue;
+
+			const typeParts = mod.type.split(":");
+			if (typeParts[0] !== "proficiency") continue;
+
+			const profType = typeParts[1]; // skill, tool, language, weapon, armor
+
+			if (profType === "skill") {
+				const skillKey = typeParts[2];
+				// If skill already exists but isn't tracked, track a base source first
+				if (this._data.skillProficiencies[skillKey] && !this._data.grantedProficiencies?.skills?.[skillKey]?.length) {
+					this._trackGrantedProficiency("skills", skillKey, "base");
+				}
+				if (!this._data.skillProficiencies[skillKey]) {
+					this.addSkillProficiency(skillKey);
+				}
+				this._trackGrantedProficiency("skills", skillKey, sourceId);
+			} else if (profType === "tool") {
+				const toolKey = typeParts[2];
+				const toolKeyLower = toolKey.toLowerCase();
+				// If tool already exists but isn't tracked, track a base source first
+				if (this._data.toolProficiencies.some(t => t.toLowerCase().replace(/['\s]+/g, "") === toolKeyLower) &&
+					!this._data.grantedProficiencies?.tools?.[toolKeyLower]?.length) {
+					this._trackGrantedProficiency("tools", toolKeyLower, "base");
+				}
+				this.addToolProficiency(toolKey);
+				this._trackGrantedProficiency("tools", toolKeyLower, sourceId);
+			} else if (profType === "language") {
+				const langKey = typeParts[2];
+				const langName = mod.languageName || langKey;
+				const langNameLower = langName.toLowerCase();
+				// If language already exists but isn't tracked, track a base source first
+				if (this._data.languages.some(l => l.toLowerCase() === langNameLower) &&
+					!this._data.grantedProficiencies?.languages?.[langNameLower]?.length) {
+					this._trackGrantedProficiency("languages", langNameLower, "base");
+				}
+				if (!this._data.languages.includes(langName)) {
+					this.addLanguage(langName);
+				}
+				this._trackGrantedProficiency("languages", langNameLower, sourceId);
+			} else if (profType === "weapon") {
+				const weaponKey = typeParts[2];
+				// If weapon already exists but isn't tracked, track a base source first
+				if (this._data.weaponProficiencies?.some(w => w.toLowerCase() === weaponKey.toLowerCase()) &&
+					!this._data.grantedProficiencies?.weapons?.[weaponKey.toLowerCase()]?.length) {
+					this._trackGrantedProficiency("weapons", weaponKey.toLowerCase(), "base");
+				}
+				this.addWeaponProficiency(weaponKey);
+				this._trackGrantedProficiency("weapons", weaponKey.toLowerCase(), sourceId);
+			} else if (profType === "armor") {
+				const armorKey = typeParts[2];
+				// If armor already exists but isn't tracked, track a base source first
+				if (this._data.armorProficiencies?.some(a => a.toLowerCase() === armorKey.toLowerCase()) &&
+					!this._data.grantedProficiencies?.armor?.[armorKey.toLowerCase()]?.length) {
+					this._trackGrantedProficiency("armor", armorKey.toLowerCase(), "base");
+				}
+				this.addArmorProficiency(armorKey);
+				this._trackGrantedProficiency("armor", armorKey.toLowerCase(), sourceId);
+			}
+		}
+	}
+
+	/**
+	 * Remove proficiencies granted by an item
+	 * @param {string} itemId - The item ID
+	 * @private
+	 */
+	_removeItemProficiencies (itemId) {
+		const sourceId = `item:${itemId}`;
+
+		// Check all tracked proficiencies for this source
+		if (!this._data.grantedProficiencies) return;
+
+		const profTypes = ["skills", "tools", "languages", "weapons", "armor"];
+		for (const profType of profTypes) {
+			if (!this._data.grantedProficiencies[profType]) continue;
+
+			// Iterate over all proficiency names in this type
+			const profNames = Object.keys(this._data.grantedProficiencies[profType]);
+			for (const name of profNames) {
+				if (this._untrackGrantedProficiency(profType, name, sourceId)) {
+					// This was the last source - remove the proficiency
+					if (profType === "skills") {
+						this.setSkillProficiency(name, 0);
+					} else if (profType === "tools") {
+						this.removeToolProficiency(name);
+					} else if (profType === "languages") {
+						this.removeLanguage(name);
+					} else if (profType === "weapons") {
+						this.removeWeaponProficiency(name);
+					} else if (profType === "armor") {
+						this.removeArmorProficiency(name);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Get rendered text from item entries for parsing
+	 * @param {object} itemData - The item data object
+	 * @returns {string} The rendered entries text
+	 * @private
+	 */
+	_getItemEntriesText (itemData) {
+		if (!itemData) return "";
+
+		let text = "";
+
+		// Try entries array first
+		if (itemData.entries?.length) {
+			// Try to render with Renderer if available, fallback to plain text join
+			if (typeof Renderer !== "undefined" && Renderer.get) {
+				try {
+					text += Renderer.get().render({entries: itemData.entries});
+				} catch {
+					text += itemData.entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ");
+				}
+			} else {
+				text += itemData.entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ");
+			}
+		}
+
+		// Also check description
+		if (itemData.description) {
+			text += " " + itemData.description;
+		}
+
+		// Strip HTML tags for plain text parsing
+		return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 	}
 
 	/**
@@ -27383,6 +28175,9 @@ class CharacterSheetState {
 
 		// Sorcerous Restoration: recover SP on short rest
 		this.applySorcerousRestoration();
+
+		// Recharge magic items that recharge on short rest
+		this._rechargeItems("restShort");
 	}
 
 	onLongRest (options = {}) {
@@ -27437,6 +28232,12 @@ class CharacterSheetState {
 		// Recharge magic items at dawn
 		this._rechargeItems("dawn");
 
+		// Recharge magic items that recharge on long rest
+		this._rechargeItems("restLong");
+
+		// Reset resource restoration items (Dragonhide Belt, Bloodwell Vial, etc.)
+		this.resetResourceRestorations();
+
 		// Track time for rest restrictions
 		this._data.lastLongRestTime = 0; // Reset to 0 hours since last long rest
 
@@ -27446,28 +28247,43 @@ class CharacterSheetState {
 
 	/**
 	 * Recharge magic items that recharge on a specific trigger
-	 * @param {string} trigger - "dawn", "dusk", or "long"
+	 * @param {string} trigger - "dawn", "dusk", "midnight", "restShort", "restLong", "round"
 	 */
 	_rechargeItems (trigger) {
 		const items = this._data.inventory || [];
 		for (const entry of items) {
 			const itemData = entry.item || entry;
+			// Check if this item has this recharge trigger
+			// Items use `charges` (max) and `chargesCurrent` (current)
 			if (itemData.recharge === trigger && itemData.charges) {
-				const rechargeAmount = itemData.rechargeAmount;
-				if (rechargeAmount === "all") {
-					itemData.charges.current = itemData.charges.max;
+				const maxCharges = itemData.charges;
+				const currentCharges = itemData.chargesCurrent ?? maxCharges;
+				let rechargeAmount = itemData.rechargeAmount;
+
+				if (!rechargeAmount || rechargeAmount === "all") {
+					// Default: restore all charges
+					itemData.chargesCurrent = maxCharges;
 				} else if (typeof rechargeAmount === "string" && rechargeAmount.includes("d")) {
-					// Dice expression like "1d6+4" - use average
-					const match = rechargeAmount.match(/(\d*)d(\d+)([+-]\d+)?/);
+					// Strip {@dice ...} wrapper if present
+					rechargeAmount = rechargeAmount.replace(/\{@dice\s*([^}]+)\}/i, "$1").trim();
+					// Parse dice expression like "1d6+4", "1d6 + 4", "2d8-2"
+					const match = rechargeAmount.match(/(\d*)d(\d+)\s*(?:([+-])\s*(\d+))?/i);
 					if (match) {
 						const numDice = parseInt(match[1] || "1", 10);
 						const dieSize = parseInt(match[2], 10);
-						const modifier = parseInt(match[3] || "0", 10);
-						const average = Math.ceil((numDice * (dieSize + 1)) / 2) + modifier;
-						itemData.charges.current = Math.min(itemData.charges.max, itemData.charges.current + average);
+						const sign = match[3] === "-" ? -1 : 1;
+						const modifier = (parseInt(match[4], 10) || 0) * sign;
+						// Roll actual dice using RollerUtil.randomise
+						let rolled = modifier;
+						for (let i = 0; i < numDice; i++) {
+							rolled += (typeof RollerUtil !== "undefined" && RollerUtil.randomise)
+								? RollerUtil.randomise(dieSize)
+								: Math.floor(Math.random() * dieSize) + 1;
+						}
+						itemData.chargesCurrent = Math.min(maxCharges, Math.max(0, currentCharges + rolled));
 					}
 				} else if (typeof rechargeAmount === "number") {
-					itemData.charges.current = Math.min(itemData.charges.max, itemData.charges.current + rechargeAmount);
+					itemData.chargesCurrent = Math.min(maxCharges, currentCharges + rechargeAmount);
 				}
 			}
 		}
@@ -27478,6 +28294,20 @@ class CharacterSheetState {
 	 */
 	onDusk () {
 		this._rechargeItems("dusk");
+	}
+
+	/**
+	 * Trigger midnight events (item recharges, etc.)
+	 */
+	onMidnight () {
+		this._rechargeItems("midnight");
+	}
+
+	/**
+	 * Trigger new round events in combat (item recharges, etc.)
+	 */
+	onNewRound () {
+		this._rechargeItems("round");
 	}
 
 	/**

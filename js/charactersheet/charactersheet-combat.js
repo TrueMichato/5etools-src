@@ -785,6 +785,25 @@ class CharacterSheetCombat {
 		}
 		if (!attack) return;
 
+		// Ammunition consumption (if enabled and weapon uses ammo)
+		let ammoNote = "";
+		if (this._state.isAmmunitionTrackingEnabled?.() && attack.sourceItem?.ammoType) {
+			const ammoItems = this._state.getAmmunitionForWeapon?.(attack.sourceItem.id) || [];
+			if (ammoItems.length > 0) {
+				// Use first available ammunition
+				const ammo = ammoItems[0];
+				if (this._state.consumeAmmunition?.(ammo.id, 1)) {
+					const remaining = ammo.quantity - 1;
+					ammoNote = ` [${ammo.name}: ${remaining} remaining]`;
+				}
+			} else {
+				// No compatible ammunition
+				if (typeof JqueryUtil !== "undefined" && JqueryUtil.doToast) {
+					JqueryUtil.doToast({type: "warning", content: `No compatible ammunition for ${attack.name}!`});
+				}
+			}
+		}
+
 		// Determine attack type for advantage/disadvantage matching
 		const isMelee = attack.isMelee || attack.type === "melee" || attack.range === "melee"
 			|| (attack.range && !attack.range.includes("/"));
@@ -840,7 +859,7 @@ class CharacterSheetCombat {
 			modifier: totalBonus,
 			total,
 			resultClass,
-			resultNote,
+			resultNote: resultNote + ammoNote,
 			subtitle: this._page.formatD20Breakdown(rollResult, totalBonus),
 		});
 	}

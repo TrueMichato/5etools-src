@@ -520,36 +520,220 @@ describe("Rest Mechanics", () => {
 			state.addItem({
 				id: "item1",
 				name: "Staff of Fire",
-				charges: {current: 0, max: 10},
+				charges: 10,
+				chargesCurrent: 0,
 				recharge: "dawn",
 				rechargeAmount: "1d6+4",
 			});
 			state.onLongRest();
-			expect(state.getItem("item1").charges.current).toBeGreaterThanOrEqual(5);
+			expect(state.getItem("item1").chargesCurrent).toBeGreaterThanOrEqual(5);
 		});
 
 		it("should track items that recharge at dusk", () => {
 			state.addItem({
 				id: "item2",
 				name: "Cloak of Shadows",
-				charges: {current: 0, max: 3},
+				charges: 3,
+				chargesCurrent: 0,
 				recharge: "dusk",
 				rechargeAmount: "all",
 			});
 			state.onDusk();
-			expect(state.getItem("item2").charges.current).toBe(3);
+			expect(state.getItem("item2").chargesCurrent).toBe(3);
 		});
 
 		it("should track items that recharge on specific conditions", () => {
 			state.addItem({
 				id: "item3",
 				name: "Ring of Spell Storing",
-				charges: {current: 5, max: 5},
+				charges: 5,
+				chargesCurrent: 5,
 				recharge: "manual",
 			});
 			// Doesn't auto-recharge
 			state.onLongRest();
-			expect(state.getItem("item3").charges.current).toBe(5);
+			expect(state.getItem("item3").chargesCurrent).toBe(5);
+		});
+
+		it("should recharge magic items on short rest", () => {
+			state.addItem({
+				id: "item4",
+				name: "Wand of Magic Detection",
+				charges: 3,
+				chargesCurrent: 0,
+				recharge: "restShort",
+			});
+			state.onShortRest();
+			expect(state.getItem("item4").chargesCurrent).toBe(3);
+		});
+
+		it("should recharge magic items on long rest (restLong)", () => {
+			state.addItem({
+				id: "item5",
+				name: "Amulet of Proof Against Detection",
+				charges: 1,
+				chargesCurrent: 0,
+				recharge: "restLong",
+			});
+			state.onLongRest();
+			expect(state.getItem("item5").chargesCurrent).toBe(1);
+		});
+
+		it("should recharge magic items at midnight", () => {
+			state.addItem({
+				id: "item6",
+				name: "Midnight Pendant",
+				charges: 2,
+				chargesCurrent: 0,
+				recharge: "midnight",
+			});
+			state.onMidnight();
+			expect(state.getItem("item6").chargesCurrent).toBe(2);
+		});
+
+		it("should recharge magic items each round in combat", () => {
+			state.addItem({
+				id: "item7",
+				name: "Ring of Regeneration Charges",
+				charges: 1,
+				chargesCurrent: 0,
+				recharge: "round",
+			});
+			state.onNewRound();
+			expect(state.getItem("item7").chargesCurrent).toBe(1);
+		});
+
+		// Dice-based recharge tests
+		it("should roll dice for recharge with 1d6+4 pattern", () => {
+			state.addItem({
+				id: "dice1",
+				name: "Staff of Fire",
+				charges: 10,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: "1d6+4",
+			});
+			state.onLongRest(); // triggers dawn
+			// 1d6+4 = min 5, max 10
+			expect(state.getItem("dice1").chargesCurrent).toBeGreaterThanOrEqual(5);
+			expect(state.getItem("dice1").chargesCurrent).toBeLessThanOrEqual(10);
+		});
+
+		it("should roll dice for recharge with 1d3 pattern", () => {
+			state.addItem({
+				id: "dice2",
+				name: "Gem of Seeing",
+				charges: 3,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: "1d3",
+			});
+			state.onLongRest();
+			// 1d3 = min 1, max 3
+			expect(state.getItem("dice2").chargesCurrent).toBeGreaterThanOrEqual(1);
+			expect(state.getItem("dice2").chargesCurrent).toBeLessThanOrEqual(3);
+		});
+
+		it("should roll dice for recharge with 2d8+4 pattern", () => {
+			state.addItem({
+				id: "dice3",
+				name: "Blackstaff",
+				charges: 50,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: "2d8+4",
+			});
+			state.onLongRest();
+			// 2d8+4 = min 6, max 20
+			expect(state.getItem("dice3").chargesCurrent).toBeGreaterThanOrEqual(6);
+			expect(state.getItem("dice3").chargesCurrent).toBeLessThanOrEqual(20);
+		});
+
+		it("should handle {@dice ...} wrapper in rechargeAmount", () => {
+			state.addItem({
+				id: "dice4",
+				name: "Wand of Magic Missiles",
+				charges: 7,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: "{@dice 1d6 + 1}",
+			});
+			state.onLongRest();
+			// 1d6+1 = min 2, max 7
+			expect(state.getItem("dice4").chargesCurrent).toBeGreaterThanOrEqual(2);
+			expect(state.getItem("dice4").chargesCurrent).toBeLessThanOrEqual(7);
+		});
+
+		it("should handle whitespace in dice expressions", () => {
+			state.addItem({
+				id: "dice5",
+				name: "Staff With Spaces",
+				charges: 10,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: "1d6 + 4",
+			});
+			state.onLongRest();
+			// 1d6+4 = min 5, max 10
+			expect(state.getItem("dice5").chargesCurrent).toBeGreaterThanOrEqual(5);
+			expect(state.getItem("dice5").chargesCurrent).toBeLessThanOrEqual(10);
+		});
+
+		it("should handle negative modifiers in dice expressions", () => {
+			state.addItem({
+				id: "dice6",
+				name: "Cursed Wand",
+				charges: 10,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: "1d6-2",
+			});
+			state.onLongRest();
+			// 1d6-2 = min 0 (clamped), max 4
+			expect(state.getItem("dice6").chargesCurrent).toBeGreaterThanOrEqual(0);
+			expect(state.getItem("dice6").chargesCurrent).toBeLessThanOrEqual(4);
+		});
+
+		it("should handle fixed number rechargeAmount", () => {
+			state.addItem({
+				id: "fixed1",
+				name: "Staff of Fixed Recharge",
+				charges: 10,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: 3,
+			});
+			state.onLongRest();
+			expect(state.getItem("fixed1").chargesCurrent).toBe(3);
+		});
+
+		it("should cap recharged charges at max", () => {
+			state.addItem({
+				id: "cap1",
+				name: "Nearly Full Staff",
+				charges: 10,
+				chargesCurrent: 8,
+				recharge: "dawn",
+				rechargeAmount: "1d6+4", // min 5 would exceed max 10
+			});
+			state.onLongRest();
+			// Should not exceed 10
+			expect(state.getItem("cap1").chargesCurrent).toBeLessThanOrEqual(10);
+		});
+
+		it("should handle d20 recharge pattern", () => {
+			state.addItem({
+				id: "dice7",
+				name: "Abracadabrus",
+				charges: 20,
+				chargesCurrent: 0,
+				recharge: "dawn",
+				rechargeAmount: "1d20",
+			});
+			state.onLongRest();
+			// 1d20 = min 1, max 20
+			expect(state.getItem("dice7").chargesCurrent).toBeGreaterThanOrEqual(1);
+			expect(state.getItem("dice7").chargesCurrent).toBeLessThanOrEqual(20);
 		});
 	});
 });

@@ -587,18 +587,23 @@ class CharacterSheetRest {
 							if (typeof item.rechargeAmount === "number") {
 								rechargeAmount = item.rechargeAmount;
 							} else if (typeof item.rechargeAmount === "string") {
-								// Parse dice notation like "{@dice 1d6 + 1}" or "1d6+1"
-								const diceMatch = item.rechargeAmount.match(/(\d+)d(\d+)\s*(?:\+\s*(\d+))?/i);
+								// Strip {@dice ...} wrapper if present
+								let diceStr = item.rechargeAmount.replace(/\{@dice\s*([^}]+)\}/i, "$1").trim();
+								// Parse dice notation like "1d6 + 1", "1d6+1", "2d8-2"
+								const diceMatch = diceStr.match(/(\d+)d(\d+)\s*(?:([+-])\s*(\d+))?/i);
 								if (diceMatch) {
 									const numDice = parseInt(diceMatch[1]);
 									const dieSize = parseInt(diceMatch[2]);
-									const bonus = parseInt(diceMatch[3]) || 0;
-									// Roll the dice
-									let total = bonus;
+									const sign = diceMatch[3] === "-" ? -1 : 1;
+									const modifier = (parseInt(diceMatch[4]) || 0) * sign;
+									// Roll the dice using RollerUtil if available
+									let total = modifier;
 									for (let i = 0; i < numDice; i++) {
-										total += Math.floor(Math.random() * dieSize) + 1;
+										total += (typeof RollerUtil !== "undefined" && RollerUtil.randomise)
+											? RollerUtil.randomise(dieSize)
+											: Math.floor(Math.random() * dieSize) + 1;
 									}
-									rechargeAmount = total;
+									rechargeAmount = Math.max(0, total);
 								} else {
 									// Try parsing as a plain number
 									rechargeAmount = parseInt(item.rechargeAmount) || item.charges;
