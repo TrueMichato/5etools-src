@@ -15595,6 +15595,222 @@ class CharacterSheetState {
 	}
 
 	// ======================================================================
+	// Conditional Bonuses
+	// ======================================================================
+
+	/**
+	 * Get conditional bonuses for a specific item
+	 * @param {string} itemId - The item ID
+	 * @returns {Array<object>} Array of conditional bonuses or empty array
+	 */
+	getItemConditionalBonuses (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		return invItem?.item?.conditionalBonuses || [];
+	}
+
+	/**
+	 * Check if an item has conditional bonuses
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	hasConditionalBonuses (itemId) {
+		const bonuses = this.getItemConditionalBonuses(itemId);
+		return bonuses.length > 0;
+	}
+
+	/**
+	 * Get all items that have conditional bonuses
+	 * @param {object} options - Filter options
+	 * @param {boolean} options.equippedOnly - Only return equipped items
+	 * @param {boolean} options.activeOnly - Only return items that are active (equipped and attuned if required)
+	 * @returns {Array} Items with conditional bonuses
+	 */
+	getItemsWithConditionalBonuses (options = {}) {
+		return this.getItems().filter(item => {
+			if (!item.conditionalBonuses?.length) return false;
+			if (options.equippedOnly && !item.equipped) return false;
+			if (options.activeOnly) {
+				if (!item.equipped) return false;
+				if (item.requiresAttunement && !item.attuned) return false;
+			}
+			return true;
+		});
+	}
+
+	/**
+	 * Get conditional bonuses matching a specific creature type
+	 * @param {string} itemId - The item ID
+	 * @param {string} creatureType - The creature type to match (e.g., "undead", "fiend")
+	 * @returns {Array<object>} Matching conditional bonuses
+	 */
+	getConditionalBonusesForCreatureType (itemId, creatureType) {
+		const bonuses = this.getItemConditionalBonuses(itemId);
+		const typeLower = creatureType.toLowerCase();
+		return bonuses.filter(b => b.creatureTypes?.includes(typeLower));
+	}
+
+	// ======================================================================
+	// Artifact Properties
+	// ======================================================================
+
+	/**
+	 * Check if an item is an artifact
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	isArtifact (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		return invItem?.item?.rarity === "artifact";
+	}
+
+	/**
+	 * Get artifact property requirements for an item
+	 * @param {string} itemId - The item ID
+	 * @returns {object|null} Requirements object or null
+	 */
+	getArtifactPropertyRequirements (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		return invItem?.item?.artifactProperties?.requirements || null;
+	}
+
+	/**
+	 * Get selected artifact properties for an item
+	 * @param {string} itemId - The item ID
+	 * @returns {Array} Array of selected property objects
+	 */
+	getArtifactProperties (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		return invItem?.item?.artifactProperties?.selected || [];
+	}
+
+	/**
+	 * Check if artifact has all required properties configured
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	isArtifactFullyConfigured (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem?.item?.artifactProperties) return true; // Not an artifact
+
+		const {requirements, selected} = invItem.item.artifactProperties;
+		if (!requirements) return true;
+
+		// Count selected properties by type
+		const counts = {
+			minorBeneficial: 0,
+			majorBeneficial: 0,
+			minorDetrimental: 0,
+			majorDetrimental: 0,
+		};
+
+		for (const prop of selected) {
+			if (counts[prop.type] !== undefined) {
+				counts[prop.type]++;
+			}
+		}
+
+		// Check if all requirements are met
+		return (
+			counts.minorBeneficial >= (requirements.minorBeneficial || 0) &&
+			counts.majorBeneficial >= (requirements.majorBeneficial || 0) &&
+			counts.minorDetrimental >= (requirements.minorDetrimental || 0) &&
+			counts.majorDetrimental >= (requirements.majorDetrimental || 0)
+		);
+	}
+
+	/**
+	 * Add a property to an artifact
+	 * @param {string} itemId - The item ID
+	 * @param {string} type - Property type (minorBeneficial, majorBeneficial, minorDetrimental, majorDetrimental)
+	 * @param {object} property - The property object (from ARTIFACT_PROPERTIES table)
+	 * @returns {boolean} True if added successfully
+	 */
+	setArtifactProperty (itemId, type, property) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem?.item?.artifactProperties) return false;
+
+		if (!invItem.item.artifactProperties.selected) {
+			invItem.item.artifactProperties.selected = [];
+		}
+
+		// Add the property with its type
+		invItem.item.artifactProperties.selected.push({
+			type,
+			...property,
+			addedAt: Date.now(),
+		});
+
+		return true;
+	}
+
+	/**
+	 * Remove a property from an artifact
+	 * @param {string} itemId - The item ID
+	 * @param {number} index - Index in selected array
+	 * @returns {boolean} True if removed successfully
+	 */
+	removeArtifactProperty (itemId, index) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem?.item?.artifactProperties?.selected) return false;
+
+		if (index >= 0 && index < invItem.item.artifactProperties.selected.length) {
+			invItem.item.artifactProperties.selected.splice(index, 1);
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Roll a random artifact property
+	 * @param {string} type - Property type (minorBeneficial, majorBeneficial, minorDetrimental, majorDetrimental)
+	 * @returns {object|null} The rolled property or null if invalid type
+	 */
+	rollArtifactProperty (type) {
+		const table = CharacterSheetState.ARTIFACT_PROPERTIES[type];
+		if (!table) return null;
+
+		// Roll d100
+		const roll = Math.floor(Math.random() * 100) + 1;
+
+		// Find the property that matches the roll
+		for (const prop of table) {
+			if (roll >= prop.min && roll <= prop.max) {
+				return {
+					roll,
+					...prop,
+				};
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get artifact property table by type
+	 * @param {string} type - Property type
+	 * @returns {Array} Property table entries
+	 */
+	getArtifactPropertyTable (type) {
+		return CharacterSheetState.ARTIFACT_PROPERTIES[type] || [];
+	}
+
+	/**
+	 * Get all artifacts in inventory
+	 * @returns {Array} Array of artifact items
+	 */
+	getArtifacts () {
+		return this.getItems().filter(item => item.rarity === "artifact");
+	}
+
+	/**
+	 * Get artifacts that need property configuration
+	 * @returns {Array} Array of unconfigured artifact items
+	 */
+	getUnconfiguredArtifacts () {
+		return this.getArtifacts().filter(item => !this.isArtifactFullyConfigured(item.id));
+	}
+
+	// ======================================================================
 	// Ammunition Tracking
 	// ======================================================================
 
@@ -15799,6 +16015,16 @@ class CharacterSheetState {
 			// Item activation requirements detection (action economy costs)
 			if (itemProps.activation === undefined) {
 				itemProps.activation = this._detectItemActivation(itemProps);
+			}
+
+			// Conditional damage bonuses detection (vs creature types)
+			if (itemProps.conditionalBonuses === undefined) {
+				itemProps.conditionalBonuses = this._detectConditionalBonuses(itemProps);
+			}
+
+			// Artifact property requirements detection
+			if (itemProps.artifactProperties === undefined && itemProps.rarity === "artifact") {
+				itemProps.artifactProperties = this._detectArtifactPropertyRequirements(itemProps);
 			}
 
 			// Initialize arrays for complex item features
@@ -16046,6 +16272,215 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Detect conditional damage bonuses from item entries
+	 * Parses for patterns like "+1d8 radiant vs undead", "+3d6 vs dragons"
+	 * @param {object} item - The item data
+	 * @returns {Array<object>} Array of conditional bonuses: [{id, label, damage, damageType, creatureTypes}]
+	 */
+	_detectConditionalBonuses (item) {
+		if (item.conditionalBonuses) return item.conditionalBonuses; // Already set explicitly
+
+		const bonuses = [];
+		const entries = item.entries || [];
+		if (!entries.length) return bonuses;
+
+		// Convert entries to plain text for parsing
+		const entriesText = entries
+			.map(e => typeof e === "string" ? e : (e?.entries ? e.entries.join(" ") : JSON.stringify(e)))
+			.join(" ")
+			.replace(/<[^>]*>/g, " ")
+			.trim();
+
+		// Creature type keywords
+		const creatureTypes = [
+			"aberration", "beast", "celestial", "construct", "dragon", "elemental",
+			"fey", "fiend", "giant", "humanoid", "monstrosity", "ooze", "plant", "undead",
+		];
+
+		// Damage type keywords
+		const damageTypes = [
+			"acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic",
+			"piercing", "poison", "psychic", "radiant", "slashing", "thunder",
+		];
+
+		// Pattern variations to detect conditional damage
+		// "hit an undead...extra {@damage 1d8} radiant damage"
+		// "against dragons, deal an additional 3d6 damage"
+		// "when you hit a fiend or undead, the target takes an extra 2d6 radiant damage"
+		const patterns = [
+			// "hit [a/an] [creature type]...extra {@damage XdY} [damage type]"
+			{
+				regex: /hit\s+(?:a|an)\s+(\w+)[^.]*?(?:{@damage\s*|extra\s+)(\d+d\d+)\}?\s*(\w+)?/gi,
+				extractor: (match) => ({damage: match[2], damageType: match[3], creature: match[1]}),
+			},
+			// "against [creature type]...extra XdY [damage type]"
+			{
+				regex: /against\s+(\w+)[^.]*?(?:{@damage\s*|extra\s+|additional\s+)(\d+d\d+)\}?\s*(\w+)?/gi,
+				extractor: (match) => ({damage: match[2], damageType: match[3], creature: match[1]}),
+			},
+			// "[creature type] takes extra XdY [damage type]"
+			{
+				regex: /(\w+)\s+takes?\s+(?:an?\s+)?extra\s+(?:{@damage\s*)?(\d+d\d+)\}?\s*(\w+)?/gi,
+				extractor: (match) => ({damage: match[2], damageType: match[3], creature: match[1]}),
+			},
+			// "extra XdY [damage type] damage to [creature type]"
+			{
+				regex: /extra\s+(?:{@damage\s*)?(\d+d\d+)\}?\s*(\w+)?\s+damage\s+(?:to|against)\s+(\w+)/gi,
+				extractor: (match) => ({damage: match[1], damageType: match[2], creature: match[3]}),
+			},
+			// "+XdY vs [creature type]" (shorthand)
+			{
+				regex: /\+(\d+d\d+)(?:\s+(\w+))?\s+(?:vs\.?|versus)\s+(\w+)/gi,
+				extractor: (match) => ({damage: match[1], damageType: match[2], creature: match[3]}),
+			},
+		];
+
+		const foundTypes = new Set();
+
+		// First check for "fiend or undead" combined patterns to avoid partial matches
+		const combinedPattern = /(?:hit|against)\s+(?:a\s+)?(\w+)\s+or\s+(?:an?\s+)?(\w+)[^.]*?(?:{@damage\s*|extra\s+)(\d+d\d+)\}?\s*(\w+)?/gi;
+		let match;
+		while ((match = combinedPattern.exec(entriesText)) !== null) {
+			const creature1 = match[1]?.toLowerCase();
+			const creature2 = match[2]?.toLowerCase();
+			const damage = match[3];
+			let damageType = match[4]?.toLowerCase();
+
+			if (!creatureTypes.includes(creature1) || !creatureTypes.includes(creature2)) continue;
+			if (damageType && !damageTypes.includes(damageType)) damageType = null;
+
+			const key = `${creature1}_${creature2}:${damage}`;
+			if (foundTypes.has(key)) continue;
+			foundTypes.add(key);
+			// Also mark individual types as found to avoid duplicates
+			foundTypes.add(`${creature1}:${damage}`);
+			foundTypes.add(`${creature2}:${damage}`);
+
+			bonuses.push({
+				id: `vs_${creature1}_${creature2}`,
+				label: `vs ${creature1.charAt(0).toUpperCase() + creature1.slice(1)}/${creature2.charAt(0).toUpperCase() + creature2.slice(1)}`,
+				damage,
+				damageType: damageType || null,
+				creatureTypes: [creature1, creature2],
+			});
+		}
+
+		// Then check individual patterns
+		for (const {regex, extractor} of patterns) {
+			let match;
+			while ((match = regex.exec(entriesText)) !== null) {
+				const result = extractor(match);
+				const creatureLower = result.creature?.toLowerCase();
+
+				// Validate creature type
+				if (!creatureTypes.includes(creatureLower)) continue;
+
+				// Validate damage type if provided
+				let damageType = result.damageType?.toLowerCase();
+				if (damageType && !damageTypes.includes(damageType)) {
+					damageType = null; // Will use weapon's damage type
+				}
+
+				// Avoid duplicates
+				const key = `${creatureLower}:${result.damage}`;
+				if (foundTypes.has(key)) continue;
+				foundTypes.add(key);
+
+				bonuses.push({
+					id: `vs_${creatureLower}`,
+					label: `vs ${creatureLower.charAt(0).toUpperCase() + creatureLower.slice(1)}`,
+					damage: result.damage,
+					damageType: damageType || null,
+					creatureTypes: [creatureLower],
+				});
+			}
+		}
+
+		return bonuses;
+	}
+
+	/**
+	 * Detect artifact property requirements from item entries
+	 * Parses entries text for {@table Artifact Properties...} references
+	 * @param {object} item - The item data
+	 * @returns {object|null} Artifact properties structure or null
+	 */
+	_detectArtifactPropertyRequirements (item) {
+		if (item.rarity !== "artifact") return null;
+
+		const requirements = {
+			minorBeneficial: 0,
+			majorBeneficial: 0,
+			minorDetrimental: 0,
+			majorDetrimental: 0,
+		};
+
+		// Convert entries to text for parsing
+		const entries = item.entries || [];
+		const entriesText = entries
+			.map(e => typeof e === "string" ? e : JSON.stringify(e))
+			.join(" ");
+
+		// Pattern to find artifact property table references
+		// Examples:
+		// "1 {@table Artifact Properties; Minor Beneficial Properties|dmg|minor beneficial property}"
+		// "2 {@table Artifact Properties; Major Detrimental Properties|dmg|major detrimental properties}"
+		const propertyPatterns = [
+			{
+				regex: /(\d+)\s*{@table\s*Artifact Properties;\s*Minor Beneficial/gi,
+				key: "minorBeneficial",
+			},
+			{
+				regex: /(\d+)\s*{@table\s*Artifact Properties;\s*Major Beneficial/gi,
+				key: "majorBeneficial",
+			},
+			{
+				regex: /(\d+)\s*{@table\s*Artifact Properties;\s*Minor Detrimental/gi,
+				key: "minorDetrimental",
+			},
+			{
+				regex: /(\d+)\s*{@table\s*Artifact Properties;\s*Major Detrimental/gi,
+				key: "majorDetrimental",
+			},
+		];
+
+		for (const {regex, key} of propertyPatterns) {
+			let match;
+			while ((match = regex.exec(entriesText)) !== null) {
+				const count = parseInt(match[1]) || 0;
+				requirements[key] = Math.max(requirements[key], count);
+			}
+		}
+
+		// Also check for alternate patterns without specific table reference
+		// "has 2 minor beneficial properties"
+		const altPatterns = [
+			{regex: /(\d+)\s*minor\s*beneficial\s*propert/gi, key: "minorBeneficial"},
+			{regex: /(\d+)\s*major\s*beneficial\s*propert/gi, key: "majorBeneficial"},
+			{regex: /(\d+)\s*minor\s*detrimental\s*propert/gi, key: "minorDetrimental"},
+			{regex: /(\d+)\s*major\s*detrimental\s*propert/gi, key: "majorDetrimental"},
+		];
+
+		for (const {regex, key} of altPatterns) {
+			let match;
+			while ((match = regex.exec(entriesText)) !== null) {
+				const count = parseInt(match[1]) || 0;
+				requirements[key] = Math.max(requirements[key], count);
+			}
+		}
+
+		// Only return if at least one property type is required
+		const hasRequirements = Object.values(requirements).some(v => v > 0);
+
+		return {
+			requirements,
+			selected: [], // Array of selected property objects
+			isArtifact: true,
+			hasRequirements,
+		};
+	}
+
+	/**
 	 * Detect spell storing capacity from item
 	 * @param {object} item - The item data
 	 * @returns {number|null} Max spell levels, or null
@@ -16252,6 +16687,179 @@ class CharacterSheetState {
 
 		item.item.chargesCurrent = Math.max(0, current - actualChargesUsed);
 		return true;
+	}
+
+	// ==========================================
+	// Consumable Items (Potions, Scrolls)
+	// ==========================================
+
+	/**
+	 * Check if an item is a consumable (potion or scroll)
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	isConsumable (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem?.item) return false;
+		const type = invItem.item.type;
+		// P = Potion, SC = Scroll
+		return type === "P" || type === "SC";
+	}
+
+	/**
+	 * Check if an item is a potion
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	isPotion (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		return invItem?.item?.type === "P";
+	}
+
+	/**
+	 * Check if an item is a spell scroll
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean}
+	 */
+	isSpellScroll (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		return invItem?.item?.type === "SC";
+	}
+
+	/**
+	 * Consume a consumable item (decrement quantity or remove)
+	 * @param {string} itemId - The item ID
+	 * @returns {boolean} True if item was consumed
+	 */
+	consumeItem (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem) return false;
+
+		const quantity = invItem.quantity || 1;
+		if (quantity > 1) {
+			this.setItemQuantity(itemId, quantity - 1);
+		} else {
+			this.removeItem(itemId);
+		}
+		return true;
+	}
+
+	/**
+	 * Get healing effect from a potion item
+	 * @param {string} itemId - The item ID
+	 * @returns {object|null} {dice: string, modifier?: number} or null
+	 */
+	getItemHealingEffect (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem?.item) return null;
+
+		const item = invItem.item;
+
+		// Check for explicit healing property
+		if (item.healing) {
+			return item.healing;
+		}
+
+		// Parse from entries
+		const entries = item.entries || [];
+		for (const entry of entries) {
+			const text = typeof entry === "string" ? entry : entry?.entries?.join(" ");
+			if (!text) continue;
+
+			// Look for {@dice XdY} pattern with healing context
+			const diceMatch = text.match(/{@dice\s+(\d+d\d+(?:\s*\+\s*\d+)?)}|(\d+d\d+\s*\+\s*\d+)\s*(?:hit\s*point|hp)/i);
+			if (diceMatch) {
+				const dice = (diceMatch[1] || diceMatch[2]).replace(/\s+/g, "");
+				return {dice};
+			}
+		}
+
+		// Check item name patterns for healing potions
+		const name = (item.name || "").toLowerCase();
+		// Match both "Potion of Healing" and "Potion of Greater/Superior/Supreme Healing"
+		if (name.includes("potion") && name.includes("healing")) {
+			if (name.includes("supreme")) return {dice: "10d4+20"};
+			if (name.includes("superior")) return {dice: "8d4+8"};
+			if (name.includes("greater")) return {dice: "4d4+4"};
+			return {dice: "2d4+2"}; // Regular Potion of Healing
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get spell from a spell scroll
+	 * @param {string} itemId - The item ID
+	 * @returns {object|null} {name: string, source?: string, level?: number} or null
+	 */
+	getScrollSpell (itemId) {
+		const invItem = this._data.inventory.find(i => i.id === itemId);
+		if (!invItem?.item) return null;
+
+		const item = invItem.item;
+
+		// Check attachedSpells property
+		if (item.attachedSpells?.length) {
+			const spellRef = item.attachedSpells[0];
+			if (typeof spellRef === "string") {
+				const [name, source] = spellRef.split("|");
+				return {name, source};
+			}
+			return spellRef;
+		}
+
+		// Try parsing from item name (e.g., "Spell Scroll (Fireball)")
+		const nameMatch = item.name?.match(/spell\s*scroll\s*\(([^)]+)\)/i);
+		if (nameMatch) {
+			return {name: nameMatch[1].trim()};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get the DC for using a scroll above your spell level
+	 * DC = 10 + spell level
+	 * @param {number} spellLevel - The spell's level
+	 * @returns {number}
+	 */
+	getScrollAbilityCheckDc (spellLevel) {
+		return 10 + spellLevel;
+	}
+
+	/**
+	 * Check if character can cast a scroll without ability check
+	 * @param {number} spellLevel - The spell's level
+	 * @returns {boolean}
+	 */
+	canCastScrollWithoutCheck (spellLevel) {
+		// Cantrips (level 0) never require checks
+		if (spellLevel === 0) return true;
+
+		// Check if character has spell slots at this level or higher
+		const spellSlots = this.getSpellSlots();
+		let maxSlotLevel = 0;
+		for (let level = 1; level <= 9; level++) {
+			if (spellSlots[level]?.max > 0) {
+				maxSlotLevel = level;
+			}
+		}
+
+		// Also check pact slots
+		const pactSlots = this.getPactSlots();
+		if (pactSlots.level && pactSlots.max > 0) {
+			maxSlotLevel = Math.max(maxSlotLevel, pactSlots.level);
+		}
+
+		if (maxSlotLevel >= spellLevel) return true;
+
+		// Thief Rogues at level 13+ can use any spell scroll (Use Magic Device feature)
+		const rogueClass = this._data.classes.find(c => c.name?.toLowerCase() === "rogue");
+		if (rogueClass?.subclass?.name?.toLowerCase() === "thief" && rogueClass.level >= 13) {
+			return true;
+		}
+
+		return false;
 	}
 
 	// ==========================================
@@ -21283,6 +21891,72 @@ class CharacterSheetState {
 		"resistance:bludgeoning": {id: "resistance:bludgeoning", name: "Bludgeoning Resistance", category: "resistance", valueType: "boolean"},
 		"resistance:piercing": {id: "resistance:piercing", name: "Piercing Resistance", category: "resistance", valueType: "boolean"},
 		"resistance:slashing": {id: "resistance:slashing", name: "Slashing Resistance", category: "resistance", valueType: "boolean"},
+	};
+
+	/**
+	 * Artifact Property Tables (DMG)
+	 * Each property has: min/max (d100 range), name, description, and optional effects
+	 */
+	static ARTIFACT_PROPERTIES = {
+		minorBeneficial: [
+			{min: 1, max: 20, name: "Skill Proficiency", description: "While attuned to the artifact, you gain proficiency in one skill of the DM's choice.", effects: {type: "skillProficiency"}},
+			{min: 21, max: 30, name: "Darkvision", description: "While attuned to the artifact, you gain darkvision out to a range of 60 feet. If you already have darkvision, its range increases by 60 feet.", effects: {type: "darkvision", value: 60}},
+			{min: 31, max: 40, name: "Language", description: "While attuned to the artifact, you can speak and understand one language of the DM's choice.", effects: {type: "language"}},
+			{min: 41, max: 50, name: "Damage Resistance", description: "While attuned to the artifact, you have resistance to one damage type of the DM's choice.", effects: {type: "resistance"}},
+			{min: 51, max: 60, name: "Condition Immunity", description: "While attuned to the artifact, you are immune to one condition of the DM's choice.", effects: {type: "conditionImmunity"}},
+			{min: 61, max: 70, name: "Cantrip", description: "While attuned to the artifact, you can cast one cantrip from it at will. The spellcasting ability for this cantrip is Charisma.", effects: {type: "cantrip"}},
+			{min: 71, max: 80, name: "Spell (1/day)", description: "While attuned to the artifact, you can cast one 1st-level spell from it once per day. The spellcasting ability for this spell is Charisma.", effects: {type: "spell", level: 1, uses: 1}},
+			{min: 81, max: 90, name: "Spell (3/day)", description: "While attuned to the artifact, you can cast one 2nd-level spell from it three times per day. The spellcasting ability for this spell is Charisma.", effects: {type: "spell", level: 2, uses: 3}},
+			{min: 91, max: 100, name: "AC Bonus", description: "While attuned to the artifact, you gain a +1 bonus to AC.", effects: {type: "ac", value: 1}},
+		],
+		majorBeneficial: [
+			{min: 1, max: 20, name: "Ability Score Increase", description: "While attuned to the artifact, one ability score of your choice increases by 2, to a maximum of 24.", effects: {type: "abilityBonus", value: 2, max: 24}},
+			{min: 21, max: 30, name: "Regeneration", description: "While attuned to the artifact, you regain 1d6 hit points at the start of your turn if you have at least 1 hit point.", effects: {type: "regeneration", value: "1d6"}},
+			{min: 31, max: 40, name: "Additional Damage", description: "When you hit with a weapon attack while attuned to the artifact, the target takes an extra 1d6 damage of the same type.", effects: {type: "damageBonus", value: "1d6"}},
+			{min: 41, max: 50, name: "Speed Increase", description: "While attuned to the artifact, your walking speed increases by 10 feet.", effects: {type: "speed", value: 10}},
+			{min: 51, max: 60, name: "Spell (1/dawn)", description: "While attuned to the artifact, you can cast one 3rd-level spell from it once per dawn. The spellcasting ability for this spell is Charisma.", effects: {type: "spell", level: 3, uses: 1, recharge: "dawn"}},
+			{min: 61, max: 70, name: "Spell (1/dawn, higher)", description: "While attuned to the artifact, you can cast one 4th-level spell from it once per dawn. The spellcasting ability for this spell is Charisma.", effects: {type: "spell", level: 4, uses: 1, recharge: "dawn"}},
+			{min: 71, max: 80, name: "Death Resistance", description: "While attuned to the artifact, you can't be blinded, deafened, petrified, or stunned.", effects: {type: "multiConditionImmunity", conditions: ["blinded", "deafened", "petrified", "stunned"]}},
+			{min: 81, max: 90, name: "Magic Resistance", description: "While attuned to the artifact, you have advantage on saving throws against spells and other magical effects.", effects: {type: "magicResistance"}},
+			{min: 91, max: 100, name: "Fly Speed", description: "While attuned to the artifact, you gain a flying speed equal to your walking speed.", effects: {type: "fly", value: "walk"}},
+		],
+		minorDetrimental: [
+			{min: 1, max: 5, name: "Appearance Change (Hair)", description: "While attuned to the artifact, your hair grows at a rate of 1 foot per day.", effects: null},
+			{min: 6, max: 10, name: "Appearance Change (Hair Color)", description: "While attuned to the artifact, your hair color changes to a random color each dawn.", effects: null},
+			{min: 11, max: 15, name: "Appearance Change (Skin Pattern)", description: "While attuned to the artifact, your skin develops a strange pattern of the DM's choice.", effects: null},
+			{min: 16, max: 20, name: "Appearance Change (Eyes)", description: "While attuned to the artifact, your eyes become an unusual color chosen by the DM.", effects: null},
+			{min: 21, max: 25, name: "Appearance Change (Voice)", description: "While attuned to the artifact, your voice changes in a way chosen by the DM.", effects: null},
+			{min: 26, max: 30, name: "Appearance Change (Eyes Glow)", description: "While attuned to the artifact, your eyes glow in the dark.", effects: null},
+			{min: 31, max: 35, name: "Appearance Change (Smell)", description: "While attuned to the artifact, you smell faintly of brimstone.", effects: null},
+			{min: 36, max: 40, name: "Appearance Change (Temperature)", description: "While attuned to the artifact, your skin is warm or cool to the touch, as determined by the DM.", effects: null},
+			{min: 41, max: 45, name: "Hearing Difficulty", description: "While attuned to the artifact, you must speak loudly to be heard.", effects: null},
+			{min: 46, max: 50, name: "Unwitting Speech", description: "While attuned to the artifact, you sometimes speak aloud thoughts that you normally keep to yourself.", effects: null},
+			{min: 51, max: 55, name: "Irritability", description: "While attuned to the artifact, you become easily irritated.", effects: null},
+			{min: 56, max: 60, name: "Paranoia", description: "While attuned to the artifact, you become suspicious of everyone.", effects: null},
+			{min: 61, max: 65, name: "Appetite Change", description: "While attuned to the artifact, you have an insatiable appetite.", effects: null},
+			{min: 66, max: 70, name: "Nightmare Visions", description: "While attuned to the artifact, you sometimes have strange visions when you sleep.", effects: null},
+			{min: 71, max: 75, name: "Muttering", description: "While attuned to the artifact, you often mutter to yourself.", effects: null},
+			{min: 76, max: 80, name: "First-Person Aversion", description: "While attuned to the artifact, you dislike speaking in the first person.", effects: null},
+			{min: 81, max: 85, name: "Item Attachment", description: "While attuned to the artifact, you must always be touching it when resting.", effects: null},
+			{min: 86, max: 90, name: "Frightening Appearance", description: "While attuned to the artifact, your shadow has a life of its own.", effects: null},
+			{min: 91, max: 95, name: "Detect Magic Aura", description: "While attuned to the artifact, you register to a detect magic spell and similar effects as a fiend.", effects: null},
+			{min: 96, max: 100, name: "Item Jealousy", description: "While attuned to the artifact, it whispers warnings to you about any who attempt to take it from you.", effects: null},
+		],
+		majorDetrimental: [
+			{min: 1, max: 5, name: "Cowardice", description: "While attuned to the artifact, you gain vulnerability to all damage types except one of the DM's choice.", effects: {type: "vulnerability", all: true}},
+			{min: 6, max: 15, name: "Psychic Damage on Rest", description: "While attuned to the artifact, you take 4d10 psychic damage when you finish a long rest.", effects: {type: "restDamage", value: "4d10", damageType: "psychic"}},
+			{min: 16, max: 25, name: "Blinding", description: "While attuned to the artifact, you have disadvantage on attack rolls and Wisdom (Perception) checks that rely on sight. You can see normally up to 30 feet.", effects: {type: "disadvantage", target: "sight"}},
+			{min: 26, max: 35, name: "Alignment Check", description: "When you first attune to the artifact, there is a 50% chance that you are affected by a geas spell (DC 20), which compels you to pursue a goal determined by the DM.", effects: {type: "geas", dc: 20}},
+			{min: 36, max: 45, name: "Creature Attraction", description: "Creatures of a particular type (DM's choice) are hostile to you while you are attuned to the artifact.", effects: {type: "hostility"}},
+			{min: 46, max: 55, name: "Ability Reduction", description: "While attuned to the artifact, one ability score of the DM's choice is reduced by 2.", effects: {type: "abilityPenalty", value: -2}},
+			{min: 56, max: 65, name: "Attachment", description: "While attuned to the artifact, you are unwilling to part with it. You have disadvantage on attack rolls if you are more than 10 feet away from it.", effects: {type: "attachmentPenalty"}},
+			{min: 66, max: 75, name: "Alignment Restriction", description: "While attuned to the artifact, you can't attune to any other artifact.", effects: {type: "artifactRestriction"}},
+			{min: 76, max: 80, name: "Sunlight Sensitivity", description: "While attuned to the artifact, you have disadvantage on attack rolls and Wisdom (Perception) checks when you or your target is in direct sunlight.", effects: {type: "sunlightSensitivity"}},
+			{min: 81, max: 85, name: "Magical Interference", description: "While attuned to the artifact, creatures within 10 feet of you have advantage on saving throws against any spells you cast.", effects: {type: "spellWeakness"}},
+			{min: 86, max: 90, name: "Self-Damage", description: "While attuned to the artifact, you take 2d6 necrotic damage whenever you deal damage to another creature.", effects: {type: "damageBacklash", value: "2d6"}},
+			{min: 91, max: 95, name: "Greedy", description: "While attuned to the artifact, you can't voluntarily give away gold or treasure.", effects: null},
+			{min: 96, max: 100, name: "Sacrificial", description: "When you die, your soul becomes trapped in the artifact. You can't be raised from the dead.", effects: {type: "soulTrap"}},
+		],
 	};
 
 	/**

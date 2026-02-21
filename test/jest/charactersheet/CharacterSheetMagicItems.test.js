@@ -792,6 +792,37 @@ describe("Magic Item Bonuses", () => {
 			expect(state.getMaxAttunement()).toBe(3);
 		});
 
+		it("should give Artificer level 10+ 4 attunement slots (Magic Item Adept)", () => {
+			const artificerState = new CharacterSheetState();
+			artificerState.addClass({name: "Artificer", source: "TCE", level: 10});
+			expect(artificerState.getMaxAttunement()).toBe(4);
+		});
+
+		it("should give Artificer level 14+ 5 attunement slots (Magic Item Savant)", () => {
+			const artificerState = new CharacterSheetState();
+			artificerState.addClass({name: "Artificer", source: "TCE", level: 14});
+			expect(artificerState.getMaxAttunement()).toBe(5);
+		});
+
+		it("should give Artificer level 18+ 6 attunement slots (Soul of Artifice)", () => {
+			const artificerState = new CharacterSheetState();
+			artificerState.addClass({name: "Artificer", source: "TCE", level: 18});
+			expect(artificerState.getMaxAttunement()).toBe(6);
+		});
+
+		it("should give multiclass Artificer 10 / Fighter 5 only 4 attunement slots", () => {
+			const multiState = new CharacterSheetState();
+			multiState.addClass({name: "Artificer", source: "TCE", level: 10});
+			multiState.addClass({name: "Fighter", source: "PHB", level: 5});
+			expect(multiState.getMaxAttunement()).toBe(4);
+		});
+
+		it("should give Artificer level 9 only 3 attunement slots", () => {
+			const artificerState = new CharacterSheetState();
+			artificerState.addClass({name: "Artificer", source: "TCE", level: 9});
+			expect(artificerState.getMaxAttunement()).toBe(3);
+		});
+
 		it("should report canAttune false when at limit", () => {
 			for (let i = 0; i < 3; i++) {
 				state.addItem(makeWondrous({name: `Ring ${i}`, requiresAttunement: true}));
@@ -2989,6 +3020,828 @@ describe("Magic Item Bonuses", () => {
 			const ammo = state.getAmmunitionForWeapon("crossbow");
 			expect(ammo.length).toBe(1);
 			expect(ammo[0].name).toBe("Crossbow Bolt");
+		});
+	});
+
+	// =========================================================================
+	// Conditional Bonuses
+	// =========================================================================
+
+	describe("Conditional Bonuses", () => {
+		let state;
+
+		beforeEach(() => {
+			state = new CharacterSheetState();
+			state.addClass({name: "Fighter", source: "PHB", level: 5});
+			state.setAbilityBase("str", 16);
+			state.setAbilityBase("dex", 14);
+		});
+
+		describe("Detection Patterns", () => {
+			it("should detect 'hit [creature type]...extra {@damage XdY}' pattern", () => {
+				state.addItem({
+					id: "mace-disruption",
+					name: "Mace of Disruption",
+					weapon: true,
+					entries: [
+						"When you hit a fiend or an undead with this magic weapon, that creature takes an extra {@damage 2d6} radiant damage.",
+					],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("mace-disruption");
+				expect(bonuses.length).toBeGreaterThan(0);
+				expect(bonuses[0].damage).toBe("2d6");
+				expect(bonuses[0].damageType).toBe("radiant");
+				expect(bonuses[0].creatureTypes).toContain("fiend");
+				expect(bonuses[0].creatureTypes).toContain("undead");
+			});
+
+			it("should detect 'against [creature type]' pattern", () => {
+				state.addItem({
+					id: "dragon-slayer",
+					name: "Dragon Slayer",
+					weapon: true,
+					entries: [
+						"When you hit a dragon with this weapon, the dragon takes an extra {@damage 3d6} damage of the weapon's type.",
+					],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("dragon-slayer");
+				expect(bonuses.length).toBeGreaterThan(0);
+				expect(bonuses[0].damage).toBe("3d6");
+				expect(bonuses[0].creatureTypes).toContain("dragon");
+			});
+
+			it("should detect 'takes extra XdY [damage type]' pattern", () => {
+				state.addItem({
+					id: "sunblade",
+					name: "Sun Blade",
+					weapon: true,
+					entries: [
+						"Undead take an extra {@damage 1d8} radiant damage when hit by this weapon.",
+					],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("sunblade");
+				expect(bonuses.length).toBeGreaterThan(0);
+				expect(bonuses[0].damage).toBe("1d8");
+				expect(bonuses[0].damageType).toBe("radiant");
+				expect(bonuses[0].creatureTypes).toContain("undead");
+			});
+
+			it("should detect multiple creature types", () => {
+				state.addItem({
+					id: "holy-avenger",
+					name: "Holy Avenger",
+					weapon: true,
+					entries: [
+						"When you hit a fiend or undead with it, that creature takes an extra {@damage 2d10} radiant damage.",
+					],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("holy-avenger");
+				expect(bonuses.length).toBeGreaterThan(0);
+				expect(bonuses[0].creatureTypes.length).toBe(2);
+				expect(bonuses[0].creatureTypes).toContain("fiend");
+				expect(bonuses[0].creatureTypes).toContain("undead");
+			});
+
+			it("should handle items without conditional bonuses", () => {
+				state.addItem({
+					id: "plus-one-sword",
+					name: "+1 Longsword",
+					weapon: true,
+					bonusWeapon: "+1",
+					entries: [
+						"You have a +1 bonus to attack and damage rolls made with this magic weapon.",
+					],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("plus-one-sword");
+				expect(bonuses).toEqual([]);
+			});
+
+			it("should detect bonus from nested entries", () => {
+				state.addItem({
+					id: "nested-weapon",
+					name: "Nested Entry Weapon",
+					weapon: true,
+					entries: [
+						{
+							type: "entries",
+							name: "Special Attack",
+							entries: [
+								"When you hit an aberration with this weapon, it takes an extra {@damage 2d8} psychic damage.",
+							],
+						},
+					],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("nested-weapon");
+				expect(bonuses.length).toBeGreaterThan(0);
+				expect(bonuses[0].creatureTypes).toContain("aberration");
+			});
+		});
+
+		describe("Accessor Methods", () => {
+			it("should check if item has conditional bonuses", () => {
+				state.addItem({
+					id: "with-bonus",
+					name: "Weapon with Bonus",
+					weapon: true,
+					entries: ["When you hit a beast with this weapon, it takes an extra {@damage 1d6} piercing damage."],
+				});
+				state.addItem({
+					id: "without-bonus",
+					name: "Normal Weapon",
+					weapon: true,
+				});
+
+				expect(state.hasConditionalBonuses("with-bonus")).toBe(true);
+				expect(state.hasConditionalBonuses("without-bonus")).toBe(false);
+			});
+
+			it("should get items with conditional bonuses", () => {
+				state.addItem({
+					id: "bonus-weapon",
+					name: "Bonus Weapon",
+					weapon: true,
+					equipped: true,
+					entries: ["When you hit a construct with this weapon, it takes an extra {@damage 1d8} force damage."],
+				});
+				state.addItem({
+					id: "normal-weapon",
+					name: "Normal Weapon",
+					weapon: true,
+					equipped: true,
+				});
+
+				const items = state.getItemsWithConditionalBonuses();
+				expect(items.length).toBe(1);
+				expect(items[0].name).toBe("Bonus Weapon");
+			});
+
+			it("should filter by equipped only", () => {
+				state.addItem({
+					id: "equipped-bonus",
+					name: "Equipped Bonus Weapon",
+					weapon: true,
+					equipped: true,
+					entries: ["When you hit an elemental with this weapon, it takes an extra {@damage 2d6} cold damage."],
+				});
+				state.addItem({
+					id: "unequipped-bonus",
+					name: "Unequipped Bonus Weapon",
+					weapon: true,
+					equipped: false,
+					entries: ["When you hit a fey with this weapon, it takes an extra {@damage 1d6} fire damage."],
+				});
+
+				const items = state.getItemsWithConditionalBonuses({equippedOnly: true});
+				expect(items.length).toBe(1);
+				expect(items[0].name).toBe("Equipped Bonus Weapon");
+			});
+
+			it("should filter by active only (equipped + attuned if required)", () => {
+				state.addItem({
+					id: "active-attunement",
+					name: "Active Attuned Weapon",
+					weapon: true,
+					equipped: true,
+					requiresAttunement: true,
+					attuned: true,
+					entries: ["When you hit a giant with this weapon, it takes an extra {@damage 3d6} thunder damage."],
+				});
+				state.addItem({
+					id: "inactive-attunement",
+					name: "Inactive Attuned Weapon",
+					weapon: true,
+					equipped: true,
+					requiresAttunement: true,
+					attuned: false,
+					entries: ["When you hit a humanoid with this weapon, it takes an extra {@damage 1d4} poison damage."],
+				});
+
+				const items = state.getItemsWithConditionalBonuses({activeOnly: true});
+				expect(items.length).toBe(1);
+				expect(items[0].name).toBe("Active Attuned Weapon");
+			});
+
+			it("should get conditional bonuses for specific creature type", () => {
+				state.addItem({
+					id: "multi-bonus",
+					name: "Multi Bonus Weapon",
+					weapon: true,
+					conditionalBonuses: [
+						{id: "vs_undead", label: "vs Undead", damage: "2d6", damageType: "radiant", creatureTypes: ["undead"]},
+						{id: "vs_fiend", label: "vs Fiend", damage: "1d8", damageType: "fire", creatureTypes: ["fiend"]},
+					],
+				});
+
+				const undeadBonuses = state.getConditionalBonusesForCreatureType("multi-bonus", "undead");
+				expect(undeadBonuses.length).toBe(1);
+				expect(undeadBonuses[0].damage).toBe("2d6");
+
+				const fiendBonuses = state.getConditionalBonusesForCreatureType("multi-bonus", "fiend");
+				expect(fiendBonuses.length).toBe(1);
+				expect(fiendBonuses[0].damage).toBe("1d8");
+
+				const dragonBonuses = state.getConditionalBonusesForCreatureType("multi-bonus", "dragon");
+				expect(dragonBonuses.length).toBe(0);
+			});
+		});
+
+		describe("Explicit Override", () => {
+			it("should use explicit conditionalBonuses if provided", () => {
+				state.addItem({
+					id: "explicit-bonus",
+					name: "Explicit Bonus Weapon",
+					weapon: true,
+					conditionalBonuses: [
+						{id: "custom_bonus", label: "Custom Bonus", damage: "5d10", damageType: "necrotic", creatureTypes: ["celestial"]},
+					],
+					entries: ["When you hit a fiend with this weapon, it takes an extra {@damage 1d6} radiant damage."],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("explicit-bonus");
+				expect(bonuses.length).toBe(1);
+				expect(bonuses[0].damage).toBe("5d10"); // Explicit overrides detection
+				expect(bonuses[0].damageType).toBe("necrotic");
+			});
+
+			it("should handle empty conditionalBonuses array", () => {
+				state.addItem({
+					id: "empty-bonus",
+					name: "Empty Bonus Weapon",
+					weapon: true,
+					conditionalBonuses: [],
+					entries: ["When you hit an ooze with this weapon, it takes an extra {@damage 1d6} acid damage."],
+				});
+
+				const bonuses = state.getItemConditionalBonuses("empty-bonus");
+				expect(bonuses).toEqual([]); // Empty explicit overrides detection
+			});
+		});
+
+		describe("Various Creature Types", () => {
+			const creatureTypes = [
+				{type: "aberration", damageType: "psychic"},
+				{type: "beast", damageType: "piercing"},
+				{type: "celestial", damageType: "necrotic"},
+				{type: "construct", damageType: "force"},
+				{type: "dragon", damageType: "cold"},
+				{type: "elemental", damageType: "lightning"},
+				{type: "fey", damageType: "poison"},
+				{type: "fiend", damageType: "radiant"},
+				{type: "giant", damageType: "thunder"},
+				{type: "humanoid", damageType: "slashing"},
+				{type: "monstrosity", damageType: "acid"},
+				{type: "ooze", damageType: "fire"},
+				{type: "plant", damageType: "cold"},
+				{type: "undead", damageType: "radiant"},
+			];
+
+			creatureTypes.forEach(({type, damageType}) => {
+				it(`should detect conditional bonus vs ${type}`, () => {
+					state.addItem({
+						id: `vs-${type}`,
+						name: `${type.charAt(0).toUpperCase() + type.slice(1)} Bane`,
+						weapon: true,
+						entries: [`When you hit a ${type} with this weapon, it takes an extra {@damage 2d6} ${damageType} damage.`],
+					});
+
+					const bonuses = state.getItemConditionalBonuses(`vs-${type}`);
+					expect(bonuses.length).toBeGreaterThan(0);
+					expect(bonuses[0].creatureTypes).toContain(type);
+					expect(bonuses[0].damageType).toBe(damageType);
+				});
+			});
+		});
+	});
+
+	// =========================================================================
+	// Consumable Items (Potions, Scrolls)
+	// =========================================================================
+
+	describe("Consumable Items", () => {
+		let state;
+
+		beforeEach(() => {
+			state = new CharacterSheetState();
+			state.addClass({name: "Wizard", source: "PHB", level: 5});
+			state.setAbilityBase("int", 16);
+		});
+
+		describe("isConsumable", () => {
+			it("should identify potions as consumable", () => {
+				state.addItem({
+					id: "healing-potion",
+					name: "Potion of Healing",
+					type: "P",
+				});
+				expect(state.isConsumable("healing-potion")).toBe(true);
+			});
+
+			it("should identify spell scrolls as consumable", () => {
+				state.addItem({
+					id: "scroll-fireball",
+					name: "Spell Scroll (Fireball)",
+					type: "SC",
+				});
+				expect(state.isConsumable("scroll-fireball")).toBe(true);
+			});
+
+			it("should not identify weapons as consumable", () => {
+				state.addItem({
+					id: "sword",
+					name: "Longsword",
+					weapon: true,
+				});
+				expect(state.isConsumable("sword")).toBe(false);
+			});
+
+			it("should not identify armor as consumable", () => {
+				state.addItem({
+					id: "chainmail",
+					name: "Chain Mail",
+					armor: true,
+					type: "HA",
+				});
+				expect(state.isConsumable("chainmail")).toBe(false);
+			});
+		});
+
+		describe("isPotion / isSpellScroll", () => {
+			it("should correctly identify potions", () => {
+				state.addItem({id: "pot", name: "Potion", type: "P"});
+				expect(state.isPotion("pot")).toBe(true);
+				expect(state.isSpellScroll("pot")).toBe(false);
+			});
+
+			it("should correctly identify spell scrolls", () => {
+				state.addItem({id: "scroll", name: "Scroll", type: "SC"});
+				expect(state.isSpellScroll("scroll")).toBe(true);
+				expect(state.isPotion("scroll")).toBe(false);
+			});
+		});
+
+		describe("consumeItem", () => {
+			it("should decrement quantity for stacked items", () => {
+				state.addItem({
+					id: "healing-potions",
+					name: "Potion of Healing",
+					type: "P",
+					quantity: 5,
+				});
+
+				state.consumeItem("healing-potions");
+				const item = state.getItems().find(i => i.id === "healing-potions");
+				expect(item.quantity).toBe(4);
+			});
+
+			it("should remove item when quantity reaches 0", () => {
+				state.addItem({
+					id: "last-potion",
+					name: "Potion of Healing",
+					type: "P",
+					quantity: 1,
+				});
+
+				state.consumeItem("last-potion");
+				const item = state.getItems().find(i => i.id === "last-potion");
+				expect(item).toBeUndefined();
+			});
+
+			it("should remove item with no explicit quantity", () => {
+				state.addItem({
+					id: "scroll",
+					name: "Spell Scroll",
+					type: "SC",
+				});
+
+				state.consumeItem("scroll");
+				const item = state.getItems().find(i => i.id === "scroll");
+				expect(item).toBeUndefined();
+			});
+
+			it("should return true when item is consumed", () => {
+				state.addItem({id: "pot", name: "Potion", type: "P"});
+				expect(state.consumeItem("pot")).toBe(true);
+			});
+
+			it("should return false for non-existent item", () => {
+				expect(state.consumeItem("non-existent")).toBe(false);
+			});
+		});
+
+		describe("getItemHealingEffect", () => {
+			it("should detect Potion of Healing by name", () => {
+				state.addItem({
+					id: "basic-healing",
+					name: "Potion of Healing",
+					type: "P",
+				});
+				const healing = state.getItemHealingEffect("basic-healing");
+				expect(healing).not.toBeNull();
+				expect(healing.dice).toBe("2d4+2");
+			});
+
+			it("should detect Greater Potion of Healing by name", () => {
+				state.addItem({
+					id: "greater-healing",
+					name: "Potion of Greater Healing",
+					type: "P",
+				});
+				const healing = state.getItemHealingEffect("greater-healing");
+				expect(healing).not.toBeNull();
+				expect(healing.dice).toBe("4d4+4");
+			});
+
+			it("should detect Superior Potion of Healing by name", () => {
+				state.addItem({
+					id: "superior-healing",
+					name: "Potion of Superior Healing",
+					type: "P",
+				});
+				const healing = state.getItemHealingEffect("superior-healing");
+				expect(healing).not.toBeNull();
+				expect(healing.dice).toBe("8d4+8");
+			});
+
+			it("should detect Supreme Potion of Healing by name", () => {
+				state.addItem({
+					id: "supreme-healing",
+					name: "Potion of Supreme Healing",
+					type: "P",
+				});
+				const healing = state.getItemHealingEffect("supreme-healing");
+				expect(healing).not.toBeNull();
+				expect(healing.dice).toBe("10d4+20");
+			});
+
+			it("should use explicit healing property if provided", () => {
+				state.addItem({
+					id: "custom-potion",
+					name: "Custom Potion",
+					type: "P",
+					healing: {dice: "3d8+5"},
+				});
+				const healing = state.getItemHealingEffect("custom-potion");
+				expect(healing).not.toBeNull();
+				expect(healing.dice).toBe("3d8+5");
+			});
+
+			it("should parse healing from entries", () => {
+				state.addItem({
+					id: "entry-potion",
+					name: "Custom Healing Potion",
+					type: "P",
+					entries: ["You regain {@dice 2d4+2} hit points when you drink this potion."],
+				});
+				const healing = state.getItemHealingEffect("entry-potion");
+				expect(healing).not.toBeNull();
+				expect(healing.dice).toBe("2d4+2");
+			});
+
+			it("should return null for non-healing items", () => {
+				state.addItem({
+					id: "speed-potion",
+					name: "Potion of Speed",
+					type: "P",
+					entries: ["You gain the effect of Haste for 1 minute."],
+				});
+				const healing = state.getItemHealingEffect("speed-potion");
+				expect(healing).toBeNull();
+			});
+		});
+
+		describe("getScrollSpell", () => {
+			it("should extract spell from attachedSpells array", () => {
+				state.addItem({
+					id: "fireball-scroll",
+					name: "Spell Scroll",
+					type: "SC",
+					attachedSpells: ["Fireball|PHB"],
+				});
+				const spell = state.getScrollSpell("fireball-scroll");
+				expect(spell).not.toBeNull();
+				expect(spell.name).toBe("Fireball");
+				expect(spell.source).toBe("PHB");
+			});
+
+			it("should extract spell from name pattern", () => {
+				state.addItem({
+					id: "scroll-magic-missile",
+					name: "Spell Scroll (Magic Missile)",
+					type: "SC",
+				});
+				const spell = state.getScrollSpell("scroll-magic-missile");
+				expect(spell).not.toBeNull();
+				expect(spell.name).toBe("Magic Missile");
+			});
+
+			it("should return null for scroll without spell info", () => {
+				state.addItem({
+					id: "unknown-scroll",
+					name: "Unknown Scroll",
+					type: "SC",
+				});
+				const spell = state.getScrollSpell("unknown-scroll");
+				expect(spell).toBeNull();
+			});
+
+			it("should handle object format in attachedSpells", () => {
+				state.addItem({
+					id: "object-scroll",
+					name: "Spell Scroll",
+					type: "SC",
+					attachedSpells: [{name: "Fireball", source: "PHB", level: 3}],
+				});
+				const spell = state.getScrollSpell("object-scroll");
+				expect(spell).not.toBeNull();
+				expect(spell.name).toBe("Fireball");
+			});
+		});
+
+		describe("Scroll Ability Check DC", () => {
+			it("should calculate DC as 10 + spell level", () => {
+				expect(state.getScrollAbilityCheckDc(0)).toBe(10);
+				expect(state.getScrollAbilityCheckDc(1)).toBe(11);
+				expect(state.getScrollAbilityCheckDc(5)).toBe(15);
+				expect(state.getScrollAbilityCheckDc(9)).toBe(19);
+			});
+		});
+
+		describe("canCastScrollWithoutCheck", () => {
+			it("should allow casting if max spell slot >= spell level", () => {
+				// Wizard 5 has 3rd level slots
+				expect(state.canCastScrollWithoutCheck(1)).toBe(true);
+				expect(state.canCastScrollWithoutCheck(2)).toBe(true);
+				expect(state.canCastScrollWithoutCheck(3)).toBe(true);
+			});
+
+			it("should require check for spells above max slot", () => {
+				// Wizard 5 has max 3rd level slots
+				expect(state.canCastScrollWithoutCheck(4)).toBe(false);
+				expect(state.canCastScrollWithoutCheck(5)).toBe(false);
+				expect(state.canCastScrollWithoutCheck(9)).toBe(false);
+			});
+
+			it("should allow Thief 13+ to cast any scroll", () => {
+				const thiefState = new CharacterSheetState();
+				thiefState.addClass({name: "Rogue", source: "PHB", level: 13});
+				thiefState.setSubclass("Rogue", {name: "Thief", source: "PHB"});
+
+				expect(thiefState.canCastScrollWithoutCheck(9)).toBe(true);
+			});
+
+			it("should not allow Thief below 13 to bypass check", () => {
+				const thiefState = new CharacterSheetState();
+				thiefState.addClass({name: "Rogue", source: "PHB", level: 12});
+				thiefState.setSubclass("Rogue", {name: "Thief", source: "PHB"});
+
+				expect(thiefState.canCastScrollWithoutCheck(5)).toBe(false);
+			});
+		});
+	});
+
+	// =========================================================================
+	// Artifact Properties
+	// =========================================================================
+
+	describe("Artifact Properties", () => {
+		let state;
+
+		beforeEach(() => {
+			state = new CharacterSheetState();
+			state.addClass({name: "Fighter", source: "PHB", level: 20});
+		});
+
+		describe("isArtifact", () => {
+			it("should identify artifacts by rarity", () => {
+				state.addItem({
+					id: "eye-of-vecna",
+					name: "Eye of Vecna",
+					rarity: "artifact",
+					wondrous: true,
+					requiresAttunement: true,
+				});
+				expect(state.isArtifact("eye-of-vecna")).toBe(true);
+			});
+
+			it("should not identify non-artifacts as artifacts", () => {
+				state.addItem({
+					id: "legendary-sword",
+					name: "Legendary Sword",
+					rarity: "legendary",
+					weapon: true,
+				});
+				expect(state.isArtifact("legendary-sword")).toBe(false);
+			});
+		});
+
+		describe("Property Requirements Detection", () => {
+			it("should detect property requirements from entries", () => {
+				state.addItem({
+					id: "eye-of-vecna",
+					name: "Eye of Vecna",
+					rarity: "artifact",
+					entries: [
+						"Random Properties",
+						{
+							type: "entries",
+							entries: [
+								"The Eye of Vecna has the following random properties:",
+								{
+									type: "list",
+									items: [
+										"1 {@table Artifact Properties; Minor Beneficial Properties|dmg|minor beneficial property}",
+										"1 {@table Artifact Properties; Major Beneficial Properties|dmg|major beneficial property}",
+										"1 {@table Artifact Properties; Minor Detrimental Properties|dmg|minor detrimental property}",
+									],
+								},
+							],
+						},
+					],
+				});
+
+				const requirements = state.getArtifactPropertyRequirements("eye-of-vecna");
+				expect(requirements).not.toBeNull();
+				expect(requirements.minorBeneficial).toBe(1);
+				expect(requirements.majorBeneficial).toBe(1);
+				expect(requirements.minorDetrimental).toBe(1);
+				expect(requirements.majorDetrimental).toBe(0);
+			});
+
+			it("should detect multiple properties of same type", () => {
+				state.addItem({
+					id: "hand-of-vecna",
+					name: "Hand of Vecna",
+					rarity: "artifact",
+					entries: [
+						"The Hand of Vecna has the following random properties:",
+						"2 {@table Artifact Properties; Minor Beneficial Properties|dmg|minor beneficial properties}",
+						"1 {@table Artifact Properties; Major Beneficial Properties|dmg|major beneficial property}",
+						"2 {@table Artifact Properties; Minor Detrimental Properties|dmg|minor detrimental properties}",
+						"1 {@table Artifact Properties; Major Detrimental Properties|dmg|major detrimental property}",
+					],
+				});
+
+				const requirements = state.getArtifactPropertyRequirements("hand-of-vecna");
+				expect(requirements.minorBeneficial).toBe(2);
+				expect(requirements.majorBeneficial).toBe(1);
+				expect(requirements.minorDetrimental).toBe(2);
+				expect(requirements.majorDetrimental).toBe(1);
+			});
+
+			it("should handle artifacts without property requirements", () => {
+				state.addItem({
+					id: "simple-artifact",
+					name: "Simple Artifact",
+					rarity: "artifact",
+					entries: ["This artifact has fixed properties."],
+				});
+
+				const item = state.getItems().find(i => i.id === "simple-artifact");
+				expect(item.artifactProperties).not.toBeNull();
+				expect(item.artifactProperties.hasRequirements).toBe(false);
+			});
+		});
+
+		describe("Property Management", () => {
+			beforeEach(() => {
+				state.addItem({
+					id: "test-artifact",
+					name: "Test Artifact",
+					rarity: "artifact",
+					entries: ["1 {@table Artifact Properties; Minor Beneficial Properties|dmg|minor beneficial property}"],
+				});
+			});
+
+			it("should add a property to an artifact", () => {
+				const property = {min: 1, max: 20, name: "Skill Proficiency", description: "You gain proficiency in one skill."};
+				state.setArtifactProperty("test-artifact", "minorBeneficial", property);
+
+				const properties = state.getArtifactProperties("test-artifact");
+				expect(properties.length).toBe(1);
+				expect(properties[0].name).toBe("Skill Proficiency");
+				expect(properties[0].type).toBe("minorBeneficial");
+			});
+
+			it("should remove a property from an artifact", () => {
+				const property = {name: "Test Property", description: "Test"};
+				state.setArtifactProperty("test-artifact", "minorBeneficial", property);
+				expect(state.getArtifactProperties("test-artifact").length).toBe(1);
+
+				state.removeArtifactProperty("test-artifact", 0);
+				expect(state.getArtifactProperties("test-artifact").length).toBe(0);
+			});
+
+			it("should track configuration status", () => {
+				expect(state.isArtifactFullyConfigured("test-artifact")).toBe(false);
+
+				const property = {name: "Skill Proficiency", description: "Test"};
+				state.setArtifactProperty("test-artifact", "minorBeneficial", property);
+
+				expect(state.isArtifactFullyConfigured("test-artifact")).toBe(true);
+			});
+		});
+
+		describe("Property Rolling", () => {
+			it("should roll a valid minor beneficial property", () => {
+				const property = state.rollArtifactProperty("minorBeneficial");
+				expect(property).not.toBeNull();
+				expect(property.roll).toBeGreaterThanOrEqual(1);
+				expect(property.roll).toBeLessThanOrEqual(100);
+				expect(property.name).toBeDefined();
+				expect(property.description).toBeDefined();
+			});
+
+			it("should roll a valid major beneficial property", () => {
+				const property = state.rollArtifactProperty("majorBeneficial");
+				expect(property).not.toBeNull();
+				expect(property.name).toBeDefined();
+			});
+
+			it("should roll a valid minor detrimental property", () => {
+				const property = state.rollArtifactProperty("minorDetrimental");
+				expect(property).not.toBeNull();
+				expect(property.name).toBeDefined();
+			});
+
+			it("should roll a valid major detrimental property", () => {
+				const property = state.rollArtifactProperty("majorDetrimental");
+				expect(property).not.toBeNull();
+				expect(property.name).toBeDefined();
+			});
+
+			it("should return null for invalid property type", () => {
+				const property = state.rollArtifactProperty("invalidType");
+				expect(property).toBeNull();
+			});
+		});
+
+		describe("Property Tables", () => {
+			it("should have 9 minor beneficial properties", () => {
+				const table = state.getArtifactPropertyTable("minorBeneficial");
+				expect(table.length).toBe(9);
+			});
+
+			it("should have 9 major beneficial properties", () => {
+				const table = state.getArtifactPropertyTable("majorBeneficial");
+				expect(table.length).toBe(9);
+			});
+
+			it("should have 20 minor detrimental properties", () => {
+				const table = state.getArtifactPropertyTable("minorDetrimental");
+				expect(table.length).toBe(20);
+			});
+
+			it("should have 13 major detrimental properties", () => {
+				const table = state.getArtifactPropertyTable("majorDetrimental");
+				expect(table.length).toBe(13);
+			});
+
+			it("should cover d100 range 1-100 for minor beneficial", () => {
+				const table = state.getArtifactPropertyTable("minorBeneficial");
+				const covered = new Set();
+				for (const prop of table) {
+					for (let i = prop.min; i <= prop.max; i++) {
+						covered.add(i);
+					}
+				}
+				expect(covered.size).toBe(100);
+			});
+		});
+
+		describe("Artifact Collection", () => {
+			it("should get all artifacts in inventory", () => {
+				state.addItem({id: "artifact1", name: "Artifact 1", rarity: "artifact"});
+				state.addItem({id: "artifact2", name: "Artifact 2", rarity: "artifact"});
+				state.addItem({id: "legendary", name: "Not Artifact", rarity: "legendary"});
+
+				const artifacts = state.getArtifacts();
+				expect(artifacts.length).toBe(2);
+			});
+
+			it("should get unconfigured artifacts", () => {
+				state.addItem({
+					id: "unconfigured",
+					name: "Unconfigured Artifact",
+					rarity: "artifact",
+					entries: ["1 {@table Artifact Properties; Minor Beneficial Properties|dmg|minor beneficial}"],
+				});
+				state.addItem({
+					id: "no-requirements",
+					name: "No Requirements Artifact",
+					rarity: "artifact",
+					entries: ["Fixed properties only."],
+				});
+
+				const unconfigured = state.getUnconfiguredArtifacts();
+				expect(unconfigured.length).toBe(1);
+				expect(unconfigured[0].name).toBe("Unconfigured Artifact");
+			});
 		});
 	});
 });
