@@ -1118,6 +1118,26 @@ class CharacterSheetSpells {
 		// Spell list
 		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
 
+		// Cache getCombinedClasses results per spell to avoid expensive recalculation on every filter
+		const _classListCache = new Map();
+		const _subclassListCache = new Map();
+		const getCachedClassList = (spell) => {
+			const key = `${spell.name}|${spell.source}`;
+			if (!_classListCache.has(key)) {
+				try { _classListCache.set(key, Renderer.spell.getCombinedClasses(spell, "fromClassList") || []); }
+				catch (e) { _classListCache.set(key, spell.classes?.fromClassList || []); }
+			}
+			return _classListCache.get(key);
+		};
+		const getCachedSubclassList = (spell) => {
+			const key = `${spell.name}|${spell.source}`;
+			if (!_subclassListCache.has(key)) {
+				try { _subclassListCache.set(key, Renderer.spell.getCombinedClasses(spell, "fromSubclass") || []); }
+				catch (e) { _subclassListCache.set(key, []); }
+			}
+			return _subclassListCache.get(key);
+		};
+
 		const renderList = () => {
 			$list.empty();
 
@@ -1128,9 +1148,9 @@ class CharacterSheetSpells {
 				// Class filter (separate from subclass)
 				if (selectedClasses.has("__NONE__") && selectedSubclasses.has("__NONE__")) return false;
 
-				// Get spell's class and subclass sources using Renderer.spell.getCombinedClasses
-				const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
-				const fromSubclass = Renderer.spell.getCombinedClasses(spell, "fromSubclass");
+				// Get spell's class and subclass sources using cached getCombinedClasses
+				const fromClassList = getCachedClassList(spell);
+				const fromSubclass = getCachedSubclassList(spell);
 				const spellClasses = fromClassList?.map(c => c.name) || [];
 				const spellSubclasses = fromSubclass?.map(sc => `${sc.class.name}: ${sc.subclass.name}`) || [];
 
@@ -1394,7 +1414,6 @@ class CharacterSheetSpells {
 	}
 
 	_addSpell (spell) {
-		console.log("[CharSheet Spells] Adding spell:", spell.name, spell.level);
 
 		// Check limits and warn if over
 		const limitCheck = this._checkSpellLimits(spell);
@@ -1425,7 +1444,6 @@ class CharacterSheetSpells {
 			subschools: spell.subschools || [], // Include rarity/legality tags
 		});
 
-		console.log("[CharSheet Spells] After add, total spells:", this._state.getSpells().length);
 
 		this._renderSpellList();
 		// Update combat spells tab (cantrips are auto-prepared)
@@ -1728,7 +1746,6 @@ class CharacterSheetSpells {
 			);
 			if (!hasBeastSpells) {
 				// Allow but warn - user can decide
-				console.log(`[CharSheet Spells] Warning: Casting ${spell.name} while in Wild Shape`);
 			}
 		}
 
@@ -3052,7 +3069,6 @@ class CharacterSheetSpells {
 	// #region Rendering
 	renderSlots () {
 		const $container = $("#charsheet-spell-slots");
-		console.log("[CharSheet Spells] renderSlots: container found?", $container.length > 0);
 		if (!$container.length) return;
 
 		$container.empty();
@@ -3060,7 +3076,6 @@ class CharacterSheetSpells {
 		// Debug: Log all slot maxes
 		const allSlots = {};
 		for (let i = 1; i <= 9; i++) allSlots[i] = this._state.getSpellSlotsMax(i);
-		console.log("[CharSheet Spells] renderSlots: slot maxes by level:", allSlots);
 
 		let slotsRendered = 0;
 		for (let level = 1; level <= 9; level++) {
@@ -3087,7 +3102,6 @@ class CharacterSheetSpells {
 				</div>
 			`);
 
-			console.log("[CharSheet Spells] renderSlots: Level", level, "max:", max, "current:", current, "pipsHtml length:", pipsHtml.length);
 
 			$container.append($row);
 		}
@@ -3116,7 +3130,6 @@ class CharacterSheetSpells {
 			$container.append($pactRow);
 		}
 
-		console.log("[CharSheet Spells] renderSlots: rendered", slotsRendered, "levels of slots");
 
 		// Show if no slots
 		if (!$container.children().length) {
@@ -3126,7 +3139,6 @@ class CharacterSheetSpells {
 
 	_renderSpellList () {
 		const $container = $("#charsheet-spell-lists");
-		console.log("[CharSheet Spells] _renderSpellList: container found?", $container.length > 0);
 		if (!$container.length) return;
 
 		$container.empty();
@@ -3137,7 +3149,6 @@ class CharacterSheetSpells {
 		let spells = this._state.getSpells();
 		// Apply Thelemar rarity to stored spells (for backwards compatibility and display)
 		spells = this._applyThelemarSpellRarity(spells);
-		console.log("[CharSheet Spells] _renderSpellList: spells count", spells.length, spells);
 
 		// Check if this character has a spellbook-style caster (Wizard)
 		const classes = this._state.getClasses() || [];
@@ -3711,7 +3722,6 @@ class CharacterSheetSpells {
 		this._renderSpellList();
 		this._renderSpellcastingStats();
 
-		console.log("[CharSheet Spells] Rendered. Spells:", this._state.getSpells().length, "Slots:", this._state.getSpellSlotsMax(1));
 	}
 
 	_renderSpellcastingStats () {

@@ -129,6 +129,8 @@ class CharacterSheetQuickBuild {
 			languages: {},
 			scholarSkill: null,
 			spellbookSpells: [],
+			knownSpells: [], // Known-caster spells (Sorcerer, Bard, etc.)
+			knownCantrips: [], // Known-caster cantrips
 			spells: [],
 			hpMethod: "average",
 			hpRolls: {},
@@ -205,6 +207,54 @@ class CharacterSheetQuickBuild {
 			const isScholarLevel = isXPHBWizard && classLevel === 2;
 			const isSpellbookLevel = isWizard && classLevel >= 2;
 
+			// Known-spell caster detection (Sorcerer, Bard, Ranger, Warlock, etc.)
+			let isKnownCaster = false;
+			let knownSpellsGainAtLevel = 0;
+			let knownCantripsGainAtLevel = 0;
+			let knownMaxSpellLevel = 0;
+
+			if (!isWizard && !classData.preparedSpellsProgression) {
+				const spellsKnownTables = {
+					"Bard": [4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 15, 16, 18, 19, 19, 20, 22, 22, 22],
+					"Sorcerer": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 13, 13, 14, 14, 15, 15, 15, 15],
+					"Warlock": [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15],
+					"Ranger": [0, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11],
+				};
+				const cantripTables = {
+					"Bard": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+					"Sorcerer": [4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+					"Warlock": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+				};
+
+				const prog = classData.spellsKnownProgression || spellsKnownTables[className];
+				if (prog) {
+					isKnownCaster = true;
+					const prevKnown = classLevel >= 2 ? (prog[classLevel - 2] || 0) : 0;
+					const newKnown = prog[classLevel - 1] || 0;
+					knownSpellsGainAtLevel = Math.max(0, newKnown - prevKnown);
+
+					const cProg = classData.cantripProgression || cantripTables[className];
+					if (cProg) {
+						const prevCantrips = classLevel >= 2 ? (cProg[classLevel - 2] || 0) : 0;
+						const newCantrips = cProg[classLevel - 1] || 0;
+						knownCantripsGainAtLevel = Math.max(0, newCantrips - prevCantrips);
+					}
+
+					const casterProg = classData.casterProgression;
+					if (casterProg === "full" || !casterProg) {
+						knownMaxSpellLevel = Math.min(9, Math.ceil(classLevel / 2));
+					} else if (casterProg === "1/2") {
+						knownMaxSpellLevel = Math.min(5, Math.ceil(classLevel / 4));
+					} else if (casterProg === "1/3") {
+						knownMaxSpellLevel = Math.min(4, Math.ceil(classLevel / 7));
+					} else if (casterProg === "pact") {
+						knownMaxSpellLevel = Math.min(5, Math.ceil(classLevel / 2));
+					} else {
+						knownMaxSpellLevel = Math.min(9, Math.ceil(classLevel / 2));
+					}
+				}
+			}
+
 			// Check for weapon mastery progression
 			const weaponMasteryCount = this._getWeaponMasteryCountAtLevel(classData, classLevel);
 
@@ -230,6 +280,10 @@ class CharacterSheetQuickBuild {
 				isScholarLevel,
 				isSpellbookLevel,
 				isWizard,
+				isKnownCaster,
+				knownSpellsGainAtLevel,
+				knownCantripsGainAtLevel,
+				knownMaxSpellLevel,
 				weaponMasteryCount,
 			};
 
@@ -321,25 +375,79 @@ class CharacterSheetQuickBuild {
 	}
 
 	_levelGrantsSubclass (classData, level) {
-		const subclassLevel = classData.subclassTitle === "Sorcerous Origin" ? 1
-			: classData.subclassTitle === "Otherworldly Patron" ? 1
-				: classData.subclassTitle === "Divine Domain" ? 1
-					: classData.subclassTitle === "Arcane Tradition" ? 2
-						: classData.subclassTitle === "Druid Circle" ? 2
-							: classData.subclassTitle === "Wizard Subclass" ? 2
-								: 3;
-		return level === subclassLevel;
+		// Data-driven: check if any feature at this level has gainSubclassFeature: true
+		if (classData.classFeatures && Array.isArray(classData.classFeatures)) {
+			const isArrayOfArrays = Array.isArray(classData.classFeatures[0]);
+			const levelFeatures = isArrayOfArrays
+				? classData.classFeatures[level - 1] || []
+				: classData.classFeatures.filter(f => {
+					if (typeof f === "string") {
+						const parts = f.split("|");
+						// Format: "Name|Class|Source|Level" or "Name|Class|Source|Level|FeatureSource"
+						return parseInt(parts[3]) === level;
+					}
+					if (typeof f === "object" && f.classFeature) {
+						const parts = f.classFeature.split("|");
+						return parseInt(parts[3]) === level;
+					}
+					return f.level === level;
+				});
+
+			return levelFeatures.some(f =>
+				typeof f === "object" && f.gainSubclassFeature,
+			);
+		}
+
+		// Fallback: default subclass level 3
+		return level === 3;
 	}
 
 	_getSubclassLevel (classData) {
-		const subclassLevel = classData.subclassTitle === "Sorcerous Origin" ? 1
-			: classData.subclassTitle === "Otherworldly Patron" ? 1
-				: classData.subclassTitle === "Divine Domain" ? 1
-					: classData.subclassTitle === "Arcane Tradition" ? 2
-						: classData.subclassTitle === "Druid Circle" ? 2
-							: classData.subclassTitle === "Wizard Subclass" ? 2
-								: 3;
-		return subclassLevel;
+		// Data-driven: find the level where gainSubclassFeature appears
+		if (classData.classFeatures && Array.isArray(classData.classFeatures)) {
+			const isArrayOfArrays = Array.isArray(classData.classFeatures[0]);
+			if (isArrayOfArrays) {
+				for (let lvl = 1; lvl <= 20; lvl++) {
+					const features = classData.classFeatures[lvl - 1] || [];
+					if (features.some(f => typeof f === "object" && f.gainSubclassFeature)) return lvl;
+				}
+			} else {
+				for (const f of classData.classFeatures) {
+					if (typeof f === "object" && f.gainSubclassFeature) {
+						const parts = f.classFeature.split("|");
+						const lvl = parseInt(parts[3]);
+						if (!isNaN(lvl)) return lvl;
+					}
+				}
+			}
+		}
+		// Fallback: default subclass level 3
+		return 3;
+	}
+
+	/**
+	 * Filter optional features to only include those matching the class's edition.
+	 * TGTT classes get TGTT optional features.
+	 * XPHB/2024 classes get XPHB (+ TCE/XGE expansion content).
+	 * PHB/2014 classes get PHB/TCE/XGE.
+	 * If no edition info is available, returns all features (no filter).
+	 */
+	_filterOptFeaturesByEdition (optFeatures, classSource) {
+		if (!classSource || !optFeatures?.length) return optFeatures;
+
+		const editionMap = {
+			"TGTT": ["TGTT"],
+			"XPHB": ["XPHB", "TCE", "XGE", "FTD", "SCC"],
+			"PHB": ["PHB", "TCE", "XGE", "UA", "FTD", "SCC"],
+		};
+
+		const allowedSources = editionMap[classSource];
+		if (!allowedSources) return optFeatures;
+
+		return optFeatures.filter(opt => {
+			if (!opt.source) return true;
+			return allowedSources.includes(opt.source);
+		});
 	}
 
 	_hasSubclass (className, classSource) {
@@ -599,15 +707,38 @@ class CharacterSheetQuickBuild {
 			return !!ability;
 		});
 		const spellbookLevels = analysis.filter(a => a.isSpellbookLevel);
-		if (hasSpellcasting || spellbookLevels.length > 0) {
+
+		// Aggregate known-spell gains across all levels for this QB
+		const knownCasterLevels = analysis.filter(a => a.isKnownCaster && (a.knownSpellsGainAtLevel > 0 || a.knownCantripsGainAtLevel > 0));
+		let totalKnownSpellsGain = 0;
+		let totalKnownCantripsGain = 0;
+		let knownMaxSpellLevel = 0;
+		let knownCasterClassName = null;
+		let knownCasterClassSource = null;
+		for (const a of knownCasterLevels) {
+			totalKnownSpellsGain += a.knownSpellsGainAtLevel;
+			totalKnownCantripsGain += a.knownCantripsGainAtLevel;
+			knownMaxSpellLevel = Math.max(knownMaxSpellLevel, a.knownMaxSpellLevel);
+			knownCasterClassName = a.className;
+			knownCasterClassSource = a.classSource;
+		}
+		const knownCasterInfo = totalKnownSpellsGain > 0 || totalKnownCantripsGain > 0 ? {
+			className: knownCasterClassName,
+			classSource: knownCasterClassSource,
+			totalSpells: totalKnownSpellsGain,
+			totalCantrips: totalKnownCantripsGain,
+			maxSpellLevel: knownMaxSpellLevel,
+		} : null;
+
+		if (hasSpellcasting || spellbookLevels.length > 0 || knownCasterInfo) {
 			this._steps.push({
 				id: "spells",
 				label: "Spells",
 				icon: "🔮",
 				required: true,
-				data: {hasSpellcasting, spellbookLevels},
-				render: ($content) => this._renderSpellsStep($content, {hasSpellcasting, spellbookLevels}),
-				validate: () => this._validateSpellsStep({hasSpellcasting, spellbookLevels}),
+				data: {hasSpellcasting, spellbookLevels, knownCasterInfo},
+				render: ($content) => this._renderSpellsStep($content, {hasSpellcasting, spellbookLevels, knownCasterInfo}),
+				validate: () => this._validateSpellsStep({hasSpellcasting, spellbookLevels, knownCasterInfo}),
 			});
 		}
 
@@ -1446,13 +1577,19 @@ class CharacterSheetQuickBuild {
 			);
 		});
 
+		// Apply edition filtering based on class source
+		const classSource = gain.classData?.source || gain.classSource;
+		const editionFiltered = this._filterOptFeaturesByEdition(filtered, classSource);
+
+		// Pre-filter by allowed sources (hoisted out of render loop)
+		const sourceFiltered = this._page.filterByAllowedSources(editionFiltered);
+
 		const $search = $(`<input type="text" class="form-control form-control-sm mb-1" placeholder="Search...">`);
 		const $list = $(`<div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`);
 
 		const renderList = (filter = "") => {
 			$list.empty();
 			const filterLower = filter.toLowerCase();
-			const sourceFiltered = this._page.filterByAllowedSources(filtered);
 			sourceFiltered
 				.filter(f => !filter || f.name.toLowerCase().includes(filterLower))
 				.sort((a, b) => a.name.localeCompare(b.name))
@@ -1462,12 +1599,27 @@ class CharacterSheetQuickBuild {
 						<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 6px 8px; cursor: pointer;">
 							<div class="ve-flex-v-center">
 								<input type="checkbox" ${isSelected ? "checked" : ""}>
-								<strong class="ml-2">${opt.name}</strong>
+								<span class="qb-opt-name ml-2"></span>
 								<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 							</div>
 							${opt.entries ? `<div class="ve-muted ve-small ml-4" style="max-height: 40px; overflow: hidden;">${(() => { try { return Renderer.get().render({entries: opt.entries}).substring(0, 120); } catch (e) { return opt.entries.map(e => typeof e === "string" ? e : "").join(" ").substring(0, 120); } })()}...</div>` : ""}
 						</div>
 					`);
+
+					// Create hoverable link for the optional feature name
+					const $optName = $item.find(".qb-opt-name");
+					try {
+						const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
+							opt.source,
+							Parser.SRC_XPHB,
+							Parser.SRC_PHB,
+						]);
+						$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+						$optName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+					} catch (e) {
+						$optName.html(`<strong>${opt.name}</strong>`);
+					}
+
 					$item.on("click", () => {
 						if (isSelected) {
 							const idx = selectedList.findIndex(s => s.name === opt.name && s.source === opt.source);
@@ -1503,7 +1655,10 @@ class CharacterSheetQuickBuild {
 		const selectedList = this._selections.optionalFeatures[typeKey];
 
 		const levelUp = this._getLevelUpModule();
-		const allOptFeatures = this._page.filterByAllowedSources(this._page.getOptionalFeatures() || []);
+		const classSource = gain.classData?.source || gain.classSource;
+		const rawOptFeatures = this._page.getOptionalFeatures() || [];
+		const editionFiltered = this._filterOptFeaturesByEdition(rawOptFeatures, classSource);
+		const allOptFeatures = this._page.filterByAllowedSources(editionFiltered);
 		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
 
 		// Get max degree from class table
@@ -1642,11 +1797,26 @@ class CharacterSheetQuickBuild {
 							<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 6px 8px; cursor: pointer;">
 								<div class="ve-flex-v-center">
 									<input type="checkbox" ${isSelected ? "checked" : ""}>
-									<strong class="ml-2">${opt.name}</strong>
+									<span class="qb-method-name ml-2"></span>
 									<span class="ve-muted ml-1">(${degree}${this._getOrdinalSuffix(degree)} degree)</span>
 								</div>
 							</div>
 						`);
+
+						// Create hoverable link for the method name
+						const $methodName = $item.find(".qb-method-name");
+						try {
+							const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
+								opt.source,
+								Parser.SRC_XPHB,
+								Parser.SRC_PHB,
+							]);
+							$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+							$methodName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+						} catch (e) {
+							$methodName.html(`<strong>${opt.name}</strong>`);
+						}
+
 						$item.on("click", () => {
 							if (isSelected) {
 								const idx = selectedList.findIndex(s => s.name === opt.name && s.source === opt.source);
@@ -1878,7 +2048,15 @@ class CharacterSheetQuickBuild {
 				}
 				// Pool key: groups that share the same base option list.
 				// `referencedFrom` is set by _findFeatureOptions for "gain another X" refs.
-				const poolKey = optGroup.referencedFrom || `${className}_${optGroup.featureName}`;
+				// Normalize: convert "FeatureName|ClassName|Source|Level" → "ClassName_FeatureName"
+				// so that both the base feature and its "gain another" references share the same pool.
+				let poolKey;
+				if (optGroup.referencedFrom) {
+					const refParts = optGroup.referencedFrom.split("|");
+					poolKey = `${refParts[1] || className}_${refParts[0]}`;
+				} else {
+					poolKey = `${className}_${optGroup.featureName}`;
+				}
 				allSections.push({
 					analysis,
 					optGroup,
@@ -1909,6 +2087,21 @@ class CharacterSheetQuickBuild {
 			return names;
 		};
 
+		// Check if a feature option is repeatable (can be taken multiple times)
+		const isRepeatableOpt = (opt) => {
+			if (opt.type !== "classFeature" || !opt.ref) return false;
+			const parts = opt.ref.split("|");
+			const classFeatures = this._page.getClassFeatures();
+			const fullOpt = classFeatures.find(f =>
+				f.name === parts[0]
+				&& f.className === parts[1]
+				&& (f.source === parts[2] || !parts[2]),
+			);
+			if (!fullOpt?.entries) return false;
+			const text = JSON.stringify(fullOpt.entries).toLowerCase();
+			return text.includes("multiple times") || text.includes("chosen again") || text.includes("retaken");
+		};
+
 		// Render a single section; callable multiple times for re-render on selection change
 		const renderSection = (sec) => {
 			const {optGroup, levelKey, poolKey} = sec;
@@ -1920,18 +2113,50 @@ class CharacterSheetQuickBuild {
 
 			(optGroup.options || []).forEach(opt => {
 				// Hide options already picked in another section of the same pool
-				if (usedNames.has(opt.name)) return;
+				// unless the feature is explicitly repeatable
+				if (usedNames.has(opt.name) && !isRepeatableOpt(opt)) return;
 
 				const isSelected = selectedList.some(s => s.name === opt.name);
 				const $item = $(`
 					<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 6px 8px; cursor: pointer;">
 						<div class="ve-flex-v-center">
 							<input type="${optGroup.count === 1 ? "radio" : "checkbox"}" name="qb-featopt-${levelKey}" ${isSelected ? "checked" : ""}>
-							<strong class="ml-2">${opt.name}</strong>
+							<span class="qb-feat-opt-name ml-2"></span>
 							${opt.source ? `<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 						</div>
 					</div>
 				`);
+
+				// Create hoverable link for the feature option name
+				const $featOptName = $item.find(".qb-feat-opt-name");
+				if (opt.type === "classFeature" && opt.ref) {
+					const parts = opt.ref.split("|");
+					const featureSource = parts[2] || opt.source || "TGTT";
+					const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
+					try {
+						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
+						$featOptName.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} onclick="event.preventDefault(); event.stopPropagation();">${opt.name}</a>`);
+					} catch (e) {
+						$featOptName.html(`<strong>${opt.name}</strong>`);
+					}
+				} else if (opt.type === "optionalfeature" && opt.ref) {
+					const refParts = opt.ref.split("|");
+					try {
+						const resolvedSource = this._page.resolveOptionalFeatureSource(refParts[0] || opt.name, [
+							refParts[1],
+							opt.source,
+							Parser.SRC_XPHB,
+							Parser.SRC_PHB,
+						]);
+						$featOptName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
+						$featOptName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+					} catch (e) {
+						$featOptName.html(`<strong>${opt.name}</strong>`);
+					}
+				} else {
+					$featOptName.html(`<strong>${opt.name}</strong>`);
+				}
+
 				$item.on("click", () => {
 					if (isSelected) {
 						const idx = selectedList.findIndex(s => s.name === opt.name);
@@ -2181,7 +2406,7 @@ class CharacterSheetQuickBuild {
 	// Step 7: Spells
 	// ==========================================
 
-	_renderSpellsStep ($content, {hasSpellcasting, spellbookLevels}) {
+	_renderSpellsStep ($content, {hasSpellcasting, spellbookLevels, knownCasterInfo}) {
 		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
 		$step.append(`
 			<div class="charsheet__quickbuild-step-header">
@@ -2203,11 +2428,11 @@ class CharacterSheetQuickBuild {
 			`);
 
 			const allSpells = this._page.getSpells() || [];
-			const wizardSpells = allSpells.filter(s =>
+			const wizardSpells = this._page.filterByAllowedSources(allSpells.filter(s =>
 				s.level > 0
 				&& s.level <= maxSpellLevel
-				&& (s.classes?.fromClassList || []).some(c => c.name === "Wizard"),
-			);
+				&& this._spellIsForClass(s, "Wizard"),
+			));
 
 			const $search = $(`<input type="text" class="form-control form-control-sm mb-1" placeholder="Search wizard spells...">`);
 			const $list = $(`<div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`);
@@ -2215,7 +2440,7 @@ class CharacterSheetQuickBuild {
 			const renderList = (filter = "") => {
 				$list.empty();
 				const filterLower = filter.toLowerCase();
-				this._page.filterByAllowedSources(wizardSpells)
+				wizardSpells
 					.filter(s => !filter || s.name.toLowerCase().includes(filterLower))
 					.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
 					.slice(0, 80)
@@ -2254,8 +2479,11 @@ class CharacterSheetQuickBuild {
 			$step.append($section);
 		}
 
-		// General note about spell management
-		if (hasSpellcasting && spellbookLevels.length === 0) {
+		// Known-spell caster picker (Sorcerer, Bard, Ranger, Warlock, etc.)
+		if (knownCasterInfo) {
+			this._renderKnownSpellPicker($step, knownCasterInfo);
+		} else if (hasSpellcasting && spellbookLevels.length === 0) {
+			// Prepared casters only need slot management
 			$step.append(`
 				<div class="charsheet__quickbuild-section mb-3">
 					<p class="ve-muted">Spell preparation and known spell management can be done from the Spells tab after building your character. Your spell slots will be automatically calculated based on your class levels.</p>
@@ -2264,6 +2492,175 @@ class CharacterSheetQuickBuild {
 		}
 
 		$content.append($step);
+	}
+
+	/**
+	 * Render a known-spell picker section for the Quick Build spells step.
+	 * Supports both leveled spells and cantrips with search/filter.
+	 */
+	_renderKnownSpellPicker ($step, knownCasterInfo) {
+		const {className, classSource, totalSpells, totalCantrips, maxSpellLevel} = knownCasterInfo;
+
+		const parts = [];
+		if (totalSpells > 0) parts.push(`${totalSpells} spell${totalSpells !== 1 ? "s" : ""} (up to level ${maxSpellLevel})`);
+		if (totalCantrips > 0) parts.push(`${totalCantrips} cantrip${totalCantrips !== 1 ? "s" : ""}`);
+
+		const $section = $(`
+			<div class="charsheet__quickbuild-section mb-3">
+				<h5>Spells Known — ${className}
+					${totalSpells > 0 ? `<span class="badge badge-primary spell-badge">${this._selections.knownSpells.length}/${totalSpells}</span>` : ""}
+					${totalCantrips > 0 ? `<span class="badge badge-info cantrip-badge ml-1">${this._selections.knownCantrips.length}/${totalCantrips}</span>` : ""}
+				</h5>
+				<p class="ve-small ve-muted">Choose ${parts.join(" and ")} for your ${className}.</p>
+			</div>
+		`);
+
+		// Pre-compute class spells once
+		const allSpells = this._page.getSpells() || [];
+		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
+		const classSpells = sourceFiltered.filter(spell => {
+			if (spell.level > maxSpellLevel) return false;
+			if (totalCantrips === 0 && spell.level === 0) return false;
+			if (totalSpells === 0 && spell.level > 0) return false;
+			return this._spellIsForClass(spell, className);
+		}).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+
+		// Get already-known spells to mark them
+		const knownSpells = this._state.getSpells?.() || [];
+		const knownCantrips = this._state.getCantripsKnown?.() || [];
+		const knownIds = new Set([...knownSpells, ...knownCantrips].map(s => `${s.name}|${s.source}`));
+
+		// Filter controls
+		const $filterRow = $(`<div class="ve-flex-wrap gap-2 mb-2" style="align-items: center;"></div>`);
+
+		const $search = $(`<input type="text" class="form-control form-control-sm" placeholder="Search spells..." style="flex: 1; min-width: 150px;">`);
+		$filterRow.append($search);
+
+		const levelOptions = [];
+		if (totalCantrips > 0) levelOptions.push({value: "0", label: "Cantrips"});
+		for (let i = 1; i <= maxSpellLevel; i++) levelOptions.push({value: String(i), label: `Level ${i}`});
+		const $levelFilter = $(`
+			<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
+				<option value="">All Levels</option>
+				${levelOptions.map(l => `<option value="${l.value}">${l.label}</option>`).join("")}
+			</select>
+		`);
+		$filterRow.append($levelFilter);
+
+		$section.append($filterRow);
+
+		const $spellList = $(`<div style="max-height: 350px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`);
+		$section.append($spellList);
+
+		const updateBadges = () => {
+			$section.find(".spell-badge").text(`${this._selections.knownSpells.length}/${totalSpells}`);
+			$section.find(".cantrip-badge").text(`${this._selections.knownCantrips.length}/${totalCantrips}`);
+		};
+
+		const renderList = () => {
+			$spellList.empty();
+			const searchText = ($search.val() || "").toLowerCase();
+			const levelVal = $levelFilter.val();
+
+			const filtered = classSpells.filter(spell => {
+				if (searchText && !spell.name.toLowerCase().includes(searchText)) return false;
+				if (levelVal !== "" && levelVal !== undefined && spell.level !== parseInt(levelVal)) return false;
+				return true;
+			});
+
+			if (!filtered.length) {
+				$spellList.append(`<p class="ve-muted text-center py-2">No spells match your filters</p>`);
+				return;
+			}
+
+			// Group by level
+			const byLevel = {};
+			filtered.forEach(spell => {
+				if (!byLevel[spell.level]) byLevel[spell.level] = [];
+				byLevel[spell.level].push(spell);
+			});
+
+			Object.keys(byLevel).sort((a, b) => Number(a) - Number(b)).forEach(level => {
+				const levelNum = parseInt(level);
+				const levelLabel = levelNum === 0 ? "🔮 Cantrips" : `Level ${level}`;
+
+				$spellList.append(`<div class="ve-small ve-bold px-2 py-1" style="background: var(--cs-bg-alt, #f5f5f5); border-bottom: 1px solid var(--cs-border, #ddd);">${levelLabel} <span style="opacity: 0.6;">(${byLevel[level].length})</span></div>`);
+
+				byLevel[level].forEach(spell => {
+					const spellId = `${spell.name}|${spell.source}`;
+					const isKnown = knownIds.has(spellId);
+					const isCantrip = spell.level === 0;
+					const targetArr = isCantrip ? this._selections.knownCantrips : this._selections.knownSpells;
+					const maxCount = isCantrip ? totalCantrips : totalSpells;
+					const isSelected = targetArr.some(s => `${s.name}|${s.source}` === spellId);
+
+					const isConc = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+					const isRitual = spell.ritual || spell.meta?.ritual || false;
+					const tags = [];
+					if (isRitual) tags.push("🔮");
+					if (isConc) tags.push("⏳");
+					const tagsStr = tags.length ? ` ${tags.join(" ")}` : "";
+
+					const $item = $(`
+						<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""} ${isKnown ? "ve-muted" : ""}" style="padding: 5px 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+							<div>
+								<input type="checkbox" ${isSelected ? "checked" : ""} ${isKnown ? "disabled" : ""}>
+								<span class="qb-spell-name ml-2"></span>
+								<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(spell.source)})</span>
+								${tagsStr}
+							</div>
+							${isKnown ? `<span class="ve-muted ve-small">✓ Known</span>` : ""}
+						</div>
+					`);
+
+					// Add spell name with hover link
+					const $spellName = $item.find(".qb-spell-name");
+					try {
+						$spellName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_SPELLS, spell.name, spell.source));
+						$spellName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+					} catch (e) {
+						$spellName.html(`<strong>${spell.name}</strong>`);
+					}
+
+					if (!isKnown) {
+						$item.on("click", () => {
+							if (isSelected) {
+								const idx = targetArr.findIndex(s => `${s.name}|${s.source}` === spellId);
+								if (idx >= 0) targetArr.splice(idx, 1);
+							} else {
+								if (targetArr.length >= maxCount) {
+									const typeLabel = isCantrip ? "cantrips" : "spells";
+									JqueryUtil.doToast({type: "warning", content: `You can only select ${maxCount} ${typeLabel}.`});
+									return;
+								}
+								targetArr.push(spell);
+							}
+							updateBadges();
+							renderList();
+						});
+					}
+
+					$spellList.append($item);
+				});
+			});
+		};
+
+		$search.on("input", renderList);
+		$levelFilter.on("change", renderList);
+		renderList();
+
+		$step.append($section);
+	}
+
+	/**
+	 * Check if a spell belongs to a class's spell list, using Renderer API with fallback.
+	 */
+	_spellIsForClass (spell, className) {
+		try {
+			const classList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
+			if (classList?.some(c => c.name === className)) return true;
+		} catch (e) { /* fall through */ }
+		return spell.classes?.fromClassList?.some(c => c.name === className) || false;
 	}
 
 	_getMaxSpellLevelForClass (className, classLevel) {
@@ -2280,11 +2677,21 @@ class CharacterSheetQuickBuild {
 		return 0;
 	}
 
-	_validateSpellsStep ({hasSpellcasting, spellbookLevels}) {
+	_validateSpellsStep ({hasSpellcasting, spellbookLevels, knownCasterInfo}) {
 		if (spellbookLevels.length > 0) {
 			const totalNeeded = spellbookLevels.length * 2;
 			if (this._selections.spellbookSpells.length < totalNeeded) {
 				JqueryUtil.doToast({type: "warning", content: `Please select ${totalNeeded} spellbook spells (currently ${this._selections.spellbookSpells.length}).`});
+				return false;
+			}
+		}
+		if (knownCasterInfo) {
+			if (knownCasterInfo.totalSpells > 0 && this._selections.knownSpells.length < knownCasterInfo.totalSpells) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${knownCasterInfo.totalSpells} spells (currently ${this._selections.knownSpells.length}).`});
+				return false;
+			}
+			if (knownCasterInfo.totalCantrips > 0 && this._selections.knownCantrips.length < knownCasterInfo.totalCantrips) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${knownCasterInfo.totalCantrips} cantrips (currently ${this._selections.knownCantrips.length}).`});
 				return false;
 			}
 		}
@@ -2514,6 +2921,25 @@ class CharacterSheetQuickBuild {
 			$step.append($spellSummary);
 		}
 
+		// Known spells summary
+		if (this._selections.knownSpells.length > 0 || this._selections.knownCantrips.length > 0) {
+			const $knownSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>🔮 Spells Known</h5></div>`);
+			if (this._selections.knownCantrips.length > 0) {
+				$knownSummary.append(`<div class="ve-small mb-1">Cantrips: ${this._selections.knownCantrips.map(s => s.name).join(", ")}</div>`);
+			}
+			if (this._selections.knownSpells.length > 0) {
+				const byLevel = {};
+				this._selections.knownSpells.forEach(s => {
+					if (!byLevel[s.level]) byLevel[s.level] = [];
+					byLevel[s.level].push(s.name);
+				});
+				Object.entries(byLevel).sort(([a], [b]) => Number(a) - Number(b)).forEach(([lvl, names]) => {
+					$knownSummary.append(`<div class="ve-small mb-1">Level ${lvl}: ${names.join(", ")}</div>`);
+				});
+			}
+			$step.append($knownSummary);
+		}
+
 		// HP summary
 		const conMod = this._state.getAbilityMod("con");
 		let totalHp = 0;
@@ -2574,7 +3000,6 @@ class CharacterSheetQuickBuild {
 			return;
 		}
 
-		console.log(`[QuickBuild] Starting batch apply: Level ${this._fromLevel} → ${this._targetLevel}`);
 
 		const conMod = this._state.getAbilityMod("con");
 
@@ -2583,7 +3008,6 @@ class CharacterSheetQuickBuild {
 			const {characterLevel, className, classSource, classLevel, classData, features} = analysis;
 			const levelKey = `${className}_${classLevel}`;
 
-			console.log(`[QuickBuild] Applying level ${characterLevel}: ${className} ${classLevel}`);
 
 			// 1. Resolve subclass if this is the subclass level
 			let selectedSubclass = null;
@@ -2768,6 +3192,44 @@ class CharacterSheetQuickBuild {
 					inSpellbook: true,
 					sourceFeature: "Wizard Spellbook",
 					sourceClass: "Wizard",
+				});
+			});
+		}
+
+		// Apply known spells (Sorcerer, Bard, Ranger, Warlock, etc.)
+		if (this._selections.knownSpells.length > 0) {
+			const knownClassName = this._classAllocations.find(a =>
+				!a.classData?.preparedSpellsProgression && a.classData?.name !== "Wizard",
+			)?.className;
+			this._selections.knownSpells.forEach(spell => {
+				const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+				const isRitual = spell.ritual || spell.meta?.ritual || false;
+				this._state.addSpell({
+					name: spell.name,
+					source: spell.source,
+					level: spell.level,
+					school: spell.school,
+					ritual: isRitual,
+					concentration: isConcentration,
+					prepared: true,
+					sourceFeature: "Spells Known",
+					sourceClass: knownClassName || "",
+				});
+			});
+		}
+
+		// Apply known cantrips
+		if (this._selections.knownCantrips.length > 0) {
+			const knownClassName = this._classAllocations.find(a =>
+				!a.classData?.preparedSpellsProgression && a.classData?.name !== "Wizard",
+			)?.className;
+			this._selections.knownCantrips.forEach(spell => {
+				this._state.addCantrip({
+					name: spell.name,
+					source: spell.source,
+					school: spell.school,
+					sourceFeature: "Cantrips Known",
+					sourceClass: knownClassName || "",
 				});
 			});
 		}
