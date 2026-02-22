@@ -110,6 +110,12 @@ class CharacterSheetInventory {
 			this._useConsumable(itemId);
 		});
 
+		// Configure artifact properties
+		$(document).on("click", ".charsheet__item-artifact-config", (e) => {
+			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
+			this._showArtifactPropertiesModal(itemId);
+		});
+
 		// Star/favorite button
 		$(document).on("click", ".charsheet__item-star", (e) => {
 			e.stopPropagation();
@@ -1717,6 +1723,185 @@ class CharacterSheetInventory {
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
 	}
 
+	/**
+	 * Show artifact properties configuration modal
+	 * @param {string} itemId - The item ID
+	 */
+	async _showArtifactPropertiesModal (itemId) {
+		const items = this._state.getItems();
+		const item = items.find(i => i.id === itemId);
+		if (!item || item.rarity !== "artifact") return;
+
+		const requirements = this._state.getArtifactPropertyRequirements(itemId);
+		const selectedProperties = this._state.getArtifactProperties(itemId);
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `${item.name} - Artifact Properties`,
+			isMinHeight0: true,
+			isWidth100: true,
+		});
+
+		// Build the modal content
+		const $content = $(`<div class="charsheet__artifact-modal"></div>`);
+
+		// Requirements summary
+		if (requirements) {
+			const $requirements = $(`<div class="charsheet__artifact-requirements mb-3"></div>`);
+			$requirements.append(`<h5>Property Requirements</h5>`);
+			const reqList = [];
+			if (requirements.minorBeneficial > 0) reqList.push(`${requirements.minorBeneficial} Minor Beneficial`);
+			if (requirements.majorBeneficial > 0) reqList.push(`${requirements.majorBeneficial} Major Beneficial`);
+			if (requirements.minorDetrimental > 0) reqList.push(`${requirements.minorDetrimental} Minor Detrimental`);
+			if (requirements.majorDetrimental > 0) reqList.push(`${requirements.majorDetrimental} Major Detrimental`);
+			$requirements.append(`<p class="ve-muted">${reqList.length ? reqList.join(", ") : "No random properties required"}</p>`);
+			$content.append($requirements);
+		}
+
+		// Selected properties display
+		const $selectedSection = $(`<div class="charsheet__artifact-selected mb-3"></div>`);
+		$selectedSection.append(`<h5>Selected Properties</h5>`);
+		const $selectedList = $(`<div class="charsheet__artifact-selected-list"></div>`);
+
+		const renderSelectedProperties = () => {
+			$selectedList.empty();
+			const props = this._state.getArtifactProperties(itemId);
+			if (props.length === 0) {
+				$selectedList.append(`<p class="ve-muted ve-small">No properties selected yet.</p>`);
+			} else {
+				props.forEach((prop, index) => {
+					const typeLabels = {
+						minorBeneficial: {label: "Minor Beneficial", class: "text-success"},
+						majorBeneficial: {label: "Major Beneficial", class: "text-success"},
+						minorDetrimental: {label: "Minor Detrimental", class: "text-danger"},
+						majorDetrimental: {label: "Major Detrimental", class: "text-danger"},
+					};
+					const typeInfo = typeLabels[prop.type] || {label: prop.type, class: ""};
+
+					const $propRow = $(`
+						<div class="charsheet__artifact-property-row ve-flex-v-center mb-1 p-1 stripe-even">
+							<div class="ve-flex-1">
+								<span class="ve-small ${typeInfo.class}">[${typeInfo.label}]</span>
+								<strong>${prop.name}</strong>
+								${prop.roll ? `<span class="ve-muted ve-small">(Roll: ${prop.roll})</span>` : ""}
+								<p class="ve-small ve-muted mb-0">${prop.description}</p>
+							</div>
+							<button type="button" class="ve-btn ve-btn-xs ve-btn-danger charsheet__artifact-remove-prop" data-index="${index}" title="Remove property">
+								<span class="glyphicon glyphicon-trash"></span>
+							</button>
+						</div>
+					`);
+					$selectedList.append($propRow);
+				});
+			}
+		};
+
+		renderSelectedProperties();
+		$selectedSection.append($selectedList);
+		$content.append($selectedSection);
+
+		// Add property controls
+		const $addSection = $(`<div class="charsheet__artifact-add mb-3"></div>`);
+		$addSection.append(`<h5>Add Property</h5>`);
+
+		const propertyTypes = [
+			{id: "minorBeneficial", label: "Minor Beneficial", class: "ve-btn-success"},
+			{id: "majorBeneficial", label: "Major Beneficial", class: "ve-btn-success"},
+			{id: "minorDetrimental", label: "Minor Detrimental", class: "ve-btn-danger"},
+			{id: "majorDetrimental", label: "Major Detrimental", class: "ve-btn-danger"},
+		];
+
+		const $typeSelect = $(`<select class="form-control form-control-sm mb-2" style="max-width: 200px;"></select>`);
+		propertyTypes.forEach(type => {
+			$typeSelect.append(`<option value="${type.id}">${type.label}</option>`);
+		});
+		$addSection.append($typeSelect);
+
+		// Property table display
+		const $tableContainer = $(`<div class="charsheet__artifact-table mb-2" style="max-height: 200px; overflow-y: auto;"></div>`);
+
+		const renderPropertyTable = (type) => {
+			$tableContainer.empty();
+			const table = this._state.getArtifactPropertyTable(type);
+			const $table = $(`<table class="table table-sm table-striped ve-small"><thead><tr><th>d100</th><th>Property</th><th></th></tr></thead><tbody></tbody></table>`);
+			const $tbody = $table.find("tbody");
+
+			table.forEach(prop => {
+				const $row = $(`
+					<tr>
+						<td class="ve-muted">${prop.min === prop.max ? prop.min : `${prop.min}-${prop.max}`}</td>
+						<td>
+							<strong>${prop.name}</strong>
+							<br><span class="ve-muted">${prop.description.substring(0, 80)}${prop.description.length > 80 ? "..." : ""}</span>
+						</td>
+						<td>
+							<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__artifact-select-prop" data-type="${type}" data-min="${prop.min}" title="Select this property">
+								<span class="glyphicon glyphicon-plus"></span>
+							</button>
+						</td>
+					</tr>
+				`);
+				$tbody.append($row);
+			});
+
+			$tableContainer.append($table);
+		};
+
+		$typeSelect.on("change", () => renderPropertyTable($typeSelect.val()));
+		renderPropertyTable("minorBeneficial");
+
+		$addSection.append($tableContainer);
+
+		// Roll and Choose buttons
+		const $buttons = $(`<div class="ve-flex-v-center gap-2"></div>`);
+		const $rollBtn = $(`<button type="button" class="ve-btn ve-btn-sm ve-btn-primary"><span class="glyphicon glyphicon-random"></span> Roll d100</button>`);
+		$buttons.append($rollBtn);
+		$addSection.append($buttons);
+
+		$content.append($addSection);
+
+		// Event handlers
+		$content.on("click", ".charsheet__artifact-remove-prop", (e) => {
+			const index = parseInt($(e.currentTarget).data("index"));
+			this._state.removeArtifactProperty(itemId, index);
+			renderSelectedProperties();
+			this._page.saveCharacter();
+		});
+
+		$content.on("click", ".charsheet__artifact-select-prop", (e) => {
+			const type = $(e.currentTarget).data("type");
+			const min = parseInt($(e.currentTarget).data("min"));
+			const table = this._state.getArtifactPropertyTable(type);
+			const prop = table.find(p => p.min === min);
+			if (prop) {
+				this._state.setArtifactProperty(itemId, type, {...prop});
+				renderSelectedProperties();
+				this._page.saveCharacter();
+				JqueryUtil.doToast({type: "success", content: `Added: ${prop.name}`});
+			}
+		});
+
+		$rollBtn.on("click", () => {
+			const type = $typeSelect.val();
+			const prop = this._state.rollArtifactProperty(type);
+			if (prop) {
+				this._state.setArtifactProperty(itemId, type, prop);
+				renderSelectedProperties();
+				this._page.saveCharacter();
+				JqueryUtil.doToast({type: "success", content: `Rolled ${prop.roll}: ${prop.name}`});
+			}
+		});
+
+		$modalInner.append($content);
+
+		// Close button
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => {
+				this._renderItemList(); // Refresh to update badge
+				doClose(false);
+			});
+	}
+
 	_renderItemDetails (item) {
 		let html = "";
 
@@ -2547,6 +2732,8 @@ class CharacterSheetInventory {
 		const hasCharges = item.charges && item.charges > 0;
 		const hasNote = !!this._state.getItemNote(item.id);
 		const isConsumable = item.type === "P" || item.type === "SC"; // Potion or Scroll
+		const isArtifact = item.rarity === "artifact";
+		const artifactNeedsConfig = isArtifact && item.artifactProperties?.hasRequirements && !this._state.isArtifactFullyConfigured(item.id);
 
 		// Render item name with a 5etools hover link if it has a source
 		let itemNameHtml = item.name;
@@ -2600,7 +2787,7 @@ class CharacterSheetInventory {
 						</span>
 						<span class="charsheet__item-meta">
 							${typeTag ? `<span class="badge badge-secondary ve-small">${typeTag}</span>` : ""}
-							${item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) ? `<span class="badge badge-info ve-small">${item.rarity.toTitleCase()}</span>` : ""}
+							${isArtifact ? `<span class="badge badge-danger ve-small" title="Artifact">⚗️ Artifact</span>` : item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase()) ? `<span class="badge badge-info ve-small">${item.rarity.toTitleCase()}</span>` : ""}
 							${item.weight ? `<span class="ve-muted ve-small">${(item.weight * item.quantity).toFixed(1)} lb.</span>` : ""}
 						</span>
 					</div>
@@ -2636,6 +2823,11 @@ class CharacterSheetInventory {
 						${isConsumable ? `
 							<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__item-use" title="Use ${item.name}">
 								<span class="glyphicon glyphicon-play"></span> Use
+							</button>
+						` : ""}
+						${isArtifact ? `
+							<button type="button" class="ve-btn ve-btn-xs ${artifactNeedsConfig ? "ve-btn-warning" : "ve-btn-default"} charsheet__item-artifact-config" title="${artifactNeedsConfig ? "Configure artifact properties" : "View/edit artifact properties"}">
+								<span class="glyphicon glyphicon-cog"></span> ${artifactNeedsConfig ? "Configure" : "Properties"}
 							</button>
 						` : ""}
 						<button type="button" class="ve-btn ve-btn-xs ${hasNote ? "ve-btn-primary" : "ve-btn-default"} charsheet__item-note" title="${hasNote ? "View/Edit Note" : "Add Note"}">
