@@ -49,9 +49,17 @@ class CharacterSheetNpcExporter {
 		};
 	}
 
-	static convertStateToMonster (state, {sourceJson = CharacterSheetNpcExporter.SOURCE_JSON_DEFAULT} = {}) {
+	static convertStateToMonster (
+		state,
+		{
+			sourceJson = CharacterSheetNpcExporter.SOURCE_JSON_DEFAULT,
+			defenseMode = "persistent",
+		} = {},
+	) {
 		const safeSource = this._getSafeSourceJson(sourceJson);
 		const name = this._getSafeName(state.getName?.()) || "Unnamed Character";
+		const npcName = this._getNpcReferenceName(name);
+		const safeDefenseMode = String(defenseMode || "persistent").toLowerCase() === "active" ? "active" : "persistent";
 		const totalLevel = state.getTotalLevel?.() || 0;
 		const hp = state.getHp?.() || {current: 0, max: 1};
 		const maxHp = Math.max(1, hp.max || 1);
@@ -72,16 +80,19 @@ class CharacterSheetNpcExporter {
 		const senses = this._getSensesBlock(state);
 		const passive = state.getPassivePerception?.() ?? 10;
 		const languages = this._getSafeStringList(state.getLanguages?.(), {maxLen: 40});
+		const defenses = this._getExportDefenses(state, {defenseMode: safeDefenseMode});
 
 		const attacks = this._getMergedAttacks(state);
 		const actions = this._getActionEntriesFromAttacks(attacks, state);
 
-		const methodsBlock = this._getCombatMethodsBlock(state);
+		const methodsBlock = this._getCombatMethodsBlock(state, {npcName});
 		const specialEquipmentBlock = this._getSpecialEquipmentBlock(state);
-		const itemUseBlocks = this._getMagicItemUseBlocks(state);
+		const itemUseBlocks = this._getMagicItemUseBlocks(state, {npcName});
 		const spellcastingBlock = this._getSpellcastingBlock(state);
 
-		const featureTraits = this._getFeatureTraits(state);
+		const featureBlocks = this._getFeatureBlocks(state, {npcName});
+		const customAbilityBlocks = this._getCustomAbilityBlocks(state, {npcName});
+		const namedModifierTrait = this._getNamedModifierTrait(state, {npcName});
 		const levelSignal = {
 			name: "Level Signal",
 			entries: [
@@ -125,23 +136,72 @@ class CharacterSheetNpcExporter {
 			pbNote: `+${state.getProficiencyBonus?.() ?? 2}`,
 			trait: [
 				levelSignal,
-				...featureTraits,
+				...(featureBlocks.trait || []),
+				...(customAbilityBlocks.trait || []),
+				...(namedModifierTrait ? [namedModifierTrait] : []),
 				...(specialEquipmentBlock ? [specialEquipmentBlock] : []),
 				...(methodsBlock ? [methodsBlock] : []),
 			],
-			action: [...actions, ...(itemUseBlocks.action || [])],
+			action: [...actions, ...(featureBlocks.action || []), ...(customAbilityBlocks.action || []), ...(itemUseBlocks.action || [])],
 		};
 
-		if ((itemUseBlocks.bonus || []).length) out.bonus = itemUseBlocks.bonus;
-		if ((itemUseBlocks.reaction || []).length) out.reaction = itemUseBlocks.reaction;
+		if ((itemUseBlocks.bonus || []).length || (customAbilityBlocks.bonus || []).length || (featureBlocks.bonus || []).length) out.bonus = [...(featureBlocks.bonus || []), ...(customAbilityBlocks.bonus || []), ...(itemUseBlocks.bonus || [])];
+		if ((itemUseBlocks.reaction || []).length || (customAbilityBlocks.reaction || []).length || (featureBlocks.reaction || []).length) out.reaction = [...(featureBlocks.reaction || []), ...(customAbilityBlocks.reaction || []), ...(itemUseBlocks.reaction || [])];
 
 		if (Object.keys(saves).length) out.save = saves;
 		if (Object.keys(skills).length) out.skill = skills;
 		if (senses.length) out.senses = senses;
+		if ((defenses.resist || []).length) out.resist = defenses.resist;
+		if ((defenses.immune || []).length) out.immune = defenses.immune;
+		if ((defenses.vulnerable || []).length) out.vulnerable = defenses.vulnerable;
+		if ((defenses.conditionImmune || []).length) out.conditionImmune = defenses.conditionImmune;
 
 		if (spellcastingBlock) out.spellcasting = [spellcastingBlock];
 
 		return out;
+	}
+
+	static _getExportDefenses (state, {defenseMode = "persistent"} = {}) {
+		if (defenseMode === "active") {
+			const effective = state.getEffectiveDefenses?.() || {};
+			return {
+				resist: this._getSanitizedDefenseList(effective.resistances),
+				immune: this._getSanitizedDefenseList(effective.immunities),
+				vulnerable: this._getSanitizedDefenseList(effective.vulnerabilities),
+				conditionImmune: this._getSanitizedDefenseList(effective.conditionImmunities, {isCondition: true}),
+			};
+		}
+
+		const baseData = state?._data || {};
+		const itemDefenses = baseData.itemDefenses || {};
+		const baseResist = baseData.resistances || [];
+		const baseImmune = baseData.immunities || [];
+		const baseVulnerable = baseData.vulnerabilities || [];
+		const baseConditionImmune = baseData.conditionImmunities || [];
+
+		const itemResist = (itemDefenses.resist || []).map(it => it?.type);
+		const itemImmune = (itemDefenses.immune || []).map(it => it?.type);
+		const itemVulnerable = (itemDefenses.vulnerable || []).map(it => it?.type);
+		const itemConditionImmune = (itemDefenses.conditionImmune || []).map(it => it?.type);
+
+		return {
+			resist: this._getSanitizedDefenseList([...baseResist, ...itemResist]),
+			immune: this._getSanitizedDefenseList([...baseImmune, ...itemImmune]),
+			vulnerable: this._getSanitizedDefenseList([...baseVulnerable, ...itemVulnerable]),
+			conditionImmune: this._getSanitizedDefenseList([...baseConditionImmune, ...itemConditionImmune], {isCondition: true}),
+		};
+	}
+
+	static _getSanitizedDefenseList (values, {isCondition = false} = {}) {
+		if (!Array.isArray(values)) return [];
+		const out = values
+			.map(it => String(it || "").split("|")[0])
+			.map(it => it.replace(/^damage:/i, "").replace(/^condition:/i, ""))
+			.map(it => this._getSafeInlineText(it, {maxLen: 40}).toLowerCase())
+			.filter(Boolean);
+		const deduped = [...new Set(out)].sort((a, b) => a.localeCompare(b));
+		if (!isCondition) return deduped;
+		return deduped.map(it => it.replace(/\s+/g, " ").trim());
 	}
 
 	static getValidationIssues (monster) {
@@ -537,7 +597,7 @@ class CharacterSheetNpcExporter {
 		};
 	}
 
-	static _getMagicItemUseBlocks (state) {
+	static _getMagicItemUseBlocks (state, {npcName = "The NPC"} = {}) {
 		const out = {action: [], bonus: [], reaction: []};
 		const items = (state.getItems?.() || [])
 			.filter(it => !!it)
@@ -551,7 +611,7 @@ class CharacterSheetNpcExporter {
 		items.forEach(item => {
 			if (!item.activation?.length) return;
 			const activationTypes = new Set(item.activation.map(a => String(a?.type || "").toLowerCase()));
-			const snippet = this._getItemUseSnippet(item);
+			const snippet = this._getItemUseSnippet(item, {npcName});
 			const name = this._getSafeInlineText(item.name || "Magic Item", {maxLen: 80}) || "Magic Item";
 			const itemTag = this._getItemTag(item);
 
@@ -590,19 +650,22 @@ class CharacterSheetNpcExporter {
 		if (!spell) return "";
 		if (spell.usageType === "will") return "at will";
 		if (spell.usageType === "charges") return `${spell.chargesCost || 1} charge${Number(spell.chargesCost || 1) === 1 ? "" : "s"}`;
-		if ((spell.usageType === "daily" || spell.usageType === "rest") && spell.usesMax) {
-			return `${spell.usesMax}/day`;
+		if (spell.usageType === "daily" && spell.usesMax) {
+			return `${spell.usesMax}/day${spell.isEach ? " each" : ""}`;
+		}
+		if (spell.usageType === "rest" && spell.usesMax) {
+			return `${spell.usesMax}/rest${spell.isEach ? " each" : ""}`;
 		}
 		if (spell.usageType === "ritual") return "ritual";
 		return "";
 	}
 
-	static _getItemUseSnippet (item) {
+	static _getItemUseSnippet (item, {npcName = "The NPC"} = {}) {
 		const joined = (item.entries || [])
 			.map(it => typeof it === "string" ? it : (it?.entries || []).join(" "))
 			.join(" ");
 		const plain = this._getSafeInlineText(joined, {maxLen: 240});
-		if (plain) return plain;
+		if (plain) return this._normalizeAbilityTextForNpc(plain, {npcName});
 
 		if (Number.isFinite(Number(item.charges)) && Number(item.charges) > 0) {
 			const current = Number.isFinite(Number(item.chargesCurrent)) ? Number(item.chargesCurrent) : Number(item.charges);
@@ -655,13 +718,14 @@ class CharacterSheetNpcExporter {
 	}
 
 	static _getAttackToHit (attack, state) {
-		const explicit = Number(attack?.attackBonus);
-		if (Number.isFinite(explicit)) return explicit;
-
 		const abilityMod = this._getAttackAbilityMod(attack, state);
 		const profBonus = state.getProficiencyBonus?.() || 2;
 		const magicAttackBonus = Number(attack?.magicAttackBonus) || 0;
-		return abilityMod + profBonus + magicAttackBonus;
+		const derived = abilityMod + profBonus + magicAttackBonus;
+
+		const explicit = Number(attack?.attackBonus);
+		if (!Number.isFinite(explicit)) return derived;
+		return Math.max(explicit, derived);
 	}
 
 	static _getAttackAbilityMod (attack, state) {
@@ -798,7 +862,7 @@ class CharacterSheetNpcExporter {
 		return out;
 	}
 
-	static _getCombatMethodsBlock (state) {
+	static _getCombatMethodsBlock (state, {npcName = "The NPC"} = {}) {
 		const methods = state.getCombatMethods?.() || [];
 		if (!methods.length) return null;
 		const calculations = state.getFeatureCalculations?.() || {};
@@ -833,7 +897,7 @@ class CharacterSheetNpcExporter {
 		const exertionMax = state.getExertionMax?.() || 0;
 		const degreeAccess = state.getMethodDegreeAccess?.() || 0;
 
-		entries.unshift(`The NPC uses combat methods fueled by exertion (pool ${exertionMax}; method degree access ${degreeAccess}; save {@dc ${methodDc}}).`);
+		entries.unshift(`${npcName} uses combat methods fueled by exertion (pool ${exertionMax}; method degree access ${degreeAccess}; save {@dc ${methodDc}}).`);
 
 		return {
 			name: "Combat Methods",
@@ -841,16 +905,235 @@ class CharacterSheetNpcExporter {
 		};
 	}
 
-	static _getFeatureTraits (state) {
+	static _getFeatureBlocks (state, {npcName = "The NPC"} = {}) {
+		const out = {trait: [], action: [], bonus: [], reaction: []};
+		const sourceFeatureIds = new Set((state.getNamedModifiers?.() || [])
+			.map(mod => mod?.sourceFeatureId)
+			.filter(Boolean));
+
 		const features = (state.getFeatures?.() || [])
 			.filter(f => f?.name && f?.description)
-			.filter(f => !f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:")))
-			.slice(0, 5);
+			.filter(f => !f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:")));
 
-		return features.map(f => ({
-			name: this._getSafeInlineText(f.name, {maxLen: 80}) || "Feature",
-			entries: [this._stripHtmlTags(f.description).slice(0, 280)],
-		}));
+		const classified = features
+			.map(feature => this._classifyFeatureForStatblock(feature, {sourceFeatureIds}))
+			.filter(it => it.classification === "important")
+			.slice(0, 8);
+
+		classified.forEach(({feature, analysis}) => {
+			const text = this._normalizeAbilityTextForNpc(this._stripHtmlTags(feature.description).slice(0, 280), {npcName});
+			const usesText = this._getFeatureUsesText(feature);
+			const entry = {
+				name: this._getSafeInlineText(feature.name, {maxLen: 80}) || "Feature",
+				entries: [usesText ? `${text} ${usesText}` : text],
+			};
+
+			const section = this._getFeatureActivationSection(feature, analysis);
+			if (section === "bonus") {
+				out.bonus.push(entry);
+				return;
+			}
+			if (section === "reaction") {
+				out.reaction.push(entry);
+				return;
+			}
+			if (section === "action") {
+				out.action.push(entry);
+				return;
+			}
+
+			out.trait.push(entry);
+		});
+
+		return out;
+	}
+
+	static _classifyFeatureForStatblock (feature, {sourceFeatureIds = new Set()} = {}) {
+		const analysis = CharacterSheetState.analyzeFeature?.(feature) || null;
+		const rawText = String(feature?.description || "").toLowerCase();
+
+		const hasLimitedUses = Number(feature?.uses?.max || 0) > 0;
+		const hasCombatKeyword = /\b(action|bonus action|reaction|save|damage|attack|resistance|immunity|advantage|disadvantage)\b/i.test(rawText);
+		const isBackgroundFeature = String(feature?.featureType || "").toLowerCase() === "background";
+
+		const isImportant = !!(
+			hasLimitedUses
+			|| feature?.important
+			|| analysis?.isActivatable
+			|| analysis?.hasResourceCost
+			|| hasCombatKeyword
+		);
+
+		const effectTypes = new Set((analysis?.effects || []).map(e => e?.type).filter(Boolean));
+		const statDerivedEffectTypes = new Set([
+			"bonus", "penalty", "setMinimum", "setMaximum", "setValue",
+			"advantage", "disadvantage", "proficiency", "expertise",
+			"setSpeed", "speed", "ac", "hp", "damage", "attack",
+		]);
+		const allEffectsAreStatDerived = effectTypes.size
+			&& [...effectTypes].every(type => statDerivedEffectTypes.has(type));
+		const activationSection = this._getFeatureActivationSection(feature, analysis);
+
+		const isAlreadyApplied = !!(
+			!activationSection
+			&& (sourceFeatureIds.has(feature?.id) || allEffectsAreStatDerived)
+		);
+
+		if (isBackgroundFeature) {
+			return {feature, analysis, classification: "notImportant"};
+		}
+
+		if (isAlreadyApplied) return {feature, analysis, classification: "alreadyApplied"};
+		if (!isImportant) return {feature, analysis, classification: "notImportant"};
+		return {feature, analysis, classification: "important"};
+	}
+
+	static _getFeatureActivationSection (feature, analysis = null) {
+		const activationAction = String(analysis?.activationInfo?.activationAction || "").toLowerCase();
+		if (activationAction === "bonus") return "bonus";
+		if (activationAction === "reaction") return "reaction";
+		if (activationAction === "action" || activationAction === "attack") return "action";
+
+		const text = String(feature?.description || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
+		if (/\bas a bonus action\b|\buse (?:a|your) bonus action\b/.test(text)) return "bonus";
+		if (/\bas a reaction\b|\buse (?:a|your) reaction\b/.test(text)) return "reaction";
+		if (/\bas an action\b|\buse (?:an|your) action\b/.test(text)) return "action";
+		return null;
+	}
+
+	static _getFeatureUsesText (feature) {
+		const uses = feature?.uses;
+		if (!uses || !Number.isFinite(Number(uses.max)) || Number(uses.max) <= 0) return "";
+		const current = Number.isFinite(Number(uses.current)) ? Number(uses.current) : Number(uses.max);
+		const recharge = this._getSafeInlineText(uses.recharge || "", {maxLen: 24});
+		return `(${current}/${Number(uses.max)} uses${recharge ? `; recharges on ${recharge}` : ""})`;
+	}
+
+	static _getCustomAbilityBlocks (state, {npcName = "The NPC"} = {}) {
+		const out = {trait: [], action: [], bonus: [], reaction: []};
+		const abilities = state.getCustomAbilities?.() || [];
+		if (!abilities.length) return out;
+
+		const passiveEntries = [];
+		abilities.forEach(ability => {
+			const safeName = this._getSafeInlineText(ability?.name || "Custom Ability", {maxLen: 80}) || "Custom Ability";
+			const description = this._normalizeAbilityTextForNpc(this._stripHtmlTags(ability?.description || ""), {npcName});
+			const mode = this._getSafeInlineText(ability?.mode || "passive", {maxLen: 24}) || "passive";
+			const uses = ability?.uses;
+			const usesText = uses && Number.isFinite(Number(uses.max))
+				? `${Number.isFinite(Number(uses.current)) ? Number(uses.current) : Number(uses.max)}/${Number(uses.max)} uses`
+				: "";
+			const statusText = ability?.isActive === false ? "inactive" : "active";
+
+			const entryText = [description || `${safeName} grants custom effects.`, `(${mode}; ${statusText}${usesText ? `; ${usesText}` : ""})`]
+				.filter(Boolean)
+				.join(" ");
+
+			const activation = String(ability?.activationAction || "").toLowerCase();
+			const isActivatable = mode !== "passive" || ["action", "bonus", "reaction"].includes(activation);
+			if (isActivatable) {
+				const actionEntry = {
+					name: safeName,
+					entries: [entryText],
+				};
+				if (activation === "bonus") out.bonus.push(actionEntry);
+				else if (activation === "reaction") out.reaction.push(actionEntry);
+				else out.action.push(actionEntry);
+				return;
+			}
+
+			passiveEntries.push(`• {@b ${safeName}.} ${entryText}`);
+		});
+
+		if (passiveEntries.length) {
+			out.trait.push({
+				name: "Custom Abilities",
+				entries: passiveEntries.slice(0, 12),
+			});
+		}
+
+		return out;
+	}
+
+	static _getNamedModifierTrait (state, {npcName = "The NPC"} = {}) {
+		const modifiers = state.getNamedModifiers?.() || [];
+		if (!modifiers.length) return null;
+
+		const entries = modifiers
+			.slice(0, 20)
+			.map(mod => {
+				const name = this._getSafeInlineText(mod?.name || "Modifier", {maxLen: 80}) || "Modifier";
+				const type = this._getSafeInlineText(mod?.type || "ac", {maxLen: 48}) || "ac";
+				const target = this._getModifierTargetLabel(type);
+				const value = this._getModifierValueSummary(mod);
+				const status = mod?.enabled === false ? "disabled" : "enabled";
+				const note = this._normalizeAbilityTextForNpc(this._getSafeInlineText(mod?.note || "", {maxLen: 120}), {npcName});
+				const conditionalText = this._getSafeInlineText(mod?.conditional || "", {maxLen: 64});
+				const bits = [target, value, status, conditionalText ? `if ${conditionalText}` : "", note].filter(Boolean);
+				return `• {@b ${name}.} ${bits.join("; ")}.`;
+			});
+
+		return {
+			name: "Custom Modifiers",
+			entries,
+		};
+	}
+
+	static _getModifierTargetLabel (type) {
+		const map = {
+			ac: "Armor Class",
+			initiative: "initiative",
+			attack: "attack rolls",
+			damage: "damage rolls",
+			hp: "hit points",
+			spellDc: "spell save DC",
+			spellAttack: "spell attacks",
+			speed: "speed",
+			d20: "d20 rolls",
+		};
+
+		if (map[type]) return map[type];
+		if (type.startsWith("save:")) return `${type.split(":")[1].toUpperCase()} saves`;
+		if (type.startsWith("skill:")) return `${type.split(":")[1]} checks`;
+		if (type.startsWith("check:")) return `${type.split(":")[1].toUpperCase()} checks`;
+		return type;
+	}
+
+	static _getModifierValueSummary (modifier) {
+		if (!modifier) return "";
+		if (modifier.advantage) return "advantage";
+		if (modifier.disadvantage) return "disadvantage";
+		if (modifier.autoSuccess) return "auto success";
+		if (modifier.autoFail) return "auto fail";
+		if (modifier.setValue != null) return `set to ${modifier.setValue}`;
+		if (modifier.setMinimum != null) return `minimum ${modifier.setMinimum}`;
+		if (modifier.setMaximum != null) return `maximum ${modifier.setMaximum}`;
+		if (modifier.bonusDie) return `+${modifier.bonusDie}`;
+		if (Number.isFinite(Number(modifier.value)) && Number(modifier.value)) return this._toSignedStr(Number(modifier.value));
+		return "contextual";
+	}
+
+	static _getNpcReferenceName (name) {
+		const safeName = this._getSafeInlineText(name || "", {maxLen: 80});
+		if (!safeName) return "The NPC";
+		return safeName;
+	}
+
+	static _normalizeAbilityTextForNpc (text, {npcName = "The NPC"} = {}) {
+		const safeText = this._getSafeInlineText(text || "", {maxLen: 280}) || "";
+		if (!safeText) return "";
+
+		const possessive = npcName.endsWith("s") ? `${npcName}'` : `${npcName}'s`;
+		return safeText
+			.replace(/\byourself\b/gi, npcName)
+			.replace(/\byou are\b/gi, `${npcName} is`)
+			.replace(/\byou have\b/gi, `${npcName} has`)
+			.replace(/\byou can\b/gi, `${npcName} can`)
+			.replace(/\byou gain\b/gi, `${npcName} gains`)
+			.replace(/\byour\b/gi, possessive)
+			.replace(/\byou\b/gi, npcName)
+			.replace(/\s+/g, " ")
+			.trim();
 	}
 
 	static _stripHtmlTags (text) {

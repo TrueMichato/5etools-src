@@ -187,6 +187,7 @@ describe("CharacterSheetNpcExporter", () => {
 		});
 		state.setItemGrantedSpells?.([
 			{name: "fireball", sourceItem: "Wand of Bolts", usageType: "charges", chargesCost: 3},
+			{name: "shield", sourceItem: "Wand of Bolts", usageType: "rest", usesMax: 1, isEach: true},
 		]);
 
 		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
@@ -199,6 +200,33 @@ describe("CharacterSheetNpcExporter", () => {
 		expect(out.action.some(a => (a.name || "").includes("Wand of Bolts"))).toBe(true);
 		expect((out.bonus || []).some(a => (a.name || "").includes("Boots of Burst"))).toBe(true);
 		expect((out.reaction || []).some(a => (a.name || "").includes("Ring of Riposte"))).toBe(true);
+		expect(out.action.some(a => (a.entries || []).join(" ").includes("1/rest each"))).toBe(true);
+	});
+
+	it("should export magic-item defenses in persistent mode", () => {
+		state._data.itemDefenses = {
+			resist: [{type: "fire"}],
+			conditionImmune: [{type: "frightened"}],
+		};
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
+		expect(out.resist || []).toContain("fire");
+		expect(out.conditionImmune || []).toContain("frightened");
+	});
+
+	it("should support active defense mode using effective defenses", () => {
+		state.getEffectiveDefenses = () => ({
+			resistances: ["cold"],
+			immunities: ["poison"],
+			vulnerabilities: ["radiant"],
+			conditionImmunities: ["charmed"],
+		});
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state, {defenseMode: "active"});
+		expect(out.resist).toEqual(["cold"]);
+		expect(out.immune).toEqual(["poison"]);
+		expect(out.vulnerable).toEqual(["radiant"]);
+		expect(out.conditionImmune).toEqual(["charmed"]);
 	});
 
 	it("should omit empty optional fields and keep hp formula dice-only", () => {
@@ -272,6 +300,129 @@ describe("CharacterSheetNpcExporter", () => {
 		expect(cfg.abbreviation).toBe("brew");
 		expect(cfg.full).toBe("My Export Source");
 		expect(cfg.version).toBe("v1.0.0beta");
+	});
+
+	it("should rewrite second-person feature text to NPC-name references", () => {
+		state.addFeature({
+			name: "Battle Focus",
+			source: "PHB",
+			description: "You can reroll one attack roll on your turn.",
+			important: true,
+		});
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
+		const trait = out.trait.find(t => t.name === "Battle Focus");
+
+		expect(trait).toBeDefined();
+		expect(trait.entries[0]).toContain("Aelar can reroll one attack roll on Aelar's turn");
+		expect(trait.entries[0].toLowerCase()).not.toContain("you can");
+	});
+
+	it("should omit features already represented by derived modifier effects", () => {
+		state.addFeature({
+			id: "feat_expertise_test",
+			name: "Skill Expertise",
+			source: "PHB",
+			description: "You gain expertise in one skill.",
+			important: true,
+		});
+		state.addNamedModifier({
+			name: "Skill Expertise Applied",
+			type: "skill:perception",
+			value: 2,
+			sourceFeatureId: "feat_expertise_test",
+			enabled: true,
+		});
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
+		expect(out.trait.some(t => t.name === "Skill Expertise")).toBe(false);
+	});
+
+	it("should include configured custom abilities and named modifiers in traits and actions", () => {
+		state.addCustomAbility({
+			name: "Arc Burst",
+			description: "You unleash force in a line.",
+			mode: "toggleable",
+			activationAction: "action",
+		});
+		state.addCustomAbility({
+			name: "Stone Skin",
+			description: "Your skin hardens against blows.",
+			mode: "passive",
+		});
+		state.addNamedModifier({
+			name: "Ward Shield",
+			type: "ac",
+			value: 2,
+			note: "You gain this bonus while your ward is active",
+			enabled: false,
+		});
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
+
+		expect(out.action.some(a => a.name === "Arc Burst")).toBe(true);
+		const customTrait = out.trait.find(t => t.name === "Custom Abilities");
+		expect(customTrait).toBeDefined();
+		expect(customTrait.entries.join(" ")).toContain("Stone Skin");
+		expect(customTrait.entries.join(" ")).toContain("Aelar's skin hardens");
+
+		const modifierTrait = out.trait.find(t => t.name === "Custom Modifiers");
+		expect(modifierTrait).toBeDefined();
+		expect(modifierTrait.entries.join(" ")).toContain("Ward Shield");
+		expect(modifierTrait.entries.join(" ")).toContain("Armor Class");
+		expect(modifierTrait.entries.join(" ")).toContain("disabled");
+	});
+
+	it("should route activatable features into action economy sections", () => {
+		state.addFeature({
+			name: "Sudden Step",
+			source: "PHB",
+			description: "As a bonus action, you teleport up to 10 feet.",
+		});
+		state.addFeature({
+			name: "Riposte Guard",
+			source: "PHB",
+			description: "As a reaction, you gain +2 AC against one attack.",
+		});
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
+
+		expect((out.bonus || []).some(it => it.name === "Sudden Step")).toBe(true);
+		expect((out.reaction || []).some(it => it.name === "Riposte Guard")).toBe(true);
+		expect((out.trait || []).some(it => it.name === "Sudden Step")).toBe(false);
+		expect((out.trait || []).some(it => it.name === "Riposte Guard")).toBe(false);
+	});
+
+	it("should suppress non-combat background features from statblock", () => {
+		state.addFeature({
+			name: "Shelter of the Faithful",
+			source: "Acolyte",
+			featureType: "Background",
+			description: "You and your companions can expect free healing and care at temples.",
+			important: true,
+		});
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
+		expect((out.trait || []).some(it => it.name === "Shelter of the Faithful")).toBe(false);
+		expect((out.action || []).some(it => it.name === "Shelter of the Faithful")).toBe(false);
+		expect((out.bonus || []).some(it => it.name === "Shelter of the Faithful")).toBe(false);
+		expect((out.reaction || []).some(it => it.name === "Shelter of the Faithful")).toBe(false);
+	});
+
+	it("should suppress background features even if they mention action economy", () => {
+		state.addFeature({
+			name: "Street Runner",
+			source: "Urchin",
+			featureType: "Background",
+			description: "As a bonus action, you can blend into a crowd in urban terrain.",
+			important: true,
+		});
+
+		const out = CharacterSheetNpcExporter.convertStateToMonster(state);
+		expect((out.trait || []).some(it => it.name === "Street Runner")).toBe(false);
+		expect((out.action || []).some(it => it.name === "Street Runner")).toBe(false);
+		expect((out.bonus || []).some(it => it.name === "Street Runner")).toBe(false);
+		expect((out.reaction || []).some(it => it.name === "Street Runner")).toBe(false);
 	});
 
 	it("should report validation issues for malformed monster payloads", () => {
