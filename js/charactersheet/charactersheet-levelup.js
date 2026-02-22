@@ -2822,8 +2822,15 @@ class CharacterSheetLevelUp {
 						}
 					} else if (opt.type === "optionalfeature" && opt.ref) {
 						const refParts = opt.ref.split("|");
+						const resolvedSource = this._page.resolveOptionalFeatureSource(refParts[0] || opt.name, [
+							refParts[1],
+							opt.source,
+							this._selectedClass?.source,
+							Parser.SRC_XPHB,
+							Parser.SRC_PHB,
+						]);
 						try {
-							$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], refParts[1] || opt.source || "TGTT"));
+							$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
 							$nameSpan.find("a").on("click", (e) => e.preventDefault());
 						} catch (e) {
 							$nameSpan.text(opt.name);
