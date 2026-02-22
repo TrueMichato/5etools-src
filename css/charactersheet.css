@@ -77,6 +77,8 @@
 .charsheet__header-row--primary {
 	background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
 	border-bottom: 1px solid var(--cs-border, rgba(255,255,255,0.06));
+	column-gap: var(--cs-space-xs, 0.375rem);
+	row-gap: var(--cs-space-xs, 0.375rem);
 }
 
 .charsheet__header-row--secondary {
@@ -317,6 +319,36 @@
 .charsheet__tool-btn:hover {
 	background: rgba(255,255,255,0.08);
 	color: var(--cs-text, inherit);
+}
+
+#charsheet-btn-modifiers {
+	position: relative;
+}
+
+.charsheet__header-group--tools {
+	margin-left: auto;
+	align-items: center;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 2px;
+}
+
+#charsheet-btn-import,
+#charsheet-btn-export,
+#charsheet-btn-export-npc {
+	min-width: 32px;
+	justify-content: center;
+	padding: var(--cs-space-xs, 0.35rem);
+	line-height: 1;
+	font-size: 0.95rem;
+}
+
+#charsheet-btn-print {
+	min-width: 32px;
+	justify-content: center;
+	padding: var(--cs-space-xs, 0.35rem);
+	line-height: 1;
+	font-size: 0.95rem;
 }
 
 /* Status Group - Save Indicator */
@@ -1664,6 +1696,7 @@
 @media (max-width: 992px) {
 	.charsheet__header-row--primary {
 		flex-wrap: wrap;
+		row-gap: var(--cs-space-xs, 0.375rem);
 	}
 	
 	.charsheet__header-group--character {
@@ -1688,7 +1721,10 @@
 	
 	.charsheet__header-group--status {
 		order: 4;
+		flex: 1 1 auto;
 		flex-wrap: wrap;
+		justify-content: flex-end;
+		min-width: 0;
 	}
 	
 	.charsheet__header-divider:last-of-type {
@@ -1697,6 +1733,11 @@
 	
 	.charsheet__header-group--tools {
 		order: 6;
+		flex: 1 1 100%;
+		margin-left: 0;
+		justify-content: flex-end;
+		padding-top: 2px;
+		gap: 3px;
 	}
 }
 
@@ -1746,6 +1787,11 @@
 		justify-content: center;
 		margin-left: 0;
 		padding-top: var(--cs-space-xs, 0.25rem);
+		gap: 4px;
+	}
+
+	.charsheet__tool-btn {
+		font-size: 0.8125rem;
 	}
 	
 	.charsheet__action-btn-text {
@@ -10023,19 +10069,23 @@
 
 /* Modifier badge on button */
 .charsheet__modifier-badge {
+	position: absolute;
+	top: -5px;
+	right: -5px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	min-width: 16px;
 	height: 16px;
 	padding: 0 4px;
-	margin-left: 4px;
-	font-size: 0.7rem;
+	font-size: 0.65rem;
 	font-weight: 700;
 	color: #fff;
 	background: var(--rgb-name-green, #28a745);
 	border-radius: 8px;
 	line-height: 1;
+	pointer-events: none;
+	z-index: 1;
 }
 
 .charsheet__btn--has-modifiers {
