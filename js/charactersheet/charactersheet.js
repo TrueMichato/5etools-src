@@ -7667,6 +7667,35 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Resolve the best source for an optional feature name.
+	 * Prefers explicitly provided sources, then common official fallbacks.
+	 * @param {string} name - Optional feature name
+	 * @param {string[]} [preferredSources=[]] - Ordered source preferences
+	 * @returns {string} Resolved source
+	 */
+	resolveOptionalFeatureSource (name, preferredSources = []) {
+		if (!name) return preferredSources.find(Boolean) || Parser.SRC_XPHB;
+
+		const allOptFeatures = this.getOptionalFeatures?.() || this._optionalFeaturesData || [];
+		const matchingByName = allOptFeatures.filter(it => it.name?.toLowerCase() === name.toLowerCase());
+		if (!matchingByName.length) return preferredSources.find(Boolean) || Parser.SRC_XPHB;
+
+		for (const preferredSource of preferredSources.filter(Boolean)) {
+			const preferredSourceNorm = preferredSource.toUpperCase();
+			const exact = matchingByName.find(it => (it.source || "").toUpperCase() === preferredSourceNorm);
+			if (exact?.source) return exact.source;
+		}
+
+		const xphb = matchingByName.find(it => (it.source || "").toUpperCase() === Parser.SRC_XPHB);
+		if (xphb?.source) return xphb.source;
+
+		const phb = matchingByName.find(it => (it.source || "").toUpperCase() === Parser.SRC_PHB);
+		if (phb?.source) return phb.source;
+
+		return matchingByName[0].source || preferredSources.find(Boolean) || Parser.SRC_XPHB;
+	}
+
+	/**
 	 * Get hover attributes for an action (Dodge, Disengage, etc.)
 	 * @param {string} actionName - The action name
 	 * @param {string} [source] - Source book abbreviation (defaults to XPHB)

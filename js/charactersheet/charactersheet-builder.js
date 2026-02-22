@@ -1534,15 +1534,23 @@ class CharacterSheetBuilder {
 				} else if (opt.type === "optionalfeature" && opt.ref) {
 					// Handle optional feature options (like specialties from TGTT)
 					const allOptFeatures = this._page.getOptionalFeatures();
+					const refParts = opt.ref.split("|");
+					const resolvedSource = this._page.resolveOptionalFeatureSource(refParts[0] || opt.name, [
+						refParts[1],
+						opt.source,
+						this._selectedClass?.source,
+						Parser.SRC_XPHB,
+						Parser.SRC_PHB,
+					]);
 
 					// Debug: Check what sources are available
 					const sourceSet = new Set(allOptFeatures.map(f => f.source));
-					console.log(`[CharSheet Builder] Looking for "${opt.name}" source "${opt.source}" in ${allOptFeatures.length} optionalfeatures. Available sources:`, [...sourceSet]);
+					console.log(`[CharSheet Builder] Looking for "${opt.name}" source "${resolvedSource}" in ${allOptFeatures.length} optionalfeatures. Available sources:`, [...sourceSet]);
 
 					const fullOpt = allOptFeatures.find(f =>
 						f.name === opt.name
-						&& (f.source === opt.source || !opt.source),
-					);
+						&& f.source === resolvedSource,
+					) || allOptFeatures.find(f => f.name === opt.name);
 
 					// Debug logging
 					if (!fullOpt) {
@@ -1557,7 +1565,7 @@ class CharacterSheetBuilder {
 
 					this._state.addFeature({
 						name: opt.name,
-						source: opt.source || fullOpt?.source,
+						source: fullOpt?.source || resolvedSource,
 						level: 1,
 						className: this._selectedClass?.name,
 						classSource: this._selectedClass?.source,
@@ -4764,8 +4772,15 @@ class CharacterSheetBuilder {
 					}
 				} else if (opt.type === "optionalfeature" && opt.ref) {
 					const refParts = opt.ref.split("|");
+					const resolvedSource = this._page.resolveOptionalFeatureSource(refParts[0] || opt.name, [
+						refParts[1],
+						opt.source,
+						this._selectedClass?.source,
+						Parser.SRC_XPHB,
+						Parser.SRC_PHB,
+					]);
 					try {
-						$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], refParts[1] || opt.source || "TGTT"));
+						$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
 						$nameSpan.find("a").on("click", (e) => e.preventDefault());
 					} catch (e) {
 						$nameSpan.text(opt.name);
