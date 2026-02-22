@@ -2,7 +2,11 @@
  * Character Sheet Export/Import Handler
  * Handles saving, loading, exporting, and importing character data
  */
+import {CharacterSheetNpcExporter} from "./charactersheet-npc-exporter.js";
+
 class CharacterSheetExport {
+	static _STORAGE_KEY_NPC_SOURCE_CONFIG = "charsheet-npc-export-source-config";
+
 	constructor (page) {
 		this._page = page;
 		this._state = page.getState();
@@ -23,6 +27,9 @@ class CharacterSheetExport {
 
 		// Print button
 		$(document).on("click", "#charsheet-btn-print", () => this._printCharacter());
+
+		// NPC statblock export button
+		$(document).on("click", "#charsheet-btn-export-npc", () => this._showNpcExportDialog());
 
 		// Save button (if exists)
 		$(document).on("click", "#charsheet-btn-save", () => this._saveCharacter());
@@ -223,6 +230,251 @@ class CharacterSheetExport {
 			${$btnCancel}
 			${$btnImport}
 		</div>`.appendTo($modalInner);
+	}
+
+	async _showNpcExportDialog () {
+		try {
+			let sourceConfig = await this._pGetNpcExportSourceConfig();
+			let monster = CharacterSheetNpcExporter.convertStateToMonster(this._state, {sourceJson: sourceConfig.sourceJson});
+			let sourceMeta = CharacterSheetNpcExporter.getDefaultSourceMeta(sourceConfig);
+
+			const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+				title: "👹 Export Character as NPC",
+				isMinHeight0: true,
+				isWidth100: true,
+			});
+
+			const $iptSourceJson = $(`<input class="form-control input-sm" placeholder="CSHEET">`).val(sourceConfig.sourceJson);
+			const $iptSourceAbv = $(`<input class="form-control input-sm" placeholder="CSHEET">`).val(sourceConfig.abbreviation);
+			const $iptSourceFull = $(`<input class="form-control input-sm" placeholder="Character Sheet NPC Exports">`).val(sourceConfig.full);
+			const $iptSourceVersion = $(`<input class="form-control input-sm" placeholder="1.0.0">`).val(sourceConfig.version);
+
+			const $wrpPreviewMeta = $(`<p class="ve-muted mb-0"></p>`);
+			const $wrpPreviewStatblock = $(`<div class="ve-overflow-x-auto" style="max-height: 60vh; overflow-y: auto;"></div>`);
+
+			const pApplySourceConfig = async () => {
+				const inputConfig = {
+					sourceJson: String($iptSourceJson.val() || ""),
+					abbreviation: String($iptSourceAbv.val() || ""),
+					full: String($iptSourceFull.val() || ""),
+					version: String($iptSourceVersion.val() || ""),
+				};
+
+				sourceConfig = CharacterSheetNpcExporter.getSanitizedSourceConfig(inputConfig);
+				$iptSourceJson.val(sourceConfig.sourceJson);
+				$iptSourceAbv.val(sourceConfig.abbreviation);
+				$iptSourceFull.val(sourceConfig.full);
+				$iptSourceVersion.val(sourceConfig.version);
+
+				await this._pSetNpcExportSourceConfig(sourceConfig);
+
+				monster = CharacterSheetNpcExporter.convertStateToMonster(this._state, {sourceJson: sourceConfig.sourceJson});
+				sourceMeta = CharacterSheetNpcExporter.getDefaultSourceMeta(sourceConfig);
+
+				const rendered = Renderer.monster.getCompactRenderedString(monster, {isShowScalers: false});
+				const safeName = this._escapeHtml(monster.name);
+				const safeSource = this._escapeHtml(monster.source);
+				const safeCr = this._escapeHtml(monster.cr);
+
+				$wrpPreviewMeta.html(`CR: <strong>${safeCr}</strong> • Source: <strong>${safeSource}</strong> • Name: <strong>${safeName}</strong>`);
+				$wrpPreviewStatblock.empty().append(`<table class="w-100 stats"><tbody>${rendered}</tbody></table>`);
+			};
+
+			$$`<div>
+				<div class="charsheet__export-info mb-3">
+					<p class="ve-muted mb-1"><strong>Statblock Preview</strong> — Uses the standard bestiary compact format.</p>
+					${$wrpPreviewMeta}
+				</div>
+				<div class="mb-3 p-2" style="border: 1px solid var(--bs-border-color); border-radius: 4px;">
+					<div class="mb-2"><strong>Source Metadata</strong></div>
+					<div class="ve-flex-v-center mb-2" style="gap: 8px;">
+						<label class="ve-muted no-shrink" style="min-width: 110px;">JSON Identifier</label>
+						${$iptSourceJson}
+					</div>
+					<div class="ve-flex-v-center mb-2" style="gap: 8px;">
+						<label class="ve-muted no-shrink" style="min-width: 110px;">Abbreviation</label>
+						${$iptSourceAbv}
+					</div>
+					<div class="ve-flex-v-center mb-2" style="gap: 8px;">
+						<label class="ve-muted no-shrink" style="min-width: 110px;">Full Name</label>
+						${$iptSourceFull}
+					</div>
+					<div class="ve-flex-v-center" style="gap: 8px;">
+						<label class="ve-muted no-shrink" style="min-width: 110px;">Version</label>
+						${$iptSourceVersion}
+					</div>
+				</div>
+				${$wrpPreviewStatblock}
+			</div>`.appendTo($modalInner);
+
+			await pApplySourceConfig();
+
+			const $btnCancel = $(`<button class="ve-btn ve-btn-default">Close</button>`)
+				.on("click", () => doClose(false));
+			const $btnRefresh = $(`<button class="ve-btn ve-btn-default"><span class="glyphicon glyphicon-refresh"></span> Refresh Preview</button>`)
+				.on("click", async () => {
+					await pApplySourceConfig();
+				});
+			const $btnDownload = $(`<button class="ve-btn ve-btn-default"><span class="glyphicon glyphicon-download"></span> Download JSON</button>`)
+				.on("click", async () => {
+					await pApplySourceConfig();
+
+					const validation = CharacterSheetNpcExporter.getValidationIssues(monster);
+					if (validation.errors.length || validation.warnings.length) {
+						const details = this._getValidationIssueSummary(validation, {maxErrors: 2, maxWarnings: 2});
+						JqueryUtil.doToast({
+							type: "warning",
+							content: `Downloaded with validation warnings (${validation.errors.length} error(s), ${validation.warnings.length} warning(s)). ${details}`.trim(),
+						});
+					}
+
+					const filename = `${(monster.name || "npc").replace(/[^a-zA-Z0-9]/g, "_")}.json`;
+					DataUtil.userDownload(
+						filename,
+						{_meta: {sources: [sourceMeta]}, monster: [monster]},
+						{fileType: "homebrew"},
+					);
+					JqueryUtil.doToast({type: "success", content: `Downloaded ${filename}`});
+				});
+			const $btnSave = $(`<button class="ve-btn ve-btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Save to Homebrew</button>`)
+				.on("click", async () => {
+					await pApplySourceConfig();
+					await this._pSaveNpcToEditableBrew(monster, {sourceMeta});
+				});
+
+			$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+				${$btnCancel}
+				${$btnRefresh}
+				${$btnDownload}
+				${$btnSave}
+			</div>`.appendTo($modalInner);
+		} catch (e) {
+			console.error("NPC export failed:", e);
+			JqueryUtil.doToast({type: "danger", content: "Failed to build NPC statblock from character."});
+		}
+	}
+
+	_escapeHtml (text) {
+		return String(text ?? "")
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#39;");
+	}
+
+	async _pGetNpcExportSourceConfig () {
+		const stored = await StorageUtil.pGetForPage(CharacterSheetExport._STORAGE_KEY_NPC_SOURCE_CONFIG);
+		return CharacterSheetNpcExporter.getSanitizedSourceConfig(stored || {});
+	}
+
+	async _pSetNpcExportSourceConfig (sourceConfig) {
+		await StorageUtil.pSetForPage(CharacterSheetExport._STORAGE_KEY_NPC_SOURCE_CONFIG, sourceConfig);
+	}
+
+	_getValidationErrorMessage (validation) {
+		const messages = validation.errors.slice(0, 3).join(" ");
+		const extraCount = Math.max(0, validation.errors.length - 3);
+		if (!messages) return "Exported NPC is missing required fields and cannot be saved.";
+		if (!extraCount) return `Cannot save NPC: ${messages}`;
+		return `Cannot save NPC: ${messages} (+${extraCount} more issue${extraCount === 1 ? "" : "s"}).`;
+	}
+
+	_getValidationIssueSummary (validation, {maxErrors = 2, maxWarnings = 2} = {}) {
+		const errorPreview = validation.errors.slice(0, maxErrors);
+		const warningPreview = validation.warnings.slice(0, maxWarnings);
+
+		const parts = [];
+		if (errorPreview.length) {
+			const extraErrors = Math.max(0, validation.errors.length - errorPreview.length);
+			parts.push(`Errors: ${errorPreview.join(" ")}${extraErrors ? ` (+${extraErrors} more)` : ""}`);
+		}
+		if (warningPreview.length) {
+			const extraWarnings = Math.max(0, validation.warnings.length - warningPreview.length);
+			parts.push(`Warnings: ${warningPreview.join(" ")}${extraWarnings ? ` (+${extraWarnings} more)` : ""}`);
+		}
+
+		return parts.join(" ");
+	}
+
+	_getNpcCopyName ({name, existingMonsters}) {
+		const usedNames = new Set((existingMonsters || []).map(it => it?.name).filter(Boolean));
+		if (!usedNames.has(name)) return name;
+		const base = `${name} (Copy)`;
+		if (!usedNames.has(base)) return base;
+
+		for (let i = 2; i < 1000; i++) {
+			const candidate = `${name} (Copy ${i})`;
+			if (!usedNames.has(candidate)) return candidate;
+		}
+
+		return `${name} (Copy ${CryptUtil.uid().slice(0, 6)})`;
+	}
+
+	async _pSaveNpcToEditableBrew (monster, {sourceMeta = null} = {}) {
+		if (typeof BrewUtil2 === "undefined") {
+			JqueryUtil.doToast({type: "danger", content: "Homebrew utilities are not available."});
+			return;
+		}
+
+		const validation = CharacterSheetNpcExporter.getValidationIssues(monster);
+		if (validation.errors.length) {
+			const details = this._getValidationIssueSummary(validation, {maxErrors: 3, maxWarnings: 0});
+			JqueryUtil.doToast({type: "danger", content: `${this._getValidationErrorMessage(validation)} ${details}`.trim()});
+			return;
+		}
+		if (validation.warnings.length) {
+			const details = this._getValidationIssueSummary(validation, {maxErrors: 0, maxWarnings: 3});
+			JqueryUtil.doToast({
+				type: "warning",
+				content: `Saving with ${validation.warnings.length} validation warning${validation.warnings.length === 1 ? "" : "s"}. ${details}`.trim(),
+			});
+		}
+
+		try {
+			const brew = await BrewUtil2.pGetOrCreateEditableBrewDoc();
+			const sourceJson = monster.source || CharacterSheetNpcExporter.SOURCE_JSON_DEFAULT;
+			sourceMeta ||= CharacterSheetNpcExporter.getDefaultSourceMeta({sourceJson});
+
+			const sources = MiscUtil.getOrSet(brew, "body", "_meta", "sources", []);
+			if (!sources.some(src => src.json === sourceJson)) {
+				sources.push(sourceMeta);
+				await BrewUtil2.pSetEditableBrewDoc(brew);
+			}
+
+			const brewMonsters = brew.body?.monster || [];
+			const existing = brewMonsters.find(it => it.name === monster.name && it.source === monster.source);
+
+			let isOverwrite = true;
+			let finalName = monster.name;
+			if (existing) {
+				const choice = await InputUiUtil.pGetUserEnum({
+					title: "NPC Already Exists",
+					values: ["Overwrite existing", "Save as copy", "Cancel"],
+					default: 0,
+					isResolveItem: true,
+					$elePost: $$`<p class="ve-muted mt-2 mb-0">A monster named <strong>${this._escapeHtml(existing.name)}</strong> with source <strong>${this._escapeHtml(existing.source)}</strong> already exists in editable homebrew.</p>`,
+				});
+
+				if (!choice || choice === "Cancel") return;
+				if (choice === "Save as copy") {
+					isOverwrite = false;
+					finalName = this._getNpcCopyName({name: monster.name, existingMonsters: brewMonsters});
+				}
+			}
+
+			const toSave = {
+				...monster,
+				name: finalName,
+				uniqueId: isOverwrite ? (existing?.uniqueId || monster.uniqueId || CryptUtil.uid()) : (monster.uniqueId || CryptUtil.uid()),
+			};
+
+			await BrewUtil2.pPersistEditableBrewEntity("monster", toSave);
+			JqueryUtil.doToast({type: "success", content: `Saved ${toSave.name} to editable homebrew.`});
+		} catch (e) {
+			console.error("Failed to save NPC to homebrew:", e);
+			JqueryUtil.doToast({type: "danger", content: "Failed to save NPC to editable homebrew."});
+		}
 	}
 
 	_printCharacter () {
