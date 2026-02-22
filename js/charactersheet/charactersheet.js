@@ -11,6 +11,7 @@ import {CharacterSheetLevelUp} from "./charactersheet-levelup.js";
 import {CharacterSheetLayout} from "./charactersheet-layout.js";
 import {CharacterSheetNotes} from "./charactersheet-notes.js";
 import {CharacterSheetCustomAbilities} from "./charactersheet-customabilities.js";
+import {CharacterSheetQuickBuild} from "./charactersheet-quickbuild.js";
 
 /**
  * Character Sheet - Main Controller
@@ -30,6 +31,7 @@ class CharacterSheetPage {
 		this._layout = null;
 		this._notes = null;
 		this._customAbilities = null;
+		this._quickBuild = null;
 
 		this._$selCharacter = null;
 		this._currentCharacterId = null;
@@ -117,6 +119,11 @@ class CharacterSheetPage {
 			this._customAbilities = new CharacterSheetCustomAbilities(this);
 			console.log("CharacterSheetPage.pInit: CustomAbilities module initialized");
 		} catch (e) { console.error("Failed to init customAbilities:", e); }
+
+		try {
+			this._quickBuild = new CharacterSheetQuickBuild(this);
+			console.log("CharacterSheetPage.pInit: QuickBuild module initialized");
+		} catch (e) { console.error("Failed to init quickBuild:", e); }
 
 		try {
 			this._respec = new CharacterSheetRespec({page: this, state: this._state});
@@ -537,6 +544,7 @@ class CharacterSheetPage {
 		// Import/Export/Print handled by CharacterSheetExport module
 		$("#charsheet-btn-levelup").on("click", () => this._levelUp?.showLevelUp());
 		$("#charsheet-btn-multiclass").on("click", () => this._levelUp?.showMulticlass());
+		$("#charsheet-btn-quickbuild").on("click", () => this._quickBuild?.showQuickBuild());
 		$("#charsheet-btn-xp-add").on("click", () => this._onXpAdd());
 		$("#charsheet-ipt-xp-add").on("keydown", (e) => {
 			if (e.key !== "Enter") return;
@@ -2393,11 +2401,12 @@ class CharacterSheetPage {
 				$container.append($badge);
 			});
 			
-			// Show count
-			$container.append(`<span class="ve-muted ve-small ml-2">(${masteries.length}/${maxMasteries})</span>`);
+			// Show count, highlight if there are unfilled slots
+			const hasUnfilled = masteries.length < maxMasteries;
+			$container.append(`<span class="${hasUnfilled ? "text-warning" : "ve-muted"} ve-small ml-2">(${masteries.length}/${maxMasteries}${hasUnfilled ? " — click ✎ to add more" : ""})</span>`);
 		} else {
 			// No masteries selected yet
-			$container.html(`<span class="ve-muted">None selected - click ✎ to choose weapons</span>`);
+			$container.html(`<span class="ve-muted">None selected — click ✎ to choose weapons</span>`);
 		}
 	}
 

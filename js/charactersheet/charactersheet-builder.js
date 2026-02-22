@@ -38,6 +38,7 @@ class CharacterSheetBuilder {
 		this._tashasAbilityBonuses = {}; // Stores custom ASI when using Tasha's rules
 		this._customBackground = null; // Stores custom background object
 		this._customBackgroundData = null; // Stores custom background form data
+		this._quickBuildTargetLevel = 1; // Target level for Quick Build integration
 
 		this._init();
 	}
@@ -1854,10 +1855,24 @@ class CharacterSheetBuilder {
 		// Update tab visibility (hide builder, show respec)
 		this._page._updateTabVisibility();
 
-		// Switch to overview tab
-		this._page.switchToTab("#charsheet-tab-overview");
+		// Check if Quick Build target level is set
+		if (this._quickBuildTargetLevel > 1 && this._page._quickBuild && this._selectedClass) {
+			// Switch to overview first so user sees the character
+			this._page.switchToTab("#charsheet-tab-overview");
+			JqueryUtil.doToast({type: "success", content: "Character created! Opening Quick Build wizard..."});
 
-		JqueryUtil.doToast({type: "success", content: "Character created successfully!"});
+			// Small delay to let the UI settle, then open Quick Build
+			setTimeout(() => {
+				this._page._quickBuild.showFromBuilder({
+					classData: this._selectedClass,
+					targetLevel: this._quickBuildTargetLevel,
+				});
+			}, 500);
+		} else {
+			// Switch to overview tab
+			this._page.switchToTab("#charsheet-tab-overview");
+			JqueryUtil.doToast({type: "success", content: "Character created successfully!"});
+		}
 	}
 
 	_renderCurrentStep () {
@@ -2878,6 +2893,38 @@ class CharacterSheetBuilder {
 		if (cls.spellcastingAbility) {
 			$content.append(`<p><strong>Spellcasting:</strong> ${Parser.attAbvToFull(cls.spellcastingAbility)}</p>`);
 		}
+
+		// Quick Build target level
+		const $quickBuildSection = $(`
+			<div class="charsheet__builder-feat-opt-section mt-3">
+				<div class="charsheet__builder-feat-opt-header">
+					<span class="charsheet__builder-feat-opt-header-name">⚡ Quick Build — Start at Higher Level</span>
+				</div>
+				<p class="ve-small ve-muted mb-2">Optionally start your character at a higher level. All leveling choices will be collected in a guided wizard after building.</p>
+				<div class="ve-flex-v-center gap-2">
+					<label class="ve-small ve-bold mb-0">Target Level:</label>
+					<input type="range" class="form-control-range" min="1" max="20" value="${this._quickBuildTargetLevel || 1}" style="flex: 1;" id="builder-quickbuild-level-slider">
+					<span class="charsheet__quickbuild-level-display ve-bold" style="min-width:30px; text-align:center; font-size:1.2rem; color: var(--cs-primary, #6366f1);" id="builder-quickbuild-level-display">${this._quickBuildTargetLevel || 1}</span>
+				</div>
+				<div class="ve-small ve-muted mt-1" id="builder-quickbuild-info">
+					${(this._quickBuildTargetLevel || 1) > 1 ? `After building at level 1, Quick Build wizard will guide you through leveling to ${this._quickBuildTargetLevel}.` : "Level 1 — standard character creation (no Quick Build)."}
+				</div>
+			</div>
+		`);
+
+		$quickBuildSection.find("#builder-quickbuild-level-slider").on("input", (e) => {
+			const val = parseInt($(e.target).val());
+			this._quickBuildTargetLevel = val;
+			$quickBuildSection.find("#builder-quickbuild-level-display").text(val);
+			const $info = $quickBuildSection.find("#builder-quickbuild-info");
+			if (val > 1) {
+				$info.html(`After building at level 1, Quick Build wizard will guide you through leveling to <strong>${val}</strong>.`);
+			} else {
+				$info.text("Level 1 — standard character creation (no Quick Build).");
+			}
+		});
+
+		$content.append($quickBuildSection);
 
 		$preview.append($content);
 	}

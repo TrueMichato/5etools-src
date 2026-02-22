@@ -7061,6 +7061,260 @@
 	font-weight: 500;
 }
 
+/* ========================================================================
+   Quick Build - Full-screen Wizard Overlay
+   ======================================================================== */
+.charsheet__quickbuild-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.6);
+	backdrop-filter: blur(4px);
+	z-index: 9999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	animation: qb-fadeIn 0.2s ease;
+}
+
+@keyframes qb-fadeIn {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+/* Ensure toasts appear above the quickbuild overlay */
+.charsheet__quickbuild-overlay ~ .toast,
+.charsheet__quickbuild-overlay ~ .toast__container,
+body:has(.charsheet__quickbuild-overlay) .toast,
+body:has(.charsheet__quickbuild-overlay) .toast__container {
+	z-index: 10001 !important;
+}
+
+.charsheet__quickbuild-container {
+	background: var(--cs-bg-surface, var(--rgb-bg));
+	border-radius: var(--cs-radius-xl, 16px);
+	box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+	width: min(95vw, 900px);
+	max-height: 90vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.charsheet__quickbuild-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--cs-space-lg, 1rem) var(--cs-space-xl, 1.5rem);
+	border-bottom: 2px solid var(--cs-border, var(--rgb-border-grey));
+	background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%);
+}
+
+.charsheet__quickbuild-title {
+	margin: 0;
+	font-size: 1.25rem;
+	font-weight: 700;
+	color: var(--cs-text-primary, var(--rgb-text));
+}
+
+.charsheet__quickbuild-close {
+	border: none;
+	background: transparent;
+	font-size: 1.25rem;
+	cursor: pointer;
+	opacity: 0.6;
+	transition: opacity 0.15s;
+	padding: 4px 8px;
+	border-radius: 4px;
+}
+
+.charsheet__quickbuild-close:hover {
+	opacity: 1;
+	background: rgba(0, 0, 0, 0.1);
+}
+
+.charsheet__quickbuild-steps {
+	display: flex;
+	overflow-x: auto;
+	gap: var(--cs-space-xs, 0.25rem);
+	padding: var(--cs-space-md, 0.75rem) var(--cs-space-xl, 1.5rem);
+	border-bottom: 1px solid var(--cs-border, var(--rgb-border-grey));
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+}
+
+.charsheet__quickbuild-steps .charsheet__builder-step {
+	flex-direction: row;
+	gap: 0.35rem;
+	padding: 0.35rem 0.75rem;
+	border-radius: var(--cs-radius-full, 9999px);
+	background: transparent;
+	white-space: nowrap;
+	min-width: auto;
+}
+
+.charsheet__quickbuild-steps .charsheet__builder-step.active {
+	background: rgba(99, 102, 241, 0.12);
+}
+
+.charsheet__quickbuild-steps .charsheet__builder-step.completed {
+	background: rgba(16, 185, 129, 0.1);
+}
+
+.charsheet__quickbuild-steps .charsheet__builder-step-num {
+	width: 28px;
+	height: 28px;
+	font-size: 0.85rem;
+	margin-bottom: 0;
+	border-width: 2px;
+}
+
+.charsheet__quickbuild-steps .charsheet__builder-step-label {
+	font-size: 0.75rem;
+}
+
+.charsheet__quickbuild-content {
+	flex: 1;
+	overflow-y: auto;
+	padding: var(--cs-space-xl, 1.5rem);
+	min-height: 350px;
+}
+
+.charsheet__quickbuild-nav {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--cs-space-md, 0.75rem) var(--cs-space-xl, 1.5rem);
+	border-top: 2px solid var(--cs-border, var(--rgb-border-grey));
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+}
+
+.charsheet__quickbuild-nav-info {
+	font-size: 0.8rem;
+	color: var(--cs-text-muted, var(--rgb-text-muted));
+	font-weight: 500;
+}
+
+/* Quick Build Steps */
+.charsheet__quickbuild-step {
+	animation: qb-slideIn 0.25s ease;
+}
+
+@keyframes qb-slideIn {
+	from { opacity: 0; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+.charsheet__quickbuild-step-header {
+	margin-bottom: var(--cs-space-lg, 1rem);
+}
+
+.charsheet__quickbuild-step-header h4 {
+	margin: 0 0 0.25rem 0;
+	font-weight: 700;
+	font-size: 1.15rem;
+}
+
+.charsheet__quickbuild-section {
+	margin-bottom: var(--cs-space-lg, 1rem);
+}
+
+.charsheet__quickbuild-section h5 {
+	font-weight: 600;
+	font-size: 1rem;
+	margin: 0 0 0.5rem 0;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.charsheet__quickbuild-level-display {
+	font-size: 2rem;
+	font-weight: 800;
+	color: var(--cs-primary, #6366f1);
+	width: 60px;
+	text-align: center;
+	line-height: 1;
+}
+
+/* Quick Build Options (selectable list items) */
+.charsheet__quickbuild-option {
+	padding: 0.5rem 0.75rem;
+	border-radius: var(--cs-radius-md, 8px);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	border: 1px solid transparent;
+	margin-bottom: 2px;
+}
+
+.charsheet__quickbuild-option:hover {
+	background: rgba(99, 102, 241, 0.06);
+}
+
+.charsheet__quickbuild-option.selected {
+	background: rgba(99, 102, 241, 0.1);
+	border-color: var(--cs-primary, #6366f1);
+}
+
+/* Quick Build ASI Grid */
+.charsheet__quickbuild-asi-grid {
+	display: grid;
+	gap: 0.25rem;
+}
+
+.charsheet__quickbuild-asi-grid .qb-asi-val {
+	font-family: monospace;
+	color: var(--cs-primary, #6366f1);
+}
+
+/* Quick Build Class Row */
+.charsheet__quickbuild-class-row {
+	transition: all 0.15s ease;
+}
+
+.charsheet__quickbuild-class-row:hover {
+	background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Quick Build Action Button Variant */
+.charsheet__action-btn--quickbuild {
+	background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+	color: white;
+	border: 2px solid rgba(139, 92, 246, 0.3);
+}
+
+.charsheet__action-btn--quickbuild:hover {
+	background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+	transform: translateY(-1px);
+	box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.charsheet__action-btn--quickbuild .charsheet__action-btn-icon {
+	filter: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+	.charsheet__quickbuild-container {
+		width: 100vw;
+		max-height: 100vh;
+		border-radius: 0;
+	}
+
+	.charsheet__quickbuild-steps {
+		padding: 0.5rem;
+	}
+
+	.charsheet__quickbuild-steps .charsheet__builder-step-label {
+		display: none;
+	}
+
+	.charsheet__quickbuild-content {
+		padding: var(--cs-space-md, 0.75rem);
+	}
+}
+
 /* Respec Tab Container */
 .charsheet__respec-container {
 	max-width: 900px;
