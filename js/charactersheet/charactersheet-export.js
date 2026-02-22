@@ -6,6 +6,7 @@ import {CharacterSheetNpcExporter} from "./charactersheet-npc-exporter.js";
 
 class CharacterSheetExport {
 	static _STORAGE_KEY_NPC_SOURCE_CONFIG = "charsheet-npc-export-source-config";
+	static _STORAGE_KEY_NPC_EXPORT_OPTIONS = "charsheet-npc-export-options";
 
 	constructor (page) {
 		this._page = page;
@@ -235,7 +236,11 @@ class CharacterSheetExport {
 	async _showNpcExportDialog () {
 		try {
 			let sourceConfig = await this._pGetNpcExportSourceConfig();
-			let monster = CharacterSheetNpcExporter.convertStateToMonster(this._state, {sourceJson: sourceConfig.sourceJson});
+			let exportOptions = await this._pGetNpcExportOptions();
+			let monster = CharacterSheetNpcExporter.convertStateToMonster(this._state, {
+				sourceJson: sourceConfig.sourceJson,
+				defenseMode: exportOptions.defenseMode,
+			});
 			let sourceMeta = CharacterSheetNpcExporter.getDefaultSourceMeta(sourceConfig);
 
 			const {$modalInner, doClose} = await UiUtil.pGetShowModal({
@@ -248,6 +253,10 @@ class CharacterSheetExport {
 			const $iptSourceAbv = $(`<input class="form-control input-sm" placeholder="CSHEET">`).val(sourceConfig.abbreviation);
 			const $iptSourceFull = $(`<input class="form-control input-sm" placeholder="Character Sheet NPC Exports">`).val(sourceConfig.full);
 			const $iptSourceVersion = $(`<input class="form-control input-sm" placeholder="1.0.0">`).val(sourceConfig.version);
+			const $selDefenseMode = $(`<select class="form-control input-sm">
+				<option value="persistent">Persistent Defenses (default)</option>
+				<option value="active">Include Active-State Defenses</option>
+			</select>`).val(exportOptions.defenseMode);
 
 			const $wrpPreviewMeta = $(`<p class="ve-muted mb-0"></p>`);
 			const $wrpPreviewStatblock = $(`<div class="ve-overflow-x-auto" style="max-height: 60vh; overflow-y: auto;"></div>`);
@@ -259,16 +268,25 @@ class CharacterSheetExport {
 					full: String($iptSourceFull.val() || ""),
 					version: String($iptSourceVersion.val() || ""),
 				};
+				const nextOptions = this._getSanitizedNpcExportOptions({
+					defenseMode: String($selDefenseMode.val() || "persistent"),
+				});
 
 				sourceConfig = CharacterSheetNpcExporter.getSanitizedSourceConfig(inputConfig);
+				exportOptions = nextOptions;
 				$iptSourceJson.val(sourceConfig.sourceJson);
 				$iptSourceAbv.val(sourceConfig.abbreviation);
 				$iptSourceFull.val(sourceConfig.full);
 				$iptSourceVersion.val(sourceConfig.version);
+				$selDefenseMode.val(exportOptions.defenseMode);
 
 				await this._pSetNpcExportSourceConfig(sourceConfig);
+				await this._pSetNpcExportOptions(exportOptions);
 
-				monster = CharacterSheetNpcExporter.convertStateToMonster(this._state, {sourceJson: sourceConfig.sourceJson});
+				monster = CharacterSheetNpcExporter.convertStateToMonster(this._state, {
+					sourceJson: sourceConfig.sourceJson,
+					defenseMode: exportOptions.defenseMode,
+				});
 				sourceMeta = CharacterSheetNpcExporter.getDefaultSourceMeta(sourceConfig);
 
 				const rendered = Renderer.monster.getCompactRenderedString(monster, {isShowScalers: false});
@@ -303,6 +321,13 @@ class CharacterSheetExport {
 						<label class="ve-muted no-shrink" style="min-width: 110px;">Version</label>
 						${$iptSourceVersion}
 					</div>
+					<div class="ve-flex-v-center mt-2" style="gap: 8px;">
+						<label class="ve-muted no-shrink" style="min-width: 110px;">Defenses</label>
+						${$selDefenseMode}
+					</div>
+					<p class="ve-muted mb-0 mt-1" style="margin-left: 118px;">
+						Persistent = stable baseline; Active-State = include currently toggled effects.
+					</p>
 				</div>
 				${$wrpPreviewStatblock}
 			</div>`.appendTo($modalInner);
@@ -370,6 +395,25 @@ class CharacterSheetExport {
 
 	async _pSetNpcExportSourceConfig (sourceConfig) {
 		await StorageUtil.pSetForPage(CharacterSheetExport._STORAGE_KEY_NPC_SOURCE_CONFIG, sourceConfig);
+	}
+
+	_getSanitizedNpcExportOptions (opts = {}) {
+		const mode = String(opts.defenseMode || "persistent").toLowerCase();
+		return {
+			defenseMode: mode === "active" ? "active" : "persistent",
+		};
+	}
+
+	async _pGetNpcExportOptions () {
+		const stored = await StorageUtil.pGetForPage(CharacterSheetExport._STORAGE_KEY_NPC_EXPORT_OPTIONS);
+		return this._getSanitizedNpcExportOptions(stored || {});
+	}
+
+	async _pSetNpcExportOptions (options) {
+		await StorageUtil.pSetForPage(
+			CharacterSheetExport._STORAGE_KEY_NPC_EXPORT_OPTIONS,
+			this._getSanitizedNpcExportOptions(options),
+		);
 	}
 
 	_getValidationErrorMessage (validation) {
