@@ -606,7 +606,6 @@ class FeatureModifierParser {
 
 		// Debug: Log the plaintext for proficiency bonus features
 		if (/proficiency\s*bonus/i.test(plainText)) {
-			console.log(`[FeatureModifierParser] Checking "${sourceName}" for proficiency bonus patterns. PlainText:`, plainText.substring(0, 200));
 		}
 
 		// Helper to parse signed number from various formats
@@ -3576,11 +3575,9 @@ class CharacterSheetState {
 			});
 		}
 		if (cleanedCount > 0) {
-			console.log(`[CharSheet State] Cleaned ${cleanedCount} incorrectly-marked concentration spells`);
 		}
 
 		if (migratedCount > 0) {
-			console.log(`[CharSheet State] Migrated ${migratedCount} spells with concentration/ritual flags`);
 		}
 	}
 
@@ -3599,7 +3596,6 @@ class CharacterSheetState {
 
 		if (!needsMigration) return;
 
-		console.log("[CharSheet State] Migrating modifiers to add special flags...");
 
 		// For each feature that has associated modifiers, re-parse and update flags
 		this._data.features.forEach(feature => {
@@ -3622,11 +3618,9 @@ class CharacterSheetState {
 				if (parsedMod) {
 					if (parsedMod.proficiencyBonus && !existingMod.proficiencyBonus) {
 						existingMod.proficiencyBonus = true;
-						console.log(`[CharSheet State] Added proficiencyBonus flag to "${existingMod.name}"`);
 					}
 					if (parsedMod.abilityMod && !existingMod.abilityMod) {
 						existingMod.abilityMod = parsedMod.abilityMod;
-						console.log(`[CharSheet State] Added abilityMod flag to "${existingMod.name}"`);
 					}
 				}
 			});
@@ -7185,7 +7179,6 @@ class CharacterSheetState {
 		}
 
 		this._data.spellcasting.innateSpells.push(innateSpell);
-		console.log(`[CharSheet State] Added innate spell: ${spell.name} (from ${spell.sourceFeature})`);
 	}
 
 	removeInnateSpell (spellIdOrName, source) {
@@ -7247,7 +7240,6 @@ class CharacterSheetState {
 		};
 
 		this._data.pendingSpellChoices.push(pendingChoice);
-		console.log(`[CharSheet State] Added pending spell choice:`, pendingChoice);
 	}
 
 	removePendingSpellChoice (choiceId) {
@@ -7305,7 +7297,6 @@ class CharacterSheetState {
 
 		// Remove the fulfilled choice
 		this.removePendingSpellChoice(choiceId);
-		console.log(`[CharSheet State] Fulfilled spell choice "${choice.featureName}" with spell: ${spell.name}`);
 	}
 
 	setSpellPrepared (spellIdOrName, sourceOrPrepared, prepared) {
@@ -14892,7 +14883,6 @@ class CharacterSheetState {
 		this._data.appliedClassFeatureEffects = appliedEffects;
 
 		if (appliedEffects.length > 0) {
-			console.log(`[CharSheet State] Applied ${appliedEffects.length} class feature effects:`, appliedEffects);
 		}
 		return appliedEffects;
 	}
@@ -15232,7 +15222,6 @@ class CharacterSheetState {
 			}
 
 			default:
-				console.log(`[CharSheet State] Unknown effect type: ${effect.type}`, effect);
 				return null;
 		}
 	}
@@ -18044,7 +18033,6 @@ class CharacterSheetState {
 		const condDef = CharacterSheetState.getConditionEffects(conditionName, source);
 		if (!condDef) {
 			// Unknown condition - just track it without effects
-			console.log(`Unknown condition "${conditionName}" - no effects defined`);
 			return;
 		}
 
@@ -18473,7 +18461,6 @@ class CharacterSheetState {
 		});
 
 		if (isDuplicate) {
-			console.log("[CharSheet State] Skipping duplicate feature:", feature.name);
 			return;
 		}
 
@@ -18486,7 +18473,6 @@ class CharacterSheetState {
 			const getProfBonus = () => this.getProficiencyBonus();
 			uses = FeatureUsesParser.parseUses(feature.description, getAbilityMod, getProfBonus);
 			if (uses) {
-				console.log(`[CharSheet State] Auto-detected uses for "${feature.name}":`, uses);
 			}
 		}
 
@@ -18529,7 +18515,6 @@ class CharacterSheetState {
 					recharge: uses.recharge,
 					featureId: featureData.id, // Link to feature
 				});
-				console.log(`[CharSheet State] Auto-added resource for "${feature.name}":`, uses);
 			}
 		}
 
@@ -18546,7 +18531,6 @@ class CharacterSheetState {
 						...naturalWeapon,
 						featureId: featureData.id, // Link to feature for cleanup
 					});
-					console.log(`[CharSheet State] Auto-added natural weapon attack for "${feature.name}":`, naturalWeapon);
 				}
 			}
 		}
@@ -18828,7 +18812,6 @@ class CharacterSheetState {
 		}
 
 		if (addedCount > 0) {
-			console.log(`[CharSheet State] Applied ${addedCount} registry effect(s) for feat "${featData.name}"`);
 		}
 	}
 
@@ -18839,13 +18822,10 @@ class CharacterSheetState {
 	 */
 	_processFeatureModifiers (feature, featureId) {
 		if (!feature.description) {
-			console.log(`[CharSheet State] Feature "${feature.name}" has no description, skipping modifier parsing`);
 			return;
 		}
 
-		console.log(`[CharSheet State] Parsing modifiers for "${feature.name}", description length: ${feature.description.length}`);
 		const modifiers = FeatureModifierParser.parseModifiers(feature.description, feature.name);
-		console.log(`[CharSheet State] Found ${modifiers.length} modifiers for "${feature.name}":`, modifiers.map(m => m.type).join(", "));
 		if (!modifiers.length) return;
 
 		// Determine feature type for special handling
@@ -18865,30 +18845,25 @@ class CharacterSheetState {
 					const currentLevel = this.getSkillProficiency(profTarget);
 					if (mod.value > currentLevel) {
 						this.setSkillProficiency(profTarget, mod.value);
-						console.log(`[CharSheet State] Set ${profTarget} proficiency to ${mod.value === 2 ? "expertise" : "proficient"} from "${feature.name}"`);
 					}
 				} else if (profType === "save") {
 					if (!this._data.saveProficiencies.includes(profTarget)) {
 						this.addSaveProficiency(profTarget);
-						console.log(`[CharSheet State] Added ${profTarget} save proficiency from "${feature.name}"`);
 					}
 				} else if (profType === "armor") {
 					const armorName = profTarget.replace(/armor/gi, " armor").replace(/shields/gi, "shields").trim().toTitleCase();
 					if (!this._data.armorProficiencies.some(a => a.toLowerCase() === armorName.toLowerCase())) {
 						this.addArmorProficiency(armorName);
-						console.log(`[CharSheet State] Added ${armorName} proficiency from "${feature.name}"`);
 					}
 				} else if (profType === "weapon") {
 					const weaponName = profTarget.replace(/weapons/gi, " weapons").trim().toTitleCase();
 					if (!this._data.weaponProficiencies.some(w => w.toLowerCase() === weaponName.toLowerCase())) {
 						this.addWeaponProficiency(weaponName);
-						console.log(`[CharSheet State] Added ${weaponName} proficiency from "${feature.name}"`);
 					}
 				} else if (profType === "tool") {
 					const toolName = profTarget.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/tools/gi, " tools").replace(/kit/gi, " kit").trim().toTitleCase();
 					if (!this._data.toolProficiencies.some(t => t.toLowerCase().includes(profTarget.toLowerCase().substring(0, 6)))) {
 						this.addToolProficiency(toolName);
-						console.log(`[CharSheet State] Added ${toolName} proficiency from "${feature.name}"`);
 					}
 				}
 				return; // Don't create a named modifier for proficiency grants
@@ -18907,7 +18882,6 @@ class CharacterSheetState {
 					conditional: mod.conditional,
 					featureType: feature.featureType,
 				});
-				console.log(`[CharSheet State] Added AC formula from "${feature.name}": base ${mod.acFormula.base}${mod.acFormula.addDex ? " + DEX" : ""}${mod.acFormula.secondAbility ? ` + ${mod.acFormula.secondAbility.toUpperCase()}` : ""}`);
 				return; // Don't create a named modifier for AC formulas
 			}
 
@@ -18918,7 +18892,6 @@ class CharacterSheetState {
 				const currentValue = this._data.senses?.[senseType] || 0;
 				if (mod.value > currentValue) {
 					this.setSense(senseType, mod.value);
-					console.log(`[CharSheet State] Set base ${senseType} to ${mod.value} from "${feature.name}"`);
 				}
 				return; // Don't create a named modifier for senses that set values
 			}
@@ -18929,7 +18902,6 @@ class CharacterSheetState {
 			if (isRacialFeature && mod.type.startsWith("speed:") && mod.setValue) {
 				const speedType = mod.type.split(":")[1];
 				this.setSpeed(speedType, mod.value);
-				console.log(`[CharSheet State] Set base ${speedType} speed to ${mod.value} from "${feature.name}"`);
 				return; // Don't create a named modifier for racial base speed
 			}
 
@@ -18940,7 +18912,6 @@ class CharacterSheetState {
 				const walkSpeed = this.getWalkSpeed();
 				// Set this speed type to match walking speed
 				this.setSpeed(speedType, walkSpeed);
-				console.log(`[CharSheet State] Set ${speedType} speed equal to walking speed (${walkSpeed}) from "${feature.name}"`);
 				// Also store as named modifier so it updates when walking speed changes
 				const modifierData = {
 					name: feature.name,
@@ -19015,7 +18986,6 @@ class CharacterSheetState {
 			this.addNamedModifier(modifierData);
 
 			const valueStr = mod.setValue ? `=${mod.value}` : (mod.value >= 0 ? `+${mod.value}` : `${mod.value}`);
-			console.log(`[CharSheet State] ${mod.conditional ? "Conditional" : "Auto-added"} modifier from "${feature.name}": ${mod.type} ${valueStr}${mod.conditional ? ` (${mod.conditional})` : ""}`);
 		});
 	}
 
@@ -19054,7 +19024,6 @@ class CharacterSheetState {
 					prepared: spell.prepared,
 				});
 				hasPendingChoices = true;
-				console.log(`[CharSheet State] Added pending spell choice for "${feature.name}":`, spell.choiceFilter);
 				return;
 			}
 
@@ -19082,7 +19051,6 @@ class CharacterSheetState {
 			}
 		});
 
-		console.log(`[CharSheet State] Processed ${spells.length} spells from "${feature.name}"${hasPendingChoices ? " (has pending choices)" : ""}`);
 		return hasPendingChoices;
 	}
 
@@ -19194,7 +19162,6 @@ class CharacterSheetState {
 			const getProfBonus = () => this.getProficiencyBonus();
 			uses = FeatureUsesParser.parseUses(feat.description, getAbilityMod, getProfBonus);
 			if (uses) {
-				console.log(`[CharSheet State] Auto-detected uses for feat "${feat.name}":`, uses);
 			}
 		}
 
@@ -19225,7 +19192,6 @@ class CharacterSheetState {
 					recharge: uses.recharge,
 					featId: featData.id,
 				});
-				console.log(`[CharSheet State] Auto-added resource for feat "${feat.name}":`, uses);
 			}
 		}
 
@@ -19262,7 +19228,6 @@ class CharacterSheetState {
 					sourceType: "feat",
 					note: "Lore Mastery feat bonus",
 				});
-				console.log(`[CharSheet State] Added +${bonus} Lore Mastery bonus to ${skillKey}`);
 			}
 		}
 
@@ -19286,7 +19251,6 @@ class CharacterSheetState {
 					sourceType: "feat",
 					note: "Lore Mastery feat (new skill)",
 				});
-				console.log(`[CharSheet State] Granted new Lore skill "${skillName}" with +2 from Lore Mastery`);
 			}
 		}
 
@@ -19459,11 +19423,9 @@ class CharacterSheetState {
 	 * Restore all exertion (e.g., on short/long rest)
 	 */
 	restoreExertion () {
-		console.log("[CharSheet State] restoreExertion called, current exertionMax:", this._data.exertionMax);
 		// Initialize exertion max if not set and character uses combat system
 		this._ensureExertionInitialized();
 		this._data.exertionCurrent = this._data.exertionMax || 0;
-		console.log("[CharSheet State] restoreExertion completed, exertionCurrent:", this._data.exertionCurrent);
 	}
 
 	/**
@@ -19473,7 +19435,6 @@ class CharacterSheetState {
 	usesCombatSystem () {
 		// Check for combat traditions
 		if (this._data.combatTraditions?.length > 0) {
-			console.log("[CharSheet State] usesCombatSystem: true (has traditions:", this._data.combatTraditions, ")");
 			return true;
 		}
 
@@ -19483,12 +19444,10 @@ class CharacterSheetState {
 			// Match any CTM feature type (CTM:1RC, CTM:RC, etc.)
 			const result = f.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"));
 			if (result) {
-				console.log("[CharSheet State] Found combat method feature:", f.name, f.optionalFeatureTypes);
 			}
 			return result;
 		}) ?? false;
 
-		console.log("[CharSheet State] usesCombatSystem:", hasMethods, "(checked", this._data.features?.length || 0, "features)");
 		return hasMethods;
 	}
 
@@ -19781,12 +19740,10 @@ class CharacterSheetState {
 
 		// Deactivate any current stance first (mutual exclusivity)
 		if (this._data.activeStance && this._data.activeStance !== methodName) {
-			console.log(`[CharSheet State] Deactivating previous stance: ${this._data.activeStance}`);
 		}
 
 		// Activate the new stance
 		this._data.activeStance = methodName;
-		console.log(`[CharSheet State] Activated stance: ${methodName}`);
 
 		return true;
 	}
@@ -19796,7 +19753,6 @@ class CharacterSheetState {
 	 */
 	deactivateStance () {
 		if (this._data.activeStance) {
-			console.log(`[CharSheet State] Deactivated stance: ${this._data.activeStance}`);
 		}
 		this._data.activeStance = null;
 	}
@@ -19859,7 +19815,6 @@ class CharacterSheetState {
 			this.activateStance(methodName);
 		}
 
-		console.log(`[CharSheet State] Used combat method: ${methodName} (cost: ${cost} exertion)`);
 		return true;
 	}
 
@@ -20713,14 +20668,12 @@ class CharacterSheetState {
 	 */
 	ensureExertionInitialized () {
 		if (!this.usesCombatSystem()) {
-			console.log("[CharSheet State] ensureExertionInitialized: not using combat system, skipping");
 			return;
 		}
 
 		const profBonus = this.getProficiencyBonus();
 		const calculatedMax = profBonus * 2;
 
-		console.log("[CharSheet State] ensureExertionInitialized: profBonus=", profBonus, "calculatedMax=", calculatedMax, "currentMax=", this._data.exertionMax);
 
 		if (this._data.exertionMax !== calculatedMax) {
 			this._data.exertionMax = calculatedMax;
@@ -20732,7 +20685,6 @@ class CharacterSheetState {
 			if (!this._data.exertionCurrent) {
 				this._data.exertionCurrent = calculatedMax;
 			}
-			console.log("[CharSheet State] Exertion initialized: current=", this._data.exertionCurrent, "max=", this._data.exertionMax);
 		}
 	}
 
@@ -28166,7 +28118,6 @@ class CharacterSheetState {
 		};
 
 		this._data.companions.push(companion);
-		console.log(`[CharSheet State] Added companion "${companion.customName || companion.name}" (${companion.type})`);
 		return id;
 	}
 
@@ -28484,7 +28435,6 @@ class CharacterSheetState {
 			}
 		});
 		if (count > 0) {
-			console.log(`[CharSheet State] Dismissed ${count} concentration-linked companion(s)`);
 		}
 		return count;
 	}

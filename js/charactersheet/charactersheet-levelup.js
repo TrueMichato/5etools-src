@@ -507,6 +507,64 @@ class CharacterSheetLevelUp {
 		const wizardSpellCount = 2;
 		const maxSpellLevel = Math.min(9, Math.ceil(newLevel / 2));
 
+		// Known-spell caster detection (Sorcerer, Bard, Ranger, Warlock, etc.)
+		let knownSpellsGain = 0;
+		let knownCantripsGain = 0;
+		let knownMaxSpellLevel = 0;
+		let isKnownCaster = false;
+
+		const spellsKnownProg = classData.spellsKnownProgression;
+		const cantripProg = classData.cantripProgression;
+		const casterProg = classData.casterProgression;
+
+		// Fallback tables for 2014 casters
+		const spellsKnownTables = {
+			"Bard": [4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 15, 16, 18, 19, 19, 20, 22, 22, 22],
+			"Sorcerer": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 13, 13, 14, 14, 15, 15, 15, 15],
+			"Warlock": [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15],
+			"Ranger": [0, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11],
+		};
+		const cantripTables = {
+			"Bard": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+			"Sorcerer": [4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+			"Warlock": [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+		};
+
+		// Check if this is a known-spell caster (NOT wizard, NOT prepared caster)
+		if (!isWizard && !classData.preparedSpellsProgression) {
+			const prog = spellsKnownProg || spellsKnownTables[classEntry.name];
+			if (prog) {
+				isKnownCaster = true;
+				const currentKnown = prog[newLevel - 2] || 0; // Previous level
+				const newKnown = prog[newLevel - 1] || 0;
+				knownSpellsGain = Math.max(0, newKnown - currentKnown);
+
+				// Cantrip gains
+				const cProg = cantripProg || cantripTables[classEntry.name];
+				if (cProg) {
+					const currentCantrips = cProg[newLevel - 2] || 0;
+					const newCantrips = cProg[newLevel - 1] || 0;
+					knownCantripsGain = Math.max(0, newCantrips - currentCantrips);
+				}
+
+				// Max spell level based on caster progression
+				if (casterProg === "full" || !casterProg) {
+					knownMaxSpellLevel = Math.min(9, Math.ceil(newLevel / 2));
+				} else if (casterProg === "1/2") {
+					knownMaxSpellLevel = Math.min(5, Math.ceil(newLevel / 4));
+				} else if (casterProg === "1/3") {
+					knownMaxSpellLevel = Math.min(4, Math.ceil(newLevel / 7));
+				} else if (casterProg === "pact") {
+					knownMaxSpellLevel = Math.min(5, Math.ceil(newLevel / 2));
+				} else {
+					knownMaxSpellLevel = Math.min(9, Math.ceil(newLevel / 2));
+				}
+			}
+		}
+
+		let selectedKnownSpells = [];
+		let selectedKnownCantrips = [];
+
 		// ========== FILTER ASI FEATURES ==========
 		const filterAsiFeatures = (features) => {
 			if (!hasAsi) return features;
@@ -908,6 +966,39 @@ class CharacterSheetLevelUp {
 			$main.append(createAccordion("spellbook", "📕", `Spellbook (+${wizardSpellCount} Spells)`, $spellbookContent, {required: true}));
 		}
 
+		// ========== 8b. KNOWN SPELLS (Sorcerer, Bard, Ranger, Warlock, etc.) ==========
+		if (isKnownCaster && (knownSpellsGain > 0 || knownCantripsGain > 0)) {
+			const totalGain = knownSpellsGain + knownCantripsGain;
+			$summaryItems.append(createSummaryItem("knownspells", "✨", "Spells Known", {required: totalGain > 0}));
+
+			const $knownSpellsContent = this._renderKnownSpellSelection({
+				className: classEntry.name,
+				classSource: classEntry.source,
+				spellCount: knownSpellsGain,
+				cantripCount: knownCantripsGain,
+				maxSpellLevel: knownMaxSpellLevel,
+				onSelect: (spells, cantrips) => {
+					selectedKnownSpells = spells;
+					selectedKnownCantrips = cantrips;
+					const spellComplete = spells.length >= knownSpellsGain;
+					const cantripComplete = cantrips.length >= knownCantripsGain;
+					const complete = spellComplete && cantripComplete;
+					const parts = [];
+					if (knownSpellsGain > 0) parts.push(`${spells.length}/${knownSpellsGain} spells`);
+					if (knownCantripsGain > 0) parts.push(`${cantrips.length}/${knownCantripsGain} cantrips`);
+					const summary = parts.join(", ") || "Select spells";
+					const allNames = [...cantrips, ...spells].map(s => s.name).join(", ");
+					summaryItems.knownspells.setStatus(complete, allNames || summary);
+					accordions.knownspells.setComplete(complete, parts.join(", "));
+				},
+			});
+
+			const sectionLabel = [];
+			if (knownSpellsGain > 0) sectionLabel.push(`+${knownSpellsGain} Spell${knownSpellsGain !== 1 ? "s" : ""}`);
+			if (knownCantripsGain > 0) sectionLabel.push(`+${knownCantripsGain} Cantrip${knownCantripsGain !== 1 ? "s" : ""}`);
+			$main.append(createAccordion("knownspells", "✨", `Spells Known (${sectionLabel.join(", ")})`, $knownSpellsContent, {required: totalGain > 0}));
+		}
+
 		// ========== 9. NEW FEATURES (Info Only) ==========
 		const filteredFeatures = filterAsiFeatures(currentFeatures);
 		if (filteredFeatures.length) {
@@ -1072,6 +1163,18 @@ class CharacterSheetLevelUp {
 				return;
 			}
 
+			if (isKnownCaster && knownSpellsGain > 0 && selectedKnownSpells.length < knownSpellsGain) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${knownSpellsGain} spell(s) to learn.`});
+				accordions.knownspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				return;
+			}
+
+			if (isKnownCaster && knownCantripsGain > 0 && selectedKnownCantrips.length < knownCantripsGain) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${knownCantripsGain} cantrip(s) to learn.`});
+				accordions.knownspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				return;
+			}
+
 			// ========== APPLY LEVEL UP ==========
 			await this._applyLevelUp({
 				classEntry,
@@ -1085,6 +1188,8 @@ class CharacterSheetLevelUp {
 				selectedLanguages,
 				selectedScholarSkill,
 				selectedSpellbookSpells,
+				selectedKnownSpells,
+				selectedKnownCantrips,
 				newFeatures: currentFeatures,
 				hpMethod,
 				classData,
@@ -1231,7 +1336,6 @@ class CharacterSheetLevelUp {
 		const $container = $section.find(".charsheet__levelup-subclasses");
 
 		subclasses.forEach(subclass => {
-			console.log(`[LevelUp] Available subclass: ${subclass.name}, has subclassFeatures: ${!!subclass.subclassFeatures}, count: ${subclass.subclassFeatures?.length || 0}`);
 			const $option = $(`
 				<div class="charsheet__levelup-option" data-subclass="${subclass.name}">
 					<div class="charsheet__levelup-option-header">
@@ -1564,9 +1668,7 @@ class CharacterSheetLevelUp {
 	_getLevelFeatures (classData, level, subclass = null) {
 		const features = [];
 
-		console.log(`[LevelUp] _getLevelFeatures called: level=${level}, subclass=${subclass?.name || "null"}`);
 		if (subclass) {
-			console.log(`[LevelUp] Subclass has subclassFeatures:`, subclass.subclassFeatures);
 		}
 
 		// Get base class features for this level
@@ -1574,7 +1676,6 @@ class CharacterSheetLevelUp {
 		if (classData.classFeatures && Array.isArray(classData.classFeatures)) {
 			// Check if it's array-of-arrays format (new format) or flat array (old format)
 			const isArrayOfArrays = Array.isArray(classData.classFeatures[0]);
-			console.log(`[LevelUp] classFeatures format: ${isArrayOfArrays ? "array-of-arrays" : "flat array"}`);
 
 			const levelFeatures = isArrayOfArrays
 				? classData.classFeatures[level - 1] || [] // Array of arrays: index = level - 1
@@ -1583,18 +1684,18 @@ class CharacterSheetLevelUp {
 			const featureRefs = isArrayOfArrays
 				? levelFeatures // Already filtered by level index
 				: levelFeatures.filter(f => {
+					// Format: "Name|Class|Source|Level" or "Name|Class|Source|Level|FeatureSource"
 					if (typeof f === "string") {
 						const parts = f.split("|");
-						return parseInt(parts[parts.length - 1]) === level;
+						return parseInt(parts[3]) === level;
 					}
 					if (typeof f === "object" && f.classFeature) {
 						const parts = f.classFeature.split("|");
-						return parseInt(parts[parts.length - 1]) === level;
+						return parseInt(parts[3]) === level;
 					}
 					return f.level === level;
 				});
 
-			console.log(`[LevelUp] Level ${level} feature refs (before parsing):`, featureRefs);
 
 			featureRefs.forEach(featureRef => {
 				// Parse feature reference - format is "FeatureName|ClassName|ClassSource|Level|FeatureSource"
@@ -1668,13 +1769,10 @@ class CharacterSheetLevelUp {
 		// NOTE: After DataLoader processing, subclassFeatures is an array-of-arrays where each inner array
 		// contains feature OBJECTS (with level, name, entries properties), not strings
 		if (subclass && subclass.subclassFeatures) {
-			console.log(`[LevelUp] Processing subclassFeatures for level ${level}:`, subclass.subclassFeatures.length, "level arrays");
 			subclass.subclassFeatures.forEach((levelFeatures, idx) => {
 				// levelFeatures is an array of feature objects for a specific level
 				if (Array.isArray(levelFeatures)) {
-					console.log(`[LevelUp] levelFeatures[${idx}] is array with ${levelFeatures.length} items:`, levelFeatures);
 					levelFeatures.forEach(feature => {
-						console.log(`[LevelUp] Checking feature:`, feature, `feature.level=${feature?.level}, looking for level=${level}`);
 						// Feature is an object with level, name, entries, source, etc.
 						if (typeof feature === "object" && feature.level === level) {
 							const featureName = feature.name || Renderer.findName(feature);
@@ -1735,11 +1833,8 @@ class CharacterSheetLevelUp {
 		// Filter out features with gainSubclassFeature: true when we have actual subclass features
 		// These are placeholder entries like "Subclass Feature", "Bard College", "Bard Subclass", etc.
 		const actualSubclassFeatures = features.filter(f => f.isSubclassFeature);
-		console.log(`[LevelUp] All features before filtering:`, features.map(f => `${f.name} (gainSubclass=${f.gainSubclassFeature}, isSubclass=${f.isSubclassFeature})`));
-		console.log(`[LevelUp] Actual subclass features count:`, actualSubclassFeatures.length);
 		if (actualSubclassFeatures.length > 0) {
 			const filtered = features.filter(f => !f.gainSubclassFeature);
-			console.log(`[LevelUp] Features after filtering out gainSubclassFeature:`, filtered.map(f => f.name));
 			return filtered;
 		}
 
@@ -1764,13 +1859,31 @@ class CharacterSheetLevelUp {
 	}
 
 	_levelGrantsSubclass (classData, level) {
-		// Most classes get subclass at level 3
-		const subclassLevel = classData.subclassTitle === "Sorcerous Origin" ? 1
-			: classData.subclassTitle === "Otherworldly Patron" ? 1
-				: classData.subclassTitle === "Divine Domain" ? 1
-					: 3;
+		// Data-driven: check if any feature at this level has gainSubclassFeature: true
+		if (classData.classFeatures && Array.isArray(classData.classFeatures)) {
+			const isArrayOfArrays = Array.isArray(classData.classFeatures[0]);
+			const levelFeatures = isArrayOfArrays
+				? classData.classFeatures[level - 1] || []
+				: classData.classFeatures.filter(f => {
+					// Format: "Name|Class|Source|Level" or "Name|Class|Source|Level|FeatureSource"
+					if (typeof f === "string") {
+						const parts = f.split("|");
+						return parseInt(parts[3]) === level;
+					}
+					if (typeof f === "object" && f.classFeature) {
+						const parts = f.classFeature.split("|");
+						return parseInt(parts[3]) === level;
+					}
+					return f.level === level;
+				});
 
-		return level === subclassLevel;
+			return levelFeatures.some(f =>
+				typeof f === "object" && f.gainSubclassFeature,
+			);
+		}
+
+		// Fallback: default subclass level 3
+		return level === 3;
 	}
 
 	/**
@@ -1836,6 +1949,38 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
+	 * Filter optional features to only include those matching the class's edition.
+	 * TGTT classes get TGTT optional features.
+	 * XPHB/2024 classes get XPHB (+ TCE/XGE expansion content).
+	 * PHB/2014 classes get PHB/TCE/XGE.
+	 * If no edition info is available, returns all features (no filter).
+	 * @param {Array} optFeatures - All optional features
+	 * @param {string} classSource - The class's source book
+	 * @returns {Array} Filtered optional features
+	 */
+	_filterOptFeaturesByEdition (optFeatures, classSource) {
+		if (!classSource || !optFeatures?.length) return optFeatures;
+
+		// Define which optional-feature sources are valid for each class source
+		const editionMap = {
+			// Thelemar homebrew: only TGTT optional features
+			"TGTT": ["TGTT"],
+			// 2024: XPHB + expansion sources
+			"XPHB": ["XPHB", "TCE", "XGE", "FTD", "SCC"],
+			// 2014: PHB + expansion sources
+			"PHB": ["PHB", "TCE", "XGE", "UA", "FTD", "SCC"],
+		};
+
+		const allowedSources = editionMap[classSource];
+		if (!allowedSources) return optFeatures; // Unknown source — no edition filtering
+
+		return optFeatures.filter(opt => {
+			if (!opt.source) return true;
+			return allowedSources.includes(opt.source);
+		});
+	}
+
+	/**
 	 * Render optional features selection UI for level up
 	 * @param {Object} classData - The class data
 	 * @param {Array} gains - Array of feature gains from _getOptionalFeatureGains
@@ -1843,8 +1988,9 @@ class CharacterSheetLevelUp {
 	 * @param {number} newLevel - The new level for filtering by max degree
 	 */
 	_renderOptionalFeaturesSelection (classData, gains, onSelect, newLevel) {
-		// Filter optional features by allowed sources
-		const allOptFeatures = this._page.filterByAllowedSources(this._page.getOptionalFeatures() || []);
+		// Filter optional features by allowed sources and edition
+		const allOptFeaturesRaw = this._page.filterByAllowedSources(this._page.getOptionalFeatures() || []);
+		const allOptFeatures = this._filterOptFeaturesByEdition(allOptFeaturesRaw, classData.source);
 		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
 
 		const $section = $(`
@@ -2030,18 +2176,26 @@ class CharacterSheetLevelUp {
 				const $item = $(`
 					<label class="charsheet__levelup-opt-item d-block mb-1 ml-2${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.25rem; border-radius: 4px;${isDisabled ? " opacity: 0.6;" : ""}">
 						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
-						<strong class="opt-name">${method.name}</strong>
+						<span class="opt-name"></span>
 						${knownBadge}
 						<span class="ve-muted ve-small ml-1">(${method._degree}${this._getOrdinalSuffix(method._degree)} degree)</span>
 					</label>
 				`);
 
-				$item.find(".opt-name").on("click", (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					const desc = Renderer.get().render({entries: method.entries || []});
-					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${method.name}</strong><br>${desc}</div>`)});
-				});
+				// Create hoverable link for the method name
+				const $methodName = $item.find(".opt-name");
+				try {
+					const resolvedSource = this._page.resolveOptionalFeatureSource(method.name, [
+						method.source,
+						this._selectedClass?.source,
+						Parser.SRC_XPHB,
+						Parser.SRC_PHB,
+					]);
+					$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, resolvedSource));
+					$methodName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+				} catch (e) {
+					$methodName.html(`<strong>${method.name}</strong>`);
+				}
 
 				$item.find("input").on("change", (e) => {
 					if (e.target.checked) {
@@ -2182,18 +2336,26 @@ class CharacterSheetLevelUp {
 				const $item = $(`
 					<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}${opt._alreadyKnown ? " charsheet__levelup-opt-item--known" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.5rem; border-radius: 4px;${isDisabled ? " opacity: 0.5;" : ""}${opt._alreadyKnown && opt._selectable ? " background: rgba(var(--rgb-success-rgb), 0.1); border-left: 3px solid var(--rgb-success);" : ""}${opt._alreadyKnown && !opt._selectable ? " background: rgba(128, 128, 128, 0.1);" : ""}">
 						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
-						<strong class="opt-name" style="cursor: help; text-decoration: underline dotted;">${opt.name}</strong>
+						<span class="opt-name"></span>
 						${knownBadge}${repeatableBadge}
 						<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 					</label>
 				`);
 
-				$item.find(".opt-name").on("click", (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					const desc = Renderer.get().render({entries: opt.entries || []});
-					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
-				});
+				// Create hoverable link for the optional feature name
+				const $optName = $item.find(".opt-name");
+				try {
+					const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
+						opt.source,
+						this._selectedClass?.source,
+						Parser.SRC_XPHB,
+						Parser.SRC_PHB,
+					]);
+					$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+					$optName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+				} catch (e) {
+					$optName.html(`<strong>${opt.name}</strong>`);
+				}
 
 				$item.find("input").on("change", (e) => {
 					if (e.target.checked) {
@@ -2342,7 +2504,6 @@ class CharacterSheetLevelUp {
 		// Look up "Combat Methods" feature for this class
 		const classFeatures = this._page.getClassFeatures?.();
 		if (!classFeatures?.length) {
-			console.log("[LevelUp] No class features available for tradition extraction");
 			return traditions;
 		}
 
@@ -2356,11 +2517,9 @@ class CharacterSheetLevelUp {
 
 		// If no "Combat Methods" feature found, this class might not have combat traditions
 		if (!combatMethodsFeature) {
-			console.log(`[LevelUp] No Combat Methods feature found for ${className}`);
 			return traditions;
 		}
 
-		console.log(`[LevelUp] Found Combat Methods feature:`, combatMethodsFeature.name, "at level", combatMethodsFeature.level, "with", combatMethodsFeature.entries?.length, "entries");
 
 		// Recursively extract text from entries and look for tradition codes
 		const extractFromEntries = (entries) => {
@@ -2388,7 +2547,6 @@ class CharacterSheetLevelUp {
 
 		extractFromEntries(combatMethodsFeature.entries);
 
-		console.log(`[LevelUp] Extracted traditions from feature text:`, [...traditions]);
 		return traditions;
 	}
 
@@ -2399,7 +2557,6 @@ class CharacterSheetLevelUp {
 	 * @param {string} [className] - The class name to extract traditions from
 	 */
 	_getAvailableTraditionsForClass (allOptFeatures, classAllowedTypes, className) {
-		console.log("[LevelUp] _getAvailableTraditionsForClass called with classAllowedTypes:", classAllowedTypes, "className:", className);
 
 		// First try to extract tradition codes from class-allowed types (e.g., "CTM:AM" -> "AM", "CTM:1AM" -> "AM")
 		const allowedTraditionCodes = new Set();
@@ -2410,7 +2567,6 @@ class CharacterSheetLevelUp {
 			}
 		}
 
-		console.log("[LevelUp] Extracted tradition codes from types:", [...allowedTraditionCodes]);
 
 		// If no tradition codes found in types, try to extract from class feature description
 		if (allowedTraditionCodes.size === 0 && className) {
@@ -2422,11 +2578,9 @@ class CharacterSheetLevelUp {
 
 		// If still no traditions found, fall back to all traditions
 		if (allowedTraditionCodes.size === 0) {
-			console.log("[LevelUp] No tradition codes found, falling back to all traditions");
 			return this._getAvailableTraditions(allOptFeatures);
 		}
 
-		console.log("[LevelUp] Filtering to allowed traditions:", [...allowedTraditionCodes]);
 
 		// Filter to only allowed traditions
 		const traditions = new Map();
@@ -2476,7 +2630,6 @@ class CharacterSheetLevelUp {
 	_getClassFeatureData (featureName, className, source, level) {
 		const classFeatures = this._page.getClassFeatures?.();
 		if (!classFeatures?.length) {
-			console.log("[LevelUp] No class features available for lookup");
 			return null;
 		}
 
@@ -2494,7 +2647,6 @@ class CharacterSheetLevelUp {
 		});
 
 		if (!result && featureName) {
-			console.log(`[LevelUp] Could not find class feature: ${featureName} for ${className} level ${level} (source: ${source})`);
 		}
 		return result;
 	}
@@ -2839,25 +2991,6 @@ class CharacterSheetLevelUp {
 						$nameSpan.text(opt.name);
 					}
 
-					// Show description on name click for class features
-					if (opt.type === "classFeature" && opt.ref) {
-						$item.find(".feat-opt-name").on("click", (e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							const parts = opt.ref.split("|");
-							const classFeatures = this._page.getClassFeatures();
-							const fullOpt = classFeatures.find(f =>
-								f.name === parts[0]
-								&& f.className === parts[1]
-								&& f.source === parts[2],
-							);
-							if (fullOpt) {
-								const desc = Renderer.get().render({entries: fullOpt.entries || []});
-								JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
-							}
-						});
-					}
-
 					$item.find("input").on("change", (e) => {
 						if (e.target.checked) {
 							if (selectedForGroup.length < optGroup.count) {
@@ -3138,6 +3271,283 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
+	 * Render known-spell selection UI for level up (Sorcerer, Bard, Ranger, Warlock, etc.)
+	 * @param {Object} opts
+	 * @param {string} opts.className - Class name to filter spells by
+	 * @param {string} opts.classSource - Class source for edition filtering
+	 * @param {number} opts.spellCount - Number of leveled spells to learn
+	 * @param {number} opts.cantripCount - Number of cantrips to learn
+	 * @param {number} opts.maxSpellLevel - Max spell level accessible
+	 * @param {Function} opts.onSelect - Callback(spells[], cantrips[]) when selections change
+	 * @returns {jQuery} The section element
+	 */
+	_renderKnownSpellSelection ({className, classSource, spellCount, cantripCount, maxSpellLevel, onSelect}) {
+		const totalCount = spellCount + cantripCount;
+		const parts = [];
+		if (spellCount > 0) parts.push(`${spellCount} spell${spellCount !== 1 ? "s" : ""} (up to level ${maxSpellLevel})`);
+		if (cantripCount > 0) parts.push(`${cantripCount} cantrip${cantripCount !== 1 ? "s" : ""}`);
+
+		const $section = $(`
+			<div class="charsheet__levelup-section">
+				<h5 class="charsheet__levelup-section-title">
+					<span class="glyphicon glyphicon-fire"></span> Spells Known
+				</h5>
+				<p class="ve-small">Choose ${parts.join(" and ")} for your ${className}:</p>
+				<div class="charsheet__levelup-known-spell-selections"></div>
+				<div class="ve-small ve-muted mt-1">
+					${spellCount > 0 ? `Spells: <span class="spell-count">0</span>/${spellCount}` : ""}
+					${cantripCount > 0 ? `${spellCount > 0 ? " · " : ""}Cantrips: <span class="cantrip-count">0</span>/${cantripCount}` : ""}
+				</div>
+			</div>
+		`);
+
+		const $container = $section.find(".charsheet__levelup-known-spell-selections");
+		const selectedSpells = [];
+		const selectedCantrips = [];
+
+		// Get all spells from the page
+		const allSpells = this._page.getSpells?.() || [];
+		const allowedSources = this._page.filterByAllowedSources?.(allSpells) || allSpells;
+
+		// Filter to class spells (using proper Renderer API) up to max level
+		const classSpells = allowedSources.filter(spell => {
+			// Only include spells at correct levels
+			if (cantripCount > 0 && spellCount > 0) {
+				// Both cantrips and leveled spells
+				if (spell.level > maxSpellLevel) return false;
+			} else if (cantripCount > 0) {
+				if (spell.level !== 0) return false;
+			} else {
+				if (spell.level < 1 || spell.level > maxSpellLevel) return false;
+			}
+
+			// Check if on class spell list using proper Renderer API
+			try {
+				const classList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
+				if (classList?.some(c => c.name === className)) return true;
+			} catch (e) { /* fall through */ }
+			// Fallback: raw check
+			return spell.classes?.fromClassList?.some(c => c.name === className);
+		}).sort((a, b) => {
+			if (a.level !== b.level) return a.level - b.level;
+			return a.name.localeCompare(b.name);
+		});
+
+		// Get spells already known
+		const knownSpells = this._state.getSpells?.() || [];
+		const knownCantrips = this._state.getCantripsKnown?.() || [];
+		const knownIds = new Set([...knownSpells, ...knownCantrips].map(s => `${s.name}|${s.source}`));
+
+		// Collect unique schools for filters
+		const schools = [...new Set(classSpells.map(s => s.school).filter(Boolean))].sort();
+
+		// Filter state
+		let filterTab = "all"; // "all", "cantrips", "spells"
+
+		// Build filter row
+		const $filterRow = $(`<div class="ve-flex-wrap gap-2 mb-2" style="align-items: center;"></div>`);
+		$container.append($filterRow);
+
+		// Search input
+		const $search = $(`<input type="text" class="form-control form-control-sm" placeholder="🔍 Search..." style="flex: 1; min-width: 150px;">`);
+		$filterRow.append($search);
+
+		// Level filter dropdown
+		const levelOptions = [];
+		if (cantripCount > 0) levelOptions.push({value: "0", label: "Cantrips"});
+		for (let i = 1; i <= maxSpellLevel; i++) {
+			levelOptions.push({value: i.toString(), label: `Level ${i}`});
+		}
+		const $levelFilter = $(`
+			<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
+				<option value="">All Levels</option>
+				${levelOptions.map(l => `<option value="${l.value}">${l.label}</option>`).join("")}
+			</select>
+		`);
+		$filterRow.append($levelFilter);
+
+		// School filter dropdown
+		const $schoolFilter = $(`
+			<select class="form-control form-control-sm" style="width: auto; min-width: 120px;">
+				<option value="">All Schools</option>
+				${schools.map(s => `<option value="${s}">${this._getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
+			</select>
+		`);
+		$filterRow.append($schoolFilter);
+
+		// Quick filters
+		const $ritualFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`);
+		const $concFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`);
+		$filterRow.append($ritualFilter, $concFilter);
+
+		const $spellList = $(`<div class="charsheet__modal-list" style="max-height: 350px; overflow-y: auto;"></div>`);
+		$container.append($spellList);
+
+		const getSchoolEmoji = (school) => {
+			const schoolEmojis = {
+				"A": "✨", "C": "🌀", "D": "👁️", "E": "💫",
+				"V": "🔥", "I": "🎭", "N": "💀", "T": "🔄",
+			};
+			return schoolEmojis[school] || "📜";
+		};
+
+		const fireCallback = () => {
+			$section.find(".spell-count").text(selectedSpells.length);
+			$section.find(".cantrip-count").text(selectedCantrips.length);
+			onSelect([...selectedSpells], [...selectedCantrips]);
+		};
+
+		const renderSpellList = () => {
+			$spellList.empty();
+
+			const searchText = $search.val()?.toLowerCase() || "";
+			const levelVal = $levelFilter.val();
+			const schoolVal = $schoolFilter.val();
+			const onlyRitual = $ritualFilter.find("input").prop("checked");
+			const onlyConc = $concFilter.find("input").prop("checked");
+
+			const filtered = classSpells.filter(spell => {
+				if (searchText && !spell.name.toLowerCase().includes(searchText)) return false;
+				if (levelVal !== "" && levelVal !== undefined && spell.level !== parseInt(levelVal)) return false;
+				if (schoolVal && spell.school !== schoolVal) return false;
+				const isRitual = spell.ritual || spell.meta?.ritual || false;
+				if (onlyRitual && !isRitual) return false;
+				const isConc = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+				if (onlyConc && !isConc) return false;
+				return true;
+			});
+
+			if (!filtered.length) {
+				$spellList.append(`<p class="ve-muted text-center py-2">No spells match your filters</p>`);
+				return;
+			}
+
+			// Group by level
+			const byLevel = {};
+			filtered.forEach(spell => {
+				if (!byLevel[spell.level]) byLevel[spell.level] = [];
+				byLevel[spell.level].push(spell);
+			});
+
+			Object.keys(byLevel).sort((a, b) => Number(a) - Number(b)).forEach(level => {
+				const levelNum = parseInt(level);
+				const levelEmoji = levelNum === 0
+					? "🔮"
+					: (["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"][levelNum - 1] || "📜");
+				const levelLabel = levelNum === 0 ? "Cantrips" : `Level ${level}`;
+
+				const $levelSection = $(`<div class="charsheet__modal-section"></div>`).appendTo($spellList);
+				$(`<div class="charsheet__modal-section-title">${levelEmoji} ${levelLabel} <span style="opacity: 0.6;">(${byLevel[level].length})</span></div>`).appendTo($levelSection);
+
+				byLevel[level].forEach(spell => {
+					const spellId = `${spell.name}|${spell.source}`;
+					const isKnown = knownIds.has(spellId);
+					const isCantrip = spell.level === 0;
+					const isSelected = isCantrip
+						? selectedCantrips.some(s => `${s.name}|${s.source}` === spellId)
+						: selectedSpells.some(s => `${s.name}|${s.source}` === spellId);
+					const school = Parser.spSchoolAbvToFull?.(spell.school) || spell.school;
+					const schoolEmoji = getSchoolEmoji(spell.school);
+
+					const components = [];
+					if (spell.components?.v) components.push("V");
+					if (spell.components?.s) components.push("S");
+					if (spell.components?.m) components.push("M");
+					const componentStr = components.join(", ");
+
+					const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+					const isRitual = spell.ritual || spell.meta?.ritual || false;
+
+					const tagParts = [];
+					if (isRitual) tagParts.push("🔮");
+					if (isConcentration) tagParts.push("⏳");
+					const tagsStr = tagParts.length ? ` ${tagParts.join(" ")}` : "";
+
+					let subschoolStr = "";
+					if (spell.subschools?.length) {
+						const formatSubschool = (sub) => {
+							const p = sub.split(":");
+							return p.length === 2 ? p[1].toTitleCase() : sub.toTitleCase();
+						};
+						subschoolStr = ` • 🏷️ ${spell.subschools.map(formatSubschool).join(", ")}`;
+					}
+
+					const $item = $(`
+						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""} ${isSelected ? "charsheet__modal-list-item--selected" : ""}">
+							<div class="charsheet__modal-list-item-icon">${schoolEmoji}</div>
+							<div class="charsheet__modal-list-item-content">
+								<div class="charsheet__modal-list-item-title"></div>
+								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}${subschoolStr}</div>
+							</div>
+							${isKnown
+								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
+								: isSelected
+									? `<button class="ve-btn ve-btn-danger ve-btn-xs spell-toggle">✓ Selected</button>`
+									: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-toggle">+ Add</button>`
+							}
+						</div>
+					`);
+
+					// Add spell name with hover link
+					const $title = $item.find(".charsheet__modal-list-item-title");
+					try {
+						if (this._page?.getHoverLink) {
+							const hoverLink = this._page.getHoverLink(UrlUtil.PG_SPELLS, spell.name, spell.source || Parser.SRC_XPHB);
+							$title.html(`${hoverLink}${tagsStr}`);
+						} else {
+							$title.html(`${spell.name}${tagsStr}`);
+						}
+					} catch (e) {
+						$title.html(`${spell.name}${tagsStr}`);
+					}
+
+					if (!isKnown) {
+						$item.find(".spell-toggle").on("click", (e) => {
+							e.stopPropagation();
+							const targetArr = isCantrip ? selectedCantrips : selectedSpells;
+							const maxCount = isCantrip ? cantripCount : spellCount;
+							const typeLabel = isCantrip ? "cantrips" : "spells";
+							const idx = targetArr.findIndex(s => `${s.name}|${s.source}` === spellId);
+
+							if (idx >= 0) {
+								targetArr.splice(idx, 1);
+							} else if (targetArr.length < maxCount) {
+								targetArr.push(spell);
+							} else {
+								JqueryUtil.doToast({type: "warning", content: `You can only select ${maxCount} ${typeLabel}.`});
+								return;
+							}
+
+							fireCallback();
+							renderSpellList();
+						});
+
+						// Click row to show info
+						$item.on("click", (e) => {
+							if (!$(e.target).is("button") && !$(e.target).closest("a").length) {
+								this._showSpellInfoModal(spell);
+							}
+						});
+					}
+
+					$levelSection.append($item);
+				});
+			});
+		};
+
+		// Bind filter change events
+		$search.on("input", renderSpellList);
+		$levelFilter.on("change", renderSpellList);
+		$schoolFilter.on("change", renderSpellList);
+		$ritualFilter.find("input").on("change", renderSpellList);
+		$concFilter.find("input").on("change", renderSpellList);
+
+		renderSpellList();
+
+		return $section;
+	}
+
+	/**
 	 * Render wizard spellbook spell selection UI for level up
 	 * @param {number} spellCount - Number of spells to select (typically 2)
 	 * @param {number} maxSpellLevel - Maximum spell level the wizard can learn
@@ -3165,10 +3575,15 @@ class CharacterSheetLevelUp {
 		
 		// Filter to wizard spells up to max level
 		const wizardSpells = allowedSources.filter(spell => {
-			// Check if on wizard spell list
-			const isWizardSpell = spell.classes?.fromClassList?.some(c => 
-				c.name === "Wizard"
-			);
+			// Check if on wizard spell list (use proper Renderer API)
+			let isWizardSpell = false;
+			try {
+				const classList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
+				isWizardSpell = classList?.some(c => c.name === "Wizard");
+			} catch (e) {
+				// Fallback: raw check
+				isWizardSpell = spell.classes?.fromClassList?.some(c => c.name === "Wizard");
+			}
 			// Check level
 			const isCorrectLevel = spell.level >= 1 && spell.level <= maxSpellLevel;
 			return isWizardSpell && isCorrectLevel;
@@ -3552,16 +3967,12 @@ class CharacterSheetLevelUp {
 		return classData.hd?.faces || hitDieMap[classData.name] || 8;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, newFeatures, hpMethod, classData}) {
-		console.log(`[LevelUp] _applyLevelUp called: selectedSubclass=${selectedSubclass?.name || "null"}`);
-		console.log(`[LevelUp] Initial newFeatures:`, newFeatures?.map(f => f.name));
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, newFeatures, hpMethod, classData}) {
 
 		// If a subclass was just selected, re-compute features to include actual subclass features
 		if (selectedSubclass) {
 			// Get the subclass features for this level (replacing placeholders like "Subclass Feature")
-			console.log(`[LevelUp] Recomputing features with selected subclass:`, selectedSubclass.name);
 			newFeatures = this._getLevelFeatures(classData, newLevel, selectedSubclass);
-			console.log(`[LevelUp] Recomputed newFeatures:`, newFeatures?.map(f => f.name));
 		}
 
 		// Update class level
@@ -3683,7 +4094,6 @@ class CharacterSheetLevelUp {
 						description: opt.entries ? Renderer.get().render({entries: opt.entries}) : "",
 						entries: opt.entries,
 					};
-					console.log("[LevelUp] Adding optional feature:", featureData.name, "types:", featureData.optionalFeatureTypes);
 					this._state.addFeature(featureData);
 				});
 			});
@@ -3726,10 +4136,8 @@ class CharacterSheetLevelUp {
 									const skillKey = skill.toLowerCase().replace(/\s+/g, "");
 									if (skillChoice.type === "proficiency") {
 										this._state.setSkillProficiency(skillKey, 1);
-										console.log(`[LevelUp] Applied proficiency in ${skill} from "${opt.name}"`);
 									} else if (skillChoice.type === "expertise") {
 										this._state.setSkillProficiency(skillKey, 2);
-										console.log(`[LevelUp] Applied expertise in ${skill} from "${opt.name}"`);
 									} else if (skillChoice.type === "bonus") {
 										this._state.addNamedModifier({
 											name: `${opt.name} (${skill})`,
@@ -3738,7 +4146,6 @@ class CharacterSheetLevelUp {
 											note: `From ${opt.name}: bonus equal to proficiency bonus`,
 											enabled: true,
 										});
-										console.log(`[LevelUp] Applied skill bonus to ${skill} from "${opt.name}"`);
 									}
 								});
 							}
@@ -3754,7 +4161,6 @@ class CharacterSheetLevelUp {
 								note: effect.note || `From specialty: ${opt.name}`,
 								enabled: true,
 							});
-							console.log(`[LevelUp] Applied auto-effect from "${opt.name}":`, effect);
 						});
 					} else if (opt.type === "subclassFeature" && opt.ref) {
 						const currentSubclass = this._state.getClasses().find(c => c.name === classEntry.name)?.subclass;
@@ -3809,14 +4215,12 @@ class CharacterSheetLevelUp {
 				skills.forEach(skill => {
 					this._state.addExpertise(skill.toLowerCase());
 				});
-				console.log(`[LevelUp] Applied expertise from ${featureName}:`, skills);
 			});
 		}
 
 		// Apply Scholar expertise selection (Wizard XPHB level 2)
 		if (selectedScholarSkill) {
 			this._state.setScholarExpertise(selectedScholarSkill);
-			console.log(`[LevelUp] Applied Scholar expertise:`, selectedScholarSkill);
 		}
 
 		// Apply wizard spellbook spell selections
@@ -3846,7 +4250,51 @@ class CharacterSheetLevelUp {
 					subschools: spell.subschools || [], // Include rarity/legality tags
 				});
 			});
-			console.log(`[LevelUp] Applied wizard spellbook spells:`, selectedSpellbookSpells.map(s => s.name));
+		}
+
+		// Apply known-spell caster spell selections (Sorcerer, Bard, Ranger, Warlock, etc.)
+		if (selectedKnownSpells && selectedKnownSpells.length > 0) {
+			selectedKnownSpells.forEach(spell => {
+				const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
+				const isRitual = spell.ritual || spell.meta?.ritual || false;
+
+				this._state.addSpell({
+					name: spell.name,
+					source: spell.source,
+					level: spell.level,
+					school: spell.school,
+					ritual: isRitual,
+					concentration: isConcentration,
+					prepared: false,
+					inSpellbook: false,
+					sourceFeature: "Spells Known",
+					sourceClass: classEntry.name,
+					castingTime: this._getSpellCastingTime(spell),
+					range: this._getSpellRange(spell),
+					components: this._getSpellComponents(spell),
+					duration: this._getSpellDuration(spell),
+					subschools: spell.subschools || [],
+				});
+			});
+		}
+
+		// Apply known-spell caster cantrip selections
+		if (selectedKnownCantrips && selectedKnownCantrips.length > 0) {
+			selectedKnownCantrips.forEach(spell => {
+				this._state.addCantrip({
+					name: spell.name,
+					source: spell.source,
+					level: 0,
+					school: spell.school,
+					sourceFeature: "Spells Known",
+					sourceClass: classEntry.name,
+					castingTime: this._getSpellCastingTime(spell),
+					range: this._getSpellRange(spell),
+					components: this._getSpellComponents(spell),
+					duration: this._getSpellDuration(spell),
+					subschools: spell.subschools || [],
+				});
+			});
 		}
 
 		// Apply selected languages from features like Deft Explorer Improvement
@@ -3855,7 +4303,6 @@ class CharacterSheetLevelUp {
 				languages.forEach(lang => {
 					this._state.addLanguage(lang);
 				});
-				console.log(`[LevelUp] Applied languages from ${featureName}:`, languages);
 			});
 		}
 
@@ -3904,7 +4351,6 @@ class CharacterSheetLevelUp {
 			if (!f.isSubclassFeature && !f.subclassName && existingClassFeatureNames.includes(nameLower)) return false;
 			return true;
 		});
-		console.log(`[LevelUp] FINAL features to add:`, featuresToAdd?.map(f => `${f.name} (isSubclass=${f.isSubclassFeature})`));
 		featuresToAdd.forEach(feature => {
 			// Render description from entries if not already rendered
 			let description = feature.description;
@@ -4340,7 +4786,6 @@ class CharacterSheetLevelUp {
 		const raceName = race.name;
 		const subraceName = race._subraceName || race.subrace;
 
-		console.log(`[LevelUp] Checking racial spells for level ${totalLevel}: ${raceName} ${subraceName ? `(${subraceName})` : ""}`);
 
 		race.additionalSpells.forEach(spellBlock => {
 			// Check if this spell block is subrace-specific
@@ -4424,7 +4869,6 @@ class CharacterSheetLevelUp {
 					components: this._getSpellComponents(spellData),
 					duration: this._getSpellDuration(spellData),
 				});
-				console.log(`[LevelUp] Added racial spell: ${spellData.name}`);
 			}
 		});
 	}
@@ -4454,7 +4898,6 @@ class CharacterSheetLevelUp {
 					recharge: recharge,
 					sourceFeature: sourceName,
 				});
-				console.log(`[LevelUp] Added innate spell: ${spellData.name} (${atWill ? "at-will" : `${uses}/rest`})`);
 			}
 		});
 	}

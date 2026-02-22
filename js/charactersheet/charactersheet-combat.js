@@ -3154,13 +3154,11 @@ class CharacterSheetCombat {
 			} else {
 				// Get character's known spells with concentration
 				const allSpells = this._state.getSpells() || [];
-				console.log("[Combat] All spells for concentration check:", allSpells.map(s => ({name: s.name, concentration: s.concentration, level: s.level})));
 				const concentrationSpells = allSpells.filter(spell => {
 					// Check the stored concentration boolean property
 					// (duration array format won't work for stored spells as duration is stored as string)
 					return spell.concentration === true;
 				});
-				console.log("[Combat] Concentration spells found:", concentrationSpells.length, concentrationSpells.map(s => s.name));
 
 				let spellName;
 				if (concentrationSpells.length > 0) {

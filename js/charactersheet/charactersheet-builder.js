@@ -900,7 +900,6 @@ class CharacterSheetBuilder {
 		const raceName = race.name;
 		const subraceName = race._subraceName || this._selectedSubrace?.name;
 
-		console.log("[CharSheet Builder] Processing racial spells for:", raceName, subraceName ? `(${subraceName})` : "");
 
 		race.additionalSpells.forEach(spellBlock => {
 			// Check if this spell block is subrace-specific
@@ -975,7 +974,6 @@ class CharacterSheetBuilder {
 			if (typeof spellList === "object") {
 				if (spellList.choose) {
 					// This requires UI - store for later handling
-					console.log("[CharSheet Builder] Spell choice required:", spellList.choose);
 					// For now, skip choices - they'll need a picker UI
 					return;
 				}
@@ -1014,7 +1012,6 @@ class CharacterSheetBuilder {
 					recharge: recharge,
 					sourceFeature: sourceName,
 				});
-				console.log(`[CharSheet Builder] Added innate spell: ${spellData.name} (${atWill ? "at-will" : `${uses}/rest`})`);
 			}
 		});
 	}
@@ -1026,7 +1023,6 @@ class CharacterSheetBuilder {
 		if (typeof spellRef !== "string") {
 			// Handle choice objects
 			if (spellRef?.choose) {
-				console.log("[CharSheet Builder] Spell choice required:", spellRef.choose);
 				return null;
 			}
 			return null;
@@ -1083,7 +1079,6 @@ class CharacterSheetBuilder {
 		};
 
 		this._state.addSpell(spell);
-		console.log(`[CharSheet Builder] Added racial spell: ${spellData.name} (from ${sourceName})`);
 	}
 
 	// Helper methods for spell data formatting
@@ -1251,7 +1246,6 @@ class CharacterSheetBuilder {
 			}
 
 			level1Features = level1Features || [];
-			console.log("[CharSheet Builder] Level 1 features (from index 0):", level1Features);
 
 			// Check if we have a subclass selected - if so, we'll filter out features with gainSubclassFeature
 			const hasSubclass = !!this._selectedSubclass;
@@ -1280,14 +1274,12 @@ class CharacterSheetBuilder {
 					featureSource = f.source || classSource;
 					hasGainSubclassFeature = !!f.gainSubclassFeature;
 				} else {
-					console.log("[CharSheet Builder] Unknown feature format:", f);
 					return;
 				}
 
 				// Skip features with gainSubclassFeature if we have an actual subclass selected
 				// These are placeholder features like "Bard Subclass", "Subclass Feature", etc.
 				if (hasSubclass && hasGainSubclassFeature) {
-					console.log("[CharSheet Builder] Skipping gainSubclassFeature placeholder:", featureName);
 					return;
 				}
 
@@ -1307,11 +1299,9 @@ class CharacterSheetBuilder {
 					featureType: "Class",
 					description,
 				};
-				console.log("[CharSheet Builder] Adding feature:", featureToAdd);
 				this._state.addFeature(featureToAdd);
 			});
 		} else {
-			console.log("[CharSheet Builder] No classFeatures found on selected class:", this._selectedClass);
 		}
 
 		// Add level 1 subclass features if a subclass is selected
@@ -1344,7 +1334,6 @@ class CharacterSheetBuilder {
 									isSubclassFeature: true,
 									description,
 								};
-								console.log("[CharSheet Builder] Adding subclass feature:", featureToAdd);
 								this._state.addFeature(featureToAdd);
 							}
 						} else if (typeof feature === "string") {
@@ -1376,7 +1365,6 @@ class CharacterSheetBuilder {
 									isSubclassFeature: true,
 									description,
 								};
-								console.log("[CharSheet Builder] Adding subclass feature:", featureToAdd);
 								this._state.addFeature(featureToAdd);
 							}
 						}
@@ -1410,7 +1398,6 @@ class CharacterSheetBuilder {
 							isSubclassFeature: true,
 							description,
 						};
-						console.log("[CharSheet Builder] Adding subclass feature:", featureToAdd);
 						this._state.addFeature(featureToAdd);
 					}
 				}
@@ -1484,10 +1471,8 @@ class CharacterSheetBuilder {
 								const skillKey = skill.toLowerCase().replace(/\s+/g, "");
 								if (skillChoice.type === "proficiency") {
 									this._state.setSkillProficiency(skillKey, 1);
-									console.log(`[CharSheet Builder] Applied proficiency in ${skill} from "${opt.name}"`);
 								} else if (skillChoice.type === "expertise") {
 									this._state.setSkillProficiency(skillKey, 2);
-									console.log(`[CharSheet Builder] Applied expertise in ${skill} from "${opt.name}"`);
 								} else if (skillChoice.type === "bonus") {
 									// For "bonus equal to proficiency" - add a named modifier
 									this._state.addNamedModifier({
@@ -1497,7 +1482,6 @@ class CharacterSheetBuilder {
 										note: `From ${opt.name}: bonus equal to proficiency bonus`,
 										enabled: true,
 									});
-									console.log(`[CharSheet Builder] Applied skill bonus to ${skill} from "${opt.name}"`);
 								}
 							});
 						}
@@ -1513,7 +1497,6 @@ class CharacterSheetBuilder {
 							note: effect.note || `From ${opt.name}`,
 							enabled: true,
 						});
-						console.log(`[CharSheet Builder] Applied auto-effect ${effect.type}: ${effect.value} from "${opt.name}"`);
 					});
 				} else if (opt.type === "subclassFeature" && opt.ref) {
 					// Handle subclass feature options
@@ -1545,7 +1528,6 @@ class CharacterSheetBuilder {
 
 					// Debug: Check what sources are available
 					const sourceSet = new Set(allOptFeatures.map(f => f.source));
-					console.log(`[CharSheet Builder] Looking for "${opt.name}" source "${resolvedSource}" in ${allOptFeatures.length} optionalfeatures. Available sources:`, [...sourceSet]);
 
 					const fullOpt = allOptFeatures.find(f =>
 						f.name === opt.name
@@ -1558,7 +1540,6 @@ class CharacterSheetBuilder {
 						const similar = allOptFeatures.filter(f => f.name.toLowerCase().includes(opt.name.toLowerCase().substring(0, 5)));
 						console.warn(`[CharSheet Builder] Could not find optional feature "${opt.name}" (source: ${opt.source}). Similar names found:`, similar.map(f => `${f.name}|${f.source}`).join(", "));
 					} else {
-						console.log(`[CharSheet Builder] Found optional feature "${opt.name}" with ${fullOpt.entries?.length || 0} entries`);
 					}
 
 					const description = fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "";
@@ -1577,7 +1558,6 @@ class CharacterSheetBuilder {
 					});
 				} else if (opt.type === "text") {
 					// Simple text option - just note the selection
-					console.log(`[CharSheet Builder] Selected text option: ${opt.name} for ${featureKey}`);
 				}
 			});
 		});
@@ -1686,7 +1666,6 @@ class CharacterSheetBuilder {
 	_getClassFeatureData (featureName, className, source, level) {
 		const classFeatures = this._page.getClassFeatures();
 		if (!classFeatures?.length) {
-			console.log("[CharSheet Builder] No class features available for lookup");
 			return null;
 		}
 
@@ -1709,12 +1688,9 @@ class CharacterSheetBuilder {
 			// Try to find similar features for debugging
 			const similar = classFeatures.filter(f => f.name === featureName);
 			if (similar.length) {
-				console.log(`[CharSheet Builder] Found ${similar.length} features named "${featureName}" but none match class "${className}" level ${level} source "${source}". Found:`, similar.map(f => `${f.className}|${f.source}|${f.level}`).join(", "));
 			} else {
-				console.log(`[CharSheet Builder] Could not find class feature: ${featureName} for ${className} level ${level} (source: ${source})`);
 			}
 		} else if (result) {
-			console.log(`[CharSheet Builder] Found class feature "${featureName}" with ${result.entries?.length || 0} entries`);
 		}
 		return result;
 	}
@@ -1725,7 +1701,6 @@ class CharacterSheetBuilder {
 	_getSubclassFeatureData (featureName, className, subclassShortName, source, level) {
 		const subclassFeatures = this._page.getSubclassFeatures();
 		if (!subclassFeatures?.length) {
-			console.log("[CharSheet Builder] No subclass features available for lookup");
 			return null;
 		}
 
@@ -1744,7 +1719,6 @@ class CharacterSheetBuilder {
 		});
 
 		if (!result && featureName) {
-			console.log(`[CharSheet Builder] Could not find subclass feature: ${featureName} for ${className}/${subclassShortName} level ${level}`);
 		}
 		return result;
 	}
@@ -3920,7 +3894,6 @@ class CharacterSheetBuilder {
 		// Look up "Combat Methods" feature for this class
 		const classFeatures = this._page.getClassFeatures();
 		if (!classFeatures?.length) {
-			console.log("[CharSheet Builder] No class features available for tradition extraction");
 			return traditions;
 		}
 
@@ -3934,11 +3907,9 @@ class CharacterSheetBuilder {
 
 		// If no "Combat Methods" feature found, this class might not have combat traditions
 		if (!combatMethodsFeature) {
-			console.log(`[CharSheet Builder] No Combat Methods feature found for ${className}`);
 			return traditions;
 		}
 
-		console.log(`[CharSheet Builder] Found Combat Methods feature:`, combatMethodsFeature.name, "at level", combatMethodsFeature.level, "with", combatMethodsFeature.entries?.length, "entries");
 
 		// Recursively extract text from entries and look for tradition codes
 		const extractFromEntries = (entries) => {
@@ -3966,7 +3937,6 @@ class CharacterSheetBuilder {
 
 		extractFromEntries(combatMethodsFeature.entries);
 
-		console.log(`[CharSheet Builder] Extracted traditions from feature text:`, [...traditions]);
 		return traditions;
 	}
 
@@ -3977,7 +3947,6 @@ class CharacterSheetBuilder {
 	 * @param {string} [className] - The class name to extract traditions from
 	 */
 	_getAvailableTraditionsForClass (allOptFeatures, classAllowedTypes, className) {
-		console.log("[CharSheet Builder] _getAvailableTraditionsForClass called with classAllowedTypes:", classAllowedTypes, "className:", className);
 
 		// First try to extract tradition codes from class-allowed types (e.g., "CTM:AM" -> "AM", "CTM:1AM" -> "AM")
 		const allowedTraditionCodes = new Set();
@@ -3988,7 +3957,6 @@ class CharacterSheetBuilder {
 			}
 		}
 
-		console.log("[CharSheet Builder] Extracted tradition codes from types:", [...allowedTraditionCodes]);
 
 		// If no tradition codes found in types, try to extract from class feature description
 		if (allowedTraditionCodes.size === 0 && className) {
@@ -4000,11 +3968,9 @@ class CharacterSheetBuilder {
 
 		// If still no traditions found, fall back to all traditions
 		if (allowedTraditionCodes.size === 0) {
-			console.log("[CharSheet Builder] No tradition codes found, falling back to all traditions");
 			return this._getAvailableTraditions(allOptFeatures);
 		}
 
-		console.log("[CharSheet Builder] Filtering to allowed traditions:", [...allowedTraditionCodes]);
 
 		// Filter to only allowed traditions
 		const traditions = new Map();
@@ -4067,8 +4033,31 @@ class CharacterSheetBuilder {
 		return false;
 	}
 
+	/**
+	 * Filter optional features by class edition/source.
+	 * TGTT classes only see TGTT optional features, XPHB/PHB see their respective editions.
+	 */
+	_filterOptFeaturesByEdition (optFeatures, classSource) {
+		if (!classSource || !optFeatures?.length) return optFeatures;
+
+		const editionMap = {
+			"TGTT": ["TGTT"],
+			"XPHB": ["XPHB", "TCE", "XGE", "FTD", "SCC"],
+			"PHB": ["PHB", "TCE", "XGE", "UA", "FTD", "SCC"],
+		};
+
+		const allowedSources = editionMap[classSource];
+		if (!allowedSources) return optFeatures;
+
+		return optFeatures.filter(opt => {
+			if (!opt.source) return true;
+			return allowedSources.includes(opt.source);
+		});
+	}
+
 	_renderClassOptionalFeatures (cls) {
-		const allOptFeatures = this._page.getOptionalFeatures();
+		const allOptFeaturesRaw = this._page.getOptionalFeatures();
+		const allOptFeatures = this._filterOptFeaturesByEdition(allOptFeaturesRaw, cls?.source);
 		const $container = $(`<div class="charsheet__builder-optional-features mt-3"></div>`);
 
 		cls.optionalfeatureProgression.forEach(optFeatProg => {
@@ -4249,18 +4238,25 @@ class CharacterSheetBuilder {
 				const $item = $(`
 					<label class="charsheet__builder-method-item d-block mb-1 ml-2" style="cursor: pointer;">
 						<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
-						<span class="method-name">${method.name}</span>
+						<span class="method-name"></span>
 						<span class="ve-muted ve-small ml-1">(${method.degree}${this._getOrdinalSuffix(method.degree)} degree)</span>
 					</label>
 				`);
 
-				// Show description on name click
-				$item.find(".method-name").on("click", (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					const desc = Renderer.get().render({entries: method.entries || []});
-					JqueryUtil.doToast({type: "info", content: $(`<div><strong>${method.name}</strong><br>${desc}</div>`)});
-				});
+				// Create hoverable link for the method name
+				const $methodName = $item.find(".method-name");
+				try {
+					const resolvedSource = this._page.resolveOptionalFeatureSource(method.name, [
+						method.source,
+						this._selectedClass?.source,
+						Parser.SRC_XPHB,
+						Parser.SRC_PHB,
+					]);
+					$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, resolvedSource));
+					$methodName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+				} catch (e) {
+					$methodName.text(method.name);
+				}
 
 				$item.find("input").on("change", (e) => {
 					if (e.target.checked) {
@@ -4342,16 +4338,25 @@ class CharacterSheetBuilder {
 			const $item = $(`
 				<label class="charsheet__builder-opt-feat-item d-block mb-1" style="cursor: pointer;">
 					<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
-					<span class="opt-feat-name">${opt.name}</span>
+					<span class="opt-feat-name"></span>
 					<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 				</label>
 			`);
 
-			$item.find(".opt-feat-name").on("click", (e) => {
-				e.preventDefault();
-				const desc = Renderer.get().render({entries: opt.entries || []});
-				JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
-			});
+			// Create hoverable link for the optional feature name
+			const $optName = $item.find(".opt-feat-name");
+			try {
+				const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
+					opt.source,
+					this._selectedClass?.source,
+					Parser.SRC_XPHB,
+					Parser.SRC_PHB,
+				]);
+				$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+				$optName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+			} catch (e) {
+				$optName.text(opt.name);
+			}
 
 			$item.find("input").on("change", (e) => {
 				if (e.target.checked) {
@@ -4787,18 +4792,6 @@ class CharacterSheetBuilder {
 					}
 				} else {
 					$nameSpan.text(opt.name);
-				}
-
-				// Show description on name click for class features
-				if (opt.type === "classFeature" && opt.ref) {
-					$item.find(".feat-opt-name").on("click", (e) => {
-						e.preventDefault();
-						const fullOpt = this._getClassFeatureDataFromRef(opt.ref);
-						if (fullOpt) {
-							const desc = Renderer.get().render({entries: fullOpt.entries || []});
-							JqueryUtil.doToast({type: "info", content: $(`<div><strong>${opt.name}</strong><br>${desc}</div>`)});
-						}
-					});
 				}
 
 				$item.find("input").on("change", (e) => {

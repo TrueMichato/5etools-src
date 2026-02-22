@@ -54,81 +54,63 @@ class CharacterSheetPage {
 	}
 
 	async pInit () {
-		console.log("CharacterSheetPage.pInit: Loading data...");
 		await this._pLoadData();
-		console.log("CharacterSheetPage.pInit: Data loaded, initializing UI...");
 		this._initUi();
-		console.log("CharacterSheetPage.pInit: UI initialized, binding events...");
 		this._initEventListeners();
-		console.log("CharacterSheetPage.pInit: Events bound, loading characters...");
 		await this._pLoadCharacters();
-		console.log("CharacterSheetPage.pInit: Characters loaded, initializing modules...");
 
 		// Initialize sub-modules with error handling
 		try {
 			this._builder = new CharacterSheetBuilder(this);
-			console.log("CharacterSheetPage.pInit: Builder module initialized");
 		} catch (e) { console.error("Failed to init builder:", e); }
 
 		try {
 			this._combat = new CharacterSheetCombat(this);
-			console.log("CharacterSheetPage.pInit: Combat module initialized");
 		} catch (e) { console.error("Failed to init combat:", e); }
 
 		try {
 			this._spells = new CharacterSheetSpells(this);
-			console.log("CharacterSheetPage.pInit: Spells module initialized");
 		} catch (e) { console.error("Failed to init spells:", e); }
 
 		try {
 			this._inventory = new CharacterSheetInventory(this);
-			console.log("CharacterSheetPage.pInit: Inventory module initialized");
 		} catch (e) { console.error("Failed to init inventory:", e); }
 
 		try {
 			this._features = new CharacterSheetFeatures(this);
-			console.log("CharacterSheetPage.pInit: Features module initialized");
 		} catch (e) { console.error("Failed to init features:", e); }
 
 		try {
 			this._rest = new CharacterSheetRest(this);
-			console.log("CharacterSheetPage.pInit: Rest module initialized");
 		} catch (e) { console.error("Failed to init rest:", e); }
 
 		try {
 			this._export = new CharacterSheetExport(this);
-			console.log("CharacterSheetPage.pInit: Export module initialized");
 		} catch (e) { console.error("Failed to init export:", e); }
 
 		try {
 			this._levelUp = new CharacterSheetLevelUp(this);
-			console.log("CharacterSheetPage.pInit: LevelUp module initialized");
 		} catch (e) { console.error("Failed to init levelUp:", e); }
 
 		try {
 			this._layout = new CharacterSheetLayout(this);
-			console.log("CharacterSheetPage.pInit: Layout module initialized");
 		} catch (e) { console.error("Failed to init layout:", e); }
 
 		try {
 			this._notes = new CharacterSheetNotes(this);
-			console.log("CharacterSheetPage.pInit: Notes module initialized");
 		} catch (e) { console.error("Failed to init notes:", e); }
 
 		try {
 			this._customAbilities = new CharacterSheetCustomAbilities(this);
-			console.log("CharacterSheetPage.pInit: CustomAbilities module initialized");
 		} catch (e) { console.error("Failed to init customAbilities:", e); }
 
 		try {
 			this._quickBuild = new CharacterSheetQuickBuild(this);
-			console.log("CharacterSheetPage.pInit: QuickBuild module initialized");
 		} catch (e) { console.error("Failed to init quickBuild:", e); }
 
 		try {
 			this._respec = new CharacterSheetRespec({page: this, state: this._state});
 			this._respec.init();
-			console.log("CharacterSheetPage.pInit: Respec module initialized");
 		} catch (e) { console.error("Failed to init respec:", e); }
 
 		// Pass loaded data to modules
@@ -137,7 +119,6 @@ class CharacterSheetPage {
 		if (this._features) this._features.setFeats(this._featsData);
 		if (this._spells) this._spells.setSpells(this._spellsData);
 
-		console.log("CharacterSheetPage.pInit: All modules initialized");
 
 		// Check for character in URL
 		const urlParams = new URLSearchParams(window.location.search);
@@ -195,10 +176,6 @@ class CharacterSheetPage {
 		// Merge prerelease/homebrew data
 		this._mergeBrewData(prereleaseData);
 		this._mergeBrewData(brewData);
-
-		console.log("[CharSheet] Data loaded - Races:", this._races.length, "Classes:", this._classes.length, 
-			"Spells:", this._spellsData.length, "Items:", this._itemsData.length,
-			"Homebrew sources loaded:", this._getBrewSourceCount(prereleaseData, brewData));
 
 		// Attach subclasses to their parent classes for easier access
 		this._classes.forEach(cls => {
@@ -450,14 +427,12 @@ class CharacterSheetPage {
 		const $tabs = $('#charsheet-tabs');
 		const $tabContent = $('.tab-content');
 
-		console.log("_initTabs: Found", $tabs.length, "tab containers and", $tabs.find('a[data-toggle="tab"]').length, "tab links");
 
 		$tabs.find('a[data-toggle="tab"]').on("click", (e) => {
 			e.preventDefault();
 			const $link = $(e.currentTarget);
 			const targetId = $link.attr("href");
 
-			console.log("Tab clicked:", targetId);
 
 			// Update tab nav
 			$tabs.find("li").removeClass("active");
@@ -9819,26 +9794,18 @@ class CharacterSheetPage {
 
 // Initialize on page load
 window.addEventListener("load", async () => {
-	console.log("CharacterSheetPage: Page load event fired");
-	console.log("PrereleaseUtil available:", typeof PrereleaseUtil !== "undefined");
-	console.log("BrewUtil2 available:", typeof BrewUtil2 !== "undefined");
-	console.log("DataUtil available:", typeof DataUtil !== "undefined");
-	console.log("$ available:", typeof $ !== "undefined");
 	
 	try {
-		console.log("CharacterSheetPage: Starting initialization...");
 		await Promise.all([
 			PrereleaseUtil.pInit(),
 			BrewUtil2.pInit(),
 		]);
-		console.log("CharacterSheetPage: Prerelease and Brew initialized");
 		ExcludeUtil.pInitialise().then(null); // don't await, as this is only used for search
 
 		const charSheet = new CharacterSheetPage();
 		await charSheet.pInit();
 
 		window.charSheet = charSheet; // For debugging
-		console.log("Character sheet initialized successfully");
 
 		// Show a success toast to confirm initialization worked
 		JqueryUtil.doToast({type: "success", content: "Character sheet loaded successfully!"});

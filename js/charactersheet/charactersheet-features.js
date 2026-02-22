@@ -663,13 +663,6 @@ class CharacterSheetFeatures {
 		const allFeatures = this._state.getFeatures();
 		const classNames = classes.map(c => c.name?.toLowerCase()).filter(Boolean);
 
-		console.log("[CharSheet Features] Rendering class features:", {
-			classCount: classes.length,
-			classNames,
-			totalFeatures: allFeatures.length,
-			features: allFeatures.map(f => ({name: f.name, featureType: f.featureType, className: f.className, source: f.source, level: f.level})),
-		});
-
 		// Filter for class features - be lenient for compatibility with old saves
 		// Old saves may have features without explicit featureType markers
 		const features = allFeatures.filter(f => {
@@ -699,8 +692,6 @@ class CharacterSheetFeatures {
 			}
 			return false;
 		});
-
-		console.log("[CharSheet Features] Filtered class features:", features.length, features);
 
 		if (!classes.length) {
 			$container.append(`<div class="ve-muted ve-text-center py-2">Select a class to see features</div>`);
@@ -1468,7 +1459,6 @@ class CharacterSheetFeatures {
 
 		// Check if character uses the combat methods system (has traditions or methods)
 		const usesCombatSystem = this._state.usesCombatSystem?.() || false;
-		console.log("[CharSheet Features] _renderResources: usesCombatSystem=", usesCombatSystem);
 
 		if (usesCombatSystem) {
 			// Ensure exertion is initialized (use public method)
@@ -1478,8 +1468,6 @@ class CharacterSheetFeatures {
 
 			const exertionMax = this._state.getExertionMax() || 0;
 			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
-
-			console.log("[CharSheet Features] Exertion display: max=", exertionMax, "current=", exertionCurrent);
 
 			if (exertionMax > 0) {
 				const $exertion = $(`
