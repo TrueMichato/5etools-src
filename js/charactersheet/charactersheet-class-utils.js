@@ -1210,17 +1210,26 @@ class CharacterSheetClassUtils {
 	 * Apply feat ability/skill/language bonuses to state.
 	 * @param {Object} state - CharacterSheetState instance
 	 * @param {Object} feat - The feat object
+	 * @param {Object} [featChoices] - Optional feat choices if not stored on feat._featChoices
 	 */
-	static applyFeatBonuses (state, feat) {
+	static applyFeatBonuses (state, feat, featChoices = null) {
+		const choices = featChoices || feat._featChoices || {};
+
 		if (feat.ability) {
 			feat.ability.forEach(ablChoice => {
 				const max = ablChoice.max || 20;
 
 				if (ablChoice.choose) {
+					// Check for epic boon choice first, then feat choice
 					if (feat._epicBoonAbilityChoice) {
 						const {ability, amount} = feat._epicBoonAbilityChoice;
 						const current = state.getAbilityBase(ability);
 						state.setAbilityBase(ability, Math.min(max, current + amount));
+					} else if (choices.ability) {
+						// Apply chosen ability from feat choices
+						const amount = ablChoice.choose.amount || 1;
+						const current = state.getAbilityBase(choices.ability);
+						state.setAbilityBase(choices.ability, Math.min(max, current + amount));
 					}
 				} else {
 					Object.entries(ablChoice).forEach(([abl, bonus]) => {
@@ -1234,6 +1243,7 @@ class CharacterSheetClassUtils {
 			});
 		}
 
+		// Apply fixed skill proficiencies from feat data
 		if (feat.skillProficiencies) {
 			feat.skillProficiencies.forEach(sp => {
 				Object.keys(sp).forEach(skill => {
@@ -1244,6 +1254,14 @@ class CharacterSheetClassUtils {
 			});
 		}
 
+		// Apply chosen skill proficiencies
+		if (choices.skills?.length) {
+			choices.skills.forEach(skill => {
+				state.addSkillProficiency(skill.toLowerCase().replace(/\s+/g, ""));
+			});
+		}
+
+		// Apply fixed language proficiencies from feat data
 		if (feat.languageProficiencies) {
 			feat.languageProficiencies.forEach(lp => {
 				Object.keys(lp).forEach(lang => {
@@ -1251,6 +1269,88 @@ class CharacterSheetClassUtils {
 						state.addLanguage(lang);
 					}
 				});
+			});
+		}
+
+		// Apply chosen language proficiencies
+		if (choices.languages?.length) {
+			choices.languages.forEach(lang => {
+				state.addLanguage(lang);
+			});
+		}
+
+		// Apply fixed tool proficiencies from feat data
+		if (feat.toolProficiencies) {
+			feat.toolProficiencies.forEach(tp => {
+				Object.keys(tp).forEach(tool => {
+					if (tool !== "anyArtisansTool" && tool !== "any" && tool !== "choose") {
+						state.addToolProficiency(tool);
+					}
+				});
+			});
+		}
+
+		// Apply chosen tool proficiencies
+		if (choices.tools?.length) {
+			choices.tools.forEach(tool => {
+				state.addToolProficiency(tool);
+			});
+		}
+
+		// Apply chosen expertise
+		if (choices.expertise?.length) {
+			choices.expertise.forEach(skill => {
+				state.addExpertise(skill.toLowerCase().replace(/\s+/g, ""));
+			});
+		}
+
+		// Apply chosen cantrips
+		if (choices.cantrips?.length) {
+			choices.cantrips.forEach(cantrip => {
+				// Check if spell is already known before adding
+				const existingSpells = state.getSpells?.() || [];
+				const existingInnate = state.getInnateSpells?.() || [];
+				const alreadyKnown = [...existingSpells, ...existingInnate].some(
+					s => s.name === cantrip.name && s.source === cantrip.source,
+				);
+				if (!alreadyKnown) {
+					state.addSpell({
+						name: cantrip.name,
+						source: cantrip.source,
+						level: 0,
+						fromFeat: feat.name,
+					});
+				}
+			});
+		}
+
+		// Apply chosen spells
+		if (choices.spells?.length) {
+			choices.spells.forEach(spell => {
+				// Check if spell is already known before adding
+				const existingSpells = state.getSpells?.() || [];
+				const existingInnate = state.getInnateSpells?.() || [];
+				const alreadyKnown = [...existingSpells, ...existingInnate].some(
+					s => s.name === spell.name && s.source === spell.source,
+				);
+				if (!alreadyKnown) {
+					if (spell.innate) {
+						state.addInnateSpell({
+							name: spell.name,
+							source: spell.source,
+							level: spell.level,
+							daily: spell.daily || "1",
+							fromFeat: feat.name,
+						});
+					} else {
+						state.addSpell({
+							name: spell.name,
+							source: spell.source,
+							level: spell.level,
+							fromFeat: feat.name,
+						});
+					}
+				}
 			});
 		}
 	}

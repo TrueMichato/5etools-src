@@ -4053,6 +4053,7 @@ class CharacterSheetSpells {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Choose Spell: ${choice.featureName}`,
 			isMinHeight0: true,
+			zIndex: 10002, // Above QuickBuild/LevelUp modals
 		});
 
 		// Description
