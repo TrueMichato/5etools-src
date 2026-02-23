@@ -914,11 +914,14 @@ class CharacterSheetLevelUp {
 				<div class="charsheet__levelup-option">
 					<div class="charsheet__levelup-option-header">
 						<input type="radio" name="subclass-choice-wizard" value="${subclass.name}">
-						<span>${subclass.name}</span>
+						<span class="subclass-name-link"></span>
 						<span class="ve-small ve-muted ml-auto">${Parser.sourceJsonToAbv(subclass.source)}</span>
 					</div>
 				</div>
 			`);
+			// Add hoverable subclass link
+			const subclassLink = CharacterSheetPage.getSubclassHoverLink(subclass);
+			$option.find(".subclass-name-link").html(subclassLink);
 
 			$option.on("click", () => {
 				$list.find(".charsheet__levelup-option").removeClass("selected");
@@ -1333,7 +1336,7 @@ class CharacterSheetLevelUp {
 
 		// Helper to detect if feat has choices
 		const getFeatChoices = (feat) => {
-			const choices = {skills: null, languages: null, tools: null, ability: null};
+			const choices = {skills: null, languages: null, tools: null, ability: null, expertise: null, spells: null};
 
 			if (feat.skillProficiencies) {
 				for (const sp of feat.skillProficiencies) {
@@ -1361,12 +1364,96 @@ class CharacterSheetLevelUp {
 				}
 			}
 
+			// Tool proficiency choices
+			if (feat.toolProficiencies) {
+				for (const tp of feat.toolProficiencies) {
+					if (tp.anyArtisansTool) {
+						choices.tools = {count: tp.anyArtisansTool, type: "artisan"};
+						break;
+					}
+					if (tp.any) {
+						choices.tools = {count: tp.any, type: "any"};
+						break;
+					}
+					if (tp.choose) {
+						choices.tools = {count: tp.choose.count || 1, from: tp.choose.from || []};
+						break;
+					}
+				}
+			}
+
+			// Expertise choices
+			if (feat.expertise) {
+				for (const exp of feat.expertise) {
+					if (exp.anyProficientSkill) {
+						choices.expertise = {count: exp.anyProficientSkill, type: "proficient"};
+						break;
+					}
+					if (exp.choose) {
+						choices.expertise = {count: exp.choose.count || 1, from: exp.choose.from || []};
+						break;
+					}
+				}
+			}
+
 			if (feat.ability) {
 				for (const ab of feat.ability) {
 					if (ab.choose) {
 						choices.ability = {count: ab.choose.count || 1, amount: ab.choose.amount || 1, from: ab.choose.from || Parser.ABIL_ABVS};
 						break;
 					}
+				}
+			}
+
+			// Spell choices from additionalSpells
+			if (feat.additionalSpells) {
+				const spellChoices = {cantrips: null, spells: null, list: null};
+
+				for (const addSpells of feat.additionalSpells) {
+					// Check for list-based spells (Magic Initiate style)
+					if (addSpells.name && addSpells.ability) {
+						spellChoices.list = {
+							name: addSpells.name,
+							ability: addSpells.ability,
+						};
+					}
+
+					// Parse innate/known/prepared for choices
+					const parseSpellBlock = (block, target) => {
+						if (!block) return;
+						for (const [key, val] of Object.entries(block)) {
+							if (key === "_" || key === "daily" || key === "rest") {
+								const spells = key === "_" ? val : (val["1e"] || val["1"] || Object.values(val)[0] || []);
+								if (Array.isArray(spells)) {
+									for (const spell of spells) {
+										if (typeof spell === "object" && spell.choose) {
+											const filter = spell.choose;
+											const count = spell.count || 1;
+											const maxLevel = filter.match(/level=(\d+)/)?.[1];
+											if (maxLevel === "0" || filter.includes("level=0")) {
+												spellChoices.cantrips = {count, filter};
+											} else {
+												spellChoices.spells = {
+													count,
+													filter,
+													innate: target === "innate",
+													daily: key === "daily" ? "1" : null,
+												};
+											}
+										}
+									}
+								}
+							}
+						}
+					};
+
+					parseSpellBlock(addSpells.innate, "innate");
+					parseSpellBlock(addSpells.known, "known");
+					parseSpellBlock(addSpells.prepared, "prepared");
+				}
+
+				if (spellChoices.cantrips || spellChoices.spells || spellChoices.list) {
+					choices.spells = spellChoices;
 				}
 			}
 
@@ -1382,13 +1469,17 @@ class CharacterSheetLevelUp {
 
 			filteredFeats.forEach(feat => {
 				const choices = getFeatChoices(feat);
-				const hasChoices = choices.skills || choices.languages || choices.ability;
+				const hasChoices = choices.skills || choices.languages || choices.ability || choices.tools || choices.expertise || choices.spells;
 
 				const $feat = $(`<div class="charsheet__levelup-feat-option" data-feat="${feat.name}"></div>`);
 				$feat.append(`<input type="radio" name="feat-choice" value="${feat.name}">`);
 				const featLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_FEATS, feat.name, feat.source);
 				$feat.append($(`<strong></strong>`).append(featLink));
 				$feat.append(` <span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>`);
+				if (feat.category) {
+					const categoryFull = Parser.featCategoryToFull?.(feat.category) || feat.category;
+					$feat.append(` <span class="badge badge-secondary ml-1" style="font-size: 0.6rem;">${categoryFull}</span>`);
+				}
 				if (hasChoices) $feat.append(` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>`);
 
 				$feat.on("click", () => {
@@ -1399,7 +1490,7 @@ class CharacterSheetLevelUp {
 
 					// Initialize feat choices storage
 					if (!feat._featChoices) {
-						feat._featChoices = {skills: [], languages: [], ability: null};
+						feat._featChoices = {skills: [], languages: [], ability: null, tools: [], expertise: [], spellList: null, cantrips: [], spells: []};
 					}
 
 					// Render feat choices UI if needed
@@ -1457,15 +1548,38 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
-	 * Render feat choices UI for feats with skill/language/ability selections.
+	 * Render feat choices UI for feats with skill/language/ability/tool/expertise/spell selections.
 	 */
 	_renderFeatChoicesUI (feat, choices, $container) {
 		$container.empty();
 
-		const hasChoices = choices.skills || choices.languages || choices.ability;
+		const hasChoices = choices.skills || choices.languages || choices.ability || choices.tools || choices.expertise || choices.spells;
 		if (!hasChoices) return;
 
 		$container.append(`<div class="ve-small ve-bold mb-2 mt-2">Additional Choices for ${feat.name}:</div>`);
+
+		// Spell list choice (for Magic Initiate-style feats)
+		if (choices.spells?.list) {
+			const $listSection = $(`<div class="mb-2"></div>`);
+			$listSection.append(`<label class="ve-small">Choose spell list:</label>`);
+			const $select = $(`<select class="form-control form-control-sm mt-1"></select>`);
+			
+			const spellLists = ["Arcane", "Divine", "Primal"];
+			spellLists.forEach(list => {
+				const isSelected = feat._featChoices.spellList === list;
+				$select.append(`<option value="${list}" ${isSelected ? "selected" : ""}>${list}</option>`);
+			});
+			
+			$select.on("change", () => {
+				feat._featChoices.spellList = $select.val();
+			});
+			if (!feat._featChoices.spellList) {
+				feat._featChoices.spellList = spellLists[0];
+			}
+			
+			$listSection.append($select);
+			$container.append($listSection);
+		}
 
 		// Skill choices
 		if (choices.skills) {
@@ -1510,6 +1624,107 @@ class CharacterSheetLevelUp {
 			$skillSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="skill-count">${feat._featChoices.skills.length}/${choices.skills.count}</span></div>`);
 			renderSkills();
 			$container.append($skillSection);
+		}
+
+		// Tool proficiency choices
+		if (choices.tools) {
+			const $toolSection = $(`<div class="mb-2"></div>`);
+			$toolSection.append(`<label class="ve-small">Choose ${choices.tools.count} tool${choices.tools.count > 1 ? "s" : ""}:</label>`);
+			const $toolGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+			// Get tool list - artisan tools or from specified list
+			let availableTools = [];
+			if (choices.tools.type === "artisan") {
+				const allTools = this._page.getToolsList() || [];
+				availableTools = allTools.filter(t => t.toolType === "artisan" || (t.name || "").toLowerCase().includes("artisan") || (t.name || "").toLowerCase().includes("tools"));
+				if (availableTools.length === 0) {
+					availableTools = ["Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies", "Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools", "Cook's Utensils", "Glassblower's Tools", "Jeweler's Tools", "Leatherworker's Tools", "Mason's Tools", "Painter's Supplies", "Potter's Tools", "Smith's Tools", "Tinker's Tools", "Weaver's Tools", "Woodcarver's Tools"].map(n => ({name: n}));
+				}
+			} else if (choices.tools.from?.length) {
+				availableTools = choices.tools.from.map(t => ({name: t}));
+			}
+
+			const existingTools = new Set((this._state.getToolProficiencies?.() || []).map(t => (typeof t === "string" ? t : t.name || "").toLowerCase()));
+
+			const renderTools = () => {
+				$toolGrid.empty();
+				availableTools.forEach(tool => {
+					const toolName = typeof tool === "string" ? tool : tool.name;
+					const isKnown = existingTools.has(toolName.toLowerCase());
+					const isSelected = feat._featChoices.tools.includes(toolName);
+
+					const $btn = $(`
+						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
+							${isKnown ? "disabled title=\"Already proficient\"" : ""}
+							style="${isKnown ? "opacity: 0.5;" : ""}">
+							${toolName}${isKnown ? " ✓" : ""}
+						</button>
+					`);
+
+					if (!isKnown) {
+						$btn.on("click", () => {
+							if (isSelected) {
+								feat._featChoices.tools = feat._featChoices.tools.filter(t => t !== toolName);
+							} else if (feat._featChoices.tools.length < choices.tools.count) {
+								feat._featChoices.tools.push(toolName);
+							}
+							renderTools();
+						});
+					}
+					$toolGrid.append($btn);
+				});
+				$toolSection.find(".tool-count").text(`${feat._featChoices.tools.length}/${choices.tools.count}`);
+			};
+
+			$toolSection.append($toolGrid);
+			$toolSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="tool-count">${feat._featChoices.tools.length}/${choices.tools.count}</span></div>`);
+			renderTools();
+			$container.append($toolSection);
+		}
+
+		// Expertise choices
+		if (choices.expertise) {
+			const $expertiseSection = $(`<div class="mb-2"></div>`);
+			$expertiseSection.append(`<label class="ve-small">Choose ${choices.expertise.count} skill${choices.expertise.count > 1 ? "s" : ""} for expertise:</label>`);
+			const $expertiseGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+			// Get proficient skills that don't already have expertise
+			const existingProf = this._state.getSkillProficiencies?.() || [];
+			const existingExpertise = new Set((this._state.getExpertise?.() || []).map(e => e.toLowerCase()));
+			const availableForExpertise = existingProf.filter(s => !existingExpertise.has(s.toLowerCase()));
+			
+			// Also include skills being added by this feat
+			const newFeatSkills = feat._featChoices.skills || [];
+
+			const renderExpertise = () => {
+				$expertiseGrid.empty();
+				[...availableForExpertise, ...newFeatSkills].forEach(skill => {
+					const isSelected = feat._featChoices.expertise.includes(skill);
+					const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
+
+					const $btn = $(`
+						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
+							${displayName}
+						</button>
+					`);
+
+					$btn.on("click", () => {
+						if (isSelected) {
+							feat._featChoices.expertise = feat._featChoices.expertise.filter(s => s !== skill);
+						} else if (feat._featChoices.expertise.length < choices.expertise.count) {
+							feat._featChoices.expertise.push(skill);
+						}
+						renderExpertise();
+					});
+					$expertiseGrid.append($btn);
+				});
+				$expertiseSection.find(".expertise-count").text(`${feat._featChoices.expertise.length}/${choices.expertise.count}`);
+			};
+
+			$expertiseSection.append($expertiseGrid);
+			$expertiseSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="expertise-count">${feat._featChoices.expertise.length}/${choices.expertise.count}</span></div>`);
+			renderExpertise();
+			$container.append($expertiseSection);
 		}
 
 		// Language choices
@@ -1586,6 +1801,111 @@ class CharacterSheetLevelUp {
 			$abilitySection.append($abilityGrid);
 			$container.append($abilitySection);
 		}
+
+		// Cantrip choices
+		if (choices.spells?.cantrips) {
+			const $cantripSection = $(`<div class="mb-2"></div>`);
+			$cantripSection.append(`<label class="ve-small">Choose ${choices.spells.cantrips.count} cantrip${choices.spells.cantrips.count > 1 ? "s" : ""}:</label>`);
+			
+			const $cantripList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			
+			const renderCantrips = () => {
+				$cantripList.empty();
+				feat._featChoices.cantrips.forEach((cantrip, idx) => {
+					const $badge = $(`<span class="badge badge-primary mr-1">${cantrip.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
+					$badge.find(".clickable").on("click", () => {
+						feat._featChoices.cantrips.splice(idx, 1);
+						renderCantrips();
+					});
+					$cantripList.append($badge);
+				});
+
+				if (feat._featChoices.cantrips.length < choices.spells.cantrips.count) {
+					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Cantrip</button>`);
+					$addBtn.on("click", async () => {
+						await this._showSpellPicker(choices.spells.cantrips.filter, true, (spell) => {
+							if (!feat._featChoices.cantrips.find(s => s.name === spell.name && s.source === spell.source)) {
+								feat._featChoices.cantrips.push({name: spell.name, source: spell.source, level: 0});
+								renderCantrips();
+							}
+						});
+					});
+					$cantripList.append($addBtn);
+				}
+				$cantripSection.find(".cantrip-count").text(`${feat._featChoices.cantrips.length}/${choices.spells.cantrips.count}`);
+			};
+
+			$cantripSection.append($cantripList);
+			$cantripSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="cantrip-count">${feat._featChoices.cantrips.length}/${choices.spells.cantrips.count}</span></div>`);
+			renderCantrips();
+			$container.append($cantripSection);
+		}
+
+		// Spell choices
+		if (choices.spells?.spells) {
+			const $spellSection = $(`<div class="mb-2"></div>`);
+			const spellType = choices.spells.spells.innate ? "innate spell" : "spell";
+			$spellSection.append(`<label class="ve-small">Choose ${choices.spells.spells.count} ${spellType}${choices.spells.spells.count > 1 ? "s" : ""}:</label>`);
+			
+			const $spellList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			
+			const renderSpells = () => {
+				$spellList.empty();
+				feat._featChoices.spells.forEach((spell, idx) => {
+					const $badge = $(`<span class="badge badge-primary mr-1">${spell.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
+					$badge.find(".clickable").on("click", () => {
+						feat._featChoices.spells.splice(idx, 1);
+						renderSpells();
+					});
+					$spellList.append($badge);
+				});
+
+				if (feat._featChoices.spells.length < choices.spells.spells.count) {
+					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Spell</button>`);
+					$addBtn.on("click", async () => {
+						await this._showSpellPicker(choices.spells.spells.filter, false, (spell) => {
+							if (!feat._featChoices.spells.find(s => s.name === spell.name && s.source === spell.source)) {
+								feat._featChoices.spells.push({
+									name: spell.name,
+									source: spell.source,
+									level: spell.level,
+									innate: choices.spells.spells.innate,
+									daily: choices.spells.spells.daily,
+								});
+								renderSpells();
+							}
+						});
+					});
+					$spellList.append($addBtn);
+				}
+				$spellSection.find(".spell-count").text(`${feat._featChoices.spells.length}/${choices.spells.spells.count}`);
+			};
+
+			$spellSection.append($spellList);
+			$spellSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="spell-count">${feat._featChoices.spells.length}/${choices.spells.spells.count}</span></div>`);
+			renderSpells();
+			$container.append($spellSection);
+		}
+	}
+
+	/**
+	 * Show a spell picker modal filtered by the given filter string
+	 * @param {string} filterStr - Filter string like "level=0|class=Wizard"
+	 * @param {boolean} isCantrip - Whether we're picking cantrips (level 0)
+	 * @param {function} onSelect - Callback when spell is selected
+	 */
+	async _showSpellPicker (filterStr, isCantrip, onSelect) {
+		if (!this._page._spells?.showFilteredSpellPicker) {
+			JqueryUtil.doToast({type: "warning", content: "Spell picker not available"});
+			return;
+		}
+
+		const choice = {
+			filter: filterStr,
+			featureName: isCantrip ? "Feat Cantrip" : "Feat Spell",
+		};
+
+		await this._page._spells.showFilteredSpellPicker(choice, onSelect);
 	}
 
 	_renderNewFeatures (features) {

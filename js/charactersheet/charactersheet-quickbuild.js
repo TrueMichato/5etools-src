@@ -952,7 +952,8 @@ class CharacterSheetQuickBuild {
 				});
 		};
 
-		$search.on("input", () => renderList($search.val()));
+		const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
+		$search.on("input", renderListDebounced);
 		renderList();
 
 		$modalInner.append($search, $list);
@@ -1057,12 +1058,15 @@ class CharacterSheetQuickBuild {
 						<div class="charsheet__quickbuild-option ${isSelected ? "selected" : ""}">
 							<div class="ve-flex-v-center">
 								<input type="radio" name="qb-subclass-${key}" ${isSelected ? "checked" : ""}>
-								<strong class="ml-2">${sc.name}</strong>
+								<span class="subclass-name-link ml-2"></span>
 								<span class="ve-muted ve-small ml-2">(${Parser.sourceJsonToAbv(sc.source)})</span>
 							</div>
 							${sc.shortName && sc.shortName !== sc.name ? `<div class="ve-muted ve-small ml-4">${sc.shortName}</div>` : ""}
 						</div>
 					`);
+					// Add hoverable subclass link
+					const subclassLink = CharacterSheetPage.getSubclassHoverLink(sc);
+					$item.find(".subclass-name-link").html(subclassLink);
 					$item.on("click", () => {
 						$list.find(".charsheet__quickbuild-option").removeClass("selected");
 						$list.find("input[type=radio]").prop("checked", false);
@@ -1151,7 +1155,8 @@ class CharacterSheetQuickBuild {
 					}
 				};
 
-				$search.on("input", () => renderList($search.val()));
+				const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
+				$search.on("input", renderListDebounced);
 				$sourceFilter.on("change", () => {
 					selectedSource = $sourceFilter.val();
 					renderList($search.val());
@@ -1367,7 +1372,7 @@ class CharacterSheetQuickBuild {
 
 		// Initialize featChoices if not exists
 		if (!sel.featChoices) {
-			sel.featChoices = {skills: [], languages: [], tools: [], ability: null};
+			sel.featChoices = {skills: [], languages: [], tools: [], ability: null, expertise: [], spellList: null, cantrips: [], spells: []};
 		}
 
 		const $search = $(`<input type="text" class="form-control form-control-sm mb-1" placeholder="Search ${isEpicBoon ? "boons" : "feats"}...">`);
@@ -1376,7 +1381,7 @@ class CharacterSheetQuickBuild {
 
 		// Helper to detect if feat has choices
 		const getFeatChoices = (feat) => {
-			const choices = {skills: null, languages: null, tools: null, ability: null};
+			const choices = {skills: null, languages: null, tools: null, ability: null, expertise: null, spells: null};
 
 			// Check skill choices
 			if (feat.skillProficiencies) {
@@ -1420,11 +1425,29 @@ class CharacterSheetQuickBuild {
 			if (feat.toolProficiencies) {
 				for (const tp of feat.toolProficiencies) {
 					if (tp.choose) {
-						choices.tools = {count: tp.choose.count || 1, from: tp.choose.from};
+						choices.tools = {count: tp.choose.count || 1, from: tp.choose.from, type: "choose"};
 						break;
 					}
 					if (tp.any) {
 						choices.tools = {count: tp.any, type: "any"};
+						break;
+					}
+					if (tp.anyArtisansTool) {
+						choices.tools = {count: tp.anyArtisansTool, type: "artisan"};
+						break;
+					}
+				}
+			}
+
+			// Check expertise choices
+			if (feat.expertise) {
+				for (const exp of feat.expertise) {
+					if (exp.anyProficientSkill) {
+						choices.expertise = {count: exp.anyProficientSkill, type: "proficient"};
+						break;
+					}
+					if (exp.choose) {
+						choices.expertise = {count: exp.choose.count || 1, from: exp.choose.from};
 						break;
 					}
 				}
@@ -1444,6 +1467,89 @@ class CharacterSheetQuickBuild {
 				}
 			}
 
+			// Check spell choices (from additionalSpells)
+			if (feat.additionalSpells) {
+				choices.spells = {lists: [], cantrips: null, spells: null};
+				
+				// Check for named spell list options (Magic Initiate style)
+				const namedLists = feat.additionalSpells.filter(as => as.name);
+				if (namedLists.length > 1) {
+					choices.spells.lists = namedLists.map(as => ({
+						name: as.name,
+						ability: as.ability,
+					}));
+				}
+				
+				// Parse the first (or only) spell list for cantrip/spell counts
+				const spellList = feat.additionalSpells[0];
+				if (spellList) {
+					// Check for cantrip choices in 'known' block
+					if (spellList.known) {
+						const levelKey = Object.keys(spellList.known).find(k => k === "_" || !isNaN(k));
+						const spellsAtLevel = levelKey ? spellList.known[levelKey] : null;
+						if (Array.isArray(spellsAtLevel)) {
+							spellsAtLevel.forEach(sp => {
+								if (typeof sp === "object" && sp.choose) {
+									const filter = sp.choose;
+									if (filter.includes("level=0") || filter.includes("level=cantrip")) {
+										choices.spells.cantrips = {count: sp.count || 1, filter};
+									} else {
+										choices.spells.spells = {count: sp.count || 1, filter, known: true};
+									}
+								}
+							});
+						}
+					}
+					// Check for spell choices in 'innate' block (recursively handle nested structures)
+					if (spellList.innate) {
+						const parseInnateSpellChoices = (block, isDaily = false) => {
+							if (Array.isArray(block)) {
+								block.forEach(sp => {
+									if (typeof sp === "object" && sp.choose) {
+										const filter = sp.choose;
+										if (filter.includes("level=0") || filter.includes("level=cantrip")) {
+											choices.spells.cantrips = {count: sp.count || 1, filter};
+										} else {
+											choices.spells.spells = {count: sp.count || 1, filter: sp.choose, innate: true, daily: isDaily};
+										}
+									}
+								});
+							} else if (typeof block === "object" && block !== null) {
+								Object.entries(block).forEach(([key, v]) => {
+									parseInnateSpellChoices(v, key === "daily" || isDaily);
+								});
+							}
+						};
+						parseInnateSpellChoices(spellList.innate);
+					}
+					// Check for spell choices in 'prepared' block (recursively handle nested structures)
+					if (spellList.prepared) {
+						const parseSpellChoicesFromBlock = (block) => {
+							if (Array.isArray(block)) {
+								block.forEach(sp => {
+									if (typeof sp === "object" && sp.choose) {
+										const filter = sp.choose;
+										if (filter.includes("level=0") || filter.includes("level=cantrip")) {
+											choices.spells.cantrips = {count: sp.count || 1, filter};
+										} else {
+											choices.spells.spells = {count: sp.count || 1, filter: sp.choose, prepared: true};
+										}
+									}
+								});
+							} else if (typeof block === "object" && block !== null) {
+								Object.values(block).forEach(v => parseSpellChoicesFromBlock(v));
+							}
+						};
+						parseSpellChoicesFromBlock(spellList.prepared);
+					}
+				}
+				
+				// Clean up if no actual choices found
+				if (!choices.spells.lists.length && !choices.spells.cantrips && !choices.spells.spells) {
+					choices.spells = null;
+				}
+			}
+
 			return choices;
 		};
 
@@ -1453,10 +1559,57 @@ class CharacterSheetQuickBuild {
 			if (!sel.feat) return;
 
 			const choices = getFeatChoices(sel.feat);
-			const hasChoices = choices.skills || choices.languages || choices.tools || choices.ability;
+			const hasChoices = choices.skills || choices.languages || choices.tools || choices.ability || choices.expertise || choices.spells;
 			if (!hasChoices) return;
 
 			$choicesContainer.append(`<div class="ve-small ve-bold mb-1">Additional Choices for ${sel.feat.name}:</div>`);
+
+			// Spell list selection (for feats like Magic Initiate)
+			if (choices.spells?.lists?.length > 1) {
+				const $listSection = $(`<div class="mb-2"></div>`);
+				$listSection.append(`<label class="ve-small">Choose spell list:</label>`);
+				const $select = $(`<select class="form-control form-control-sm mt-1"></select>`);
+				$select.append(`<option value="">-- Select --</option>`);
+				choices.spells.lists.forEach(list => {
+					const isSelected = sel.featChoices.spellList === list.name;
+					$select.append(`<option value="${list.name}" ${isSelected ? "selected" : ""}>${list.name}</option>`);
+				});
+				$select.on("change", () => {
+					sel.featChoices.spellList = $select.val() || null;
+					sel.featChoices.cantrips = [];
+					sel.featChoices.spells = [];
+					renderFeatChoices();
+				});
+				$listSection.append($select);
+				$choicesContainer.append($listSection);
+			}
+
+			// Ability score choices
+			if (choices.ability) {
+				const $abilitySection = $(`<div class="mb-2"></div>`);
+				$abilitySection.append(`<label class="ve-small">Choose ability to increase by ${choices.ability.amount}:</label>`);
+				const $abilityGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+				choices.ability.from.forEach(abl => {
+					const isSelected = sel.featChoices.ability === abl;
+					const currentScore = this._state.getAbilityBase(abl);
+
+					const $btn = $(`
+						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
+							${Parser.attAbvToFull(abl)} (${currentScore} → ${currentScore + choices.ability.amount})
+						</button>
+					`);
+
+					$btn.on("click", () => {
+						sel.featChoices.ability = isSelected ? null : abl;
+						renderFeatChoices();
+					});
+					$abilityGrid.append($btn);
+				});
+
+				$abilitySection.append($abilityGrid);
+				$choicesContainer.append($abilitySection);
+			}
 
 			// Skill choices
 			if (choices.skills) {
@@ -1496,6 +1649,103 @@ class CharacterSheetQuickBuild {
 				$skillSection.append($skillGrid);
 				$skillSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.skills.length}/${choices.skills.count}</div>`);
 				$choicesContainer.append($skillSection);
+			}
+
+			// Tool choices
+			if (choices.tools) {
+				const $toolSection = $(`<div class="mb-2"></div>`);
+				$toolSection.append(`<label class="ve-small">Choose ${choices.tools.count} tool${choices.tools.count > 1 ? "s" : ""}:</label>`);
+				const $toolGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+				const allTools = this._page.getToolsList() || [];
+				let availableTools = allTools;
+				if (choices.tools.type === "artisan") {
+					availableTools = allTools.filter(t => t.name.toLowerCase().includes("tool") || 
+						["alchemist's supplies", "brewer's supplies", "calligrapher's supplies", "carpenter's tools", 
+						 "cartographer's tools", "cobbler's tools", "cook's utensils", "glassblower's tools", 
+						 "jeweler's tools", "leatherworker's tools", "mason's tools", "painter's supplies", 
+						 "potter's tools", "smith's tools", "tinker's tools", "weaver's tools", "woodcarver's tools"].some(art => t.name.toLowerCase().includes(art.toLowerCase().replace("'s tools", "").replace("'s supplies", "").replace("'s utensils", ""))));
+				} else if (choices.tools.from) {
+					availableTools = allTools.filter(t => choices.tools.from.some(f => t.name.toLowerCase().includes(f.toLowerCase())));
+				}
+
+				const existingTools = new Set((this._state.getToolProficiencies?.() || []).map(t => t.toLowerCase()));
+
+				availableTools.forEach(tool => {
+					const isKnown = existingTools.has(tool.name.toLowerCase());
+					const isSelected = sel.featChoices.tools.includes(tool.name);
+
+					const $btn = $(`
+						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
+							${isKnown ? "disabled title=\"Already proficient\"" : ""}
+							style="${isKnown ? "opacity: 0.5;" : ""}">
+							${tool.name}${isKnown ? " ✓" : ""}
+						</button>
+					`);
+
+					if (!isKnown) {
+						$btn.on("click", () => {
+							if (isSelected) {
+								sel.featChoices.tools = sel.featChoices.tools.filter(t => t !== tool.name);
+							} else if (sel.featChoices.tools.length < choices.tools.count) {
+								sel.featChoices.tools.push(tool.name);
+							}
+							renderFeatChoices();
+						});
+					}
+					$toolGrid.append($btn);
+				});
+
+				$toolSection.append($toolGrid);
+				$toolSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.tools.length}/${choices.tools.count}</div>`);
+				$choicesContainer.append($toolSection);
+			}
+
+			// Expertise choices
+			if (choices.expertise) {
+				const $expSection = $(`<div class="mb-2"></div>`);
+				$expSection.append(`<label class="ve-small">Choose ${choices.expertise.count} skill${choices.expertise.count > 1 ? "s" : ""} for expertise:</label>`);
+				const $expGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+				// Get skills that can have expertise (already proficient, or being added by this feat)
+				const proficientSkills = this._state.getSkillProficiencies?.() || [];
+				const skillsBeingAdded = sel.featChoices.skills || [];
+				const existingExpertise = new Set((this._state.getExpertise?.() || []).map(s => s.toLowerCase()));
+				const availableForExpertise = [...new Set([...proficientSkills, ...skillsBeingAdded])].map(s => s.toLowerCase());
+
+				if (availableForExpertise.length === 0) {
+					$expSection.append(`<div class="ve-small ve-muted mt-1">No proficient skills available for expertise. Add skill proficiencies first.</div>`);
+				} else {
+					availableForExpertise.forEach(skill => {
+						const hasExpertise = existingExpertise.has(skill);
+						const isSelected = sel.featChoices.expertise.includes(skill);
+						const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
+
+						const $btn = $(`
+							<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
+								${hasExpertise ? "disabled title=\"Already has expertise\"" : ""}
+								style="${hasExpertise ? "opacity: 0.5;" : ""}">
+								${displayName}${hasExpertise ? " ✓✓" : ""}
+							</button>
+						`);
+
+						if (!hasExpertise) {
+							$btn.on("click", () => {
+								if (isSelected) {
+									sel.featChoices.expertise = sel.featChoices.expertise.filter(s => s !== skill);
+								} else if (sel.featChoices.expertise.length < choices.expertise.count) {
+									sel.featChoices.expertise.push(skill);
+								}
+								renderFeatChoices();
+							});
+						}
+						$expGrid.append($btn);
+					});
+				}
+
+				$expSection.append($expGrid);
+				$expSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.expertise.length}/${choices.expertise.count}</div>`);
+				$choicesContainer.append($expSection);
 			}
 
 			// Language choices
@@ -1539,31 +1789,77 @@ class CharacterSheetQuickBuild {
 				$choicesContainer.append($langSection);
 			}
 
-			// Ability score choices
-			if (choices.ability) {
-				const $abilitySection = $(`<div class="mb-2"></div>`);
-				$abilitySection.append(`<label class="ve-small">Choose ability to increase by ${choices.ability.amount}:</label>`);
-				const $abilityGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
-
-				choices.ability.from.forEach(abl => {
-					const isSelected = sel.featChoices.ability === abl;
-					const currentScore = this._state.getAbilityBase(abl);
-
-					const $btn = $(`
-						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
-							${Parser.attAbvToFull(abl)} (${currentScore} → ${currentScore + choices.ability.amount})
-						</button>
-					`);
-
-					$btn.on("click", () => {
-						sel.featChoices.ability = isSelected ? null : abl;
+			// Cantrip choices
+			if (choices.spells?.cantrips) {
+				const $cantripSection = $(`<div class="mb-2"></div>`);
+				$cantripSection.append(`<label class="ve-small">Choose ${choices.spells.cantrips.count} cantrip${choices.spells.cantrips.count > 1 ? "s" : ""}:</label>`);
+				
+				const $cantripList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				sel.featChoices.cantrips.forEach((cantrip, idx) => {
+					const $badge = $(`<span class="badge badge-primary mr-1">${cantrip.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
+					$badge.find(".clickable").on("click", () => {
+						sel.featChoices.cantrips.splice(idx, 1);
 						renderFeatChoices();
 					});
-					$abilityGrid.append($btn);
+					$cantripList.append($badge);
 				});
 
-				$abilitySection.append($abilityGrid);
-				$choicesContainer.append($abilitySection);
+				if (sel.featChoices.cantrips.length < choices.spells.cantrips.count) {
+					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Cantrip</button>`);
+					$addBtn.on("click", async () => {
+						await this._showSpellPicker(choices.spells.cantrips.filter, true, (spell) => {
+							if (!sel.featChoices.cantrips.find(s => s.name === spell.name && s.source === spell.source)) {
+								sel.featChoices.cantrips.push({name: spell.name, source: spell.source, level: 0});
+								renderFeatChoices();
+							}
+						});
+					});
+					$cantripList.append($addBtn);
+				}
+
+				$cantripSection.append($cantripList);
+				$cantripSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.cantrips.length}/${choices.spells.cantrips.count}</div>`);
+				$choicesContainer.append($cantripSection);
+			}
+
+			// Spell choices
+			if (choices.spells?.spells) {
+				const $spellSection = $(`<div class="mb-2"></div>`);
+				const spellType = choices.spells.spells.innate ? "innate spell" : "spell";
+				$spellSection.append(`<label class="ve-small">Choose ${choices.spells.spells.count} ${spellType}${choices.spells.spells.count > 1 ? "s" : ""}:</label>`);
+				
+				const $spellList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				sel.featChoices.spells.forEach((spell, idx) => {
+					const $badge = $(`<span class="badge badge-primary mr-1">${spell.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
+					$badge.find(".clickable").on("click", () => {
+						sel.featChoices.spells.splice(idx, 1);
+						renderFeatChoices();
+					});
+					$spellList.append($badge);
+				});
+
+				if (sel.featChoices.spells.length < choices.spells.spells.count) {
+					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Spell</button>`);
+					$addBtn.on("click", async () => {
+						await this._showSpellPicker(choices.spells.spells.filter, false, (spell) => {
+							if (!sel.featChoices.spells.find(s => s.name === spell.name && s.source === spell.source)) {
+								sel.featChoices.spells.push({
+									name: spell.name, 
+									source: spell.source, 
+									level: spell.level,
+									innate: choices.spells.spells.innate,
+									daily: choices.spells.spells.daily,
+								});
+								renderFeatChoices();
+							}
+						});
+					});
+					$spellList.append($addBtn);
+				}
+
+				$spellSection.append($spellList);
+				$spellSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.spells.length}/${choices.spells.spells.count}</div>`);
+				$choicesContainer.append($spellSection);
 			}
 		};
 
@@ -1577,12 +1873,16 @@ class CharacterSheetQuickBuild {
 				.forEach(feat => {
 					const isSelected = sel.feat?.name === feat.name && sel.feat?.source === feat.source;
 					const choices = getFeatChoices(feat);
-					const hasChoices = choices.skills || choices.languages || choices.tools || choices.ability;
+					const hasChoices = choices.skills || choices.languages || choices.tools || choices.ability || choices.expertise || choices.spells;
 
 					const $item = $(`<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 4px 8px; cursor: pointer;"></div>`);
 					const featLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_FEATS, feat.name, feat.source);
 					$item.append($(`<strong></strong>`).append(featLink));
 					$item.append(` <span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>`);
+					if (feat.category) {
+						const categoryFull = Parser.featCategoryToFull?.(feat.category) || feat.category;
+						$item.append(` <span class="badge badge-secondary ml-1" style="font-size: 0.6rem;">${categoryFull}</span>`);
+					}
 					if (hasChoices) $item.append(` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>`);
 
 					$item.on("click", () => {
@@ -1590,14 +1890,15 @@ class CharacterSheetQuickBuild {
 						$item.addClass("selected");
 						sel.feat = feat;
 						// Reset feat choices when changing feat
-						sel.featChoices = {skills: [], languages: [], tools: [], ability: null};
+						sel.featChoices = {skills: [], languages: [], tools: [], ability: null, expertise: [], spellList: null, cantrips: [], spells: []};
 						renderFeatChoices();
 					});
 					$list.append($item);
 				});
 		};
 
-		$search.on("input", () => renderList($search.val()));
+		const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
+		$search.on("input", renderListDebounced);
 		renderList();
 
 		$container.append($search, $list, $choicesContainer);
@@ -1608,6 +1909,26 @@ class CharacterSheetQuickBuild {
 		}
 
 		return $container;
+	}
+
+	/**
+	 * Show a spell picker modal filtered by the given filter string
+	 * @param {string} filterStr - Filter string like "level=0|class=Wizard"
+	 * @param {boolean} isCantrip - Whether we're picking cantrips (level 0)
+	 * @param {function} onSelect - Callback when spell is selected
+	 */
+	async _showSpellPicker (filterStr, isCantrip, onSelect) {
+		if (!this._page._spells?.showFilteredSpellPicker) {
+			JqueryUtil.doToast({type: "warning", content: "Spell picker not available"});
+			return;
+		}
+
+		const choice = {
+			filter: filterStr,
+			featureName: isCantrip ? "Feat Cantrip" : "Feat Spell",
+		};
+
+		await this._page._spells.showFilteredSpellPicker(choice, onSelect);
 	}
 
 	_validateAsiStep (asiLevels) {
@@ -1749,7 +2070,7 @@ class CharacterSheetQuickBuild {
 
 		const $section = $(`
 			<div class="charsheet__quickbuild-section mb-3">
-				<h5>${gain.name} <span class="badge badge-primary">${selectedList.length}/${gain.totalNeeded}</span></h5>
+				<h5>${gain.name} <span class="badge badge-primary qb-opt-counter">${selectedList.length}/${gain.totalNeeded}</span></h5>
 			</div>
 		`);
 
@@ -1798,12 +2119,14 @@ class CharacterSheetQuickBuild {
 		const renderList = (filter = "") => {
 			$list.empty();
 
-			// Add legend for badges if there are known options
-			if (hasKnownOptions) {
+			// Add legend for badges if there are known options or any selections in progress
+			const hasAnyKnownOrSelected = hasKnownOptions || selectedList.length > 0;
+			if (hasAnyKnownOrSelected) {
 				$list.append(`
 					<div class="ve-small ve-muted mb-2 pb-2 px-2 pt-1" style="border-bottom: 1px solid var(--cs-border, #ddd);">
-						<span class="badge badge-success mr-1">✓ Known</span> = Already selected
-						<span class="badge badge-info ml-2 mr-1">↺ Repeatable</span> = Can be taken again
+						<span class="badge badge-success mr-1">✓ Known</span> = Already have
+						<span class="badge badge-primary ml-2 mr-1">● Selected</span> = Chosen now
+						<span class="badge badge-info ml-2 mr-1">↺ Repeatable</span> = Can take again
 					</div>
 				`);
 			}
@@ -1822,24 +2145,27 @@ class CharacterSheetQuickBuild {
 					const isSelected = selectedList.some(s => s.name === opt.name && s.source === opt.source);
 					const isDisabled = !opt._selectable;
 
-					// Build badges
+					// Build badges - show "Selected" for current session picks, "Known" for already in state
 					const knownText = opt._timesKnown > 1 ? `Known ×${opt._timesKnown}` : "Known";
 					const knownBadge = opt._alreadyKnown
-						? `<span class="badge badge-success ml-1" title="Already selected${opt._timesKnown > 1 ? ` (${opt._timesKnown} times)` : ""}">✓ ${knownText}</span>`
+						? `<span class="badge badge-success ml-1" title="Already have this${opt._timesKnown > 1 ? ` (${opt._timesKnown} times)` : ""}">✓ ${knownText}</span>`
+						: "";
+					const selectedBadge = isSelected && !opt._alreadyKnown
+						? `<span class="badge badge-primary ml-1" title="Selected in this session">● Selected</span>`
 						: "";
 					const repeatableBadge = opt._repeatable
 						? `<span class="badge badge-info ml-1" title="Can be taken multiple times">↺ Repeatable</span>`
 						: "";
 
-					// Build item with styling for known/disabled states
-					const itemStyle = `padding: 6px 8px; cursor: ${isDisabled ? "not-allowed" : "pointer"};${isDisabled ? " opacity: 0.5;" : ""}${opt._alreadyKnown && opt._selectable ? " background: rgba(40, 167, 69, 0.1); border-left: 3px solid #28a745;" : ""}${opt._alreadyKnown && !opt._selectable ? " background: rgba(128, 128, 128, 0.1);" : ""}`;
+					// Build item with styling for known/disabled/selected states
+					const itemStyle = `padding: 6px 8px; cursor: ${isDisabled ? "not-allowed" : "pointer"};${isDisabled ? " opacity: 0.5;" : ""}${isSelected && !opt._alreadyKnown ? " background: rgba(13, 110, 253, 0.1); border-left: 3px solid #0d6efd;" : ""}${opt._alreadyKnown && opt._selectable ? " background: rgba(40, 167, 69, 0.1); border-left: 3px solid #28a745;" : ""}${opt._alreadyKnown && !opt._selectable ? " background: rgba(128, 128, 128, 0.1);" : ""}`;
 
 					const $item = $(`
 						<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="${itemStyle}">
 							<div class="ve-flex-v-center">
 								<input type="checkbox" ${isSelected ? "checked" : ""}${isDisabled ? " disabled" : ""}>
 								<span class="qb-opt-name ml-2"></span>
-								${knownBadge}${repeatableBadge}
+								${knownBadge}${selectedBadge}${repeatableBadge}
 								<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 							</div>
 						</div>
@@ -1873,13 +2199,14 @@ class CharacterSheetQuickBuild {
 							selectedList.push(opt);
 						}
 						renderList(filter);
-						$section.find(".badge").text(`${selectedList.length}/${gain.totalNeeded}`);
+						$section.find(".qb-opt-counter").text(`${selectedList.length}/${gain.totalNeeded}`);
 					});
 					$list.append($item);
 				});
 		};
 
-		$search.on("input", () => renderList($search.val()));
+		const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
+		$search.on("input", renderListDebounced);
 		renderList();
 
 		$section.append($search, $list);
@@ -2080,7 +2407,8 @@ class CharacterSheetQuickBuild {
 				}
 			};
 
-			$search.on("input", () => renderFiltered($search.val()));
+			const renderFilteredDebounced = MiscUtil.debounce(() => renderFiltered($search.val()), 100);
+			$search.on("input", renderFilteredDebounced);
 			renderFiltered();
 
 			$methodsContainer.append($search, $list);
@@ -3466,6 +3794,11 @@ class CharacterSheetQuickBuild {
 		// Check racial spells
 		CharacterSheetClassUtils.updateRacialSpells(this._state, this._page);
 
+		// Process any pending spell choices from feats or features that grant selectable spells
+		if (this._page._spells?.processPendingSpellChoices) {
+			await this._page._spells.processPendingSpellChoices();
+		}
+
 		// Final recalculations
 		this._state.ensureXpMatchesLevel();
 		this._state.applyClassFeatureEffects();
@@ -3514,11 +3847,11 @@ class CharacterSheetQuickBuild {
 			// Apply feat
 			if (asiSel.feat) {
 				this._state.addFeat(asiSel.feat);
-				CharacterSheetClassUtils.applyFeatBonuses(this._state, asiSel.feat);
+				CharacterSheetClassUtils.applyFeatBonuses(this._state, asiSel.feat, asiSel.featChoices);
 			}
 		} else if (asiSel.mode === "feat" && asiSel.feat) {
 			this._state.addFeat(asiSel.feat);
-			CharacterSheetClassUtils.applyFeatBonuses(this._state, asiSel.feat);
+			CharacterSheetClassUtils.applyFeatBonuses(this._state, asiSel.feat, asiSel.featChoices);
 		} else if (asiSel.mode === "asi") {
 			const increases = [];
 			Parser.ABIL_ABVS.forEach(abl => {

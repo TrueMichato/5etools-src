@@ -7644,6 +7644,26 @@ class CharacterSheetPage {
 	}
 
 	/**
+	 * Create a hoverable link for a subclass.
+	 * @param {object} subclass - Subclass object with name, source, className, classSource
+	 * @returns {string} HTML string for the hover link
+	 */
+	static getSubclassHoverLink (subclass) {
+		try {
+			const hash = `${UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_CLASSES]({name: subclass.className, source: subclass.classSource})}${HASH_PART_SEP}${UrlUtil.getClassesPageStatePart({subclass})}`;
+			const hoverAttrs = Renderer.hover.getHoverElementAttributes({
+				page: UrlUtil.PG_CLASSES,
+				source: subclass.source,
+				hash,
+			});
+			return `<a href="${UrlUtil.PG_CLASSES}#${hash}" ${hoverAttrs} onclick="event.preventDefault();">${subclass.name}</a>`;
+		} catch (e) {
+			console.error("[CharSheet] getSubclassHoverLink error:", e);
+			return subclass.name; // Fallback to just the name
+		}
+	}
+
+	/**
 	 * Resolve the best source for an optional feature name.
 	 * Prefers explicitly provided sources, then common official fallbacks.
 	 * @param {string} name - Optional feature name
