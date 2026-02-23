@@ -10,372 +10,6 @@ class CharacterSheetLevelUp {
 	}
 
 	/**
-	 * Find entries of type "options" in a feature's entries array
-	 * These represent choices the player must make (like Specialties)
-	 * @param {Object} feature - The feature object with entries
-	 * @param {number} characterLevel - Current character level for filtering
-	 * @returns {Array} Array of {count, options} objects
-	 */
-	_findFeatureOptions (feature, characterLevel = 1) {
-		if (!feature?.entries) return [];
-
-		const results = [];
-
-		const searchEntries = (entries) => {
-			if (!Array.isArray(entries)) return;
-
-			for (const entry of entries) {
-				if (typeof entry === "object" && entry.type === "options") {
-					// Found an options entry
-					const count = entry.count || 1;
-					const options = [];
-
-					// Process the option entries
-					if (entry.entries) {
-						for (const opt of entry.entries) {
-							if (opt.type === "refClassFeature" && opt.classFeature) {
-								// Parse "FeatureName|ClassName|Source|Level" format
-								const parts = opt.classFeature.split("|");
-								const optLevel = parseInt(parts[3]) || 1;
-
-								// Only include options available at current level
-								if (optLevel <= characterLevel) {
-									options.push({
-										name: parts[0],
-										className: parts[1],
-										source: parts[2],
-										level: optLevel,
-										type: "classFeature",
-										ref: opt.classFeature,
-									});
-								}
-							} else if (opt.type === "refSubclassFeature" && opt.subclassFeature) {
-								const parts = opt.subclassFeature.split("|");
-								const optLevel = parseInt(parts[5]) || 1;
-
-								if (optLevel <= characterLevel) {
-									options.push({
-										name: parts[0],
-										className: parts[1],
-										classSource: parts[2],
-										subclassShortName: parts[3],
-										subclassSource: parts[4],
-										level: optLevel,
-										type: "subclassFeature",
-										ref: opt.subclassFeature,
-									});
-								}
-							} else if (opt.type === "refOptionalfeature" && opt.optionalfeature) {
-								options.push({
-									name: opt.optionalfeature.split("|")[0],
-									source: opt.optionalfeature.split("|")[1],
-									type: "optionalfeature",
-									ref: opt.optionalfeature,
-								});
-							} else if (typeof opt === "string") {
-								options.push({
-									name: opt,
-									type: "text",
-								});
-							}
-						}
-					}
-
-					if (options.length > 0) {
-						results.push({count, options, featureName: feature.name});
-					}
-				} else if (typeof entry === "string") {
-					// Check for features that reference another feature's options
-					// Pattern: "{@classFeature FeatureName|ClassName|Source|Level}" in text like
-					// "You gain another specialty of your choice from the {@classFeature Specialties|Fighter|TGTT|1}."
-					const refMatch = entry.match(/\{@classFeature\s+([^}]+)\}/);
-					if (refMatch && /another|additional|gain/i.test(entry)) {
-						const refParts = refMatch[1].split("|");
-						const refFeatureName = refParts[0];
-						const refClassName = refParts[1];
-						const refSource = refParts[2];
-						const refLevel = parseInt(refParts[3]) || 1;
-
-						// Look up the referenced feature
-						const referencedFeature = this._getClassFeatureByRef(refFeatureName, refClassName, refSource, refLevel);
-						if (referencedFeature) {
-							// Get options from the referenced feature
-							const refResults = this._findFeatureOptions(referencedFeature, characterLevel);
-							for (const refResult of refResults) {
-								// Use count of 1 for "gain another" features
-								results.push({
-									count: 1,
-									options: refResult.options,
-									featureName: feature.name,
-									referencedFrom: refMatch[1],
-								});
-							}
-						}
-					}
-				}
-
-				// Recursively search nested entries
-				if (entry.entries) {
-					searchEntries(entry.entries);
-				}
-			}
-		};
-
-		searchEntries(feature.entries);
-		return results;
-	}
-
-	/**
-	 * Look up a class feature by reference parts
-	 */
-	_getClassFeatureByRef (featureName, className, source, level) {
-		const classFeatures = this._page.getClassFeatures();
-		if (!classFeatures?.length) return null;
-
-		return classFeatures.find(f => {
-			if (f.name !== featureName) return false;
-			if (f.className !== className) return false;
-			if (f.level !== level) return false;
-			// Be flexible with source matching
-			if (source && f.source && f.source !== source) {
-				return false;
-			}
-			return true;
-		});
-	}
-
-	/**
-	 * Get feature options from features gained at a specific level
-	 * @param {Array} features - Array of features gained at this level
-	 * @param {number} level - The level being gained
-	 * @returns {Array} Array of {featureName, featureSource, count, options} objects
-	 */
-	_getFeatureOptionsForLevel (features, level) {
-		const allOptions = [];
-
-		for (const feature of features) {
-			const featureOptions = this._findFeatureOptions(feature, level);
-			for (const optionGroup of featureOptions) {
-				allOptions.push({
-					featureName: feature.name,
-					featureSource: feature.source,
-					isSubclassFeature: feature.isSubclassFeature,
-					...optionGroup,
-				});
-			}
-		}
-
-		return allOptions;
-	}
-
-	/**
-	 * Get expertise grants from features at the new level
-	 * Features like Deft Explorer Improvement grant expertise at levels 6 and 10
-	 * @param {Array} features - Features gained at the new level
-	 * @returns {Array} Array of {featureName, count, allowTools, toolName} objects
-	 */
-	_getExpertiseGrantsForLevel (features) {
-		const grants = [];
-
-		for (const feature of features) {
-			const expertiseInfo = this._findExpertiseInFeature(feature);
-			if (expertiseInfo) {
-				grants.push({
-					featureName: feature.name,
-					...expertiseInfo,
-				});
-			}
-		}
-
-		return grants;
-	}
-
-	/**
-	 * Find expertise grant in a feature's entries
-	 * @param {Object} feature - Feature with entries
-	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
-	 */
-	_findExpertiseInFeature (feature) {
-		if (!feature?.entries) return null;
-
-		// Check if feature name is "Expertise"
-		if (feature.name === "Expertise") {
-			return this._parseExpertiseEntries(feature.entries);
-		}
-
-		// Search nested entries for Expertise grants
-		return this._findExpertiseInEntries(feature.entries);
-	}
-
-	/**
-	 * Recursively search entries for nested Expertise grants
-	 * @param {Array} entries - Feature entries
-	 * @returns {{count: number, allowTools: boolean, toolName: string}|null}
-	 */
-	_findExpertiseInEntries (entries) {
-		for (const entry of entries) {
-			if (typeof entry === "object" && entry.type === "entries") {
-				// Check if this sub-entry's name is "Expertise"
-				if (entry.name === "Expertise") {
-					return this._parseExpertiseEntries(entry.entries || []);
-				}
-				// Check if this sub-entry's text grants expertise
-				if (this._entryGrantsExpertise(entry.entries || [])) {
-					return this._parseExpertiseEntries(entry.entries || []);
-				}
-				// Recursively check nested entries
-				if (entry.entries) {
-					const result = this._findExpertiseInEntries(entry.entries);
-					if (result) return result;
-				}
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * Check if entries text indicates an expertise grant
-	 * @param {Array} entries - Feature entries to check
-	 * @returns {boolean}
-	 */
-	_entryGrantsExpertise (entries) {
-		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
-		return entriesText.includes("proficiency bonus is doubled")
-			|| entriesText.includes("gain expertise")
-			|| entriesText.includes("double your proficiency bonus");
-	}
-
-	/**
-	 * Parse expertise entries to determine count and tool allowance
-	 * @param {Array} entries - Expertise feature entries
-	 * @returns {{count: number, allowTools: boolean, toolName: string}}
-	 */
-	_parseExpertiseEntries (entries) {
-		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
-
-		// Determine count - look for expertise-specific patterns
-		// We need to be careful: "two languages" shouldn't affect expertise count
-		// Look for patterns like "one of your skill proficiencies" or "two skill proficiencies"
-		let count = 1; // Default to 1 for safety
-
-		// Check for specific expertise-granting patterns
-		// "choose two skills" or "two of your skill proficiencies"
-		if (entriesText.match(/(?:choose|pick|select|gain|get)\s+(?:two|2)\s+(?:skills?|proficienc)/i)
-			|| entriesText.match(/two\s+(?:of\s+)?(?:your\s+)?skill(?:\s+proficienc)?/i)) {
-			count = 2;
-		}
-		// "choose one skill" or "one of your skill proficiencies" (this should take precedence)
-		if (entriesText.match(/(?:choose|pick|select|gain|get)\s+(?:one|1|a)\s+(?:skill|proficienc)/i)
-			|| entriesText.match(/one\s+(?:of\s+)?(?:your\s+)?skill(?:\s+proficienc)?/i)) {
-			count = 1;
-		}
-		// "another" typically means 1 additional
-		if (entriesText.includes("another")) count = 1;
-		// Explicit number mentions with expertise
-		if (entriesText.includes("three") && entriesText.includes("expertise")) count = 3;
-		if (entriesText.includes("four") && entriesText.includes("expertise")) count = 4;
-
-		// Check if tools are allowed
-		const allowTools = entriesText.includes("thieves' tools") && !entriesText.includes("variantrule");
-
-		return {
-			count,
-			allowTools,
-			toolName: allowTools ? "Thieves' Tools" : null,
-		};
-	}
-
-	/**
-	 * Get language grants from features at the new level
-	 * Features like Deft Explorer Improvement grant languages at levels 6 and 10
-	 * @param {Array} features - Features gained at the new level
-	 * @returns {Array} Array of {featureName, count} objects
-	 */
-	_getLanguageGrantsForLevel (features) {
-		const grants = [];
-
-		for (const feature of features) {
-			const langInfo = this._findLanguageGrantsInFeature(feature);
-			if (langInfo) {
-				grants.push({
-					featureName: feature.name,
-					count: langInfo.count,
-				});
-			}
-		}
-
-		return grants;
-	}
-
-	/**
-	 * Find language grant in a feature's entries
-	 * @param {Object} feature - Feature with entries
-	 * @returns {{count: number}|null}
-	 */
-	_findLanguageGrantsInFeature (feature) {
-		if (!feature?.entries) return null;
-		return this._findLanguageGrantsInEntries(feature.entries, feature.name);
-	}
-
-	/**
-	 * Recursively search entries for language grants
-	 * @param {Array} entries - Feature entries
-	 * @param {string} featureName - Name of the feature for reference
-	 * @returns {{count: number}|null}
-	 */
-	_findLanguageGrantsInEntries (entries, featureName) {
-		const entriesText = entries.map(e => {
-			if (typeof e === "string") return e;
-			if (typeof e === "object" && e.type === "list" && e.items) {
-				return e.items.map(item => typeof item === "string" ? item : JSON.stringify(item)).join(" ");
-			}
-			return JSON.stringify(e);
-		}).join(" ").toLowerCase();
-
-		// Check for language-granting patterns
-		const langPatterns = [
-			/learn\s+(one|two|three|four|\d+)\s+(?:additional\s+)?languages?/i,
-			/speak,?\s*read,?\s*and\s*write\s+(one|two|three|four|\d+)\s+(?:additional\s+)?languages?/i,
-			/two\s+(?:additional\s+)?languages?\s+of\s+your\s+choice/i,
-			/one\s+(?:additional\s+)?language\s+of\s+your\s+choice/i,
-			/\{@b Languages?\.\}\s*You\s+learn\s+(one|two|three|four|\d+)\s+languages?/i,
-		];
-
-		for (const pattern of langPatterns) {
-			const match = entriesText.match(pattern);
-			if (match) {
-				let count = 0;
-				const numWord = match[1]?.toLowerCase();
-				if (numWord === "one" || numWord === "1") count = 1;
-				else if (numWord === "two" || numWord === "2") count = 2;
-				else if (numWord === "three" || numWord === "3") count = 3;
-				else if (numWord === "four" || numWord === "4") count = 4;
-				else if (/^\d+$/.test(numWord)) count = parseInt(numWord);
-
-				// Special cases for patterns without capture groups
-				if (count === 0 && entriesText.includes("two additional languages")) count = 2;
-				if (count === 0 && entriesText.includes("two languages of your choice")) count = 2;
-				if (count === 0 && entriesText.includes("one additional language")) count = 1;
-				if (count === 0 && entriesText.includes("one language of your choice")) count = 1;
-
-				if (count > 0) {
-					return {count};
-				}
-			}
-		}
-
-		// Recursively check nested entries
-		for (const entry of entries) {
-			if (typeof entry === "object" && entry.entries) {
-				const result = this._findLanguageGrantsInEntries(entry.entries, featureName);
-				if (result) return result;
-			}
-		}
-
-		return null;
-	}
-
-	/**
 	 * Show level up dialog for a specific class
 	 * @param {string} className - The class to level up (optional, prompts if multiple classes)
 	 */
@@ -445,13 +79,13 @@ class CharacterSheetLevelUp {
 		}
 
 		// Get features for the new level
-		const newFeatures = this._getLevelFeatures(classData, newLevel, fullSubclassData);
+		const newFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, fullSubclassData, this._page.getClassFeatures());
 
 		// Check if this level grants an ASI
-		const hasAsi = this._levelGrantsAsi(classData, newLevel);
+		const hasAsi = CharacterSheetClassUtils.levelGrantsAsi(classData, newLevel);
 
 		// Check if this level grants a subclass (usually level 3 for most classes)
-		const needsSubclass = this._levelGrantsSubclass(classData, newLevel) && !classEntry.subclass;
+		const needsSubclass = CharacterSheetClassUtils.levelGrantsSubclass(classData, newLevel) && !classEntry.subclass;
 
 		// Build the level up modal
 		await this._pShowLevelUpModal({
@@ -484,9 +118,9 @@ class CharacterSheetLevelUp {
 		let featureOptionGroups = [];
 		this._selectedFeatureSkillChoices = {};
 		let selectedExpertise = {};
-		let expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
+		let expertiseGrants = CharacterSheetClassUtils.getExpertiseGrantsForLevel(currentFeatures);
 		let selectedLanguages = {};
-		let languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
+		let languageGrants = CharacterSheetClassUtils.getLanguageGrantsForLevel(currentFeatures);
 		let selectedScholarSkill = null;
 		let selectedSpellbookSpells = [];
 
@@ -494,8 +128,8 @@ class CharacterSheetLevelUp {
 		const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
 		const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
 		const isEpicBoonLevel = newLevel === 19 && (classEntry.source === "XPHB" || classEntry.source === "TGTT");
-		const optionalFeatureGains = this._getOptionalFeatureGains(classData, classEntry.level, newLevel);
-		featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
+		const optionalFeatureGains = CharacterSheetClassUtils.getOptionalFeatureGains(classData, classEntry.level, newLevel, this._state);
+		featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(currentFeatures, newLevel, this._page.getClassFeatures());
 
 		// Scholar expertise (Wizard XPHB level 2)
 		const existingScholarExpertise = this._state.getScholarExpertise();
@@ -730,12 +364,12 @@ class CharacterSheetLevelUp {
 
 			const $subclassContent = this._renderSubclassSelectionCompact(classData, (subclass) => {
 				selectedSubclass = subclass;
-				currentFeatures = this._getLevelFeatures(classData, newLevel, subclass);
+				currentFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, subclass, this._page.getClassFeatures());
 
 				// Update dependent sections
-				featureOptionGroups = this._getFeatureOptionsForLevel(currentFeatures, newLevel);
-				expertiseGrants = this._getExpertiseGrantsForLevel(currentFeatures);
-				languageGrants = this._getLanguageGrantsForLevel(currentFeatures);
+				featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(currentFeatures, newLevel, this._page.getClassFeatures());
+				expertiseGrants = CharacterSheetClassUtils.getExpertiseGrantsForLevel(currentFeatures);
+				languageGrants = CharacterSheetClassUtils.getLanguageGrantsForLevel(currentFeatures);
 
 				// Update summary & accordion
 				summaryItems.subclass.setStatus(true, subclass.name);
@@ -955,12 +589,22 @@ class CharacterSheetLevelUp {
 		if (isWizard) {
 			$summaryItems.append(createSummaryItem("spellbook", "📕", "Spellbook", {required: true}));
 
-			const $spellbookContent = this._renderWizardSpellbookSelection(wizardSpellCount, maxSpellLevel, (spells) => {
-				selectedSpellbookSpells = spells;
-				const complete = spells.length >= wizardSpellCount;
-				const summary = spells.length > 0 ? spells.map(s => s.name).join(", ") : "Select spells";
-				summaryItems.spellbook.setStatus(complete, summary);
-				accordions.spellbook.setComplete(complete, `${spells.length}/${wizardSpellCount} spells`);
+			const allSpells = this._page.filterByAllowedSources?.(this._page.getSpells?.() || []) || [];
+			const knownSpellIds = new Set((this._state.getSpells?.() || []).map(s => `${s.name}|${s.source}`));
+
+			const $spellbookContent = CharacterSheetSpellPicker.renderWizardSpellbookPicker({
+				spellCount: wizardSpellCount,
+				maxSpellLevel,
+				allSpells,
+				knownSpellIds,
+				getHoverLink: (...args) => CharacterSheetPage.getHoverLink(...args),
+				onSelect: (spells) => {
+					selectedSpellbookSpells = spells;
+					const complete = spells.length >= wizardSpellCount;
+					const summary = spells.length > 0 ? spells.map(s => s.name).join(", ") : "Select spells";
+					summaryItems.spellbook.setStatus(complete, summary);
+					accordions.spellbook.setComplete(complete, `${spells.length}/${wizardSpellCount} spells`);
+				},
 			});
 
 			$main.append(createAccordion("spellbook", "📕", `Spellbook (+${wizardSpellCount} Spells)`, $spellbookContent, {required: true}));
@@ -971,12 +615,21 @@ class CharacterSheetLevelUp {
 			const totalGain = knownSpellsGain + knownCantripsGain;
 			$summaryItems.append(createSummaryItem("knownspells", "✨", "Spells Known", {required: totalGain > 0}));
 
-			const $knownSpellsContent = this._renderKnownSpellSelection({
+			const knownAllSpells = this._page.filterByAllowedSources?.(this._page.getSpells?.() || []) || [];
+			const knownExistingIds = new Set([
+				...(this._state.getSpells?.() || []),
+				...(this._state.getCantripsKnown?.() || []),
+			].map(s => `${s.name}|${s.source}`));
+
+			const $knownSpellsContent = CharacterSheetSpellPicker.renderKnownSpellPicker({
 				className: classEntry.name,
 				classSource: classEntry.source,
 				spellCount: knownSpellsGain,
 				cantripCount: knownCantripsGain,
 				maxSpellLevel: knownMaxSpellLevel,
+				allSpells: knownAllSpells,
+				knownSpellIds: knownExistingIds,
+				getHoverLink: (...args) => CharacterSheetPage.getHoverLink(...args),
 				onSelect: (spells, cantrips) => {
 					selectedKnownSpells = spells;
 					selectedKnownCantrips = cantrips;
@@ -1014,7 +667,7 @@ class CharacterSheetLevelUp {
 		// ========== 10. HP ==========
 		$summaryItems.append(createSummaryItem("hp", "❤️", "Hit Points", {required: false}));
 
-		const hitDie = this._getClassHitDie(classData);
+		const hitDie = CharacterSheetClassUtils.getClassHitDie(classData);
 		const conMod = this._state.getAbilityMod("con");
 		const averageHp = Math.ceil(hitDie / 2) + 1 + conMod;
 
@@ -1203,10 +856,60 @@ class CharacterSheetLevelUp {
 	 * Render compact subclass selection for wizard layout
 	 */
 	_renderSubclassSelectionCompact (classData, onSelect) {
-		const subclasses = classData.subclasses || [];
+		const allSubclassesRaw = classData.subclasses || [];
+		// Apply source filtering
+		const allSubclasses = this._page.filterByAllowedSources(allSubclassesRaw);
+
+		const subclassTitle = classData.subclassTitle || "Subclass";
 		const $container = $(`<div class="charsheet__levelup-subclasses"></div>`);
 
-		subclasses.forEach(subclass => {
+		// Get class source from classData
+		const classSource = classData.source;
+
+		// Group by source affinity
+		const primarySubclasses = allSubclasses.filter(sc => {
+			const scClassSource = sc.classSource || Parser.SRC_PHB;
+			return scClassSource === classSource ||
+				([Parser.SRC_PHB, Parser.SRC_XPHB].includes(scClassSource) &&
+				 [Parser.SRC_PHB, Parser.SRC_XPHB].includes(classSource));
+		}).sort((a, b) => a.name.localeCompare(b.name));
+
+		const secondarySubclasses = allSubclasses.filter(sc => {
+			const scClassSource = sc.classSource || Parser.SRC_PHB;
+			if (scClassSource === classSource) return false;
+			if ([Parser.SRC_PHB, Parser.SRC_XPHB].includes(scClassSource) &&
+				[Parser.SRC_PHB, Parser.SRC_XPHB].includes(classSource)) return false;
+			return true;
+		}).sort((a, b) => a.name.localeCompare(b.name));
+
+		// Build source filter options
+		const availableSources = [...new Set(allSubclasses.map(sc => sc.source))].sort();
+		const showFilters = allSubclasses.length > 6;
+
+		let selectedSource = "";
+		let textFilter = "";
+
+		const $filterRow = showFilters ? $(`<div class="ve-flex gap-2 mb-2"></div>`) : null;
+		const $search = showFilters
+			? $(`<input type="text" class="form-control form-control-sm ve-flex-grow" placeholder="Search ${subclassTitle.toLowerCase()}s...">`)
+			: null;
+		const $sourceFilter = showFilters && availableSources.length > 1
+			? $(`
+				<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
+					<option value="">All Sources</option>
+					${availableSources.map(src => `<option value="${src}">${Parser.sourceJsonToAbv(src)}</option>`).join("")}
+				</select>
+			`)
+			: null;
+
+		if ($filterRow) {
+			$filterRow.append($search);
+			if ($sourceFilter) $filterRow.append($sourceFilter);
+		}
+
+		const $list = $(`<div style="max-height: 300px; overflow-y: auto;"></div>`);
+
+		const renderSubclassItem = (subclass) => {
 			const $option = $(`
 				<div class="charsheet__levelup-option">
 					<div class="charsheet__levelup-option-header">
@@ -1218,13 +921,106 @@ class CharacterSheetLevelUp {
 			`);
 
 			$option.on("click", () => {
-				$container.find(".charsheet__levelup-option").removeClass("selected");
+				$list.find(".charsheet__levelup-option").removeClass("selected");
 				$option.addClass("selected").find("input").prop("checked", true);
 				onSelect(subclass);
 			});
 
-			$container.append($option);
-		});
+			return $option;
+		};
+
+		// Track collapse states
+		let primaryCollapsed = false;
+		let secondaryCollapsed = true; // Start collapsed
+
+		const renderList = () => {
+			$list.empty();
+			const filterLower = textFilter.toLowerCase();
+
+			const filterSubclasses = (scs) => scs.filter(sc => {
+				if (selectedSource && sc.source !== selectedSource) return false;
+				if (!textFilter) return true;
+				return sc.name.toLowerCase().includes(filterLower) ||
+					(sc.shortName && sc.shortName.toLowerCase().includes(filterLower));
+			});
+
+			const filteredPrimary = filterSubclasses(primarySubclasses);
+			const filteredSecondary = filterSubclasses(secondarySubclasses);
+
+			if (filteredPrimary.length === 0 && filteredSecondary.length === 0) {
+				$list.append(`<p class="ve-muted text-center py-2">No matching ${subclassTitle.toLowerCase()}s</p>`);
+				return;
+			}
+
+			// Primary subclasses
+			if (filteredPrimary.length > 0) {
+				const $primaryHeader = $(`
+					<div class="ve-flex-v-center py-2 px-3 mb-2 clickable" 
+						style="background: linear-gradient(135deg, rgba(66, 153, 225, 0.15) 0%, rgba(66, 153, 225, 0.05) 100%); border: 1px solid rgba(66, 153, 225, 0.3); border-radius: 6px; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+						<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">▶</span>
+						<span class="ve-bold" style="color: var(--rgb-name-blue);">🎯 ${Parser.sourceJsonToAbv(classSource)} ${subclassTitle}s</span>
+						<span class="badge badge-primary ml-auto" style="font-size: 0.75em;">${filteredPrimary.length}</span>
+					</div>
+				`);
+				const $primaryContent = $(`<div class="mb-3 pl-2" style="border-left: 3px solid rgba(66, 153, 225, 0.3);"></div>`);
+				filteredPrimary.forEach(sc => $primaryContent.append(renderSubclassItem(sc)));
+
+				$primaryHeader.on("click", () => {
+					primaryCollapsed = !primaryCollapsed;
+					$primaryHeader.find("span:first").css("transform", primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
+					$primaryContent.toggle(!primaryCollapsed);
+				});
+
+				// Apply initial state
+				$primaryHeader.find("span:first").css("transform", primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
+				$primaryContent.toggle(!primaryCollapsed);
+
+				$list.append($primaryHeader, $primaryContent);
+			}
+
+			// Secondary subclasses
+			if (filteredSecondary.length > 0) {
+				const $secondaryHeader = $(`
+					<div class="ve-flex-v-center py-2 px-3 mb-2 clickable" 
+						style="background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.03) 100%); border: 1px solid rgba(128, 128, 128, 0.2); border-radius: 6px; user-select: none;">
+						<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">▶</span>
+						<span class="ve-bold ve-muted">📚 Other ${subclassTitle}s</span>
+						<span class="badge badge-secondary ml-auto" style="font-size: 0.75em;">${filteredSecondary.length}</span>
+					</div>
+				`);
+				const $secondaryContent = $(`<div class="mb-2 pl-2" style="border-left: 3px solid rgba(128, 128, 128, 0.2);"></div>`);
+				filteredSecondary.forEach(sc => $secondaryContent.append(renderSubclassItem(sc)));
+
+				$secondaryHeader.on("click", () => {
+					secondaryCollapsed = !secondaryCollapsed;
+					$secondaryHeader.find("span:first").css("transform", secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
+					$secondaryContent.toggle(!secondaryCollapsed);
+				});
+
+				// Apply initial state
+				$secondaryHeader.find("span:first").css("transform", secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
+				$secondaryContent.toggle(!secondaryCollapsed);
+
+				$list.append($secondaryHeader, $secondaryContent);
+			}
+		};
+
+		if ($search) {
+			$search.on("input", () => {
+				textFilter = $search.val();
+				renderList();
+			});
+		}
+		if ($sourceFilter) {
+			$sourceFilter.on("change", () => {
+				selectedSource = $sourceFilter.val();
+				renderList();
+			});
+		}
+
+		if ($filterRow) $container.append($filterRow);
+		renderList();
+		$container.append($list);
 
 		return $container;
 	}
@@ -1533,27 +1329,82 @@ class CharacterSheetLevelUp {
 
 		const $featSearch = $(`<input type="text" class="form-control mb-2" placeholder="Search feats...">`);
 		const $featList = $(`<div class="charsheet__levelup-feats-list"></div>`);
+		const $featChoicesContainer = $(`<div class="charsheet__levelup-feat-choices"></div>`);
+
+		// Helper to detect if feat has choices
+		const getFeatChoices = (feat) => {
+			const choices = {skills: null, languages: null, tools: null, ability: null};
+
+			if (feat.skillProficiencies) {
+				for (const sp of feat.skillProficiencies) {
+					if (sp.choose) {
+						choices.skills = {count: sp.choose.count || 1, from: sp.choose.from || Object.keys(Parser.SKILL_TO_ATB_ABV)};
+						break;
+					}
+					if (sp.any) {
+						choices.skills = {count: sp.any, from: Object.keys(Parser.SKILL_TO_ATB_ABV)};
+						break;
+					}
+				}
+			}
+
+			if (feat.languageProficiencies) {
+				for (const lp of feat.languageProficiencies) {
+					if (lp.anyStandard) {
+						choices.languages = {count: lp.anyStandard, type: "standard"};
+						break;
+					}
+					if (lp.any) {
+						choices.languages = {count: lp.any, type: "any"};
+						break;
+					}
+				}
+			}
+
+			if (feat.ability) {
+				for (const ab of feat.ability) {
+					if (ab.choose) {
+						choices.ability = {count: ab.choose.count || 1, amount: ab.choose.amount || 1, from: ab.choose.from || Parser.ABIL_ABVS};
+						break;
+					}
+				}
+			}
+
+			return choices;
+		};
 
 		const renderFeats = (filter = "") => {
 			$featList.empty();
+			$featChoicesContainer.empty();
 			const filteredFeats = feats.filter(f =>
 				f.name.toLowerCase().includes(filter.toLowerCase()),
 			).slice(0, 50);
 
 			filteredFeats.forEach(feat => {
-				const $feat = $(`
-					<div class="charsheet__levelup-feat-option" data-feat="${feat.name}">
-						<input type="radio" name="feat-choice" value="${feat.name}">
-						<strong>${feat.name}</strong>
-						<span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>
-					</div>
-				`);
+				const choices = getFeatChoices(feat);
+				const hasChoices = choices.skills || choices.languages || choices.ability;
+
+				const $feat = $(`<div class="charsheet__levelup-feat-option" data-feat="${feat.name}"></div>`);
+				$feat.append(`<input type="radio" name="feat-choice" value="${feat.name}">`);
+				const featLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_FEATS, feat.name, feat.source);
+				$feat.append($(`<strong></strong>`).append(featLink));
+				$feat.append(` <span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>`);
+				if (hasChoices) $feat.append(` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>`);
 
 				$feat.on("click", () => {
 					// Deselect from all feat lists (including epic boons)
 					$featsContainer.find(".charsheet__levelup-feat-option").removeClass("selected");
 					$feat.addClass("selected");
 					$feat.find("input").prop("checked", true);
+
+					// Initialize feat choices storage
+					if (!feat._featChoices) {
+						feat._featChoices = {skills: [], languages: [], ability: null};
+					}
+
+					// Render feat choices UI if needed
+					this._renderFeatChoicesUI(feat, choices, $featChoicesContainer);
+
 					onFeatSelect(feat);
 				});
 
@@ -1564,7 +1415,7 @@ class CharacterSheetLevelUp {
 		$featSearch.on("input", (e) => renderFeats(e.target.value));
 		renderFeats();
 
-		$featsContainer.append($featSearch, $featList);
+		$featsContainer.append($featSearch, $featList, $featChoicesContainer);
 
 		return $section;
 	}
@@ -1605,6 +1456,138 @@ class CharacterSheetLevelUp {
 		$parentSection.append($choiceContainer);
 	}
 
+	/**
+	 * Render feat choices UI for feats with skill/language/ability selections.
+	 */
+	_renderFeatChoicesUI (feat, choices, $container) {
+		$container.empty();
+
+		const hasChoices = choices.skills || choices.languages || choices.ability;
+		if (!hasChoices) return;
+
+		$container.append(`<div class="ve-small ve-bold mb-2 mt-2">Additional Choices for ${feat.name}:</div>`);
+
+		// Skill choices
+		if (choices.skills) {
+			const $skillSection = $(`<div class="mb-2"></div>`);
+			$skillSection.append(`<label class="ve-small">Choose ${choices.skills.count} skill${choices.skills.count > 1 ? "s" : ""}:</label>`);
+			const $skillGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+			const availableSkills = choices.skills.from.map(s => s.toLowerCase().replace(/\s+/g, ""));
+			const existingSkills = new Set((this._state.getSkillProficiencies?.() || []).map(s => s.toLowerCase()));
+
+			const renderSkills = () => {
+				$skillGrid.empty();
+				availableSkills.forEach(skill => {
+					const isKnown = existingSkills.has(skill);
+					const isSelected = feat._featChoices.skills.includes(skill);
+					const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
+
+					const $btn = $(`
+						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
+							${isKnown ? "disabled title=\"Already proficient\"" : ""}
+							style="${isKnown ? "opacity: 0.5;" : ""}">
+							${displayName}${isKnown ? " ✓" : ""}
+						</button>
+					`);
+
+					if (!isKnown) {
+						$btn.on("click", () => {
+							if (isSelected) {
+								feat._featChoices.skills = feat._featChoices.skills.filter(s => s !== skill);
+							} else if (feat._featChoices.skills.length < choices.skills.count) {
+								feat._featChoices.skills.push(skill);
+							}
+							renderSkills();
+						});
+					}
+					$skillGrid.append($btn);
+				});
+				$skillSection.find(".skill-count").text(`${feat._featChoices.skills.length}/${choices.skills.count}`);
+			};
+
+			$skillSection.append($skillGrid);
+			$skillSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="skill-count">${feat._featChoices.skills.length}/${choices.skills.count}</span></div>`);
+			renderSkills();
+			$container.append($skillSection);
+		}
+
+		// Language choices
+		if (choices.languages) {
+			const $langSection = $(`<div class="mb-2"></div>`);
+			$langSection.append(`<label class="ve-small">Choose ${choices.languages.count} language${choices.languages.count > 1 ? "s" : ""}:</label>`);
+
+			const existingLangs = new Set((this._state.getLanguages?.() || []).map(l => l.toLowerCase()));
+			const standardLangs = ["common", "dwarvish", "elvish", "giant", "gnomish", "goblin", "halfling", "orc"];
+			const exoticLangs = ["abyssal", "celestial", "draconic", "deep speech", "infernal", "primordial", "sylvan", "undercommon"];
+			const availableLangs = choices.languages.type === "standard" ? standardLangs : [...standardLangs, ...exoticLangs];
+
+			const $langGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+			const renderLangs = () => {
+				$langGrid.empty();
+				availableLangs.forEach(lang => {
+					const isKnown = existingLangs.has(lang.toLowerCase());
+					const isSelected = feat._featChoices.languages.includes(lang);
+
+					const $btn = $(`
+						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
+							${isKnown ? "disabled title=\"Already known\"" : ""}
+							style="${isKnown ? "opacity: 0.5;" : ""}">
+							${lang.toTitleCase()}${isKnown ? " ✓" : ""}
+						</button>
+					`);
+
+					if (!isKnown) {
+						$btn.on("click", () => {
+							if (isSelected) {
+								feat._featChoices.languages = feat._featChoices.languages.filter(l => l !== lang);
+							} else if (feat._featChoices.languages.length < choices.languages.count) {
+								feat._featChoices.languages.push(lang);
+							}
+							renderLangs();
+						});
+					}
+					$langGrid.append($btn);
+				});
+				$langSection.find(".lang-count").text(`${feat._featChoices.languages.length}/${choices.languages.count}`);
+			};
+
+			$langSection.append($langGrid);
+			$langSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="lang-count">${feat._featChoices.languages.length}/${choices.languages.count}</span></div>`);
+			renderLangs();
+			$container.append($langSection);
+		}
+
+		// Ability score choices
+		if (choices.ability) {
+			const $abilitySection = $(`<div class="mb-2"></div>`);
+			$abilitySection.append(`<label class="ve-small">Choose ability to increase by ${choices.ability.amount}:</label>`);
+			const $abilityGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+
+			choices.ability.from.forEach(abl => {
+				const isSelected = feat._featChoices.ability === abl;
+				const currentScore = this._state.getAbilityScore(abl);
+
+				const $btn = $(`
+					<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
+						${Parser.attAbvToFull(abl)} (${currentScore} → ${currentScore + choices.ability.amount})
+					</button>
+				`);
+
+				$btn.on("click", () => {
+					feat._featChoices.ability = isSelected ? null : abl;
+					$abilityGrid.find(".ve-btn").removeClass("ve-btn-primary").addClass("ve-btn-default");
+					if (!isSelected) $btn.removeClass("ve-btn-default").addClass("ve-btn-primary");
+				});
+				$abilityGrid.append($btn);
+			});
+
+			$abilitySection.append($abilityGrid);
+			$container.append($abilitySection);
+		}
+	}
+
 	_renderNewFeatures (features) {
 		const $section = $(`
 			<div class="charsheet__levelup-section">
@@ -1635,7 +1618,7 @@ class CharacterSheetLevelUp {
 	}
 
 	_renderHpIncrease (classData, newLevel, onMethodChange) {
-		const hitDie = this._getClassHitDie(classData);
+		const hitDie = CharacterSheetClassUtils.getClassHitDie(classData);
 		const conMod = this._state.getAbilityMod("con");
 		const averageHp = Math.ceil(hitDie / 2) + 1 + conMod;
 
@@ -1665,321 +1648,6 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	_getLevelFeatures (classData, level, subclass = null) {
-		const features = [];
-
-		if (subclass) {
-		}
-
-		// Get base class features for this level
-		// classFeatures is an array of arrays where index = level - 1
-		if (classData.classFeatures && Array.isArray(classData.classFeatures)) {
-			// Check if it's array-of-arrays format (new format) or flat array (old format)
-			const isArrayOfArrays = Array.isArray(classData.classFeatures[0]);
-
-			const levelFeatures = isArrayOfArrays
-				? classData.classFeatures[level - 1] || [] // Array of arrays: index = level - 1
-				: classData.classFeatures; // Flat array: filter by level
-
-			const featureRefs = isArrayOfArrays
-				? levelFeatures // Already filtered by level index
-				: levelFeatures.filter(f => {
-					// Format: "Name|Class|Source|Level" or "Name|Class|Source|Level|FeatureSource"
-					if (typeof f === "string") {
-						const parts = f.split("|");
-						return parseInt(parts[3]) === level;
-					}
-					if (typeof f === "object" && f.classFeature) {
-						const parts = f.classFeature.split("|");
-						return parseInt(parts[3]) === level;
-					}
-					return f.level === level;
-				});
-
-
-			featureRefs.forEach(featureRef => {
-				// Parse feature reference - format is "FeatureName|ClassName|ClassSource|Level|FeatureSource"
-				// FeatureSource is optional, defaults to ClassSource
-				if (typeof featureRef === "string") {
-					const parts = featureRef.split("|");
-					const featureName = parts[0];
-					const className = parts[1] || classData.name;
-					const classSource = parts[2] || classData.source;
-					const featureSource = parts[4] || classSource; // Feature source defaults to class source
-
-					// Look up full feature data to get entries
-					const fullFeature = this._getClassFeatureData(featureName, className, classSource, level);
-
-					features.push({
-						name: featureName,
-						className: className,
-						classSource: classSource,
-						source: featureSource,
-						level: level,
-						gainSubclassFeature: false,
-						entries: fullFeature?.entries, // Include entries for option detection
-					});
-				} else if (typeof featureRef === "object" && featureRef.classFeature) {
-					const parts = featureRef.classFeature.split("|");
-					const featureName = parts[0];
-					const className = parts[1] || classData.name;
-					const classSource = parts[2] || classData.source;
-					const featureSource = parts[4] || classSource; // Feature source defaults to class source
-
-					// Look up full feature data to get entries
-					const fullFeature = this._getClassFeatureData(featureName, className, classSource, level);
-
-					features.push({
-						name: featureName,
-						className: className,
-						classSource: classSource,
-						source: featureSource,
-						level: level,
-						gainSubclassFeature: !!featureRef.gainSubclassFeature,
-						entries: fullFeature?.entries, // Include entries for option detection
-					});
-				} else if (typeof featureRef === "object" && featureRef.name) {
-					// Feature object - may have classSource and source properties
-					const classSource = featureRef.classSource || classData.source;
-					const featureSource = featureRef.source || classSource;
-
-					// Look up full feature data to get entries
-					const fullFeature = this._getClassFeatureData(
-						featureRef.name,
-						classData.name,
-						classSource,
-						level,
-					);
-
-					features.push({
-						name: featureRef.name,
-						className: classData.name,
-						classSource: classSource,
-						source: featureSource,
-						level: level,
-						gainSubclassFeature: !!featureRef.gainSubclassFeature,
-						entries: fullFeature?.entries, // Include entries for option detection
-					});
-				}
-			});
-		}
-
-		// Get subclass features if applicable
-		// Subclass features should REPLACE features that have gainSubclassFeature: true
-		// NOTE: After DataLoader processing, subclassFeatures is an array-of-arrays where each inner array
-		// contains feature OBJECTS (with level, name, entries properties), not strings
-		if (subclass && subclass.subclassFeatures) {
-			subclass.subclassFeatures.forEach((levelFeatures, idx) => {
-				// levelFeatures is an array of feature objects for a specific level
-				if (Array.isArray(levelFeatures)) {
-					levelFeatures.forEach(feature => {
-						// Feature is an object with level, name, entries, source, etc.
-						if (typeof feature === "object" && feature.level === level) {
-							const featureName = feature.name || Renderer.findName(feature);
-							if (featureName) {
-								features.push({
-									name: featureName,
-									className: feature.className || subclass.className || classData.name,
-									classSource: feature.classSource || subclass.classSource || classData.source,
-									subclassName: subclass.name,
-									subclassShortName: feature.subclassShortName || subclass.shortName,
-									subclassSource: feature.subclassSource || subclass.source || classData.source,
-									source: feature.source || subclass.source || classData.source,
-									level: feature.level,
-									entries: feature.entries,
-									isSubclassFeature: true,
-								});
-							}
-						} else if (typeof feature === "string") {
-							// Fallback for raw string format (shouldn't happen after loading but just in case)
-							const parts = feature.split("|");
-							const featureLevel = parseInt(parts[parts.length - 1]);
-							if (featureLevel === level) {
-								features.push({
-									name: parts[0],
-									className: parts[1] || classData.name,
-									classSource: parts[2] || classData.source,
-									subclassName: subclass.name,
-									subclassShortName: parts[3] || subclass.shortName,
-									subclassSource: parts[4] || subclass.source || classData.source,
-									source: parts[4] || subclass.source || classData.source,
-									level: featureLevel,
-									isSubclassFeature: true,
-								});
-							}
-						}
-					});
-				} else if (typeof levelFeatures === "string") {
-					// Raw string format (pre-DataLoader format)
-					const parts = levelFeatures.split("|");
-					const featureLevel = parseInt(parts[parts.length - 1]);
-					if (featureLevel === level) {
-						features.push({
-							name: parts[0],
-							className: parts[1] || classData.name,
-							classSource: parts[2] || classData.source,
-							subclassName: subclass.name,
-							subclassShortName: parts[3] || subclass.shortName,
-							subclassSource: parts[4] || subclass.source || classData.source,
-							source: parts[4] || subclass.source || classData.source,
-							level: featureLevel,
-							isSubclassFeature: true,
-						});
-					}
-				}
-			});
-		}
-
-		// Filter out features with gainSubclassFeature: true when we have actual subclass features
-		// These are placeholder entries like "Subclass Feature", "Bard College", "Bard Subclass", etc.
-		const actualSubclassFeatures = features.filter(f => f.isSubclassFeature);
-		if (actualSubclassFeatures.length > 0) {
-			const filtered = features.filter(f => !f.gainSubclassFeature);
-			return filtered;
-		}
-
-		return features;
-	}
-
-	_levelGrantsAsi (classData, level) {
-		// Standard ASI levels for most classes
-		const standardAsiLevels = [4, 8, 12, 16, 19];
-
-		// Fighter gets extra at 6 and 14
-		if (classData.name === "Fighter") {
-			return [...standardAsiLevels, 6, 14].includes(level);
-		}
-
-		// Rogue gets extra at 10
-		if (classData.name === "Rogue") {
-			return [...standardAsiLevels, 10].includes(level);
-		}
-
-		return standardAsiLevels.includes(level);
-	}
-
-	_levelGrantsSubclass (classData, level) {
-		// Data-driven: check if any feature at this level has gainSubclassFeature: true
-		if (classData.classFeatures && Array.isArray(classData.classFeatures)) {
-			const isArrayOfArrays = Array.isArray(classData.classFeatures[0]);
-			const levelFeatures = isArrayOfArrays
-				? classData.classFeatures[level - 1] || []
-				: classData.classFeatures.filter(f => {
-					// Format: "Name|Class|Source|Level" or "Name|Class|Source|Level|FeatureSource"
-					if (typeof f === "string") {
-						const parts = f.split("|");
-						return parseInt(parts[3]) === level;
-					}
-					if (typeof f === "object" && f.classFeature) {
-						const parts = f.classFeature.split("|");
-						return parseInt(parts[3]) === level;
-					}
-					return f.level === level;
-				});
-
-			return levelFeatures.some(f =>
-				typeof f === "object" && f.gainSubclassFeature,
-			);
-		}
-
-		// Fallback: default subclass level 3
-		return level === 3;
-	}
-
-	/**
-	 * Get optional feature gains for a level up (metamagic, invocations, maneuvers, etc.)
-	 * @param {Object} classData - The class data
-	 * @param {number} currentLevel - Current class level
-	 * @param {number} newLevel - New class level
-	 * @returns {Array} Array of {featureTypes, name, newCount} objects for features that gain new options
-	 */
-	_getOptionalFeatureGains (classData, currentLevel, newLevel) {
-		const gains = [];
-
-		if (!classData.optionalfeatureProgression?.length) return gains;
-
-		classData.optionalfeatureProgression.forEach(optFeatProg => {
-			const featureTypes = optFeatProg.featureType || [];
-			const name = optFeatProg.name || featureTypes.map(ft => ft.replace(/:/g, " ")).join(", ");
-
-			// Get count at current level and new level
-			let countAtCurrent = 0;
-			let countAtNew = 0;
-
-			if (Array.isArray(optFeatProg.progression)) {
-				// Array format: index = level - 1
-				countAtCurrent = optFeatProg.progression[currentLevel - 1] || 0;
-				countAtNew = optFeatProg.progression[newLevel - 1] || 0;
-			} else if (typeof optFeatProg.progression === "object") {
-				// Object format: key is level string
-				countAtCurrent = optFeatProg.progression[String(currentLevel)] || 0;
-				countAtNew = optFeatProg.progression[String(newLevel)] || 0;
-			}
-
-			// Count how many of this feature type the character already has
-			const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
-
-			// Helper to check if a feature type matches (exact or prefix match)
-			const matchesFeatureType = (optFeatTypes) => {
-				return optFeatTypes?.some(ft =>
-					featureTypes.some(progType => ft === progType || ft.startsWith(progType)),
-				);
-			};
-
-			const existingOfType = existingOptFeatures.filter(f =>
-				matchesFeatureType(f.optionalFeatureTypes),
-			).length;
-
-			// Calculate how many new options to pick
-			// totalCount is from class progression, existingOfType is what player already has
-			const newOptionsCount = countAtNew - existingOfType;
-			if (newOptionsCount > 0) {
-				gains.push({
-					featureTypes,
-					name,
-					currentCount: existingOfType,
-					totalCount: countAtNew,
-					newCount: newOptionsCount,
-					required: optFeatProg.required || false,
-				});
-			}
-		});
-
-		return gains;
-	}
-
-	/**
-	 * Filter optional features to only include those matching the class's edition.
-	 * TGTT classes get TGTT optional features.
-	 * XPHB/2024 classes get XPHB (+ TCE/XGE expansion content).
-	 * PHB/2014 classes get PHB/TCE/XGE.
-	 * If no edition info is available, returns all features (no filter).
-	 * @param {Array} optFeatures - All optional features
-	 * @param {string} classSource - The class's source book
-	 * @returns {Array} Filtered optional features
-	 */
-	_filterOptFeaturesByEdition (optFeatures, classSource) {
-		if (!classSource || !optFeatures?.length) return optFeatures;
-
-		// Define which optional-feature sources are valid for each class source
-		const editionMap = {
-			// Thelemar homebrew: only TGTT optional features
-			"TGTT": ["TGTT"],
-			// 2024: XPHB + expansion sources
-			"XPHB": ["XPHB", "TCE", "XGE", "FTD", "SCC"],
-			// 2014: PHB + expansion sources
-			"PHB": ["PHB", "TCE", "XGE", "UA", "FTD", "SCC"],
-		};
-
-		const allowedSources = editionMap[classSource];
-		if (!allowedSources) return optFeatures; // Unknown source — no edition filtering
-
-		return optFeatures.filter(opt => {
-			if (!opt.source) return true;
-			return allowedSources.includes(opt.source);
-		});
-	}
-
 	/**
 	 * Render optional features selection UI for level up
 	 * @param {Object} classData - The class data
@@ -1990,7 +1658,7 @@ class CharacterSheetLevelUp {
 	_renderOptionalFeaturesSelection (classData, gains, onSelect, newLevel) {
 		// Filter optional features by allowed sources and edition
 		const allOptFeaturesRaw = this._page.filterByAllowedSources(this._page.getOptionalFeatures() || []);
-		const allOptFeatures = this._filterOptFeaturesByEdition(allOptFeaturesRaw, classData.source);
+		const allOptFeatures = CharacterSheetClassUtils.filterOptFeaturesByEdition(allOptFeaturesRaw, classData.source);
 		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
 
 		const $section = $(`
@@ -2027,10 +1695,10 @@ class CharacterSheetLevelUp {
 		const selectedForType = [];
 
 		// Get character's known traditions from existing Combat Methods or state
-		let knownTraditions = this._getKnownCombatTraditions(existingOptFeatures);
+		let knownTraditions = CharacterSheetClassUtils.getKnownCombatTraditions(existingOptFeatures, this._state);
 
 		// Get max degree for the new level
-		const maxDegree = this._getMaxMethodDegree(classData, newLevel);
+		const maxDegree = CharacterSheetClassUtils.getMaxMethodDegree(classData, newLevel);
 
 		// Track selected traditions during this level-up (for characters without traditions)
 		let tempSelectedTraditions = [...knownTraditions];
@@ -2039,7 +1707,7 @@ class CharacterSheetLevelUp {
 		if (knownTraditions.length === 0) {
 			// Filter traditions to only those the class has access to
 			const classAllowedTypes = gain.featureTypes || [];
-			const availableTraditions = this._getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, classData?.name);
+			const availableTraditions = CharacterSheetClassUtils.getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, classData?.name);
 			const traditionCount = 2; // Default tradition count
 
 			const $section = $(`
@@ -2132,15 +1800,15 @@ class CharacterSheetLevelUp {
 				...opt,
 				_alreadyKnown: alreadyHas,
 				_selectable: !alreadyHas,
-				_degree: this._getMethodDegree(opt),
-				_tradition: this._getMethodTradition(opt),
+				_degree: CharacterSheetClassUtils.getMethodDegree(opt),
+				_tradition: CharacterSheetClassUtils.getMethodTradition(opt),
 			};
 		});
 
 		const $gainSection = $(`
 			<div class="charsheet__levelup-opt-gain mb-3">
 				<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new method${gain.newCount > 1 ? "s" : ""}</p>
-				<p class="ve-small ve-muted">Max degree available: ${maxDegree}${this._getOrdinalSuffix(maxDegree)} | Traditions: ${knownTraditions.map(t => this._getTraditionName(t)).join(", ")}</p>
+				<p class="ve-small ve-muted">Max degree available: ${maxDegree}${CharacterSheetClassUtils.getOrdinalSuffix(maxDegree)} | Traditions: ${knownTraditions.map(t => CharacterSheetClassUtils.getTraditionName(t)).join(", ")}</p>
 				<div class="charsheet__levelup-opt-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
 			</div>
@@ -2165,7 +1833,7 @@ class CharacterSheetLevelUp {
 
 			const $tradGroup = $(`
 				<div class="charsheet__levelup-method-group mb-2">
-					<p class="ve-small mb-1"><strong>${this._getTraditionName(tradCode)}</strong></p>
+					<p class="ve-small mb-1"><strong>${CharacterSheetClassUtils.getTraditionName(tradCode)}</strong></p>
 				</div>
 			`);
 
@@ -2178,7 +1846,7 @@ class CharacterSheetLevelUp {
 						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
 						<span class="opt-name"></span>
 						${knownBadge}
-						<span class="ve-muted ve-small ml-1">(${method._degree}${this._getOrdinalSuffix(method._degree)} degree)</span>
+						<span class="ve-muted ve-small ml-1">(${method._degree}${CharacterSheetClassUtils.getOrdinalSuffix(method._degree)} degree)</span>
 					</label>
 				`);
 
@@ -2380,288 +2048,6 @@ class CharacterSheetLevelUp {
 		}
 
 		$container.append($gainSection);
-	}
-
-	/**
-	 * Get character's known combat traditions from stored traditions or infer from existing features
-	 */
-	_getKnownCombatTraditions (existingOptFeatures) {
-		// First check if traditions are explicitly stored on the character
-		const storedTraditions = this._state.getCombatTraditions?.() || [];
-		if (storedTraditions.length > 0) {
-			return storedTraditions;
-		}
-
-		// Fall back to inferring from existing combat method features
-		const traditions = new Set();
-
-		for (const feature of existingOptFeatures) {
-			if (!feature.optionalFeatureTypes) continue;
-
-			for (const ft of feature.optionalFeatureTypes) {
-				// Match CTM:XYY where X is degree and YY is tradition code
-				const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
-				if (match) {
-					traditions.add(match[2]);
-				}
-			}
-		}
-
-		return Array.from(traditions);
-	}
-
-	/**
-	 * Get the maximum method degree available at a given level from the class table
-	 */
-	_getMaxMethodDegree (cls, level) {
-		if (!cls.classTableGroups) return 0;
-
-		for (const group of cls.classTableGroups) {
-			const degreeColIdx = group.colLabels?.findIndex(label =>
-				label.toLowerCase().includes("method degree"),
-			);
-
-			if (degreeColIdx >= 0 && group.rows) {
-				const row = group.rows[level - 1];
-				if (row) {
-					const degreeVal = row[degreeColIdx];
-					if (typeof degreeVal === "string") {
-						const match = degreeVal.match(/^(\d)/);
-						if (match) return parseInt(match[1]);
-					} else if (typeof degreeVal === "number") {
-						return degreeVal;
-					}
-				}
-			}
-		}
-		return 0;
-	}
-
-	/**
-	 * Get tradition name from code
-	 */
-	_getTraditionName (tradCode) {
-		const names = {
-			"AM": "Adamant Mountain",
-			"AK": "Arcane Knight",
-			"BU": "Beast Unity",
-			"BZ": "Biting Zephyr",
-			"CJ": "Comedic Jabs",
-			"EB": "Eldritch Blackguard",
-			"GH": "Gallant Heart",
-			"MG": "Mirror's Glint",
-			"MS": "Mist and Shade",
-			"RC": "Rapid Current",
-			"RE": "Razor's Edge",
-			"SK": "Sanguine Knot",
-			"SS": "Spirited Steed",
-			"TI": "Tempered Iron",
-			"TC": "Tooth and Claw",
-			"UW": "Unending Wheel",
-			"UH": "Unerring Hawk",
-		};
-		return names[tradCode] || tradCode;
-	}
-
-	/**
-	 * Get available combat traditions from optional features
-	 * Traditions are identified by feature types like "CTM:1AM", "CTM:2RC", etc.
-	 */
-	_getAvailableTraditions (allOptFeatures) {
-		const traditions = new Map();
-
-		// Find all unique traditions from optional features
-		for (const opt of allOptFeatures) {
-			if (!opt.featureType) continue;
-			for (const ft of opt.featureType) {
-				// Match tradition codes like "CTM:1AM", "CTM:2RC", etc.
-				const match = ft.match(/^CTM:\d([A-Z]{2})$/);
-				if (match) {
-					const tradCode = match[1];
-					if (!traditions.has(tradCode)) {
-						traditions.set(tradCode, {
-							code: tradCode,
-							name: this._getTraditionName(tradCode),
-						});
-					}
-				}
-			}
-		}
-
-		return Array.from(traditions.values()).sort((a, b) => a.name.localeCompare(b.name));
-	}
-
-	/**
-	 * Extract tradition codes from class feature description text.
-	 * Looks for patterns like {@filter ...|feature type=ctm:am} in the feature entries.
-	 * @param {string} className - The class name to look up
-	 * @param {number} level - The level to search features at (default 1-2 for Combat Methods)
-	 * @returns {Set<string>} Set of tradition codes like "AM", "RC", etc.
-	 */
-	_extractTraditionsFromClassFeature (className, level = 2) {
-		const traditions = new Set();
-
-		// Look up "Combat Methods" feature for this class
-		const classFeatures = this._page.getClassFeatures?.();
-		if (!classFeatures?.length) {
-			return traditions;
-		}
-
-		// Find the Combat Methods feature (prioritize "Combat Methods" over "Specialties")
-		// "Combat Methods" is the feature that contains the tradition list
-		let combatMethodsFeature = classFeatures.find(f =>
-			f.className === className
-			&& f.name === "Combat Methods"
-			&& f.level <= 5,
-		);
-
-		// If no "Combat Methods" feature found, this class might not have combat traditions
-		if (!combatMethodsFeature) {
-			return traditions;
-		}
-
-
-		// Recursively extract text from entries and look for tradition codes
-		const extractFromEntries = (entries) => {
-			if (!entries) return;
-			if (typeof entries === "string") {
-				// Look for patterns like "feature type=ctm:am" or "feature type=CTM:AM"
-				const matches = entries.matchAll(/feature\s+type[=:]\s*ctm:([a-z]{2})/gi);
-				for (const match of matches) {
-					traditions.add(match[1].toUpperCase());
-				}
-				return;
-			}
-			if (Array.isArray(entries)) {
-				for (const entry of entries) {
-					extractFromEntries(entry);
-				}
-				return;
-			}
-			if (typeof entries === "object") {
-				if (entries.entries) extractFromEntries(entries.entries);
-				if (entries.items) extractFromEntries(entries.items);
-				if (entries.entry) extractFromEntries(entries.entry);
-			}
-		};
-
-		extractFromEntries(combatMethodsFeature.entries);
-
-		return traditions;
-	}
-
-	/**
-	 * Get available combat traditions filtered by what the class has access to
-	 * @param {Array} allOptFeatures - All optional features
-	 * @param {Array<string>} classAllowedTypes - Feature types the class has access to (e.g., ["CTM:1", "CTM:2"])
-	 * @param {string} [className] - The class name to extract traditions from
-	 */
-	_getAvailableTraditionsForClass (allOptFeatures, classAllowedTypes, className) {
-
-		// First try to extract tradition codes from class-allowed types (e.g., "CTM:AM" -> "AM", "CTM:1AM" -> "AM")
-		const allowedTraditionCodes = new Set();
-		for (const ft of classAllowedTypes) {
-			const match = ft.match(/^CTM:(\d)?([A-Z]{2})$/);
-			if (match && match[2]) {
-				allowedTraditionCodes.add(match[2]);
-			}
-		}
-
-
-		// If no tradition codes found in types, try to extract from class feature description
-		if (allowedTraditionCodes.size === 0 && className) {
-			const featureTraditions = this._extractTraditionsFromClassFeature(className);
-			for (const trad of featureTraditions) {
-				allowedTraditionCodes.add(trad);
-			}
-		}
-
-		// If still no traditions found, fall back to all traditions
-		if (allowedTraditionCodes.size === 0) {
-			return this._getAvailableTraditions(allOptFeatures);
-		}
-
-
-		// Filter to only allowed traditions
-		const traditions = new Map();
-		for (const tradCode of allowedTraditionCodes) {
-			traditions.set(tradCode, {
-				code: tradCode,
-				name: this._getTraditionName(tradCode),
-			});
-		}
-
-		return Array.from(traditions.values()).sort((a, b) => a.name.localeCompare(b.name));
-	}
-
-	/**
-	 * Get method degree from optional feature
-	 */
-	_getMethodDegree (opt) {
-		if (!opt.featureType) return 0;
-		for (const ft of opt.featureType) {
-			const match = ft.match(/^CTM:(\d)[A-Z]{2}$/);
-			if (match) return parseInt(match[1]);
-		}
-		return 0;
-	}
-
-	/**
-	 * Get method tradition code from optional feature
-	 */
-	_getMethodTradition (opt) {
-		if (!opt.featureType) return null;
-		for (const ft of opt.featureType) {
-			const match = ft.match(/^CTM:\d([A-Z]{2})$/);
-			if (match) return match[1];
-		}
-		return null;
-	}
-
-	_getOrdinalSuffix (n) {
-		const s = ["th", "st", "nd", "rd"];
-		const v = n % 100;
-		return s[(v - 20) % 10] || s[v] || s[0];
-	}
-
-	/**
-	 * Look up full class feature data to get description/entries
-	 */
-	_getClassFeatureData (featureName, className, source, level) {
-		const classFeatures = this._page.getClassFeatures?.();
-		if (!classFeatures?.length) {
-			return null;
-		}
-
-		const result = classFeatures.find(f => {
-			if (f.name !== featureName) return false;
-			if (f.className !== className) return false;
-			if (f.level !== level) return false;
-			// Be more flexible with source matching
-			if (source && f.source && f.source !== source) {
-				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source)
-					&& [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
-				if (!sourcesMatch) return false;
-			}
-			return true;
-		});
-
-		if (!result && featureName) {
-		}
-		return result;
-	}
-
-	/**
-	 * Look up full class feature data from a reference string
-	 * @param {string} featureRef - "FeatureName|ClassName|Source|Level" format
-	 * @returns {Object|null} The feature object or null
-	 */
-	_getClassFeatureDataFromRef (featureRef) {
-		const parts = featureRef.split("|");
-		const [name, className, source, level] = parts;
-		const parsedLevel = parseInt(level) || 1;
-
-		return this._getClassFeatureData(name, className, source, parsedLevel);
 	}
 
 	/**
@@ -3270,709 +2656,12 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	/**
-	 * Render known-spell selection UI for level up (Sorcerer, Bard, Ranger, Warlock, etc.)
-	 * @param {Object} opts
-	 * @param {string} opts.className - Class name to filter spells by
-	 * @param {string} opts.classSource - Class source for edition filtering
-	 * @param {number} opts.spellCount - Number of leveled spells to learn
-	 * @param {number} opts.cantripCount - Number of cantrips to learn
-	 * @param {number} opts.maxSpellLevel - Max spell level accessible
-	 * @param {Function} opts.onSelect - Callback(spells[], cantrips[]) when selections change
-	 * @returns {jQuery} The section element
-	 */
-	_renderKnownSpellSelection ({className, classSource, spellCount, cantripCount, maxSpellLevel, onSelect}) {
-		const totalCount = spellCount + cantripCount;
-		const parts = [];
-		if (spellCount > 0) parts.push(`${spellCount} spell${spellCount !== 1 ? "s" : ""} (up to level ${maxSpellLevel})`);
-		if (cantripCount > 0) parts.push(`${cantripCount} cantrip${cantripCount !== 1 ? "s" : ""}`);
-
-		const $section = $(`
-			<div class="charsheet__levelup-section">
-				<h5 class="charsheet__levelup-section-title">
-					<span class="glyphicon glyphicon-fire"></span> Spells Known
-				</h5>
-				<p class="ve-small">Choose ${parts.join(" and ")} for your ${className}:</p>
-				<div class="charsheet__levelup-known-spell-selections"></div>
-				<div class="ve-small ve-muted mt-1">
-					${spellCount > 0 ? `Spells: <span class="spell-count">0</span>/${spellCount}` : ""}
-					${cantripCount > 0 ? `${spellCount > 0 ? " · " : ""}Cantrips: <span class="cantrip-count">0</span>/${cantripCount}` : ""}
-				</div>
-			</div>
-		`);
-
-		const $container = $section.find(".charsheet__levelup-known-spell-selections");
-		const selectedSpells = [];
-		const selectedCantrips = [];
-
-		// Get all spells from the page
-		const allSpells = this._page.getSpells?.() || [];
-		const allowedSources = this._page.filterByAllowedSources?.(allSpells) || allSpells;
-
-		// Filter to class spells (using proper Renderer API) up to max level
-		const classSpells = allowedSources.filter(spell => {
-			// Only include spells at correct levels
-			if (cantripCount > 0 && spellCount > 0) {
-				// Both cantrips and leveled spells
-				if (spell.level > maxSpellLevel) return false;
-			} else if (cantripCount > 0) {
-				if (spell.level !== 0) return false;
-			} else {
-				if (spell.level < 1 || spell.level > maxSpellLevel) return false;
-			}
-
-			// Check if on class spell list using proper Renderer API
-			try {
-				const classList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
-				if (classList?.some(c => c.name === className)) return true;
-			} catch (e) { /* fall through */ }
-			// Fallback: raw check
-			return spell.classes?.fromClassList?.some(c => c.name === className);
-		}).sort((a, b) => {
-			if (a.level !== b.level) return a.level - b.level;
-			return a.name.localeCompare(b.name);
-		});
-
-		// Get spells already known
-		const knownSpells = this._state.getSpells?.() || [];
-		const knownCantrips = this._state.getCantripsKnown?.() || [];
-		const knownIds = new Set([...knownSpells, ...knownCantrips].map(s => `${s.name}|${s.source}`));
-
-		// Collect unique schools for filters
-		const schools = [...new Set(classSpells.map(s => s.school).filter(Boolean))].sort();
-
-		// Filter state
-		let filterTab = "all"; // "all", "cantrips", "spells"
-
-		// Build filter row
-		const $filterRow = $(`<div class="ve-flex-wrap gap-2 mb-2" style="align-items: center;"></div>`);
-		$container.append($filterRow);
-
-		// Search input
-		const $search = $(`<input type="text" class="form-control form-control-sm" placeholder="🔍 Search..." style="flex: 1; min-width: 150px;">`);
-		$filterRow.append($search);
-
-		// Level filter dropdown
-		const levelOptions = [];
-		if (cantripCount > 0) levelOptions.push({value: "0", label: "Cantrips"});
-		for (let i = 1; i <= maxSpellLevel; i++) {
-			levelOptions.push({value: i.toString(), label: `Level ${i}`});
-		}
-		const $levelFilter = $(`
-			<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
-				<option value="">All Levels</option>
-				${levelOptions.map(l => `<option value="${l.value}">${l.label}</option>`).join("")}
-			</select>
-		`);
-		$filterRow.append($levelFilter);
-
-		// School filter dropdown
-		const $schoolFilter = $(`
-			<select class="form-control form-control-sm" style="width: auto; min-width: 120px;">
-				<option value="">All Schools</option>
-				${schools.map(s => `<option value="${s}">${this._getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
-			</select>
-		`);
-		$filterRow.append($schoolFilter);
-
-		// Quick filters
-		const $ritualFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`);
-		const $concFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`);
-		$filterRow.append($ritualFilter, $concFilter);
-
-		const $spellList = $(`<div class="charsheet__modal-list" style="max-height: 350px; overflow-y: auto;"></div>`);
-		$container.append($spellList);
-
-		const getSchoolEmoji = (school) => {
-			const schoolEmojis = {
-				"A": "✨", "C": "🌀", "D": "👁️", "E": "💫",
-				"V": "🔥", "I": "🎭", "N": "💀", "T": "🔄",
-			};
-			return schoolEmojis[school] || "📜";
-		};
-
-		const fireCallback = () => {
-			$section.find(".spell-count").text(selectedSpells.length);
-			$section.find(".cantrip-count").text(selectedCantrips.length);
-			onSelect([...selectedSpells], [...selectedCantrips]);
-		};
-
-		const renderSpellList = () => {
-			$spellList.empty();
-
-			const searchText = $search.val()?.toLowerCase() || "";
-			const levelVal = $levelFilter.val();
-			const schoolVal = $schoolFilter.val();
-			const onlyRitual = $ritualFilter.find("input").prop("checked");
-			const onlyConc = $concFilter.find("input").prop("checked");
-
-			const filtered = classSpells.filter(spell => {
-				if (searchText && !spell.name.toLowerCase().includes(searchText)) return false;
-				if (levelVal !== "" && levelVal !== undefined && spell.level !== parseInt(levelVal)) return false;
-				if (schoolVal && spell.school !== schoolVal) return false;
-				const isRitual = spell.ritual || spell.meta?.ritual || false;
-				if (onlyRitual && !isRitual) return false;
-				const isConc = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
-				if (onlyConc && !isConc) return false;
-				return true;
-			});
-
-			if (!filtered.length) {
-				$spellList.append(`<p class="ve-muted text-center py-2">No spells match your filters</p>`);
-				return;
-			}
-
-			// Group by level
-			const byLevel = {};
-			filtered.forEach(spell => {
-				if (!byLevel[spell.level]) byLevel[spell.level] = [];
-				byLevel[spell.level].push(spell);
-			});
-
-			Object.keys(byLevel).sort((a, b) => Number(a) - Number(b)).forEach(level => {
-				const levelNum = parseInt(level);
-				const levelEmoji = levelNum === 0
-					? "🔮"
-					: (["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"][levelNum - 1] || "📜");
-				const levelLabel = levelNum === 0 ? "Cantrips" : `Level ${level}`;
-
-				const $levelSection = $(`<div class="charsheet__modal-section"></div>`).appendTo($spellList);
-				$(`<div class="charsheet__modal-section-title">${levelEmoji} ${levelLabel} <span style="opacity: 0.6;">(${byLevel[level].length})</span></div>`).appendTo($levelSection);
-
-				byLevel[level].forEach(spell => {
-					const spellId = `${spell.name}|${spell.source}`;
-					const isKnown = knownIds.has(spellId);
-					const isCantrip = spell.level === 0;
-					const isSelected = isCantrip
-						? selectedCantrips.some(s => `${s.name}|${s.source}` === spellId)
-						: selectedSpells.some(s => `${s.name}|${s.source}` === spellId);
-					const school = Parser.spSchoolAbvToFull?.(spell.school) || spell.school;
-					const schoolEmoji = getSchoolEmoji(spell.school);
-
-					const components = [];
-					if (spell.components?.v) components.push("V");
-					if (spell.components?.s) components.push("S");
-					if (spell.components?.m) components.push("M");
-					const componentStr = components.join(", ");
-
-					const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
-					const isRitual = spell.ritual || spell.meta?.ritual || false;
-
-					const tagParts = [];
-					if (isRitual) tagParts.push("🔮");
-					if (isConcentration) tagParts.push("⏳");
-					const tagsStr = tagParts.length ? ` ${tagParts.join(" ")}` : "";
-
-					let subschoolStr = "";
-					if (spell.subschools?.length) {
-						const formatSubschool = (sub) => {
-							const p = sub.split(":");
-							return p.length === 2 ? p[1].toTitleCase() : sub.toTitleCase();
-						};
-						subschoolStr = ` • 🏷️ ${spell.subschools.map(formatSubschool).join(", ")}`;
-					}
-
-					const $item = $(`
-						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""} ${isSelected ? "charsheet__modal-list-item--selected" : ""}">
-							<div class="charsheet__modal-list-item-icon">${schoolEmoji}</div>
-							<div class="charsheet__modal-list-item-content">
-								<div class="charsheet__modal-list-item-title"></div>
-								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}${subschoolStr}</div>
-							</div>
-							${isKnown
-								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
-								: isSelected
-									? `<button class="ve-btn ve-btn-danger ve-btn-xs spell-toggle">✓ Selected</button>`
-									: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-toggle">+ Add</button>`
-							}
-						</div>
-					`);
-
-					// Add spell name with hover link
-					const $title = $item.find(".charsheet__modal-list-item-title");
-					try {
-						if (this._page?.getHoverLink) {
-							const hoverLink = this._page.getHoverLink(UrlUtil.PG_SPELLS, spell.name, spell.source || Parser.SRC_XPHB);
-							$title.html(`${hoverLink}${tagsStr}`);
-						} else {
-							$title.html(`${spell.name}${tagsStr}`);
-						}
-					} catch (e) {
-						$title.html(`${spell.name}${tagsStr}`);
-					}
-
-					if (!isKnown) {
-						$item.find(".spell-toggle").on("click", (e) => {
-							e.stopPropagation();
-							const targetArr = isCantrip ? selectedCantrips : selectedSpells;
-							const maxCount = isCantrip ? cantripCount : spellCount;
-							const typeLabel = isCantrip ? "cantrips" : "spells";
-							const idx = targetArr.findIndex(s => `${s.name}|${s.source}` === spellId);
-
-							if (idx >= 0) {
-								targetArr.splice(idx, 1);
-							} else if (targetArr.length < maxCount) {
-								targetArr.push(spell);
-							} else {
-								JqueryUtil.doToast({type: "warning", content: `You can only select ${maxCount} ${typeLabel}.`});
-								return;
-							}
-
-							fireCallback();
-							renderSpellList();
-						});
-
-						// Click row to show info
-						$item.on("click", (e) => {
-							if (!$(e.target).is("button") && !$(e.target).closest("a").length) {
-								this._showSpellInfoModal(spell);
-							}
-						});
-					}
-
-					$levelSection.append($item);
-				});
-			});
-		};
-
-		// Bind filter change events
-		$search.on("input", renderSpellList);
-		$levelFilter.on("change", renderSpellList);
-		$schoolFilter.on("change", renderSpellList);
-		$ritualFilter.find("input").on("change", renderSpellList);
-		$concFilter.find("input").on("change", renderSpellList);
-
-		renderSpellList();
-
-		return $section;
-	}
-
-	/**
-	 * Render wizard spellbook spell selection UI for level up
-	 * @param {number} spellCount - Number of spells to select (typically 2)
-	 * @param {number} maxSpellLevel - Maximum spell level the wizard can learn
-	 * @param {Function} onSelect - Callback(spells[]) when spells are selected
-	 * @returns {jQuery} The section element
-	 */
-	_renderWizardSpellbookSelection (spellCount, maxSpellLevel, onSelect) {
-		const $section = $(`
-			<div class="charsheet__levelup-section">
-				<h5 class="charsheet__levelup-section-title">
-					<span class="glyphicon glyphicon-book"></span> Spellbook
-				</h5>
-				<p class="ve-small">Choose ${spellCount} wizard spells (up to level ${maxSpellLevel}) to add to your spellbook:</p>
-				<div class="charsheet__levelup-spellbook-selections"></div>
-				<div class="ve-small ve-muted mt-1">Selected: <span class="spell-count">0</span>/${spellCount}</div>
-			</div>
-		`);
-
-		const $container = $section.find(".charsheet__levelup-spellbook-selections");
-		const selectedSpells = [];
-
-		// Get all wizard spells from the page
-		const allSpells = this._page.getSpells?.() || [];
-		const allowedSources = this._page.filterByAllowedSources?.(allSpells) || allSpells;
-		
-		// Filter to wizard spells up to max level
-		const wizardSpells = allowedSources.filter(spell => {
-			// Check if on wizard spell list (use proper Renderer API)
-			let isWizardSpell = false;
-			try {
-				const classList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
-				isWizardSpell = classList?.some(c => c.name === "Wizard");
-			} catch (e) {
-				// Fallback: raw check
-				isWizardSpell = spell.classes?.fromClassList?.some(c => c.name === "Wizard");
-			}
-			// Check level
-			const isCorrectLevel = spell.level >= 1 && spell.level <= maxSpellLevel;
-			return isWizardSpell && isCorrectLevel;
-		}).sort((a, b) => {
-			// Sort by level then name
-			if (a.level !== b.level) return a.level - b.level;
-			return a.name.localeCompare(b.name);
-		});
-
-		// Get spells already known
-		const knownSpells = this._state.getSpells?.() || [];
-		const knownIds = new Set(knownSpells.map(s => `${s.name}|${s.source}`));
-
-		// Collect unique schools and sources for filters
-		const schools = [...new Set(wizardSpells.map(s => s.school).filter(Boolean))].sort();
-		const sources = [...new Set(wizardSpells.map(s => s.source).filter(Boolean))].sort();
-		
-		// Filter state
-		let filterText = "";
-		let filterLevels = new Set(); // Empty = all
-		let filterSchools = new Set(); // Empty = all
-
-		// Build filter row
-		const $filterRow = $(`<div class="ve-flex-wrap gap-2 mb-2" style="align-items: center;"></div>`);
-		$container.append($filterRow);
-
-		// Search input
-		const $search = $(`<input type="text" class="form-control form-control-sm" placeholder="🔍 Search..." style="flex: 1; min-width: 150px;">`);
-		$filterRow.append($search);
-
-		// Level filter dropdown
-		const levelOptions = [];
-		for (let i = 1; i <= maxSpellLevel; i++) {
-			levelOptions.push({value: i.toString(), label: `Level ${i}`});
-		}
-		const $levelFilter = $(`
-			<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
-				<option value="">All Levels</option>
-				${levelOptions.map(l => `<option value="${l.value}">${l.label}</option>`).join("")}
-			</select>
-		`);
-		$filterRow.append($levelFilter);
-
-		// School filter dropdown
-		const $schoolFilter = $(`
-			<select class="form-control form-control-sm" style="width: auto; min-width: 120px;">
-				<option value="">All Schools</option>
-				${schools.map(s => `<option value="${s}">${this._getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
-			</select>
-		`);
-		$filterRow.append($schoolFilter);
-
-		// Quick filters for ritual/concentration
-		const $ritualFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`);
-		const $concFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`);
-		$filterRow.append($ritualFilter, $concFilter);
-
-		const $spellList = $(`<div class="charsheet__modal-list" style="max-height: 350px; overflow-y: auto;"></div>`);
-		$container.append($spellList);
-
-		// Helper to get school emoji (matches spell tab)
-		const getSchoolEmoji = (school) => {
-			const schoolEmojis = {
-				"A": "✨", // Abjuration
-				"C": "🌀", // Conjuration
-				"D": "👁️", // Divination
-				"E": "💫", // Enchantment
-				"V": "🔥", // Evocation
-				"I": "🎭", // Illusion
-				"N": "💀", // Necromancy
-				"T": "🔄", // Transmutation
-			};
-			return schoolEmojis[school] || "📜";
-		};
-
-		const renderSpellList = () => {
-			$spellList.empty();
-			
-			// Get current filter values
-			const searchText = $search.val()?.toLowerCase() || "";
-			const levelVal = $levelFilter.val();
-			const schoolVal = $schoolFilter.val();
-			const onlyRitual = $ritualFilter.find("input").prop("checked");
-			const onlyConc = $concFilter.find("input").prop("checked");
-			
-			// Apply all filters
-			const filtered = wizardSpells.filter(spell => {
-				// Text search
-				if (searchText && !spell.name.toLowerCase().includes(searchText)) return false;
-				
-				// Level filter
-				if (levelVal && spell.level !== parseInt(levelVal)) return false;
-				
-				// School filter
-				if (schoolVal && spell.school !== schoolVal) return false;
-				
-				// Ritual filter
-				const isRitual = spell.ritual || spell.meta?.ritual || false;
-				if (onlyRitual && !isRitual) return false;
-				
-				// Concentration filter
-				const isConc = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
-				if (onlyConc && !isConc) return false;
-				
-				return true;
-			});
-
-			if (!filtered.length) {
-				$spellList.append(`<p class="ve-muted text-center py-2">No spells match your filters</p>`);
-				return;
-			}
-
-			// Group by level (matches spell tab)
-			const byLevel = {};
-			filtered.forEach(spell => {
-				if (!byLevel[spell.level]) byLevel[spell.level] = [];
-				byLevel[spell.level].push(spell);
-			});
-
-			Object.keys(byLevel).sort((a, b) => Number(a) - Number(b)).forEach(level => {
-				const levelEmoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"][parseInt(level) - 1] || "📜";
-				const $levelSection = $(`<div class="charsheet__modal-section"></div>`).appendTo($spellList);
-				$(`<div class="charsheet__modal-section-title">${levelEmoji} Level ${level} <span style="opacity: 0.6;">(${byLevel[level].length})</span></div>`).appendTo($levelSection);
-				
-				byLevel[level].forEach(spell => {
-					const spellId = `${spell.name}|${spell.source}`;
-					const isKnown = knownIds.has(spellId);
-					const isSelected = selectedSpells.some(s => `${s.name}|${s.source}` === spellId);
-					const school = Parser.spSchoolAbvToFull?.(spell.school) || spell.school;
-					const schoolEmoji = getSchoolEmoji(spell.school);
-					
-					// Build component string
-					const components = [];
-					if (spell.components?.v) components.push("V");
-					if (spell.components?.s) components.push("S");
-					if (spell.components?.m) components.push("M");
-					const componentStr = components.join(", ");
-
-					// Check concentration and ritual
-					const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
-					const isRitual = spell.ritual || spell.meta?.ritual || false;
-
-					// Build tags string (matches spell tab)
-					const tagParts = [];
-					if (isRitual) tagParts.push("🔮");
-					if (isConcentration) tagParts.push("⏳");
-					const tagsStr = tagParts.length ? ` ${tagParts.join(" ")}` : "";
-
-					// Build subschool string (for Thelemar rarity tags)
-					let subschoolStr = "";
-					if (spell.subschools && spell.subschools.length > 0) {
-						const formatSubschool = (sub) => {
-							const parts = sub.split(":");
-							if (parts.length === 2) {
-								return `${parts[1].toTitleCase()}`;
-							}
-							return sub.toTitleCase();
-						};
-						subschoolStr = ` • 🏷️ ${spell.subschools.map(formatSubschool).join(", ")}`;
-					}
-
-					// Use same class structure as spell tab picker
-					const $item = $(`
-						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""} ${isSelected ? "charsheet__modal-list-item--selected" : ""}">
-							<div class="charsheet__modal-list-item-icon">${schoolEmoji}</div>
-							<div class="charsheet__modal-list-item-content">
-								<div class="charsheet__modal-list-item-title"></div>
-								<div class="charsheet__modal-list-item-subtitle">${school} • ${componentStr || "No components"} • ${Parser.sourceJsonToAbv(spell.source)}${subschoolStr}</div>
-							</div>
-							${isKnown
-								? `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`
-								: isSelected
-									? `<button class="ve-btn ve-btn-danger ve-btn-xs spell-toggle">✓ Selected</button>`
-									: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-toggle">+ Add</button>`
-							}
-						</div>
-					`);
-
-					// Add spell name with hover link
-					const $title = $item.find(".charsheet__modal-list-item-title");
-					try {
-						if (this._page?.getHoverLink) {
-							const hoverLink = this._page.getHoverLink(UrlUtil.PG_SPELLS, spell.name, spell.source || Parser.SRC_XPHB);
-							$title.html(`${hoverLink}${tagsStr}`);
-						} else {
-							$title.html(`${spell.name}${tagsStr}`);
-						}
-					} catch (e) {
-						$title.html(`${spell.name}${tagsStr}`);
-					}
-
-					if (!isKnown) {
-						$item.find(".spell-toggle").on("click", (e) => {
-							e.stopPropagation();
-							const idx = selectedSpells.findIndex(s => `${s.name}|${s.source}` === spellId);
-							
-							if (idx >= 0) {
-								// Remove
-								selectedSpells.splice(idx, 1);
-							} else if (selectedSpells.length < spellCount) {
-								// Add
-								selectedSpells.push(spell);
-							} else {
-								JqueryUtil.doToast({type: "warning", content: `You can only select ${spellCount} spells.`});
-								return;
-							}
-							
-							$section.find(".spell-count").text(selectedSpells.length);
-							onSelect([...selectedSpells]);
-							renderSpellList();
-						});
-						
-						// Click row to show info (matches spell tab)
-						$item.on("click", (e) => {
-							if (!$(e.target).is("button") && !$(e.target).closest("a").length) {
-								this._showSpellInfoModal(spell);
-							}
-						});
-					}
-
-					$levelSection.append($item);
-				});
-			});
-		};
-
-		// Bind filter change events
-		$search.on("input", renderSpellList);
-		$levelFilter.on("change", renderSpellList);
-		$schoolFilter.on("change", renderSpellList);
-		$ritualFilter.find("input").on("change", renderSpellList);
-		$concFilter.find("input").on("change", renderSpellList);
-		
-		renderSpellList();
-
-		return $section;
-	}
-
-	/**
-	 * Show spell info in a modal (for level-up spell picker)
-	 */
-	async _showSpellInfoModal (spell) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: spell.name,
-			isMinHeight0: true,
-		});
-
-		const levelSchool = spell.level === 0
-			? `${Parser.spSchoolAbvToFull(spell.school)} cantrip`
-			: `${Parser.spLevelToFull(spell.level)}-level ${Parser.spSchoolAbvToFull(spell.school).toLowerCase()}`;
-
-		$modalInner.append(`<p class="ve-muted"><em>${levelSchool}</em></p>`);
-
-		// Basic info
-		const infoLines = [];
-		if (spell.time?.length) {
-			const time = spell.time[0];
-			infoLines.push(`<strong>Casting Time:</strong> ${time.number} ${time.unit}`);
-		}
-		if (spell.range) {
-			let rangeStr = "";
-			const range = spell.range;
-			if (range.type === "point") {
-				if (range.distance?.type === "self") rangeStr = "Self";
-				else if (range.distance?.type === "touch") rangeStr = "Touch";
-				else rangeStr = `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
-			} else {
-				rangeStr = range.type || "";
-			}
-			infoLines.push(`<strong>Range:</strong> ${rangeStr}`);
-		}
-		if (spell.components) {
-			const parts = [];
-			if (spell.components.v) parts.push("V");
-			if (spell.components.s) parts.push("S");
-			if (spell.components.m) {
-				const mText = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
-				parts.push(mText ? `M (${mText})` : "M");
-			}
-			infoLines.push(`<strong>Components:</strong> ${parts.join(", ")}`);
-		}
-		if (spell.duration?.length) {
-			const dur = spell.duration[0];
-			let durStr = "Instantaneous";
-			if (dur.type === "timed") {
-				durStr = dur.concentration
-					? `Concentration, up to ${dur.duration.amount} ${dur.duration.type}`
-					: `${dur.duration.amount} ${dur.duration.type}`;
-			} else if (dur.type === "permanent") {
-				durStr = "Until dispelled";
-			}
-			infoLines.push(`<strong>Duration:</strong> ${durStr}`);
-		}
-
-		$modalInner.append(`<div class="mb-2">${infoLines.join("<br>")}</div>`);
-
-		// Spell description
-		if (spell.entries) {
-			$modalInner.append(`<div class="rd__b">${Renderer.get().render({type: "entries", entries: spell.entries})}</div>`);
-		}
-
-		// Higher level scaling
-		if (spell.entriesHigherLevel) {
-			$modalInner.append(`<div class="rd__b mt-2"><strong>At Higher Levels.</strong> ${Renderer.get().render({type: "entries", entries: spell.entriesHigherLevel})}</div>`);
-		}
-
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
-	}
-
-	// Helper functions to extract spell data from raw spell objects
-	_getSpellCastingTime (spell) {
-		if (!spell.time?.length) return "";
-		const time = spell.time[0];
-		return `${time.number} ${time.unit}`;
-	}
-
-	_getSpellRange (spell) {
-		if (!spell.range) return "";
-		const range = spell.range;
-		if (range.type === "point") {
-			if (range.distance?.type === "self") return "Self";
-			if (range.distance?.type === "touch") return "Touch";
-			return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
-		}
-		return range.type || "";
-	}
-
-	_getSpellComponents (spell) {
-		if (!spell.components) return "";
-		const parts = [];
-		if (spell.components.v) parts.push("V");
-		if (spell.components.s) parts.push("S");
-		if (spell.components.m) {
-			const mat = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
-			parts.push(mat ? `M (${mat})` : "M");
-		}
-		return parts.join(", ");
-	}
-
-	_getSpellDuration (spell) {
-		if (!spell.duration?.length) return "";
-		const dur = spell.duration[0];
-		if (dur.type === "instant") return "Instantaneous";
-		if (dur.type === "permanent") return "Permanent";
-		if (dur.concentration) {
-			return `Concentration, up to ${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
-		}
-		return `${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
-	}
-
-	_getSchoolEmoji (school) {
-		const schoolEmojis = {
-			"A": "✨", // Abjuration
-			"C": "🌀", // Conjuration
-			"D": "👁️", // Divination
-			"E": "💫", // Enchantment
-			"V": "🔥", // Evocation
-			"I": "🎭", // Illusion
-			"N": "💀", // Necromancy
-			"T": "🔄", // Transmutation
-		};
-		return schoolEmojis[school] || "📜";
-	}
-
-	_getClassHitDie (classData) {
-		const hitDieMap = {
-			"Barbarian": 12,
-			"Fighter": 10,
-			"Paladin": 10,
-			"Ranger": 10,
-			"Bard": 8,
-			"Cleric": 8,
-			"Druid": 8,
-			"Monk": 8,
-			"Rogue": 8,
-			"Warlock": 8,
-			"Sorcerer": 6,
-			"Wizard": 6,
-		};
-		return classData.hd?.faces || hitDieMap[classData.name] || 8;
-	}
-
 	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, newFeatures, hpMethod, classData}) {
 
 		// If a subclass was just selected, re-compute features to include actual subclass features
 		if (selectedSubclass) {
 			// Get the subclass features for this level (replacing placeholders like "Subclass Feature")
-			newFeatures = this._getLevelFeatures(classData, newLevel, selectedSubclass);
+			newFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, selectedSubclass, this._page.getClassFeatures());
 		}
 
 		// Update class level
@@ -4036,14 +2725,14 @@ class CharacterSheetLevelUp {
 			// Also apply the feat
 			if (selectedFeat) {
 				this._state.addFeat(selectedFeat);
-				this._applyFeatBonuses(selectedFeat);
+				CharacterSheetClassUtils.applyFeatBonuses(this._state, selectedFeat);
 				await this._processFeatSpellChoices();
 			}
 		} else if (selectedFeat) {
 			// Normal rules: Feat chosen instead of ASI
 			this._state.addFeat(selectedFeat);
 			// Apply feat bonuses if any
-			this._applyFeatBonuses(selectedFeat);
+			CharacterSheetClassUtils.applyFeatBonuses(this._state, selectedFeat);
 			// Process pending spell choices from the feat
 			await this._processFeatSpellChoices();
 		} else if (asiChoices) {
@@ -4226,74 +2915,31 @@ class CharacterSheetLevelUp {
 		// Apply wizard spellbook spell selections
 		if (selectedSpellbookSpells && selectedSpellbookSpells.length > 0) {
 			selectedSpellbookSpells.forEach(spell => {
-				// Detect concentration from duration array (raw spell data format)
-				const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
-				// Detect ritual from meta object (raw spell data format)
-				const isRitual = spell.ritual || spell.meta?.ritual || false;
-
-				this._state.addSpell({
-					name: spell.name,
-					source: spell.source,
-					level: spell.level,
-					school: spell.school,
-					ritual: isRitual,
-					concentration: isConcentration,
-					prepared: false,
-					inSpellbook: true, // Mark as in spellbook
+				this._state.addSpell(CharacterSheetClassUtils.buildSpellStateObject(spell, {
 					sourceFeature: "Wizard Spellbook",
 					sourceClass: "Wizard",
-					// Include all spell details like the spell tab does
-					castingTime: this._getSpellCastingTime(spell),
-					range: this._getSpellRange(spell),
-					components: this._getSpellComponents(spell),
-					duration: this._getSpellDuration(spell),
-					subschools: spell.subschools || [], // Include rarity/legality tags
-				});
+					inSpellbook: true,
+				}));
 			});
 		}
 
 		// Apply known-spell caster spell selections (Sorcerer, Bard, Ranger, Warlock, etc.)
 		if (selectedKnownSpells && selectedKnownSpells.length > 0) {
 			selectedKnownSpells.forEach(spell => {
-				const isConcentration = spell.concentration || spell.duration?.some?.(d => d.concentration) || false;
-				const isRitual = spell.ritual || spell.meta?.ritual || false;
-
-				this._state.addSpell({
-					name: spell.name,
-					source: spell.source,
-					level: spell.level,
-					school: spell.school,
-					ritual: isRitual,
-					concentration: isConcentration,
-					prepared: false,
-					inSpellbook: false,
+				this._state.addSpell(CharacterSheetClassUtils.buildSpellStateObject(spell, {
 					sourceFeature: "Spells Known",
 					sourceClass: classEntry.name,
-					castingTime: this._getSpellCastingTime(spell),
-					range: this._getSpellRange(spell),
-					components: this._getSpellComponents(spell),
-					duration: this._getSpellDuration(spell),
-					subschools: spell.subschools || [],
-				});
+				}));
 			});
 		}
 
 		// Apply known-spell caster cantrip selections
 		if (selectedKnownCantrips && selectedKnownCantrips.length > 0) {
 			selectedKnownCantrips.forEach(spell => {
-				this._state.addCantrip({
-					name: spell.name,
-					source: spell.source,
-					level: 0,
-					school: spell.school,
+				this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(spell, {
 					sourceFeature: "Spells Known",
 					sourceClass: classEntry.name,
-					castingTime: this._getSpellCastingTime(spell),
-					range: this._getSpellRange(spell),
-					components: this._getSpellComponents(spell),
-					duration: this._getSpellDuration(spell),
-					subschools: spell.subschools || [],
-				});
+				}));
 			});
 		}
 
@@ -4308,7 +2954,7 @@ class CharacterSheetLevelUp {
 
 		// Apply HP increase
 		let hpIncrease = 0;
-		const hitDie = this._getClassHitDie(classData);
+		const hitDie = CharacterSheetClassUtils.getClassHitDie(classData);
 		const conMod = this._state.getAbilityMod("con");
 
 		if (hpMethod === "roll") {
@@ -4374,16 +3020,16 @@ class CharacterSheetLevelUp {
 		});
 
 		// Update hit dice
-		this._updateHitDice(classData);
+		CharacterSheetClassUtils.updateHitDice(this._state, classData);
 
 		// Update class resources (Ki Points, Rage, etc.)
-		this._updateClassResources(classEntry, newLevel, classData);
+		CharacterSheetClassUtils.updateClassResources(this._state, classEntry, newLevel, classData);
 
 		// Update spell slots if applicable
-		this._updateSpellSlots(classEntry, newLevel, classData);
+		CharacterSheetClassUtils.updateSpellSlots(this._state, classEntry, newLevel, classData);
 
 		// Check for racial spells at the new character level
-		this._updateRacialSpells();
+		CharacterSheetClassUtils.updateRacialSpells(this._state, this._page);
 
 		// Record level-up choices in history
 		const totalLevel = this._state.getTotalLevel();
@@ -4511,459 +3157,6 @@ class CharacterSheetLevelUp {
 		this._page.renderCharacter();
 
 		JqueryUtil.doToast({type: "success", content: `Leveled up to ${classEntry.name} ${newLevel}!`});
-	}
-
-	_applyFeatBonuses (feat) {
-		// Handle common feat patterns
-		if (feat.ability) {
-			// Feats that grant ability score increases
-			feat.ability.forEach(ablChoice => {
-				const max = ablChoice.max || 20;
-
-				if (ablChoice.choose) {
-					// Epic Boon ability choice (set via _renderEpicBoonAbilityChoice)
-					if (feat._epicBoonAbilityChoice) {
-						const {ability, amount} = feat._epicBoonAbilityChoice;
-						const current = this._state.getAbilityBase(ability);
-						this._state.setAbilityBase(ability, Math.min(max, current + amount));
-					}
-					// Otherwise skip — no UI was shown for the choice
-				} else {
-					Object.entries(ablChoice).forEach(([abl, bonus]) => {
-						if (abl === "max") return; // Skip the max property itself
-						if (Parser.ABIL_ABVS.includes(abl)) {
-							const current = this._state.getAbilityBase(abl);
-							this._state.setAbilityBase(abl, Math.min(max, current + bonus));
-						}
-					});
-				}
-			});
-		}
-
-		if (feat.skillProficiencies) {
-			feat.skillProficiencies.forEach(sp => {
-				Object.keys(sp).forEach(skill => {
-					if (skill !== "choose" && skill !== "any") {
-						this._state.addSkillProficiency(skill.toLowerCase().replace(/\s+/g, ""));
-					}
-				});
-			});
-		}
-
-		if (feat.languageProficiencies) {
-			feat.languageProficiencies.forEach(lp => {
-				Object.keys(lp).forEach(lang => {
-					if (lang !== "anyStandard" && lang !== "any") {
-						this._state.addLanguage(lang);
-					}
-				});
-			});
-		}
-	}
-
-	_updateHitDice (classData) {
-		const hitDie = `d${this._getClassHitDie(classData)}`;
-		const hitDice = this._state.getHitDiceByType();
-
-		if (!hitDice[hitDie]) {
-			hitDice[hitDie] = {current: 1, max: 1};
-		} else {
-			hitDice[hitDie].max += 1;
-			hitDice[hitDie].current += 1;
-		}
-
-		this._state.setHitDice(hitDice);
-	}
-
-	_updateClassResources (classEntry, newLevel, classData) {
-		// Fallback class resource definitions for features with non-parseable descriptions
-		// Most resources are auto-detected by addFeature(), this handles edge cases
-		const resourceDefs = {
-			"Barbarian": [
-				{name: "Rage", maxByLevel: [2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 999], recharge: "long"},
-			],
-			"Monk": [
-				// Use placeholder - resolved below based on edition
-				{name: "__MONK_RESOURCE__", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
-			],
-			"Sorcerer": [
-				{name: "Sorcery Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "long"},
-			],
-			"Paladin": [
-				{name: "Lay on Hands", maxByLevel: lvl => lvl * 5, recharge: "long"},
-			],
-			"Bard": [
-				{name: "Bardic Inspiration", maxByLevel: () => Math.max(1, this._state.getAbilityMod("cha")), recharge: newLevel >= 5 ? "short" : "long"},
-			],
-		};
-
-		const classResourceDefs = resourceDefs[classData.name];
-		if (!classResourceDefs) {
-			// No fallback resources, but recalculate any auto-detected resources
-			this._state.recalculateResourceMaximums();
-			return;
-		}
-
-		const currentResources = this._state.getResources();
-
-		classResourceDefs.forEach(resourceDef => {
-			// Resolve special placeholder for monk Ki/Focus Points
-			let resourceName = resourceDef.name;
-			if (resourceName === "__MONK_RESOURCE__") {
-				// Use "Focus Points" for 2024 (XPHB) monks, "Ki Points" for 2014 monks
-				const is2024 = classEntry.source === "XPHB" || classData.source === "XPHB";
-				resourceName = is2024 ? "Focus Points" : "Ki Points";
-			}
-
-			let newMax;
-			if (typeof resourceDef.maxByLevel === "function") {
-				newMax = resourceDef.maxByLevel(newLevel);
-			} else if (Array.isArray(resourceDef.maxByLevel)) {
-				newMax = resourceDef.maxByLevel[newLevel - 1] || 0;
-			} else {
-				newMax = resourceDef.maxByLevel;
-			}
-
-			// Find existing resource (check both Ki and Focus for monks - they're interchangeable)
-			const isMonkResource = resourceName === "Ki Points" || resourceName === "Focus Points";
-			let existingResource;
-			if (isMonkResource) {
-				existingResource = currentResources.find(r => r.name === "Ki Points" || r.name === "Focus Points");
-			} else {
-				existingResource = currentResources.find(r => r.name === resourceName);
-			}
-
-			if (existingResource) {
-				// Update max if it increased
-				const oldMax = existingResource.max;
-				if (newMax > oldMax) {
-					existingResource.max = newMax;
-					existingResource.current += (newMax - oldMax);
-				}
-			} else if (newMax > 0) {
-				// Add new resource
-				this._state.addResource({
-					name: resourceName,
-					max: newMax,
-					current: newMax,
-					recharge: resourceDef.recharge,
-				});
-			}
-		});
-
-		// Also recalculate auto-detected resources (based on proficiency bonus, ability mods, etc.)
-		this._state.recalculateResourceMaximums();
-	}
-
-	_updateSpellSlots (classEntry, newLevel, classData) {
-		// Check if class is a spellcaster
-		const spellcastingAbility = this._getSpellcastingAbility(classData);
-		if (!spellcastingAbility) return;
-
-		// For multiclass characters, always use the proper multiclass spell slot calculation
-		// This correctly handles full/half/third casters according to 2024 rules
-		const classes = this._state.getClasses();
-		const isMulticlass = classes.length > 1;
-
-		if (isMulticlass) {
-			// Use the state's multiclass spell slot calculator which handles:
-			// - Full casters: all levels count
-			// - Half casters (Paladin, Ranger): half levels rounded UP
-			// - Third casters (Eldritch Knight, Arcane Trickster): third levels rounded DOWN
-			// - Warlock Pact Magic: separate from other casters
-			this._state.calculateSpellSlots();
-		} else {
-			// Single class: use class-specific progression tables
-			const slots = this._getSpellSlotsForLevel(classData, newLevel);
-
-			// Update spellcasting
-			const spellcasting = this._state.getSpellcasting();
-			spellcasting.ability = spellcastingAbility;
-
-			Object.entries(slots).forEach(([level, count]) => {
-				if (!spellcasting.spellSlots[level]) {
-					spellcasting.spellSlots[level] = {current: count, max: count};
-				} else {
-					const diff = count - spellcasting.spellSlots[level].max;
-					if (diff > 0) {
-						spellcasting.spellSlots[level].max = count;
-						spellcasting.spellSlots[level].current += diff;
-					}
-				}
-			});
-		}
-	}
-
-	_getSpellcastingAbility (classData) {
-		const abilityMap = {
-			"Wizard": "int",
-			"Artificer": "int",
-			"Bard": "cha",
-			"Paladin": "cha",
-			"Sorcerer": "cha",
-			"Warlock": "cha",
-			"Cleric": "wis",
-			"Druid": "wis",
-			"Ranger": "wis",
-			"Monk": "wis",
-		};
-		return classData.spellcastingAbility || abilityMap[classData.name] || null;
-	}
-
-	_getSpellSlotsForLevel (classData, level) {
-		// Full casters spell slot progression
-		const fullCasterSlots = {
-			1: {1: 2},
-			2: {1: 3},
-			3: {1: 4, 2: 2},
-			4: {1: 4, 2: 3},
-			5: {1: 4, 2: 3, 3: 2},
-			6: {1: 4, 2: 3, 3: 3},
-			7: {1: 4, 2: 3, 3: 3, 4: 1},
-			8: {1: 4, 2: 3, 3: 3, 4: 2},
-			9: {1: 4, 2: 3, 3: 3, 4: 3, 5: 1},
-			10: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2},
-			11: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1},
-			12: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1},
-			13: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1},
-			14: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1},
-			15: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1},
-			16: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1},
-			17: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1, 9: 1},
-			18: {1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 1, 7: 1, 8: 1, 9: 1},
-			19: {1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 2, 7: 1, 8: 1, 9: 1},
-			20: {1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 2, 7: 2, 8: 1, 9: 1},
-		};
-
-		// Half casters (Paladin, Ranger)
-		const halfCasterSlots = {
-			2: {1: 2},
-			3: {1: 3},
-			4: {1: 3},
-			5: {1: 4, 2: 2},
-			6: {1: 4, 2: 2},
-			7: {1: 4, 2: 3},
-			8: {1: 4, 2: 3},
-			9: {1: 4, 2: 3, 3: 2},
-			10: {1: 4, 2: 3, 3: 2},
-			11: {1: 4, 2: 3, 3: 3},
-			12: {1: 4, 2: 3, 3: 3},
-			13: {1: 4, 2: 3, 3: 3, 4: 1},
-			14: {1: 4, 2: 3, 3: 3, 4: 1},
-			15: {1: 4, 2: 3, 3: 3, 4: 2},
-			16: {1: 4, 2: 3, 3: 3, 4: 2},
-			17: {1: 4, 2: 3, 3: 3, 4: 3, 5: 1},
-			18: {1: 4, 2: 3, 3: 3, 4: 3, 5: 1},
-			19: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2},
-			20: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2},
-		};
-
-		const fullCasters = ["Wizard", "Sorcerer", "Cleric", "Druid", "Bard"];
-		const halfCasters = ["Paladin", "Ranger"];
-
-		if (fullCasters.includes(classData.name)) {
-			return fullCasterSlots[level] || {};
-		} else if (halfCasters.includes(classData.name)) {
-			return halfCasterSlots[level] || {};
-		}
-
-		// Warlock uses pact magic (handled separately)
-		// Fighter/Rogue get limited casting via subclass
-
-		return {};
-	}
-
-	/**
-	 * Check for and add racial spells at the current character level
-	 * Called after level-up to grant spells from racial features (e.g., Tiefling, High Elf)
-	 */
-	_updateRacialSpells () {
-		const race = this._state.getRace();
-		if (!race?.additionalSpells?.length) return;
-
-		const totalLevel = this._state.getTotalLevel();
-		const allSpells = this._page.getSpells();
-		const raceName = race.name;
-		const subraceName = race._subraceName || race.subrace;
-
-
-		race.additionalSpells.forEach(spellBlock => {
-			// Check if this spell block is subrace-specific
-			if (spellBlock.name) {
-				// This spell block is for a specific subrace - only apply if it matches
-				if (!subraceName || spellBlock.name.toLowerCase() !== subraceName.toLowerCase()) {
-					return;
-				}
-			}
-
-			// Process "known" spells at this level
-			if (spellBlock.known) {
-				Object.entries(spellBlock.known).forEach(([levelStr, spellsAtLevel]) => {
-					const charLevel = parseInt(levelStr);
-					// Only add spells for this exact level (don't re-add lower level spells)
-					if (charLevel !== totalLevel) return;
-
-					this._processRacialSpellList(spellsAtLevel, allSpells, raceName);
-				});
-			}
-
-			// Process "innate" spells at this level
-			if (spellBlock.innate) {
-				Object.entries(spellBlock.innate).forEach(([levelStr, spellConfig]) => {
-					const charLevel = parseInt(levelStr);
-					// Only add spells for this exact level
-					if (charLevel !== totalLevel) return;
-
-					if (typeof spellConfig === "object") {
-						if (spellConfig.daily) {
-							Object.entries(spellConfig.daily).forEach(([uses, spellList]) => {
-								this._processRacialInnateSpells(spellList, allSpells, raceName, parseInt(uses), "long");
-							});
-						}
-						if (spellConfig.rest) {
-							Object.entries(spellConfig.rest).forEach(([uses, spellList]) => {
-								this._processRacialInnateSpells(spellList, allSpells, raceName, parseInt(uses), "short");
-							});
-						}
-						if (Array.isArray(spellConfig)) {
-							this._processRacialInnateSpells(spellConfig, allSpells, raceName, 0, null);
-						}
-					} else if (Array.isArray(spellConfig)) {
-						this._processRacialInnateSpells(spellConfig, allSpells, raceName, 0, null);
-					}
-				});
-			}
-		});
-	}
-
-	/**
-	 * Process a list of spells and add them as known spells
-	 */
-	_processRacialSpellList (spellList, allSpells, sourceName) {
-		if (!Array.isArray(spellList)) {
-			if (typeof spellList === "object" && spellList._) {
-				this._processRacialSpellList(spellList._, allSpells, sourceName);
-			}
-			return;
-		}
-
-		spellList.forEach(spellRef => {
-			const spellData = this._resolveSpellReference(spellRef, allSpells);
-			if (spellData) {
-				// Check if spell already known
-				const existing = this._state.getSpells().find(s =>
-					s.name === spellData.name && s.source === spellData.source,
-				);
-				if (existing) return;
-
-				this._state.addSpell({
-					name: spellData.name,
-					source: spellData.source,
-					level: spellData.level,
-					school: spellData.school,
-					prepared: spellData.level === 0, // Cantrips always prepared
-					ritual: spellData.ritual || false,
-					concentration: spellData.concentration || false,
-					castingTime: this._getSpellCastingTime(spellData),
-					range: this._getSpellRange(spellData),
-					components: this._getSpellComponents(spellData),
-					duration: this._getSpellDuration(spellData),
-				});
-			}
-		});
-	}
-
-	/**
-	 * Process innate spells with uses/recharge
-	 */
-	_processRacialInnateSpells (spellList, allSpells, sourceName, uses, recharge) {
-		if (!Array.isArray(spellList)) return;
-
-		spellList.forEach(spellRef => {
-			const spellData = this._resolveSpellReference(spellRef, allSpells);
-			if (spellData) {
-				// Check if innate spell already exists
-				const existing = this._state.getInnateSpells().find(s =>
-					s.name === spellData.name && s.source === spellData.source,
-				);
-				if (existing) return;
-
-				const atWill = uses === 0;
-				this._state.addInnateSpell({
-					name: spellData.name,
-					source: spellData.source,
-					level: spellData.level,
-					atWill: atWill,
-					uses: atWill ? null : uses,
-					recharge: recharge,
-					sourceFeature: sourceName,
-				});
-			}
-		});
-	}
-
-	/**
-	 * Resolve a spell reference to full spell data
-	 */
-	_resolveSpellReference (spellRef, allSpells) {
-		if (typeof spellRef !== "string") return null;
-
-		let spellName = spellRef.replace(/#c$/, "");
-		let source = null;
-
-		const parts = spellName.split("|");
-		spellName = parts[0].toLowerCase();
-		if (parts.length > 1) {
-			source = parts[1].toUpperCase();
-		}
-
-		return allSpells.find(s => {
-			const nameMatch = s.name.toLowerCase() === spellName;
-			if (!nameMatch) return false;
-			if (source) return s.source === source;
-			return true;
-		});
-	}
-
-	// Spell data formatting helpers
-	_getSpellCastingTime (spell) {
-		if (!spell.time?.length) return "";
-		const time = spell.time[0];
-		return `${time.number} ${time.unit}`;
-	}
-
-	_getSpellRange (spell) {
-		if (!spell.range) return "";
-		const range = spell.range;
-		if (range.type === "point") {
-			if (range.distance?.type === "self") return "Self";
-			if (range.distance?.type === "touch") return "Touch";
-			return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
-		}
-		return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
-	}
-
-	_getSpellComponents (spell) {
-		if (!spell.components) return "";
-		const parts = [];
-		if (spell.components.v) parts.push("V");
-		if (spell.components.s) parts.push("S");
-		if (spell.components.m) {
-			const mText = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
-			parts.push(mText ? `M (${mText})` : "M");
-		}
-		return parts.join(", ");
-	}
-
-	_getSpellDuration (spell) {
-		if (!spell.duration?.length) return "";
-		const dur = spell.duration[0];
-		if (dur.type === "instant") return "Instantaneous";
-		if (dur.type === "permanent") return "Until dispelled";
-		if (dur.concentration) {
-			return `Concentration, up to ${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
-		}
-		return `${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
 	}
 
 	/**
@@ -5239,13 +3432,13 @@ class CharacterSheetLevelUp {
 	 */
 	async _showMulticlassChoices (selectedClass) {
 		// Get level 1 features
-		const features = this._getLevelFeatures(selectedClass, 1);
+		const features = CharacterSheetClassUtils.getLevelFeatures(selectedClass, 1, undefined, this._page.getClassFeatures());
 
 		// Get optional feature gains (Fighting Style, etc.)
-		const optionalFeatureGains = this._getOptionalFeatureGains(selectedClass, 0, 1);
+		const optionalFeatureGains = CharacterSheetClassUtils.getOptionalFeatureGains(selectedClass, 0, 1, this._state);
 
 		// Get feature options (choices within features)
-		const featureOptionGroups = this._getFeatureOptionsForLevel(features, 1);
+		const featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(features, 1, this._page.getClassFeatures());
 
 		// Get multiclass skill grant info
 		const multiclassSkillGrants = {
@@ -5509,7 +3702,7 @@ class CharacterSheetLevelUp {
 		}
 
 		// Add hit die (don't add first level HP for multiclass - only on level up)
-		this._updateHitDice(selectedClass);
+		CharacterSheetClassUtils.updateHitDice(this._state, selectedClass);
 
 		// Add proficiencies from multiclass (armor/weapons)
 		this._applyMulticlassProficiencies(selectedClass);

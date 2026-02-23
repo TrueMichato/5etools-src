@@ -1316,6 +1316,7 @@ class CharacterSheetSpells {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: spell.name,
 			isMinHeight0: true,
+			zIndex: 10002, // Above Quick Build overlay (9999) and toasts (10001)
 		});
 
 		const school = Parser.spSchoolAbvToFull(spell.school);

@@ -7174,6 +7174,34 @@ body:has(.charsheet__quickbuild-overlay) .toast__container {
 	font-size: 0.75rem;
 }
 
+/* Quick Build Progress Bar */
+.charsheet__quickbuild-progress {
+	padding: var(--cs-space-sm, 0.5rem) var(--cs-space-xl, 1.5rem);
+	background: var(--cs-bg-surface, var(--rgb-bg-alt));
+	border-bottom: 1px solid var(--cs-border, var(--rgb-border-grey));
+}
+
+.charsheet__quickbuild-progress-bar {
+	height: 6px;
+	background: var(--cs-border, #ddd);
+	border-radius: 3px;
+	overflow: hidden;
+}
+
+.charsheet__quickbuild-progress-fill {
+	height: 100%;
+	background: linear-gradient(90deg, #6366f1, #10b981);
+	border-radius: 3px;
+	transition: width 0.3s ease;
+}
+
+.charsheet__quickbuild-progress-text {
+	font-size: 0.7rem;
+	color: var(--cs-text-muted, #666);
+	text-align: center;
+	margin-top: 4px;
+}
+
 .charsheet__quickbuild-content {
 	flex: 1;
 	overflow-y: auto;

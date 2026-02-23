@@ -12,6 +12,8 @@ import {CharacterSheetLayout} from "./charactersheet-layout.js";
 import {CharacterSheetNotes} from "./charactersheet-notes.js";
 import {CharacterSheetCustomAbilities} from "./charactersheet-customabilities.js";
 import {CharacterSheetQuickBuild} from "./charactersheet-quickbuild.js";
+import {CharacterSheetClassUtils} from "./charactersheet-class-utils.js";
+import {CharacterSheetSpellPicker} from "./charactersheet-spell-picker.js";
 
 /**
  * Character Sheet - Main Controller
