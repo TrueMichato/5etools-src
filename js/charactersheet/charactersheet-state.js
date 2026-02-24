@@ -3287,7 +3287,8 @@ class CharacterSheetState {
 				spellDc: 0,
 				spellAttack: 0,
 				abilityChecks: {}, // {str: 1, dex: 2, ...} - raw ability checks
-				abilityScores: {}, // {str: 2, dex: 1, ...} - ability score bonuses
+				abilityScores: {}, // {str: 2, dex: 1, ...} - ability score bonuses (additive)
+				abilityScoreStatic: {}, // {str: 19, ...} - "set score to X" (takes highest)
 				hp: 0, // Hit point maximum bonus
 				hpPerLevel: 0, // HP bonus per character level
 				proficiencyBonus: 0, // Proficiency bonus modifier
@@ -4373,6 +4374,7 @@ class CharacterSheetState {
 	getSenses () {
 		const senseMods = this._data.customModifiers.senses || {};
 		const baseSenses = this._data.senses || {};
+		const itemSenses = this._data.itemSenses || {};
 
 		// Also check named modifiers for sense bonuses
 		const getNamedModifierBonus = (senseType) => {
@@ -4388,10 +4390,10 @@ class CharacterSheetState {
 		};
 
 		return {
-			darkvision: Math.max(baseSenses.darkvision || 0, senseMods.darkvision || 0, this.getSenseBonusFromStates("darkvision")) + getNamedModifierBonus("darkvision"),
-			blindsight: Math.max(baseSenses.blindsight || 0, senseMods.blindsight || 0, this.getSenseBonusFromStates("blindsight")) + getNamedModifierBonus("blindsight"),
-			tremorsense: Math.max(baseSenses.tremorsense || 0, senseMods.tremorsense || 0, this.getSenseBonusFromStates("tremorsense")) + getNamedModifierBonus("tremorsense"),
-			truesight: Math.max(baseSenses.truesight || 0, senseMods.truesight || 0, this.getSenseBonusFromStates("truesight")) + getNamedModifierBonus("truesight"),
+			darkvision: Math.max(baseSenses.darkvision || 0, senseMods.darkvision || 0, itemSenses.darkvision || 0, this.getSenseBonusFromStates("darkvision")) + getNamedModifierBonus("darkvision"),
+			blindsight: Math.max(baseSenses.blindsight || 0, senseMods.blindsight || 0, itemSenses.blindsight || 0, this.getSenseBonusFromStates("blindsight")) + getNamedModifierBonus("blindsight"),
+			tremorsense: Math.max(baseSenses.tremorsense || 0, senseMods.tremorsense || 0, itemSenses.tremorsense || 0, this.getSenseBonusFromStates("tremorsense")) + getNamedModifierBonus("tremorsense"),
+			truesight: Math.max(baseSenses.truesight || 0, senseMods.truesight || 0, itemSenses.truesight || 0, this.getSenseBonusFromStates("truesight")) + getNamedModifierBonus("truesight"),
 		};
 	}
 
@@ -4489,6 +4491,12 @@ class CharacterSheetState {
 		const itemStatic = this._data.itemAbilityOverrides?.static?.[ability];
 		if (itemStatic && itemStatic > computed) {
 			computed = itemStatic;
+		}
+
+		// Apply custom ability static overrides (same logic as items)
+		const customStatic = this._data.customModifiers.abilityScoreStatic?.[ability];
+		if (customStatic && customStatic > computed) {
+			computed = customStatic;
 		}
 
 		return computed;
@@ -5743,6 +5751,15 @@ class CharacterSheetState {
 
 	getItemGrantedSpells () {
 		return this._data.itemGrantedSpells || [];
+	}
+
+	// Senses granted by equipped/attuned magic items
+	setItemSenses (senses) {
+		this._data.itemSenses = senses || {darkvision: 0, blindsight: 0, tremorsense: 0, truesight: 0};
+	}
+
+	getItemSenses () {
+		return this._data.itemSenses || {darkvision: 0, blindsight: 0, tremorsense: 0, truesight: 0};
 	}
 
 	/**
@@ -23668,7 +23685,13 @@ class CharacterSheetState {
 					// Handle ability:str, ability:dex, etc.
 					else if (mod.type.startsWith("ability:")) {
 						const abl = mod.type.split(":")[1];
-						cm.abilityScores[abl] = (cm.abilityScores[abl] || 0) + value;
+						if (mod.mode === "set") {
+							// "Set to X" mode - takes the highest value
+							cm.abilityScoreStatic[abl] = Math.max(cm.abilityScoreStatic[abl] || 0, value);
+						} else {
+							// Default additive mode
+							cm.abilityScores[abl] = (cm.abilityScores[abl] || 0) + value;
+						}
 					}
 					// Handle sense:darkvision, sense:blindsight, etc.
 					else if (mod.type.startsWith("sense:")) {

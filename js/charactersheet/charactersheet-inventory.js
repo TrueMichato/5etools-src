@@ -998,6 +998,7 @@ class CharacterSheetInventory {
 			dmg1: options.dmg1,
 			dmgType: options.dmgType,
 			property: options.property,
+			mastery: options.mastery,
 			range: options.range,
 			// Armor stats
 			armor: options.armor,
@@ -1025,14 +1026,28 @@ class CharacterSheetInventory {
 			bonusProficiencyBonus: options.bonusProficiencyBonus || 0,
 			bonusSavingThrowConcentration: options.bonusSavingThrowConcentration || 0,
 			critThreshold: options.critThreshold || null,
+			// Defenses
 			resist: options.resist || null,
 			immune: options.immune || null,
 			vulnerable: options.vulnerable || null,
 			conditionImmune: options.conditionImmune || null,
+			// Speed modifications
 			modifySpeed: options.modifySpeed || null,
-			// Charges
+			// Ability score modifications
+			ability: options.ability || null,
+			// Charges & recharge
 			charges: options.charges,
 			chargesCurrent: options.charges,
+			recharge: options.recharge || null,
+			rechargeAmount: options.rechargeAmount || null,
+			// Special properties
+			focus: options.focus || false,
+			curse: options.curse || false,
+			sentient: options.sentient || false,
+			// Senses
+			senses: options.senses || null,
+			// Attached spells
+			attachedSpells: options.attachedSpells || null,
 			// Misc
 			entries: options.entries ? [options.entries] : undefined,
 		};
@@ -1063,22 +1078,189 @@ class CharacterSheetInventory {
 		];
 
 		// Damage types
-		const damageTypes = ["bludgeoning", "piercing", "slashing", "acid", "cold", "fire", "force", "lightning", "necrotic", "poison", "psychic", "radiant", "thunder"];
+		const damageTypes = Parser.DMG_TYPES;
 
-		// Weapon properties
-		const weaponProperties = [
-			{value: "A", label: "Ammunition"},
-			{value: "F", label: "Finesse"},
-			{value: "H", label: "Heavy"},
-			{value: "L", label: "Light"},
-			{value: "LD", label: "Loading"},
-			{value: "R", label: "Range"},
-			{value: "RN", label: "Reach"},
-			{value: "S", label: "Special"},
-			{value: "T", label: "Thrown"},
-			{value: "2H", label: "Two-Handed"},
-			{value: "V", label: "Versatile"},
+		// Helper to check if property has renderable entries
+		const propertyHasEntries = (abbreviation, source) => {
+			try {
+				const uid = source ? `${abbreviation}|${source}` : abbreviation;
+				const propObj = Renderer.item?.getProperty?.(uid, {isIgnoreMissing: true});
+				return !!(propObj?.entries?.length);
+			} catch (e) { return false; }
+		};
+
+		// Helper to check if mastery has renderable entries
+		const masteryHasEntries = (name, source) => {
+			try {
+				const uid = source ? `${name}|${source}` : name;
+				const masteryObj = Renderer.item?._getMastery?.(uid);
+				return !!(masteryObj?.entries?.length);
+			} catch (e) { return false; }
+		};
+
+		// Helper to build property hover attributes (only if property has entries)
+		const buildPropertyHoverAttrs = (abbreviation, source) => {
+			try {
+				// Only add hover if property has renderable entries
+				if (!propertyHasEntries(abbreviation, source)) return "";
+				const hash = UrlUtil.encodeArrayForHash(abbreviation, source);
+				return Renderer.hover.getHoverElementAttributes({
+					page: "itemProperty",
+					source: source,
+					hash: hash,
+					isFauxPage: true,
+				});
+			} catch (e) { return ""; }
+		};
+
+		// Helper to build mastery hover attributes (only if mastery has entries)
+		const buildMasteryHoverAttrs = (name, source) => {
+			try {
+				// Only add hover if mastery has renderable entries
+				if (!masteryHasEntries(name, source)) return "";
+				const hash = UrlUtil.encodeArrayForHash(name, source);
+				return Renderer.hover.getHoverElementAttributes({
+					page: "itemMastery",
+					source: source,
+					hash: hash,
+					isFauxPage: true,
+				});
+			} catch (e) { return ""; }
+		};
+
+		// Standard weapon properties with hover attributes
+		const standardProperties = [
+			{value: "A|XPHB", label: "Ammunition", hoverAttrs: buildPropertyHoverAttrs("A", "XPHB")},
+			{value: "F|XPHB", label: "Finesse", hoverAttrs: buildPropertyHoverAttrs("F", "XPHB")},
+			{value: "H|XPHB", label: "Heavy", hoverAttrs: buildPropertyHoverAttrs("H", "XPHB")},
+			{value: "L|XPHB", label: "Light", hoverAttrs: buildPropertyHoverAttrs("L", "XPHB")},
+			{value: "LD|XPHB", label: "Loading", hoverAttrs: buildPropertyHoverAttrs("LD", "XPHB")},
+			{value: "R|XPHB", label: "Range", hoverAttrs: buildPropertyHoverAttrs("R", "XPHB")},
+			{value: "RN|XPHB", label: "Reach", hoverAttrs: buildPropertyHoverAttrs("RN", "XPHB")},
+			{value: "S|XPHB", label: "Special", hoverAttrs: buildPropertyHoverAttrs("S", "XPHB")},
+			{value: "T|XPHB", label: "Thrown", hoverAttrs: buildPropertyHoverAttrs("T", "XPHB")},
+			{value: "2H|XPHB", label: "Two-Handed", hoverAttrs: buildPropertyHoverAttrs("2H", "XPHB")},
+			{value: "V|XPHB", label: "Versatile", hoverAttrs: buildPropertyHoverAttrs("V", "XPHB")},
 		];
+		const standardPropCodes = new Set(standardProperties.map(p => p.value.split("|")[0]));
+
+		// Gather additional properties from loaded items (captures homebrew properties)
+		const allItems = this._page.getItems?.() || [];
+		const homebrewPropertiesMap = new Map(); // uid -> {label, hoverAttrs}
+		for (const item of allItems) {
+			if (!item.property) continue;
+			for (const prop of item.property) {
+				// Properties can be "F" or "F|XPHB" format or {uid: "F|XPHB"} object
+				const propUid = prop?.uid || prop;
+				const propParts = typeof propUid === "string" ? propUid.split("|") : [String(propUid)];
+				const propCode = propParts[0];
+				// Skip standard properties we already have
+				if (standardPropCodes.has(propCode)) continue;
+				
+				// Get the actual property object to find its real source and check for entries
+				let propObj = null;
+				let fullName = propCode;
+				let actualSource = propParts[1] || null;
+				let hoverAttrs = "";
+				
+				try {
+					propObj = typeof Renderer !== "undefined" && Renderer.item?.getProperty
+						? Renderer.item.getProperty(propUid, {isIgnoreMissing: true})
+						: null;
+					if (propObj) {
+						if (propObj.name) fullName = propObj.name;
+						// Use the actual source from the property object
+						if (propObj.source) actualSource = propObj.source;
+						// Only build hover attrs if property has entries
+						if (propObj.entries?.length && actualSource) {
+							hoverAttrs = buildPropertyHoverAttrs(propObj.abbreviation || propCode, actualSource);
+						}
+					}
+				} catch (e) {
+					// Ignore errors
+				}
+				
+				// Use the actual source or fallback for the key
+				const fullUid = actualSource ? `${propCode}|${actualSource}` : propCode;
+				if (homebrewPropertiesMap.has(fullUid)) continue;
+				
+				homebrewPropertiesMap.set(fullUid, {
+					label: fullName,
+					hoverAttrs: hoverAttrs,
+				});
+			}
+		}
+		// Convert homebrew properties to array format
+		const homebrewProperties = Array.from(homebrewPropertiesMap.entries())
+			.map(([uid, data]) => ({value: uid, label: data.label || uid.split("|")[0], hoverAttrs: data.hoverAttrs}))
+			.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+
+		// Combine standard + homebrew properties
+		const weaponProperties = [...standardProperties, ...homebrewProperties];
+
+		// Standard weapon masteries (2024 rules) with hover
+		const standardMasteries = [
+			{value: "Cleave|XPHB", label: "Cleave", hoverAttrs: buildMasteryHoverAttrs("Cleave", "XPHB")},
+			{value: "Graze|XPHB", label: "Graze", hoverAttrs: buildMasteryHoverAttrs("Graze", "XPHB")},
+			{value: "Nick|XPHB", label: "Nick", hoverAttrs: buildMasteryHoverAttrs("Nick", "XPHB")},
+			{value: "Push|XPHB", label: "Push", hoverAttrs: buildMasteryHoverAttrs("Push", "XPHB")},
+			{value: "Sap|XPHB", label: "Sap", hoverAttrs: buildMasteryHoverAttrs("Sap", "XPHB")},
+			{value: "Slow|XPHB", label: "Slow", hoverAttrs: buildMasteryHoverAttrs("Slow", "XPHB")},
+			{value: "Topple|XPHB", label: "Topple", hoverAttrs: buildMasteryHoverAttrs("Topple", "XPHB")},
+			{value: "Vex|XPHB", label: "Vex", hoverAttrs: buildMasteryHoverAttrs("Vex", "XPHB")},
+		];
+		const standardMasteryCodes = new Set(standardMasteries.map(m => m.value.split("|")[0].toLowerCase()));
+
+		// Gather additional masteries from loaded items (captures homebrew masteries)
+		const homebrewMasteriesMap = new Map(); // uid -> {label, hoverAttrs}
+		for (const item of allItems) {
+			if (!item.mastery) continue;
+			for (const masteryUid of item.mastery) {
+				if (typeof masteryUid !== "string") continue;
+				const masteryParts = masteryUid.split("|");
+				const masteryName = masteryParts[0];
+				const masteryCode = masteryName.toLowerCase();
+				// Skip standard masteries we already have
+				if (standardMasteryCodes.has(masteryCode)) continue;
+				
+				// Get the actual mastery object to find its real source and check for entries
+				let masteryObj = null;
+				let actualSource = masteryParts[1] || null;
+				let hoverAttrs = "";
+				
+				try {
+					masteryObj = typeof Renderer !== "undefined" && Renderer.item?._getMastery
+						? Renderer.item._getMastery(masteryUid)
+						: null;
+					if (masteryObj) {
+						// Use the actual source from the mastery object
+						if (masteryObj.source) actualSource = masteryObj.source;
+						// Only build hover attrs if mastery has entries
+						if (masteryObj.entries?.length && actualSource) {
+							hoverAttrs = buildMasteryHoverAttrs(masteryObj.name || masteryName, actualSource);
+						}
+					}
+				} catch (e) {
+					// Ignore errors - mastery doesn't exist
+				}
+				
+				// Use the actual source or fallback for the key
+				const fullUid = actualSource ? `${masteryName}|${actualSource}` : masteryUid;
+				if (homebrewMasteriesMap.has(fullUid)) continue;
+				
+				homebrewMasteriesMap.set(fullUid, {
+					label: masteryName,
+					hoverAttrs: hoverAttrs,
+				});
+			}
+		}
+		// Convert homebrew masteries to array format
+		const homebrewMasteries = Array.from(homebrewMasteriesMap.entries())
+			.map(([uid, data]) => ({value: uid, label: data.label, hoverAttrs: data.hoverAttrs}))
+			.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+
+		// Combine standard + homebrew masteries
+		const weaponMasteries = [...standardMasteries, ...homebrewMasteries];
 
 		// Rarities
 		const rarities = ["common", "uncommon", "rare", "very rare", "legendary", "artifact"];
@@ -1199,7 +1381,7 @@ class CharacterSheetInventory {
 						<input type="text" id="custom-item-range" class="form-control" placeholder="e.g., 80/320">
 					</div>
 					<div class="charsheet__custom-item-field">
-						<label>Magic Bonus</label>
+						<label>Magic Bonus (Attack & Damage)</label>
 						<select id="custom-item-weapon-bonus" class="form-control">
 							<option value="0">None</option>
 							<option value="1">+1</option>
@@ -1207,13 +1389,36 @@ class CharacterSheetInventory {
 							<option value="3">+3</option>
 						</select>
 					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Attack Only Bonus</label>
+						<input type="number" id="custom-item-bonus-attack" class="form-control" value="0" min="-5" max="10">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Damage Only Bonus</label>
+						<input type="number" id="custom-item-bonus-damage" class="form-control" value="0" min="-5" max="10">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Bonus Crit Damage</label>
+						<input type="text" id="custom-item-crit-damage" class="form-control" placeholder="e.g., 2d6 or 1d8 fire">
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<label>Weapon Masteries</label>
+						<div class="charsheet__custom-item-props">
+							${weaponMasteries.map(m => `
+								<label class="charsheet__custom-item-prop-check">
+									<input type="checkbox" value="${m.value}" class="weapon-mastery-check">
+									<span class="charsheet__prop-hover-link" ${m.hoverAttrs || ""}>${m.label}</span>
+								</label>
+							`).join("")}
+						</div>
+					</div>
 					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
 						<label>Properties</label>
 						<div class="charsheet__custom-item-props">
 							${weaponProperties.map(p => `
 								<label class="charsheet__custom-item-prop-check">
 									<input type="checkbox" value="${p.value}" class="weapon-prop-check">
-									${p.label}
+									<span class="charsheet__prop-hover-link" ${p.hoverAttrs || ""}>${p.label}</span>
 								</label>
 							`).join("")}
 						</div>
@@ -1287,7 +1492,61 @@ class CharacterSheetInventory {
 		`);
 		$form.append($shieldFields);
 
-		// Magic Item Fields Section (charges, etc.)
+		// All damage types for defenses
+		const allDamageTypes = Parser.DMG_TYPES;
+		
+		// Get conditions dynamically from the page (includes homebrew with priority source filtering)
+		const conditionsRaw = this._page.getConditionsListUnique?.() || [];
+		// Build condition data with hover attributes
+		const allConditions = conditionsRaw.map(cond => {
+			let hoverAttrs = "";
+			try {
+				const hash = UrlUtil.encodeForHash([cond.name, cond.source].join(HASH_LIST_SEP));
+				hoverAttrs = Renderer.hover.getHoverElementAttributes({
+					page: UrlUtil.PG_CONDITIONS_DISEASES,
+					source: cond.source,
+					hash: hash,
+				});
+			} catch (e) { /* ignore */ }
+			return {
+				name: cond.name,
+				source: cond.source,
+				sourceAbbr: cond.sourceAbbr || Parser.sourceJsonToAbv(cond.source),
+				hoverAttrs,
+			};
+		});
+		// Fallback to standard conditions if none loaded
+		if (allConditions.length === 0) {
+			const defaultConditions = ["blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"];
+			defaultConditions.forEach(name => {
+				let hoverAttrs = "";
+				try {
+					const hash = UrlUtil.encodeForHash([name, Parser.SRC_XPHB].join(HASH_LIST_SEP));
+					hoverAttrs = Renderer.hover.getHoverElementAttributes({
+						page: UrlUtil.PG_CONDITIONS_DISEASES,
+						source: Parser.SRC_XPHB,
+						hash: hash,
+					});
+				} catch (e) { /* ignore */ }
+				allConditions.push({
+					name: name.charAt(0).toUpperCase() + name.slice(1),
+					source: Parser.SRC_XPHB,
+					sourceAbbr: "XPHB",
+					hoverAttrs,
+				});
+			});
+		}
+		
+		const rechargeOptions = [
+			{value: "", label: "No Recharge"},
+			{value: "dawn", label: "At Dawn"},
+			{value: "dusk", label: "At Dusk"},
+			{value: "midnight", label: "At Midnight"},
+			{value: "restShort", label: "Short Rest"},
+			{value: "restLong", label: "Long Rest"},
+		];
+
+		// Magic Item Fields Section (expanded)
 		const $magicFields = $(`
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--magic" style="display: none;">
 				<div class="charsheet__custom-item-section-title">✨ Magic Properties</div>
@@ -1296,10 +1555,547 @@ class CharacterSheetInventory {
 						<label>Charges (0 = no charges)</label>
 						<input type="number" id="custom-item-charges" class="form-control" value="0" min="0">
 					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Recharge</label>
+						<select id="custom-item-recharge" class="form-control">
+							${rechargeOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join("")}
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Recharge Amount</label>
+						<input type="text" id="custom-item-recharge-amount" class="form-control" placeholder="e.g., 1d6+1 or 3" value="">
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--checkbox">
+						<label>
+							<input type="checkbox" id="custom-item-focus">
+							Spellcasting Focus
+						</label>
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--checkbox">
+						<label>
+							<input type="checkbox" id="custom-item-cursed">
+							Cursed Item
+						</label>
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--checkbox">
+						<label>
+							<input type="checkbox" id="custom-item-sentient">
+							Sentient Item
+						</label>
+					</div>
 				</div>
 			</div>
 		`);
 		$form.append($magicFields);
+
+		// Bonuses Section (spell, saves, checks)
+		const $bonusesSection = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--bonuses">
+				<div class="charsheet__custom-item-section-title">📈 Bonuses (Optional)</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field">
+						<label>Spell Attack</label>
+						<select id="custom-item-bonus-spell-attack" class="form-control">
+							<option value="0">+0</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Spell Save DC</label>
+						<select id="custom-item-bonus-spell-dc" class="form-control">
+							<option value="0">+0</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>All Saving Throws</label>
+						<select id="custom-item-bonus-save-all" class="form-control">
+							<option value="0">+0</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Concentration Saves</label>
+						<select id="custom-item-bonus-concentration" class="form-control">
+							<option value="0">+0</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+							<option value="5">+5</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>All Ability Checks</label>
+						<select id="custom-item-bonus-checks" class="form-control">
+							<option value="0">+0</option>
+							<option value="1">+1</option>
+							<option value="2">+2</option>
+							<option value="3">+3</option>
+						</select>
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Crit on X or higher</label>
+						<input type="number" id="custom-item-crit-threshold" class="form-control" value="20" min="1" max="20" placeholder="20">
+					</div>
+				</div>
+				<div class="charsheet__custom-item-subsection mt-2">
+					<div class="ve-small ve-muted mb-1">Individual Saving Throw Bonuses:</div>
+					<div class="charsheet__custom-item-fields">
+						<div class="charsheet__custom-item-field" style="width: 80px;">
+							<label>STR</label>
+							<input type="number" id="custom-item-bonus-save-str" class="form-control" value="0" min="-5" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 80px;">
+							<label>DEX</label>
+							<input type="number" id="custom-item-bonus-save-dex" class="form-control" value="0" min="-5" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 80px;">
+							<label>CON</label>
+							<input type="number" id="custom-item-bonus-save-con" class="form-control" value="0" min="-5" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 80px;">
+							<label>INT</label>
+							<input type="number" id="custom-item-bonus-save-int" class="form-control" value="0" min="-5" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 80px;">
+							<label>WIS</label>
+							<input type="number" id="custom-item-bonus-save-wis" class="form-control" value="0" min="-5" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 80px;">
+							<label>CHA</label>
+							<input type="number" id="custom-item-bonus-save-cha" class="form-control" value="0" min="-5" max="10">
+						</div>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($bonusesSection);
+
+		// Defenses Section
+		const $defensesSection = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--defenses">
+				<div class="charsheet__custom-item-section-title">🛡️ Defenses (Optional)</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<label>Damage Resistances</label>
+						<div class="charsheet__custom-item-props">
+							${allDamageTypes.map(d => `
+								<label class="charsheet__custom-item-prop-check">
+									<input type="checkbox" value="${d}" class="resist-check">
+									${d.charAt(0).toUpperCase() + d.slice(1)}
+								</label>
+							`).join("")}
+						</div>
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<label>Damage Immunities</label>
+						<div class="charsheet__custom-item-props">
+							${allDamageTypes.map(d => `
+								<label class="charsheet__custom-item-prop-check">
+									<input type="checkbox" value="${d}" class="immune-check">
+									${d.charAt(0).toUpperCase() + d.slice(1)}
+								</label>
+							`).join("")}
+						</div>
+					</div>
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<label>Condition Immunities</label>
+						<div class="charsheet__custom-item-props">
+							${allConditions.map(c => `
+								<label class="charsheet__custom-item-prop-check">
+									<input type="checkbox" value="${c.name}|${c.source}" class="condition-immune-check" data-condition-name="${c.name}" data-condition-source="${c.source}">
+									<span class="charsheet__prop-hover-link" ${c.hoverAttrs}>${c.name}</span>
+									<span class="charsheet__condition-source-badge ve-small">${c.sourceAbbr}</span>
+								</label>
+							`).join("")}
+						</div>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($defensesSection);
+
+		// Speed Section
+		const $speedSection = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--speed">
+				<div class="charsheet__custom-item-section-title">🏃 Speed Modifications (Optional)</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field">
+						<label>Walking +/-</label>
+						<input type="number" id="custom-item-speed-walk" class="form-control" value="0" step="5">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Flying +/-</label>
+						<input type="number" id="custom-item-speed-fly" class="form-control" value="0" step="5">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Swimming +/-</label>
+						<input type="number" id="custom-item-speed-swim" class="form-control" value="0" step="5">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Climbing +/-</label>
+						<input type="number" id="custom-item-speed-climb" class="form-control" value="0" step="5">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Burrowing +/-</label>
+						<input type="number" id="custom-item-speed-burrow" class="form-control" value="0" step="5">
+					</div>
+				</div>
+				<div class="charsheet__custom-item-subsection mt-2">
+					<div class="ve-small ve-muted mb-1">Grant New Speed (set value):</div>
+					<div class="charsheet__custom-item-fields">
+						<div class="charsheet__custom-item-field">
+							<label>Grant Fly</label>
+							<input type="number" id="custom-item-grant-fly" class="form-control" value="0" min="0" step="5" placeholder="e.g., 60">
+						</div>
+						<div class="charsheet__custom-item-field">
+							<label>Grant Swim</label>
+							<input type="number" id="custom-item-grant-swim" class="form-control" value="0" min="0" step="5" placeholder="e.g., 60">
+						</div>
+						<div class="charsheet__custom-item-field">
+							<label>Grant Climb</label>
+							<input type="number" id="custom-item-grant-climb" class="form-control" value="0" min="0" step="5" placeholder="e.g., 30">
+						</div>
+						<div class="charsheet__custom-item-field">
+							<label>Grant Burrow</label>
+							<input type="number" id="custom-item-grant-burrow" class="form-control" value="0" min="0" step="5" placeholder="e.g., 30">
+						</div>
+					</div>
+				</div>
+				<div class="charsheet__custom-item-subsection mt-2">
+					<div class="ve-small ve-muted mb-1">Speed Equal To (like Winged Boots):</div>
+					<div class="charsheet__custom-item-fields">
+						<div class="charsheet__custom-item-field">
+							<label>Fly = </label>
+							<select id="custom-item-equal-fly" class="form-control">
+								<option value="">None</option>
+								<option value="walk">Walk Speed</option>
+							</select>
+						</div>
+						<div class="charsheet__custom-item-field">
+							<label>Swim = </label>
+							<select id="custom-item-equal-swim" class="form-control">
+								<option value="">None</option>
+								<option value="walk">Walk Speed</option>
+							</select>
+						</div>
+						<div class="charsheet__custom-item-field">
+							<label>Climb = </label>
+							<select id="custom-item-equal-climb" class="form-control">
+								<option value="">None</option>
+								<option value="walk">Walk Speed</option>
+							</select>
+						</div>
+					</div>
+				</div>
+				<div class="charsheet__custom-item-subsection mt-2">
+					<div class="ve-small ve-muted mb-1">Speed Multiplier (like Boots of Speed):</div>
+					<div class="charsheet__custom-item-fields">
+						<div class="charsheet__custom-item-field">
+							<label>Walk Speed</label>
+							<select id="custom-item-multiply-walk" class="form-control">
+								<option value="">Normal</option>
+								<option value="2">x2 (Double)</option>
+								<option value="0.5">x0.5 (Half)</option>
+							</select>
+						</div>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($speedSection);
+
+		// Ability Scores Section
+		const $abilitySection = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--abilities">
+				<div class="charsheet__custom-item-section-title">💪 Ability Score Modifications (Optional)</div>
+				<div class="charsheet__custom-item-subsection">
+					<div class="ve-small ve-muted mb-1">Set Ability Score To (like Gauntlets of Ogre Power):</div>
+					<div class="charsheet__custom-item-fields">
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>STR =</label>
+							<input type="number" id="custom-item-ability-set-str" class="form-control" value="" min="1" max="30" placeholder="19">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>DEX =</label>
+							<input type="number" id="custom-item-ability-set-dex" class="form-control" value="" min="1" max="30" placeholder="19">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>CON =</label>
+							<input type="number" id="custom-item-ability-set-con" class="form-control" value="" min="1" max="30" placeholder="19">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>INT =</label>
+							<input type="number" id="custom-item-ability-set-int" class="form-control" value="" min="1" max="30" placeholder="19">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>WIS =</label>
+							<input type="number" id="custom-item-ability-set-wis" class="form-control" value="" min="1" max="30" placeholder="19">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>CHA =</label>
+							<input type="number" id="custom-item-ability-set-cha" class="form-control" value="" min="1" max="30" placeholder="19">
+						</div>
+					</div>
+				</div>
+				<div class="charsheet__custom-item-subsection mt-2">
+					<div class="ve-small ve-muted mb-1">Ability Score Bonuses (like Belt of Dwarvenkind +2 CON):</div>
+					<div class="charsheet__custom-item-fields">
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>STR +/-</label>
+							<input type="number" id="custom-item-ability-bonus-str" class="form-control" value="0" min="-10" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>DEX +/-</label>
+							<input type="number" id="custom-item-ability-bonus-dex" class="form-control" value="0" min="-10" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>CON +/-</label>
+							<input type="number" id="custom-item-ability-bonus-con" class="form-control" value="0" min="-10" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>INT +/-</label>
+							<input type="number" id="custom-item-ability-bonus-int" class="form-control" value="0" min="-10" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>WIS +/-</label>
+							<input type="number" id="custom-item-ability-bonus-wis" class="form-control" value="0" min="-10" max="10">
+						</div>
+						<div class="charsheet__custom-item-field" style="width: 90px;">
+							<label>CHA +/-</label>
+							<input type="number" id="custom-item-ability-bonus-cha" class="form-control" value="0" min="-10" max="10">
+						</div>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($abilitySection);
+
+		// Senses Section
+		const $sensesSection = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--senses">
+				<div class="charsheet__custom-item-section-title">👁️ Senses (Optional)</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field">
+						<label>Darkvision (ft)</label>
+						<input type="number" id="custom-item-sense-darkvision" class="form-control" value="0" min="0" step="30" placeholder="e.g., 60">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Blindsight (ft)</label>
+						<input type="number" id="custom-item-sense-blindsight" class="form-control" value="0" min="0" step="10" placeholder="e.g., 30">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Tremorsense (ft)</label>
+						<input type="number" id="custom-item-sense-tremorsense" class="form-control" value="0" min="0" step="10" placeholder="e.g., 60">
+					</div>
+					<div class="charsheet__custom-item-field">
+						<label>Truesight (ft)</label>
+						<input type="number" id="custom-item-sense-truesight" class="form-control" value="0" min="0" step="10" placeholder="e.g., 120">
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($sensesSection);
+
+		// Attached Spells Section
+		const allSpells = this._page.getSpells?.() || [];
+		const selectedSpells = [];
+
+		const $spellsSection = $(`
+			<div class="charsheet__custom-item-section charsheet__custom-item-section--spells">
+				<div class="charsheet__custom-item-section-title">✨ Attached Spells (Optional)</div>
+				<div class="charsheet__custom-item-fields">
+					<div class="charsheet__custom-item-field charsheet__custom-item-field--full">
+						<div class="charsheet__custom-item-spell-filters">
+							<input type="text" id="custom-item-spell-search" class="form-control" placeholder="Search spells...">
+							<select id="custom-item-spell-level-filter" class="form-control">
+								<option value="">All Levels</option>
+								<option value="0">Cantrips</option>
+								<option value="1">1st Level</option>
+								<option value="2">2nd Level</option>
+								<option value="3">3rd Level</option>
+								<option value="4">4th Level</option>
+								<option value="5">5th Level</option>
+								<option value="6">6th Level</option>
+								<option value="7">7th Level</option>
+								<option value="8">8th Level</option>
+								<option value="9">9th Level</option>
+							</select>
+							<select id="custom-item-spell-school-filter" class="form-control">
+								<option value="">All Schools</option>
+								<option value="A">Abjuration</option>
+								<option value="C">Conjuration</option>
+								<option value="D">Divination</option>
+								<option value="E">Enchantment</option>
+								<option value="V">Evocation</option>
+								<option value="I">Illusion</option>
+								<option value="N">Necromancy</option>
+								<option value="T">Transmutation</option>
+							</select>
+						</div>
+						<div id="custom-item-spell-list" class="charsheet__custom-item-spell-list">
+							<div class="charsheet__custom-item-spell-hint">Type to search or use filters above</div>
+						</div>
+						<div id="custom-item-spell-selected" class="charsheet__custom-item-spell-selected">
+							<div class="charsheet__custom-item-spell-empty">No spells selected</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		`);
+		$form.append($spellsSection);
+
+		// Spell picker logic
+		const renderSpellList = () => {
+			const searchTerm = $form.find("#custom-item-spell-search").val()?.toLowerCase() || "";
+			const levelFilterVal = $form.find("#custom-item-spell-level-filter").val() || "";
+			const schoolFilterVal = $form.find("#custom-item-spell-school-filter").val() || "";
+
+			let filteredSpells = allSpells.filter(s => {
+				if (searchTerm && !s.name.toLowerCase().includes(searchTerm)) return false;
+				if (levelFilterVal !== "" && String(s.level) !== levelFilterVal) return false;
+				if (schoolFilterVal && s.school !== schoolFilterVal) return false;
+				// Hide already selected spells
+				if (selectedSpells.some(gs => gs.name === s.name && gs.source === s.source)) return false;
+				return true;
+			}).slice(0, 30);
+
+			const $listContainer = $form.find("#custom-item-spell-list");
+
+			if (!searchTerm && !levelFilterVal && !schoolFilterVal) {
+				$listContainer.html(`<div class="charsheet__custom-item-spell-hint">Type to search or use filters above</div>`);
+				return;
+			}
+
+			if (!filteredSpells.length) {
+				$listContainer.html(`<div class="charsheet__custom-item-spell-empty">No matching spells</div>`);
+				return;
+			}
+
+			$listContainer.html(filteredSpells.map(s => {
+				const levelStr = s.level === 0 ? "Cantrip" : `${s.level}${Parser.getOrdinalForm(s.level)}`;
+				const schoolStr = Parser.spSchoolAbvToFull(s.school) || "";
+				return `
+					<div class="charsheet__custom-item-spell-item" data-name="${s.name}" data-source="${s.source}" data-level="${s.level}">
+						<div class="charsheet__custom-item-spell-info">
+							<span class="charsheet__custom-item-spell-name">${s.name}</span>
+							<span class="charsheet__custom-item-spell-meta">${levelStr} ${schoolStr}</span>
+						</div>
+						<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__custom-item-spell-add">Add</button>
+					</div>
+				`;
+			}).join(""));
+
+			// Bind add buttons
+			$listContainer.find(".charsheet__custom-item-spell-add").on("click", function () {
+				const $item = $(this).closest(".charsheet__custom-item-spell-item");
+				const name = $item.data("name");
+				const source = $item.data("source");
+				const level = parseInt($item.data("level"));
+
+				if (!selectedSpells.some(s => s.name === name && s.source === source)) {
+					selectedSpells.push({
+						name,
+						source,
+						level,
+						usageType: level === 0 ? "will" : "charges", // Default: cantrips at-will, others use charges
+						uses: level === 0 ? null : 1,
+						recharge: "long",
+					});
+				}
+				renderSpellList();
+				renderSelectedSpells();
+			});
+		};
+
+		const renderSelectedSpells = () => {
+			const $selectedContainer = $form.find("#custom-item-spell-selected");
+
+			if (!selectedSpells.length) {
+				$selectedContainer.html(`<div class="charsheet__custom-item-spell-empty">No spells selected</div>`);
+				return;
+			}
+
+			$selectedContainer.html(selectedSpells.map((s, idx) => {
+				const levelStr = s.level === 0 ? "Cantrip" : `${s.level}${Parser.getOrdinalForm(s.level)}`;
+				const isCantrip = s.level === 0;
+
+				return `
+					<div class="charsheet__custom-item-spell-selected-item" data-idx="${idx}">
+						<div class="charsheet__custom-item-spell-selected-info">
+							<span class="charsheet__custom-item-spell-name">${s.name}</span>
+							<span class="charsheet__custom-item-spell-meta">${levelStr}</span>
+						</div>
+						<div class="charsheet__custom-item-spell-selected-options">
+							${!isCantrip ? `
+								<select class="form-control spell-usage-type" style="width: 90px;">
+									<option value="will" ${s.usageType === "will" ? "selected" : ""}>At Will</option>
+									<option value="daily" ${s.usageType === "daily" ? "selected" : ""}>X/Day</option>
+									<option value="charges" ${s.usageType === "charges" ? "selected" : ""}>Charges</option>
+								</select>
+								${s.usageType !== "will" ? `
+									<input type="number" class="form-control spell-uses" value="${s.uses || 1}" min="1" max="20" style="width: 50px;" title="${s.usageType === "charges" ? "Charge cost" : "Uses per day"}">
+									${s.usageType === "daily" ? `
+										<select class="form-control spell-recharge" style="width: 70px;">
+											<option value="long" ${s.recharge !== "short" ? "selected" : ""}>Long</option>
+											<option value="short" ${s.recharge === "short" ? "selected" : ""}>Short</option>
+										</select>
+									` : ""}
+								` : ""}
+							` : `<span class="ve-muted ve-small">At Will</span>`}
+						</div>
+						<button type="button" class="ve-btn ve-btn-xs ve-btn-danger charsheet__custom-item-spell-remove">&times;</button>
+					</div>
+				`;
+			}).join(""));
+
+			// Bind handlers
+			$selectedContainer.find(".charsheet__custom-item-spell-selected-item").each(function () {
+				const $item = $(this);
+				const idx = parseInt($item.data("idx"));
+				const spell = selectedSpells[idx];
+				if (!spell) return;
+
+				// Usage type change
+				$item.find(".spell-usage-type").on("change", function () {
+					spell.usageType = $(this).val();
+					if (spell.usageType === "will") {
+						spell.uses = null;
+					} else if (!spell.uses) {
+						spell.uses = 1;
+					}
+					renderSelectedSpells();
+				});
+
+				// Uses input
+				$item.find(".spell-uses").on("change", function () {
+					spell.uses = parseInt($(this).val()) || 1;
+				});
+
+				// Recharge select
+				$item.find(".spell-recharge").on("change", function () {
+					spell.recharge = $(this).val();
+				});
+
+				// Remove button
+				$item.find(".charsheet__custom-item-spell-remove").on("click", function () {
+					selectedSpells.splice(idx, 1);
+					renderSpellList();
+					renderSelectedSpells();
+				});
+			});
+		};
+
+		// Bind spell filter handlers
+		$form.find("#custom-item-spell-search").on("input", MiscUtil.debounce(renderSpellList, 100));
+		$form.find("#custom-item-spell-level-filter").on("change", renderSpellList);
+		$form.find("#custom-item-spell-school-filter").on("change", renderSpellList);
 
 		// Description Section
 		const $descSection = $(`
@@ -1353,6 +2149,20 @@ class CharacterSheetInventory {
 					if (range) options.range = range;
 					const bonus = parseInt($form.find("#custom-item-weapon-bonus").val());
 					if (bonus > 0) options.bonusWeapon = `+${bonus}`;
+					// Separate attack/damage bonuses
+					const bonusAttack = parseInt($form.find("#custom-item-bonus-attack").val()) || 0;
+					if (bonusAttack) options.bonusWeaponAttack = `+${bonusAttack}`;
+					const bonusDamage = parseInt($form.find("#custom-item-bonus-damage").val()) || 0;
+					if (bonusDamage) options.bonusWeaponDamage = `+${bonusDamage}`;
+					// Bonus crit damage
+					const critDamage = $form.find("#custom-item-crit-damage").val()?.trim();
+					if (critDamage) options.bonusWeaponCritDamage = critDamage;
+					// Weapon masteries (can select multiple)
+					const masteries = [];
+					$form.find(".weapon-mastery-check:checked").each(function () {
+						masteries.push($(this).val());
+					});
+					if (masteries.length) options.mastery = masteries;
 					// Gather properties
 					const props = [];
 					$form.find(".weapon-prop-check:checked").each(function () {
@@ -1380,10 +2190,186 @@ class CharacterSheetInventory {
 					if (bonus > 0) options.bonusAc = `+${bonus}`;
 				}
 
-				// Magic item charges
+				// Magic item properties (charges, recharge, special)
 				if (["wondrous", "wand", "ring", "potion", "scroll"].includes(selectedType)) {
 					const charges = parseInt($form.find("#custom-item-charges").val());
-					if (charges > 0) options.charges = charges;
+					if (charges > 0) {
+						options.charges = charges;
+						const recharge = $form.find("#custom-item-recharge").val();
+						if (recharge) options.recharge = recharge;
+						const rechargeAmount = $form.find("#custom-item-recharge-amount").val()?.trim();
+						if (rechargeAmount) options.rechargeAmount = rechargeAmount;
+					}
+					if ($form.find("#custom-item-focus").is(":checked")) options.focus = true;
+					if ($form.find("#custom-item-cursed").is(":checked")) options.curse = true;
+					if ($form.find("#custom-item-sentient").is(":checked")) options.sentient = true;
+				}
+
+				// Bonuses (available for all magic items)
+				const bonusSpellAttack = parseInt($form.find("#custom-item-bonus-spell-attack").val()) || 0;
+				if (bonusSpellAttack) options.bonusSpellAttack = `+${bonusSpellAttack}`;
+				const bonusSpellDc = parseInt($form.find("#custom-item-bonus-spell-dc").val()) || 0;
+				if (bonusSpellDc) options.bonusSpellSaveDc = `+${bonusSpellDc}`;
+				const bonusSaveAll = parseInt($form.find("#custom-item-bonus-save-all").val()) || 0;
+				if (bonusSaveAll) options.bonusSavingThrow = `+${bonusSaveAll}`;
+				const bonusConcentration = parseInt($form.find("#custom-item-bonus-concentration").val()) || 0;
+				if (bonusConcentration) options.bonusSavingThrowConcentration = `+${bonusConcentration}`;
+				const bonusChecks = parseInt($form.find("#custom-item-bonus-checks").val()) || 0;
+				if (bonusChecks) options.bonusAbilityCheck = `+${bonusChecks}`;
+				const critThreshold = parseInt($form.find("#custom-item-crit-threshold").val());
+				if (critThreshold && critThreshold < 20) options.critThreshold = critThreshold;
+
+				// Individual save bonuses
+				const saveStr = parseInt($form.find("#custom-item-bonus-save-str").val()) || 0;
+				const saveDex = parseInt($form.find("#custom-item-bonus-save-dex").val()) || 0;
+				const saveCon = parseInt($form.find("#custom-item-bonus-save-con").val()) || 0;
+				const saveInt = parseInt($form.find("#custom-item-bonus-save-int").val()) || 0;
+				const saveWis = parseInt($form.find("#custom-item-bonus-save-wis").val()) || 0;
+				const saveCha = parseInt($form.find("#custom-item-bonus-save-cha").val()) || 0;
+				if (saveStr) options.bonusSavingThrowStr = saveStr;
+				if (saveDex) options.bonusSavingThrowDex = saveDex;
+				if (saveCon) options.bonusSavingThrowCon = saveCon;
+				if (saveInt) options.bonusSavingThrowInt = saveInt;
+				if (saveWis) options.bonusSavingThrowWis = saveWis;
+				if (saveCha) options.bonusSavingThrowCha = saveCha;
+
+				// Defenses
+				const resist = [];
+				$form.find(".resist-check:checked").each(function () { resist.push($(this).val()); });
+				if (resist.length) options.resist = resist;
+				const immune = [];
+				$form.find(".immune-check:checked").each(function () { immune.push($(this).val()); });
+				if (immune.length) options.immune = immune;
+				const conditionImmune = [];
+				$form.find(".condition-immune-check:checked").each(function () {
+					// Value is stored as "name|source", extract just the name for storage
+					const val = String($(this).val() || "");
+					const condName = val.includes("|") ? val.split("|")[0] : val;
+					conditionImmune.push(condName);
+				});
+				if (conditionImmune.length) options.conditionImmune = conditionImmune;
+
+				// Speed modifications
+				const speedBonus = {};
+				const speedWalk = parseInt($form.find("#custom-item-speed-walk").val()) || 0;
+				const speedFly = parseInt($form.find("#custom-item-speed-fly").val()) || 0;
+				const speedSwim = parseInt($form.find("#custom-item-speed-swim").val()) || 0;
+				const speedClimb = parseInt($form.find("#custom-item-speed-climb").val()) || 0;
+				const speedBurrow = parseInt($form.find("#custom-item-speed-burrow").val()) || 0;
+				if (speedWalk) speedBonus.walk = speedWalk;
+				if (speedFly) speedBonus.fly = speedFly;
+				if (speedSwim) speedBonus.swim = speedSwim;
+				if (speedClimb) speedBonus.climb = speedClimb;
+				if (speedBurrow) speedBonus.burrow = speedBurrow;
+
+				const speedStatic = {};
+				const grantFly = parseInt($form.find("#custom-item-grant-fly").val()) || 0;
+				const grantSwim = parseInt($form.find("#custom-item-grant-swim").val()) || 0;
+				const grantClimb = parseInt($form.find("#custom-item-grant-climb").val()) || 0;
+				const grantBurrow = parseInt($form.find("#custom-item-grant-burrow").val()) || 0;
+				if (grantFly) speedStatic.fly = grantFly;
+				if (grantSwim) speedStatic.swim = grantSwim;
+				if (grantClimb) speedStatic.climb = grantClimb;
+				if (grantBurrow) speedStatic.burrow = grantBurrow;
+
+				// Speed equal-to (fly = walk, etc.)
+				const speedEqual = {};
+				const equalFly = $form.find("#custom-item-equal-fly").val();
+				const equalSwim = $form.find("#custom-item-equal-swim").val();
+				const equalClimb = $form.find("#custom-item-equal-climb").val();
+				if (equalFly) speedEqual.fly = equalFly;
+				if (equalSwim) speedEqual.swim = equalSwim;
+				if (equalClimb) speedEqual.climb = equalClimb;
+
+				// Speed multiply (walk x2, etc.)
+				const speedMultiply = {};
+				const multiplyWalk = parseFloat($form.find("#custom-item-multiply-walk").val());
+				if (multiplyWalk && multiplyWalk !== 1) speedMultiply.walk = multiplyWalk;
+
+				if (Object.keys(speedBonus).length || Object.keys(speedStatic).length || Object.keys(speedEqual).length || Object.keys(speedMultiply).length) {
+					options.modifySpeed = {};
+					if (Object.keys(speedBonus).length) options.modifySpeed.bonus = speedBonus;
+					if (Object.keys(speedStatic).length) options.modifySpeed.static = speedStatic;
+					if (Object.keys(speedEqual).length) options.modifySpeed.equal = speedEqual;
+					if (Object.keys(speedMultiply).length) options.modifySpeed.multiply = speedMultiply;
+				}
+
+				// Ability score modifications
+				const abilityStatic = {};
+				const setStr = parseInt($form.find("#custom-item-ability-set-str").val());
+				const setDex = parseInt($form.find("#custom-item-ability-set-dex").val());
+				const setCon = parseInt($form.find("#custom-item-ability-set-con").val());
+				const setInt = parseInt($form.find("#custom-item-ability-set-int").val());
+				const setWis = parseInt($form.find("#custom-item-ability-set-wis").val());
+				const setCha = parseInt($form.find("#custom-item-ability-set-cha").val());
+				if (!isNaN(setStr) && setStr > 0) abilityStatic.str = setStr;
+				if (!isNaN(setDex) && setDex > 0) abilityStatic.dex = setDex;
+				if (!isNaN(setCon) && setCon > 0) abilityStatic.con = setCon;
+				if (!isNaN(setInt) && setInt > 0) abilityStatic.int = setInt;
+				if (!isNaN(setWis) && setWis > 0) abilityStatic.wis = setWis;
+				if (!isNaN(setCha) && setCha > 0) abilityStatic.cha = setCha;
+
+				const abilityBonus = {};
+				const bonusStr = parseInt($form.find("#custom-item-ability-bonus-str").val()) || 0;
+				const bonusDex = parseInt($form.find("#custom-item-ability-bonus-dex").val()) || 0;
+				const bonusCon = parseInt($form.find("#custom-item-ability-bonus-con").val()) || 0;
+				const bonusInt = parseInt($form.find("#custom-item-ability-bonus-int").val()) || 0;
+				const bonusWis = parseInt($form.find("#custom-item-ability-bonus-wis").val()) || 0;
+				const bonusCha = parseInt($form.find("#custom-item-ability-bonus-cha").val()) || 0;
+				if (bonusStr) abilityBonus.str = bonusStr;
+				if (bonusDex) abilityBonus.dex = bonusDex;
+				if (bonusCon) abilityBonus.con = bonusCon;
+				if (bonusInt) abilityBonus.int = bonusInt;
+				if (bonusWis) abilityBonus.wis = bonusWis;
+				if (bonusCha) abilityBonus.cha = bonusCha;
+
+				if (Object.keys(abilityStatic).length || Object.keys(abilityBonus).length) {
+					options.ability = {};
+					if (Object.keys(abilityStatic).length) options.ability.static = abilityStatic;
+					// Merge bonus into ability object (not nested)
+					Object.assign(options.ability, abilityBonus);
+				}
+
+				// Senses
+				const senses = {};
+				const senseDarkvision = parseInt($form.find("#custom-item-sense-darkvision").val()) || 0;
+				const senseBlindight = parseInt($form.find("#custom-item-sense-blindsight").val()) || 0;
+				const senseTremorsense = parseInt($form.find("#custom-item-sense-tremorsense").val()) || 0;
+				const senseTruesight = parseInt($form.find("#custom-item-sense-truesight").val()) || 0;
+				if (senseDarkvision) senses.darkvision = senseDarkvision;
+				if (senseBlindight) senses.blindsight = senseBlindight;
+				if (senseTremorsense) senses.tremorsense = senseTremorsense;
+				if (senseTruesight) senses.truesight = senseTruesight;
+				if (Object.keys(senses).length) options.senses = senses;
+
+				// Attached spells
+				if (selectedSpells.length) {
+					// Convert to the attachedSpells format
+					const attachedSpells = {};
+					const willSpells = [];
+					const dailySpells = {};
+					const chargesSpells = {};
+
+					for (const spell of selectedSpells) {
+						const spellRef = `${spell.name}|${spell.source}`;
+						if (spell.usageType === "will" || spell.level === 0) {
+							willSpells.push(spellRef);
+						} else if (spell.usageType === "daily") {
+							const key = `${spell.uses}${spell.recharge === "short" ? "" : "e"}`;
+							if (!dailySpells[key]) dailySpells[key] = [];
+							dailySpells[key].push(spellRef);
+						} else if (spell.usageType === "charges") {
+							const key = String(spell.uses);
+							if (!chargesSpells[key]) chargesSpells[key] = [];
+							chargesSpells[key].push(spellRef);
+						}
+					}
+
+					if (willSpells.length) attachedSpells.will = willSpells;
+					if (Object.keys(dailySpells).length) attachedSpells.daily = dailySpells;
+					if (Object.keys(chargesSpells).length) attachedSpells.charges = chargesSpells;
+
+					if (Object.keys(attachedSpells).length) options.attachedSpells = attachedSpells;
 				}
 
 				const quantity = parseInt($form.find("#custom-item-qty").val()) || 1;
@@ -2193,11 +3179,15 @@ class CharacterSheetInventory {
 		// Collect defensive properties from equipped/attuned items
 		const defenses = this._getItemDefenses(items);
 
+		// Collect senses from equipped/attuned items
+		const itemSenses = this._getItemSenses(items);
+
 		// Store bonuses and defenses in state for use by other modules
 		this._state.setItemBonuses(bonuses);
 		this._state.setItemDefenses(defenses);
 		this._state.setItemAbilityOverrides(abilityOverrides);
 		this._state.setItemGrantedSpells(itemSpells);
+		this._state.setItemSenses(itemSenses);
 	}
 
 	/**
@@ -2242,6 +3232,29 @@ class CharacterSheetInventory {
 		}
 
 		return defenses;
+	}
+
+	/**
+	 * Collect senses from equipped/attuned items
+	 * @param {Array} items - All inventory items
+	 * @returns {object} { darkvision: N, blindsight: N, tremorsense: N, truesight: N }
+	 */
+	_getItemSenses (items) {
+		const senses = {darkvision: 0, blindsight: 0, tremorsense: 0, truesight: 0};
+
+		for (const item of items) {
+			if (!item.equipped) continue;
+			if (item.requiresAttunement && !item.attuned) continue;
+			if (!item.senses) continue;
+
+			// Take the highest value for each sense type
+			if (item.senses.darkvision) senses.darkvision = Math.max(senses.darkvision, item.senses.darkvision);
+			if (item.senses.blindsight) senses.blindsight = Math.max(senses.blindsight, item.senses.blindsight);
+			if (item.senses.tremorsense) senses.tremorsense = Math.max(senses.tremorsense, item.senses.tremorsense);
+			if (item.senses.truesight) senses.truesight = Math.max(senses.truesight, item.senses.truesight);
+		}
+
+		return senses;
 	}
 
 	/**
@@ -2366,9 +3379,10 @@ class CharacterSheetInventory {
 			}
 
 			// Handle direct bonuses: ability.str = 2 (top-level ability keys)
+			// These stack with static overrides
 			const abilityKeys = ["str", "dex", "con", "int", "wis", "cha"];
 			for (const ab of abilityKeys) {
-				if (item.ability[ab] && !item.ability.static) {
+				if (item.ability[ab] && typeof item.ability[ab] === "number") {
 					bonuses[ab] = (bonuses[ab] || 0) + item.ability[ab];
 				}
 			}
@@ -2765,10 +3779,10 @@ class CharacterSheetInventory {
 		// Format properties and mastery for display (check both 'properties' and 'property' for backwards compatibility)
 		const itemProperties = item.properties || item.property || [];
 		const propertiesStr = itemProperties.length
-			? itemProperties.map(p => this._formatProperty(p)).join(", ")
+			? itemProperties.map(p => this._formatPropertyWithHover(p)).join(", ")
 			: "";
 		const masteryStr = item.mastery?.length
-			? item.mastery.map(m => this._formatMastery(m)).join(", ")
+			? item.mastery.map(m => this._formatMasteryWithHover(m)).join(", ")
 			: "";
 
 		return $(`
@@ -2890,6 +3904,75 @@ class CharacterSheetInventory {
 		// Extract mastery name (before |source)
 		const name = mastery.split("|")[0];
 		return name.toTitleCase();
+	}
+
+	/**
+	 * Format a weapon property code to HTML with hover attributes if available
+	 * @param {string} prop - Property code like "F" or "2H|XPHB"
+	 * @returns {string} HTML string with hover attributes or plain text
+	 */
+	_formatPropertyWithHover (prop) {
+		const propUid = prop?.uid || prop;
+		const displayName = this._formatProperty(prop);
+		
+		try {
+			// Get the property object to check for entries and actual source
+			const propObj = typeof Renderer !== "undefined" && Renderer.item?.getProperty
+				? Renderer.item.getProperty(propUid, {isIgnoreMissing: true})
+				: null;
+			
+			if (propObj?.entries?.length && propObj.source) {
+				const abbreviation = propObj.abbreviation || propUid.split("|")[0];
+				const source = propObj.source;
+				const hash = UrlUtil.encodeArrayForHash(abbreviation, source);
+				const hoverAttrs = Renderer.hover.getHoverElementAttributes({
+					page: "itemProperty",
+					source: source,
+					hash: hash,
+					isFauxPage: true,
+				});
+				return `<span class="charsheet__prop-hover-link" ${hoverAttrs}>${displayName}</span>`;
+			}
+		} catch (e) {
+			// Fall back to plain text
+		}
+		
+		return displayName;
+	}
+
+	/**
+	 * Format a weapon mastery code to HTML with hover attributes if available
+	 * @param {string} mastery - Mastery code like "Sap|XPHB"
+	 * @returns {string} HTML string with hover attributes or plain text
+	 */
+	_formatMasteryWithHover (mastery) {
+		const displayName = this._formatMastery(mastery);
+		const masteryParts = mastery.split("|");
+		const masteryName = masteryParts[0];
+		
+		try {
+			// Get the mastery object to check for entries and actual source
+			const masteryObj = typeof Renderer !== "undefined" && Renderer.item?._getMastery
+				? Renderer.item._getMastery(mastery)
+				: null;
+			
+			if (masteryObj?.entries?.length && masteryObj.source) {
+				const name = masteryObj.name || masteryName;
+				const source = masteryObj.source;
+				const hash = UrlUtil.encodeArrayForHash(name, source);
+				const hoverAttrs = Renderer.hover.getHoverElementAttributes({
+					page: "itemMastery",
+					source: source,
+					hash: hash,
+					isFauxPage: true,
+				});
+				return `<span class="charsheet__prop-hover-link" ${hoverAttrs}>${displayName}</span>`;
+			}
+		} catch (e) {
+			// Fall back to plain text
+		}
+		
+		return displayName;
 	}
 
 	_getItemTypeTagFromStoredType (type) {
@@ -3035,10 +4118,10 @@ class CharacterSheetInventory {
 		// Format properties and mastery (check both fields for backwards compatibility)
 		const itemProperties = item.properties || item.property || [];
 		const propertiesStr = itemProperties.length
-			? itemProperties.map(p => this._formatProperty(p)).join(", ")
+			? itemProperties.map(p => this._formatPropertyWithHover(p)).join(", ")
 			: "";
 		const masteryStr = item.mastery?.length
-			? item.mastery.map(m => this._formatMastery(m)).join(", ")
+			? item.mastery.map(m => this._formatMasteryWithHover(m)).join(", ")
 			: "";
 
 		// Build row with item type icon

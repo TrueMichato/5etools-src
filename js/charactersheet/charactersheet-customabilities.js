@@ -1744,12 +1744,17 @@ class CharacterSheetCustomAbilities {
 			}
 
 			effects.forEach((effect, idx) => {
+				const isAbilityType = effect.type?.startsWith("ability:");
 				const row = document.createElement("div");
 				row.className = "custom-abilities__effect-row";
 				row.innerHTML = `
 					<div class="custom-abilities__effect-row-main">
 						<select class="form-control custom-abilities__effect-type">${typeOptionsHtml}</select>
-						<input type="number" class="form-control custom-abilities__effect-value" placeholder="±0" value="${effect.value || 0}" style="width: 70px;">
+						<select class="form-control custom-abilities__effect-mode" style="width: 85px; ${isAbilityType ? "" : "display: none;"}" title="Add to score or set score to value">
+							<option value="" ${!effect.mode ? "selected" : ""}>Add</option>
+							<option value="set" ${effect.mode === "set" ? "selected" : ""}>Set To</option>
+						</select>
+						<input type="number" class="form-control custom-abilities__effect-value" placeholder="${isAbilityType && effect.mode === "set" ? "19" : "±0"}" value="${effect.value || 0}" style="width: 70px;">
 					</div>
 					<div class="custom-abilities__effect-row-extra">
 						<select class="form-control custom-abilities__effect-advdis" style="width: 120px;">
@@ -1789,10 +1794,30 @@ class CharacterSheetCustomAbilities {
 				row.querySelector(".custom-abilities__effect-type").value = effect.type || "ac";
 
 				// Bind change handlers
-				row.querySelector(".custom-abilities__effect-type").addEventListener("change", (e) => {
+				const $type = row.querySelector(".custom-abilities__effect-type");
+				const $mode = row.querySelector(".custom-abilities__effect-mode");
+				const $value = row.querySelector(".custom-abilities__effect-value");
+
+				$type.addEventListener("change", (e) => {
 					effects[idx].type = e.target.value;
+					// Show/hide mode dropdown based on type
+					const isAbility = e.target.value.startsWith("ability:");
+					$mode.style.display = isAbility ? "" : "none";
+					if (!isAbility) {
+						delete effects[idx].mode;
+						$value.placeholder = "±0";
+					}
 				});
-				row.querySelector(".custom-abilities__effect-value").addEventListener("change", (e) => {
+				$mode.addEventListener("change", (e) => {
+					if (e.target.value === "set") {
+						effects[idx].mode = "set";
+						$value.placeholder = "19";
+					} else {
+						delete effects[idx].mode;
+						$value.placeholder = "±0";
+					}
+				});
+				$value.addEventListener("change", (e) => {
 					effects[idx].value = parseInt(e.target.value) || 0;
 				});
 				row.querySelector(".custom-abilities__effect-advdis").addEventListener("change", (e) => {
