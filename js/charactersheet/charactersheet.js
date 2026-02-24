@@ -2448,20 +2448,27 @@ class CharacterSheetPage {
 	 * Initialize portrait upload handlers for both overview and notes tabs
 	 */
 	_initPortraitHandlers () {
+		const $portraitInput = $("#charsheet-portrait-input");
+		const portraitInput = $portraitInput[0];
+
 		// Overview tab portrait - clicking container triggers file input
-		$("#charsheet-portrait-container").on("click", () => {
-			$("#charsheet-portrait-input").trigger("click");
+		$("#charsheet-portrait-container").on("click", (e) => {
+			if ($(e.target).closest("#charsheet-portrait-input").length) return;
+			portraitInput?.click();
 		});
 
+		// Prevent input click from bubbling back to the container and recursively retriggering
+		$portraitInput.on("click", (e) => e.stopPropagation());
+
 		// File input change handler (overview tab)
-		$("#charsheet-portrait-input").on("change", (e) => {
+		$portraitInput.on("change", (e) => {
 			const file = e.target.files?.[0];
 			if (file) this._handlePortraitFile(file);
 		});
 
 		// Notes tab portrait - clicking triggers same file input
 		$("#charsheet-notes-portrait-container").on("click", () => {
-			$("#charsheet-portrait-input").trigger("click");
+			portraitInput?.click();
 		});
 
 		// Remove portrait button
