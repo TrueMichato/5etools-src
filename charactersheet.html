@@ -104,29 +104,11 @@
 					</button>
 				</div>
 
-				<div class="charsheet__header-spacer"></div>
-
-				<div class="charsheet__header-group charsheet__header-group--status">
-					<div class="charsheet__levelup-banner ve-hidden" id="charsheet-levelup-banner">
-						<span class="charsheet__levelup-banner-text" id="charsheet-levelup-banner-text">You can level up now.</span>
-						<div class="charsheet__levelup-banner-actions">
-							<button class="charsheet__levelup-banner-btn charsheet__levelup-banner-btn--primary" id="charsheet-levelup-banner-btn-now">Level Up</button>
-							<button class="charsheet__levelup-banner-btn" id="charsheet-levelup-banner-btn-later">Later</button>
-						</div>
-					</div>
+				<div class="charsheet__header-group charsheet__header-group--tools">
 					<span class="charsheet__save-indicator" id="charsheet-save-indicator" title="Auto-save status">
 						<span class="charsheet__save-icon">✓</span>
-						<span class="charsheet__save-text">Saved</span>
 					</span>
-					<div class="charsheet__layout-editing-banner" id="charsheet-layout-banner">
-						<span class="charsheet__layout-banner-icon">✨</span>
-						<span>Editing Layout</span>
-					</div>
-				</div>
-
-				<div class="charsheet__header-divider"></div>
-
-				<div class="charsheet__header-group charsheet__header-group--tools">
+					<span class="charsheet__tool-separator"></span>
 					<button class="charsheet__tool-btn" id="charsheet-btn-modifiers" title="Custom Modifiers">🎯 Modifiers</button>
 					<button class="charsheet__tool-btn" id="charsheet-btn-settings" title="Sheet Settings">⚙️ Settings</button>
 					<button class="charsheet__tool-btn charsheet__tool-btn--note" id="charsheet-add-sticky-note" title="Add a Sticky Note">📌 Note</button>
@@ -138,20 +120,37 @@
 				</div>
 			</div>
 
+			<!-- Level Up Banner - Floating notification -->
+			<div class="charsheet__levelup-banner ve-hidden" id="charsheet-levelup-banner">
+				<span class="charsheet__levelup-banner-icon">⬆️</span>
+				<span class="charsheet__levelup-banner-text" id="charsheet-levelup-banner-text">Ready to level up!</span>
+				<div class="charsheet__levelup-banner-actions">
+					<button class="charsheet__levelup-banner-btn charsheet__levelup-banner-btn--primary" id="charsheet-levelup-banner-btn-now">Level Up</button>
+					<button class="charsheet__levelup-banner-btn" id="charsheet-levelup-banner-btn-later">Later</button>
+				</div>
+			</div>
+
+			<!-- Layout Editing Banner -->
+			<div class="charsheet__layout-editing-banner" id="charsheet-layout-banner">
+				<span class="charsheet__layout-banner-icon">✨</span>
+				<span>Editing Layout — Drag sections to reorder</span>
+			</div>
+
 			<div class="charsheet__header-row charsheet__header-row--secondary">
 				<div class="charsheet__help-tips" id="charsheet-help-bar">
 					<div class="charsheet__help-tip">
-						<kbd>Shift</kbd><span>+click = Advantage</span>
+						<kbd>Shift</kbd><span>+click = Adv.</span>
 					</div>
 					<div class="charsheet__help-tip">
-						<kbd>Ctrl/⌘</kbd><span>+click = Disadvantage</span>
+						<kbd>Ctrl/⌘</kbd><span>+click = Disadv.</span>
 					</div>
 					<div class="charsheet__help-tip">
 						<kbd>Right-click</kbd><span>= Options</span>
 					</div>
 				</div>
 
-				<div class="charsheet__header-layout-controls">
+				<div class="charsheet__header-settings-group">
+					<div class="charsheet__header-layout-controls">
 					<button class="charsheet__layout-toggle" id="charsheet-btn-layout" title="Customize section layout by dragging">
 						<span class="charsheet__layout-toggle-icon">📐</span>
 						<span class="charsheet__layout-toggle-text">Layout</span>
@@ -263,6 +262,7 @@
 					<span class="charsheet__help-toggle-icon">❓</span>
 					<span class="charsheet__help-toggle-text">Tips</span>
 				</button>
+				</div>
 			</div>
 		</div>
 
