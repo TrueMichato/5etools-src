@@ -22452,6 +22452,13 @@ class CharacterSheetState {
 					setMaximum: effect.setMaximum,
 					conditional: effect.conditional, // Conditional trigger (e.g., "against:undead", "in:darkness")
 					bonusDie: effect.bonusDie,
+					// Pass through scaling properties
+					proficiencyBonus: effect.proficiencyBonus,
+					halfProficiency: effect.halfProficiency,
+					doubleProficiency: effect.doubleProficiency,
+					abilityMod: effect.abilityMod,
+					perLevel: effect.perLevel,
+					perClassLevel: effect.perClassLevel,
 				});
 			}
 		}
@@ -23942,6 +23949,8 @@ class CharacterSheetState {
 				value += this.getProficiencyBonus();
 			} else if (mod.halfProficiency) {
 				value += Math.floor(this.getProficiencyBonus() / 2);
+			} else if (mod.doubleProficiency) {
+				value += this.getProficiencyBonus() * 2;
 			}
 
 			result.bonus += value;

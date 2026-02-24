@@ -687,6 +687,24 @@ class CharacterSheetCustomAbilities {
 		];
 	}
 
+	/**
+	 * Get HTML options for class level selector
+	 */
+	_getClassOptionsHtml (state, selectedClass) {
+		// Common PHB classes as fallback
+		const commonClasses = ["Artificer", "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Monk", "Paladin", "Ranger", "Rogue", "Sorcerer", "Warlock", "Wizard"];
+		
+		// Get character's actual classes
+		const characterClasses = (state.getClasses?.() || []).map(c => c.name).filter(Boolean);
+		
+		// Combine and dedupe, prioritizing character classes
+		const allClasses = [...new Set([...characterClasses, ...commonClasses])];
+		
+		return allClasses.map(className => 
+			`<option value="${className}" ${className === selectedClass ? "selected" : ""}>${className}</option>`,
+		).join("");
+	}
+
 	_toggleAbility (id) {
 		const state = this._sheet.getState();
 		state.toggleCustomAbility(id);
@@ -1755,6 +1773,27 @@ class CharacterSheetCustomAbilities {
 							<option value="set" ${effect.mode === "set" ? "selected" : ""}>Set To</option>
 						</select>
 						<input type="number" class="form-control custom-abilities__effect-value" placeholder="${isAbilityType && effect.mode === "set" ? "19" : "±0"}" value="${effect.value || 0}" style="width: 70px;">
+						<select class="form-control custom-abilities__effect-scaling" style="width: 145px;" title="Add a stat-based bonus">
+							<option value="">Fixed Only</option>
+							<optgroup label="Proficiency">
+								<option value="proficiencyBonus" ${effect.proficiencyBonus ? "selected" : ""}>+ Prof Bonus</option>
+								<option value="halfProficiency" ${effect.halfProficiency ? "selected" : ""}>+ Half Prof</option>
+								<option value="doubleProficiency" ${effect.doubleProficiency ? "selected" : ""}>+ Double Prof</option>
+							</optgroup>
+							<optgroup label="Ability Modifier">
+								<option value="abilityMod:str" ${effect.abilityMod === "str" ? "selected" : ""}>+ STR mod</option>
+								<option value="abilityMod:dex" ${effect.abilityMod === "dex" ? "selected" : ""}>+ DEX mod</option>
+								<option value="abilityMod:con" ${effect.abilityMod === "con" ? "selected" : ""}>+ CON mod</option>
+								<option value="abilityMod:int" ${effect.abilityMod === "int" ? "selected" : ""}>+ INT mod</option>
+								<option value="abilityMod:wis" ${effect.abilityMod === "wis" ? "selected" : ""}>+ WIS mod</option>
+								<option value="abilityMod:cha" ${effect.abilityMod === "cha" ? "selected" : ""}>+ CHA mod</option>
+							</optgroup>
+							<optgroup label="Level Scaling">
+								<option value="perLevel" ${effect.perLevel ? "selected" : ""}>× Character Level</option>
+								<option value="perClassLevel" ${effect.perClassLevel ? "selected" : ""}>× Class Level...</option>
+							</optgroup>
+						</select>
+						${effect.perClassLevel ? `<select class="form-control custom-abilities__effect-class-level" style="width: 110px;">${this._getClassOptionsHtml(state, effect.perClassLevel)}</select>` : ""}
 					</div>
 					<div class="custom-abilities__effect-row-extra">
 						<select class="form-control custom-abilities__effect-advdis" style="width: 120px;">
@@ -1820,6 +1859,41 @@ class CharacterSheetCustomAbilities {
 				$value.addEventListener("change", (e) => {
 					effects[idx].value = parseInt(e.target.value) || 0;
 				});
+
+				// Scaling dropdown handler
+				const $scaling = row.querySelector(".custom-abilities__effect-scaling");
+				$scaling.addEventListener("change", (e) => {
+					// Clear all scaling properties first
+					delete effects[idx].proficiencyBonus;
+					delete effects[idx].halfProficiency;
+					delete effects[idx].doubleProficiency;
+					delete effects[idx].abilityMod;
+					delete effects[idx].perLevel;
+					delete effects[idx].perClassLevel;
+
+					const val = e.target.value;
+					if (val === "proficiencyBonus") effects[idx].proficiencyBonus = true;
+					else if (val === "halfProficiency") effects[idx].halfProficiency = true;
+					else if (val === "doubleProficiency") effects[idx].doubleProficiency = true;
+					else if (val.startsWith("abilityMod:")) effects[idx].abilityMod = val.replace("abilityMod:", "");
+					else if (val === "perLevel") effects[idx].perLevel = true;
+					else if (val === "perClassLevel") {
+						// Default to first class or "Fighter"
+						const classes = state.getClasses?.() || [];
+						effects[idx].perClassLevel = classes[0]?.name || "Fighter";
+						renderEffectsList(); // Re-render to show class selector
+						return;
+					}
+				});
+
+				// Class level dropdown handler (if present)
+				const $classLevel = row.querySelector(".custom-abilities__effect-class-level");
+				if ($classLevel) {
+					$classLevel.addEventListener("change", (e) => {
+						effects[idx].perClassLevel = e.target.value;
+					});
+				}
+
 				row.querySelector(".custom-abilities__effect-advdis").addEventListener("change", (e) => {
 					delete effects[idx].advantage;
 					delete effects[idx].disadvantage;
