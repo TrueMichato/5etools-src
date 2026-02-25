@@ -288,6 +288,52 @@ describe("Paladin Core Class Features (PHB)", () => {
 	});
 });
 
+describe("Paladin Phase 2 Mechanics", () => {
+	let state;
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+		state.setRace({name: "Human", source: "PHB"});
+		state.addClass({name: "Paladin", source: "PHB", level: 20});
+		state.setAbilityBase("cha", 18);
+	});
+
+	it("should detect capstone-style limited use features as activatable", () => {
+		state.addFeature({
+			name: "Holy Nimbus",
+			description: "As an action, you can emanate bright light and gain a radiant aura.",
+			uses: {current: 1, max: 1, recharge: "long"},
+			className: "Paladin",
+			level: 20,
+		});
+
+		const activatables = state.getActivatableFeatures();
+		const holyNimbus = activatables.find(a => a.feature.name === "Holy Nimbus");
+
+		expect(holyNimbus).toBeDefined();
+		expect(holyNimbus.interactionMode).toBe("limited");
+		expect(holyNimbus.resource).toBeDefined();
+		expect(holyNimbus.resource.max).toBe(1);
+	});
+
+	it("should apply passive metadata effects without exposing them as activatables", () => {
+		state.addFeature({
+			name: "Aura of Resolve",
+			description: "Your unwavering resolve bolsters your defenses.",
+			activatable: {
+				interactionMode: "passive",
+				effects: [{type: "bonus", target: "ac", value: 1}],
+			},
+		});
+
+		state.applyClassFeatureEffects();
+
+		const activatables = state.getActivatableFeatures();
+		expect(activatables.some(a => a.feature.name === "Aura of Resolve")).toBe(false);
+		expect(state.getNamedModifiers().some(m => m.type === "ac" && m.name.includes("Aura of Resolve"))).toBe(true);
+	});
+});
+
 // ==========================================================================
 // PART 2: PALADIN HIT DICE AND HP
 // ==========================================================================

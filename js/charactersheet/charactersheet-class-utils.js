@@ -564,6 +564,155 @@ class CharacterSheetClassUtils {
 	}
 
 	/**
+	 * Analyze feature text to detect required skill/expertise/bonus choices.
+	 * @param {Object} opt - Feature option object
+	 * @param {Array} classFeatures - All loaded class features
+	 * @returns {{type: string, count: number, from: (string|string[])}|null}
+	 */
+	static parseFeatureSkillChoice (opt, classFeatures = []) {
+		if (opt?.type !== "classFeature" || !opt?.ref) return null;
+
+		const fullOpt = CharacterSheetClassUtils.getClassFeatureDataFromRef(classFeatures, opt.ref);
+		if (!fullOpt?.entries) return null;
+
+		const text = JSON.stringify(fullOpt.entries);
+
+		if (text.includes("You gain proficiency in one of the following")) {
+			const skills = CharacterSheetClassUtils.extractSkillListFromText(text);
+			return {type: "proficiency", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+
+		if (text.includes("bonus equal to your proficiency bonus on checks made with one of")) {
+			const skills = CharacterSheetClassUtils.extractSkillListFromText(text);
+			return {type: "bonus", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+
+		if (text.includes("Choose one skill you are proficient in")) {
+			return {type: "bonus", count: 1, from: "any_proficient"};
+		}
+
+		if (/Choose two (more )?of your skill proficiencies/.test(text)) {
+			return {type: "expertise", count: 2, from: "any_proficient"};
+		}
+
+		if (text.includes("Choose one of the following skills in which you have proficiency")) {
+			const skills = CharacterSheetClassUtils.extractSkillListFromText(text);
+			return {type: "expertise", count: 1, from: skills.length ? skills : "any_proficient"};
+		}
+
+		if (text.includes("Choose one skill proficiency") && text.includes("Expertise")) {
+			return {type: "expertise", count: 1, from: "any_proficient"};
+		}
+
+		if (text.includes("Choose two skill proficiencies") && text.includes("Expertise")) {
+			return {type: "expertise", count: 2, from: "any_proficient"};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Parse automatic modifiers from feature text that do not require user choices.
+	 * @param {Object} opt - Feature option object
+	 * @param {Array} classFeatures - All loaded class features
+	 * @returns {Array<{type: string, value: number|string, note: string}>}
+	 */
+	static parseFeatureAutoEffects (opt, classFeatures = []) {
+		if (opt?.type !== "classFeature" || !opt?.ref) return [];
+
+		const fullOpt = CharacterSheetClassUtils.getClassFeatureDataFromRef(classFeatures, opt.ref);
+		if (!fullOpt?.entries) return [];
+
+		const text = JSON.stringify(fullOpt.entries);
+		const effects = [];
+
+		const passiveIncreaseMatch = text.match(/passive\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*(?:score\s+)?increases?\s+by\s+(\d+)/i);
+		if (passiveIncreaseMatch) {
+			const skill = passiveIncreaseMatch[1].toLowerCase().replace(/\s+/g, "");
+			const value = parseInt(passiveIncreaseMatch[2]);
+			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveIncreaseMatch[1]}`});
+		}
+
+		const skillBonusProfMatch = text.match(/bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?\s+equal\s+to\s+(?:your\s+)?proficiency\s+bonus/i);
+		if (skillBonusProfMatch) {
+			const skill = skillBonusProfMatch[1].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `skill:${skill}`, value: "proficiency", note: `+PB to ${skillBonusProfMatch[1]} checks`});
+		}
+
+		const skillBonusFixedMatch = text.match(/gain\s+a?\s*\+?(\d+)\s*bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?/i);
+		if (skillBonusFixedMatch) {
+			const value = parseInt(skillBonusFixedMatch[1]);
+			const skill = skillBonusFixedMatch[2].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `skill:${skill}`, value, note: `+${value} to ${skillBonusFixedMatch[2]} checks`});
+		}
+
+		const speedIncreaseMatch = text.match(/(?:your\s+)?speed\s+increases?\s+by\s+(\d+)\s*(?:feet|ft)?/i);
+		if (speedIncreaseMatch) {
+			const value = parseInt(speedIncreaseMatch[1]);
+			effects.push({type: "speed", value, note: `+${value} ft. speed`});
+		}
+
+		const passiveSimpleMatch = text.match(/\+(\d+)\s*(?:bonus\s+)?(?:to\s+)?(?:your\s+)?passive\s+\{@skill\s+([^}]+)\}/i);
+		if (passiveSimpleMatch) {
+			const value = parseInt(passiveSimpleMatch[1]);
+			const skill = passiveSimpleMatch[2].toLowerCase().replace(/\s+/g, "");
+			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveSimpleMatch[2]}`});
+		}
+
+		const darkvisionIncreaseMatch = text.match(/darkvision\s+(?:increases?\s+by|out\s+to)\s+(\d+)\s*(?:feet|ft)?/i);
+		if (darkvisionIncreaseMatch) {
+			const value = parseInt(darkvisionIncreaseMatch[1]);
+			effects.push({type: "sense:darkvision", value, note: `Darkvision ${value} ft.`});
+		}
+
+		const acMatch = text.match(/(?:AC|armor\s+class)\s+increases?\s+by\s+(\d+)|\+(\d+)\s+(?:to\s+)?(?:AC|armor\s+class)/i);
+		if (acMatch) {
+			const value = parseInt(acMatch[1] || acMatch[2]);
+			effects.push({type: "ac", value, note: `+${value} AC`});
+		}
+
+		const initMatch = text.match(/\+(\d+)\s+(?:to\s+)?initiative|initiative\s+(?:bonus\s+(?:of\s+)?|increases?\s+by\s+)\+?(\d+)/i);
+		if (initMatch) {
+			const value = parseInt(initMatch[1] || initMatch[2]);
+			effects.push({type: "initiative", value, note: `+${value} initiative`});
+		}
+
+		return effects;
+	}
+
+	/**
+	 * Extract skill names from feature text.
+	 * @param {string} text
+	 * @returns {string[]}
+	 */
+	static extractSkillListFromText (text) {
+		const allSkills = [
+			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+			"History", "Insight", "Intimidation", "Investigation", "Medicine",
+			"Nature", "Perception", "Performance", "Persuasion", "Religion",
+			"Sleight of Hand", "Stealth", "Survival",
+		];
+
+		const found = [];
+
+		const tagMatches = text.matchAll(/\{@skill\s+([^}]+)\}/gi);
+		for (const m of tagMatches) {
+			const skillName = m[1].trim();
+			if (allSkills.some(s => s.toLowerCase() === skillName.toLowerCase())) {
+				found.push(skillName.toTitleCase());
+			}
+		}
+
+		if (found.length) return [...new Set(found)];
+
+		for (const skill of allSkills) {
+			if (text.includes(skill)) found.push(skill);
+		}
+
+		return [...new Set(found)];
+	}
+
+	/**
 	 * Get all features gained at a specific class level (including subclass features).
 	 * @param {Object} classData - The class data
 	 * @param {number} level - The class level
@@ -950,7 +1099,12 @@ class CharacterSheetClassUtils {
 	 */
 	static getKnownCombatTraditions (existingOptFeatures, state) {
 		// First check explicitly stored traditions
-		const storedTraditions = state.getCombatTraditions?.() || [];
+		const storedTraditionsRaw = state.getCombatTraditions?.() || [];
+		const storedTraditions = Array.from(new Set(
+			storedTraditionsRaw
+				.map(t => typeof t === "string" ? t : t?.code)
+				.filter(Boolean),
+		));
 		if (storedTraditions.length > 0) return storedTraditions;
 
 		// Fall back to inferring from existing combat method features
@@ -963,6 +1117,58 @@ class CharacterSheetClassUtils {
 			}
 		}
 		return Array.from(traditions);
+	}
+
+	/**
+	 * Get how many combat traditions a class should select.
+	 * Attempts to parse from Combat Methods feature text; falls back to default.
+	 * @param {Object} opts
+	 * @param {Object} opts.classData
+	 * @param {Array} opts.classFeatures
+	 * @param {number} [opts.defaultCount=2]
+	 * @returns {number}
+	 */
+	static getCombatTraditionSelectionCount ({classData, classFeatures = [], defaultCount = 2} = {}) {
+		const className = classData?.name;
+		if (!className || !classFeatures?.length) return defaultCount;
+
+		const combatMethodsFeature = classFeatures.find(f =>
+			f.className === className
+			&& f.name === "Combat Methods"
+			&& f.level <= 5,
+		);
+		if (!combatMethodsFeature?.entries) return defaultCount;
+
+		const text = JSON.stringify(combatMethodsFeature.entries).toLowerCase();
+		const wordToNum = {
+			one: 1,
+			two: 2,
+			three: 3,
+			four: 4,
+			five: 5,
+			six: 6,
+		};
+
+		const parseToken = (token) => {
+			if (!token) return null;
+			const asNum = Number(token);
+			if (!Number.isNaN(asNum) && asNum > 0) return asNum;
+			return wordToNum[token] || null;
+		};
+
+		const patterns = [
+			/(\d+|one|two|three|four|five|six)\s+combat\s+traditions?\b/i,
+			/choose\s+(\d+|one|two|three|four|five|six)\s+(?:different\s+)?traditions?\b/i,
+			/gain\s+proficiency\s+in\s+(\d+|one|two|three|four|five|six)\s+combat\s+traditions?\b/i,
+		];
+
+		for (const pattern of patterns) {
+			const match = text.match(pattern);
+			const parsed = parseToken(match?.[1]);
+			if (parsed) return parsed;
+		}
+
+		return defaultCount;
 	}
 
 	/**
@@ -1159,6 +1365,127 @@ class CharacterSheetClassUtils {
 	}
 
 	/**
+	 * Build a normalized feature object ready for state.addFeature(), preserving
+	 * metadata-first fields while applying canonical class/level/source defaults.
+	 * @param {Object} feature - Raw feature payload
+	 * @param {Object} opts
+	 * @param {string} [opts.className]
+	 * @param {string} [opts.classSource]
+	 * @param {number} [opts.level]
+	 * @param {string} [opts.featureType="Class"]
+	 * @param {string} [opts.subclassName]
+	 * @param {string} [opts.subclassShortName]
+	 * @param {string} [opts.subclassSource]
+	 * @param {boolean} [opts.isSubclassFeature]
+	 * @param {boolean} [opts.isFeatureOption]
+	 * @param {string} [opts.parentFeature]
+	 * @param {Array<string>} [opts.optionalFeatureTypes]
+	 * @returns {Object}
+	 */
+	static buildFeatureStateObject (
+		feature,
+		{
+			className,
+			classSource,
+			level,
+			featureType = "Class",
+			subclassName,
+			subclassShortName,
+			subclassSource,
+			isSubclassFeature,
+			isFeatureOption,
+			parentFeature,
+			optionalFeatureTypes,
+		} = {},
+	) {
+		const outFeature = feature || {};
+
+		const entries = outFeature.entries;
+		let description = outFeature.description;
+		if (!description && entries) {
+			try { description = Renderer.get().render({entries}); } catch (e) { description = ""; }
+		}
+
+		const explicitFeatureType = typeof outFeature.featureType === "string"
+			? outFeature.featureType
+			: null;
+
+		const normalizedOptionalFeatureTypes = outFeature.optionalFeatureTypes
+			|| (Array.isArray(outFeature.featureType) ? outFeature.featureType : undefined)
+			|| optionalFeatureTypes;
+
+		return {
+			...outFeature,
+			name: outFeature.name,
+			source: outFeature.source || classSource,
+			className: outFeature.className || className,
+			classSource: outFeature.classSource || classSource,
+			level: outFeature.level || level,
+			subclassName: outFeature.subclassName ?? subclassName,
+			subclassShortName: outFeature.subclassShortName ?? subclassShortName,
+			subclassSource: outFeature.subclassSource ?? subclassSource,
+			featureType: explicitFeatureType || featureType,
+			entries,
+			description: description || "",
+			isSubclassFeature: outFeature.isSubclassFeature ?? isSubclassFeature,
+			isFeatureOption: outFeature.isFeatureOption ?? isFeatureOption,
+			parentFeature: outFeature.parentFeature ?? parentFeature,
+			optionalFeatureTypes: normalizedOptionalFeatureTypes,
+		};
+	}
+
+	/**
+	 * Build a compact, replay-safe history snapshot from a feature-like payload.
+	 * Used to persist metadata-critical fields in level history without relying on
+	 * display-only summary objects.
+	 * @param {Object} feature
+	 * @param {Object} [opts]
+	 * @param {string} [opts.type]
+	 * @param {string} [opts.parentFeature]
+	 * @returns {Object}
+	 */
+	static buildHistoryFeatureSnapshot (feature, {type, parentFeature} = {}) {
+		const outFeature = feature || {};
+		const snapshot = {
+			name: outFeature.name,
+			source: outFeature.source,
+			type: type || outFeature.type,
+			parentFeature: parentFeature ?? outFeature.parentFeature,
+			ref: outFeature.ref,
+			level: outFeature.level,
+			featureType: outFeature.featureType,
+			optionalFeatureTypes: outFeature.optionalFeatureTypes || (Array.isArray(outFeature.featureType) ? outFeature.featureType : undefined),
+			className: outFeature.className,
+			classSource: outFeature.classSource,
+			subclassName: outFeature.subclassName,
+			subclassShortName: outFeature.subclassShortName,
+			subclassSource: outFeature.subclassSource,
+			isSubclassFeature: outFeature.isSubclassFeature,
+			isFeatureOption: outFeature.isFeatureOption,
+			activatable: outFeature.activatable,
+			effects: outFeature.effects,
+			uses: outFeature.uses,
+			interactionMode: outFeature.interactionMode,
+		};
+
+		if (!snapshot.ref) {
+			snapshot.entries = outFeature.entries;
+			snapshot.description = outFeature.description;
+		}
+
+		return CharacterSheetClassUtils._filterUndefinedKeys(snapshot);
+	}
+
+	/**
+	 * Remove undefined keys from a plain object.
+	 * @param {Object} obj
+	 * @returns {Object}
+	 */
+	static _filterUndefinedKeys (obj) {
+		return Object.fromEntries(Object.entries(obj || {}).filter(([, value]) => value !== undefined));
+	}
+
+	/**
 	 * Dedup features and build state objects for addFeature().
 	 * Filters out ASI placeholders, gainSubclassFeature entries, and already-existing features.
 	 * @param {Array} features - Raw features for this level
@@ -1180,26 +1507,12 @@ class CharacterSheetClassUtils {
 			return true;
 		});
 
-		return featuresToAdd.map(feature => {
-			let description = feature.description;
-			if (!description && feature.entries) {
-				try { description = Renderer.get().render({entries: feature.entries}); } catch (e) { description = ""; }
-			}
-			return {
-				name: feature.name,
-				source: feature.source || classSource,
-				className: feature.className || className,
-				classSource: feature.classSource || classSource,
-				level: feature.level || level,
-				subclassName: feature.subclassName,
-				subclassShortName: feature.subclassShortName,
-				subclassSource: feature.subclassSource,
-				featureType: "Class",
-				description: description || "",
-				entries: feature.entries,
-				isSubclassFeature: feature.isSubclassFeature,
-			};
-		});
+		return featuresToAdd.map(feature => CharacterSheetClassUtils.buildFeatureStateObject(feature, {
+			className,
+			classSource,
+			level,
+			featureType: "Class",
+		}));
 	}
 
 	// ==========================================

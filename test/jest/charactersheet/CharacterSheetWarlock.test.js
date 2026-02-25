@@ -274,6 +274,50 @@ describe("Warlock Core Class Features (PHB)", () => {
 	});
 });
 
+describe("Warlock Phase 2 Mechanics", () => {
+	let state;
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+		state.setRace({name: "Human", source: "PHB"});
+		state.addClass({name: "Warlock", source: "PHB", level: 12});
+		state.setAbilityBase("cha", 18);
+	});
+
+	it("should apply invocation-like metadata effects through generic feature pipeline", () => {
+		state.addFeature({
+			name: "Devil's Sight",
+			description: "You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet.",
+			effects: [{type: "sense", target: "darkvision", value: 120}],
+			className: "Warlock",
+			level: 2,
+		});
+
+		state.applyClassFeatureEffects();
+
+		expect(state.getSenses().darkvision).toBe(120);
+		expect(state.getAppliedClassFeatureEffects().some(e => e.includes("Devil's Sight"))).toBe(true);
+	});
+
+	it("should expose invocation-like limited-use abilities as activatables", () => {
+		state.addFeature({
+			name: "Eldritch Hex",
+			description: "As a bonus action, you can curse a target and empower your attacks.",
+			uses: {current: 1, max: 1, recharge: "short"},
+			className: "Warlock",
+			level: 10,
+		});
+
+		const activatables = state.getActivatableFeatures();
+		const eldritchHex = activatables.find(a => a.feature.name === "Eldritch Hex");
+
+		expect(eldritchHex).toBeDefined();
+		expect(eldritchHex.interactionMode).toBe("limited");
+		expect(eldritchHex.resource).toBeDefined();
+		expect(eldritchHex.resource.max).toBe(1);
+	});
+});
+
 // ==========================================================================
 // PART 2: ELDRITCH BLAST SCALING
 // ==========================================================================

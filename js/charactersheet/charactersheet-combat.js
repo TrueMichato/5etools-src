@@ -9,6 +9,10 @@ class CharacterSheetCombat {
 		this._allItems = [];
 		this._cachedAttacks = [];
 		this._sneakAttackEnabled = false; // Toggle for including Sneak Attack in damage rolls
+		this._lastSneakAttackRoundUsed = null;
+		this._lastAttackContext = null;
+		this._sneakAttackHasAdjacentAlly = false;
+		this._turnActionUsage = {action: false, bonus: false, reaction: false};
 
 		this._init();
 	}
@@ -862,6 +866,13 @@ class CharacterSheetCombat {
 			resultNote: resultNote + ammoNote,
 			subtitle: this._page.formatD20Breakdown(rollResult, totalBonus),
 		});
+
+		this._lastAttackContext = {
+			attackId,
+			mode: rollResult.mode || "normal",
+			hasAdvantage,
+			hasDisadvantage,
+		};
 	}
 
 	/**
@@ -908,10 +919,11 @@ class CharacterSheetCombat {
 		let sneakAttackDamage = 0;
 		let sneakAttackDice = "";
 		const sneakAttackInfo = this._state.getFeatureCalculations?.()?.sneakAttack;
-		if (sneakAttackInfo && this._sneakAttackEnabled && !attack.isSpell) {
+		if (this._canApplySneakAttack(attack, sneakAttackInfo)) {
 			const sneakRoll = this._parseDamage(sneakAttackInfo.dice, isCrit);
 			sneakAttackDamage = sneakRoll.total;
 			sneakAttackDice = sneakAttackInfo.dice;
+			this._markSneakAttackUsedThisTurn();
 		}
 
 		// Magic item crit damage bonus (e.g., bonusWeaponCritDamage on the weapon)
@@ -966,8 +978,123 @@ class CharacterSheetCombat {
 		// Auto-disable sneak attack after use (once per turn)
 		if (sneakAttackDamage > 0) {
 			this._sneakAttackEnabled = false;
+			this._sneakAttackHasAdjacentAlly = false;
 			this._renderSneakAttackToggle?.();
 		}
+	}
+
+	_isSneakAttackWeaponEligible (attack) {
+		if (!attack || attack.isSpell) return false;
+
+		if (attack.isRanged) return true;
+		if (attack.abilityMod === "dex" || attack.abilityMod === "finesse") return true;
+
+		const properties = attack.properties || [];
+		return properties.includes("F") || properties.includes("T")
+			|| properties.some?.(prop => typeof prop === "string" && /^(F|T)(\||$)/.test(prop));
+	}
+
+	_isSneakAttackAvailableThisTurn () {
+		if (!this._state?.isInCombat?.()) return true;
+
+		const round = this._state.getCombatRound?.() || 0;
+		if (!round) return true;
+		return this._lastSneakAttackRoundUsed !== round;
+	}
+
+	_markSneakAttackUsedThisTurn () {
+		if (!this._state?.isInCombat?.()) return;
+		const round = this._state.getCombatRound?.() || 0;
+		if (!round) return;
+		this._lastSneakAttackRoundUsed = round;
+	}
+
+	_isSneakAttackContextDisadvantaged (attackId) {
+		if (!this._lastAttackContext || this._lastAttackContext.attackId !== attackId) return false;
+		return this._lastAttackContext.mode === "disadvantage";
+	}
+
+	_isSneakAttackContextAdvantaged (attackId) {
+		if (!this._lastAttackContext || this._lastAttackContext.attackId !== attackId) return false;
+		return this._lastAttackContext.mode === "advantage";
+	}
+
+	_isSneakAttackTriggerSatisfied (attackId, {showWarnings = true} = {}) {
+		const hasAdvantage = this._isSneakAttackContextAdvantaged(attackId);
+		const hasDisadvantage = this._isSneakAttackContextDisadvantaged(attackId);
+
+		if (hasDisadvantage) {
+			if (showWarnings) {
+				JqueryUtil.doToast({
+					type: "warning",
+					content: "Sneak Attack can't apply when this attack has disadvantage.",
+				});
+			}
+			return false;
+		}
+
+		if (hasAdvantage || this._sneakAttackHasAdjacentAlly) return true;
+
+		if (showWarnings) {
+			JqueryUtil.doToast({
+				type: "warning",
+				content: "Sneak Attack requires advantage or an adjacent ally threatening the target.",
+			});
+		}
+		return false;
+	}
+
+	_resetTurnActionUsage () {
+		this._turnActionUsage = {action: false, bonus: false, reaction: false};
+	}
+
+	_isActionTypeAvailable (actionType) {
+		if (!this._state?.isInCombat?.()) return true;
+		if (!actionType || actionType === "free") return true;
+		return !this._turnActionUsage?.[actionType];
+	}
+
+	_consumeActionType (actionType) {
+		if (!this._state?.isInCombat?.()) return;
+		if (!actionType || actionType === "free") return;
+		if (!this._turnActionUsage) this._resetTurnActionUsage();
+		if (Object.hasOwn(this._turnActionUsage, actionType)) this._turnActionUsage[actionType] = true;
+	}
+
+	_getFeatureActionType (feature) {
+		const desc = feature?.description?.toLowerCase() || "";
+		if (/bonus action/i.test(desc)) return "bonus";
+		if (/reaction/i.test(desc)) return "reaction";
+		if (/no action required|free/i.test(desc)) return "free";
+		return "action";
+	}
+
+	_canApplySneakAttack (attack, sneakAttackInfo, {showWarnings = true} = {}) {
+		if (!sneakAttackInfo || !this._sneakAttackEnabled) return false;
+
+		if (!this._isSneakAttackWeaponEligible(attack)) {
+			if (showWarnings) {
+				JqueryUtil.doToast({
+					type: "warning",
+					content: "Sneak Attack requires a finesse or ranged weapon attack.",
+				});
+			}
+			return false;
+		}
+
+		if (!this._isSneakAttackAvailableThisTurn()) {
+			if (showWarnings) {
+				JqueryUtil.doToast({
+					type: "warning",
+					content: "Sneak Attack has already been used this round.",
+				});
+			}
+			return false;
+		}
+
+		if (!this._isSneakAttackTriggerSatisfied(attack.id, {showWarnings})) return false;
+
+		return true;
 	}
 
 	_parseDamage (damageStr, isCrit = false) {
@@ -1641,10 +1768,12 @@ class CharacterSheetCombat {
 		const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id);
 		if (!uses) return $();
 
-		const canUse = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
+		const activationAction = ability.activationAction || "free";
+		const hasActionAvailable = this._isActionTypeAvailable(activationAction);
+		const canUseResource = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
+		const canUse = canUseResource && hasActionAvailable;
 
 		// Determine action type
-		const activationAction = ability.activationAction || "free";
 		let actionIcon = "✨";
 		let actionType = "Free";
 		if (activationAction === "action") {
@@ -1707,12 +1836,20 @@ class CharacterSheetCombat {
 	 * Use a limited-use custom ability
 	 */
 	_useCustomAbility (ability) {
+		const actionType = ability.activationAction || "free";
+		if (!this._isActionTypeAvailable(actionType)) {
+			const actionName = actionType === "bonus" ? "Bonus Action" : actionType === "reaction" ? "Reaction" : "Action";
+			JqueryUtil.doToast({type: "warning", content: `${actionName} already used this round.`});
+			return;
+		}
+
 		if (!this._state.canUseCustomAbility?.(ability.id)) {
 			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${ability.name}!`});
 			return;
 		}
 
 		if (this._state.useCustomAbility(ability.id)) {
+			this._consumeActionType(actionType);
 			// Re-render
 			this.renderCombatActions();
 			this.renderCombatResources();
@@ -1822,6 +1959,10 @@ class CharacterSheetCombat {
 	_createCombatActionElement (feature) {
 		const featureId = `${feature.name}-${feature.source || ""}`.replace(/\s+/g, "-").toLowerCase();
 		const hasUses = feature.uses && feature.uses.max > 0;
+		const actionTypeKey = this._getFeatureActionType(feature);
+		const actionIsAvailable = this._isActionTypeAvailable(actionTypeKey);
+		const usesAvailable = !hasUses || feature.uses.current > 0;
+		const canUse = usesAvailable && actionIsAvailable;
 
 		// Determine action type icon
 		const desc = feature.description?.toLowerCase() || "";
@@ -1904,17 +2045,15 @@ class CharacterSheetCombat {
 				</div>
 				<div class="charsheet__combat-action-info">
 					${usesHtml}
-					${hasUses ? `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__combat-action-use" data-action-id="${featureId}" title="Use this ability">Use</button>` : ""}
+					<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__combat-action-use" data-action-id="${featureId}" title="${canUse ? "Use this ability" : `No ${actionType} available`}" ${canUse ? "" : "disabled"}>Use</button>
 				</div>
 			</div>
 		`);
 
 		// Add click handler for use button
-		if (hasUses) {
-			$action.find(".charsheet__combat-action-use").on("click", () => {
-				this._useCombatAction(feature);
-			});
-		}
+		$action.find(".charsheet__combat-action-use").on("click", () => {
+			this._useCombatAction(feature);
+		});
 
 		return $action;
 	}
@@ -1940,18 +2079,29 @@ class CharacterSheetCombat {
 	 * Use a combat action (spend a use if applicable)
 	 */
 	_useCombatAction (feature) {
-		if (!feature.uses || feature.uses.current <= 0) {
+		const actionType = this._getFeatureActionType(feature);
+		if (!this._isActionTypeAvailable(actionType)) {
+			const actionName = actionType === "bonus" ? "Bonus Action" : actionType === "reaction" ? "Reaction" : "Action";
+			JqueryUtil.doToast({type: "warning", content: `${actionName} already used this round.`});
+			return;
+		}
+
+		if (feature.uses && feature.uses.current <= 0) {
 			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${feature.name}!`});
 			return;
 		}
 
-		// Spend a use
-		feature.uses.current--;
+		// Spend a use if this feature has uses
+		if (feature.uses) {
+			feature.uses.current--;
+		}
+
+		this._consumeActionType(actionType);
 
 		// Update state
 		const features = this._state.getFeatures();
 		const idx = features.findIndex(f => f.name === feature.name && f.source === feature.source);
-		if (idx >= 0) {
+		if (idx >= 0 && feature.uses) {
 			features[idx].uses = feature.uses;
 		}
 
@@ -1962,10 +2112,11 @@ class CharacterSheetCombat {
 		this._page._saveCurrentCharacter?.();
 
 		// Toast notification
-		const remaining = feature.uses.current;
+		const remaining = feature.uses?.current;
+		const remainingText = feature.uses ? ` (${remaining}/${feature.uses.max} remaining)` : "";
 		JqueryUtil.doToast({
 			type: "success",
-			content: `Used ${feature.name}! (${remaining}/${feature.uses.max} remaining)`,
+			content: `Used ${feature.name}!${remainingText}`,
 		});
 	}
 
@@ -2661,24 +2812,44 @@ class CharacterSheetCombat {
 		if (!calcs?.sneakAttack) return;
 
 		const sa = calcs.sneakAttack;
+		const isSpentThisRound = !this._isSneakAttackAvailableThisTurn();
+		if (isSpentThisRound && this._sneakAttackEnabled) this._sneakAttackEnabled = false;
 		const $section = $(`<div class="charsheet__sneak-attack-section mt-3" style="border-top: 1px solid var(--rgb-border-grey, #444); padding-top: 0.5rem;"></div>`);
 
 		// Sneak Attack toggle
 		const $toggle = $(`
 			<div class="ve-flex-v-center mb-1">
-				<button class="ve-btn ve-btn-xs ${this._sneakAttackEnabled ? "ve-btn-success" : "ve-btn-default"} charsheet__sneak-attack-toggle mr-2" title="Toggle Sneak Attack (adds ${sa.dice} to next damage roll)">
-					<span class="glyphicon glyphicon-flash mr-1"></span>${this._sneakAttackEnabled ? "Sneak Attack ON" : "Sneak Attack OFF"}
+				<button class="ve-btn ve-btn-xs ${this._sneakAttackEnabled ? "ve-btn-success" : "ve-btn-default"} charsheet__sneak-attack-toggle mr-2" title="${isSpentThisRound ? "Sneak Attack already used this round" : `Toggle Sneak Attack (adds ${sa.dice} to next damage roll)`}" ${isSpentThisRound ? "disabled" : ""}>
+					<span class="glyphicon glyphicon-flash mr-1"></span>${isSpentThisRound ? "Sneak Attack USED" : this._sneakAttackEnabled ? "Sneak Attack ON" : "Sneak Attack OFF"}
 				</button>
 				<span class="ve-small ve-muted">${sa.dice} (avg ${sa.avgDamage})</span>
 			</div>
 		`);
 
 		$toggle.find(".charsheet__sneak-attack-toggle").on("click", () => {
+			if (!this._isSneakAttackAvailableThisTurn()) {
+				JqueryUtil.doToast({type: "warning", content: "Sneak Attack has already been used this round."});
+				return;
+			}
 			this._sneakAttackEnabled = !this._sneakAttackEnabled;
 			this._renderSneakAttackToggle();
 		});
 
 		$section.append($toggle);
+
+		const $trigger = $(`
+			<div class="ve-flex-v-center mb-2">
+				<button class="ve-btn ve-btn-xxs ${this._sneakAttackHasAdjacentAlly ? "ve-btn-info" : "ve-btn-default"} charsheet__sneak-attack-ally-toggle mr-2" title="Use this when an ally is adjacent to the target">
+					${this._sneakAttackHasAdjacentAlly ? "Ally Adjacent: ON" : "Ally Adjacent: OFF"}
+				</button>
+				<span class="ve-small ve-muted">Trigger helper when no advantage is present</span>
+			</div>
+		`);
+		$trigger.find(".charsheet__sneak-attack-ally-toggle").on("click", () => {
+			this._sneakAttackHasAdjacentAlly = !this._sneakAttackHasAdjacentAlly;
+			this._renderSneakAttackToggle();
+		});
+		$section.append($trigger);
 
 		// Cunning Strike options (if available)
 		if (calcs.hasCunningStrike) {
@@ -2884,9 +3055,7 @@ class CharacterSheetCombat {
 				const resourceCost = resource?.cost || activationInfo.exertionCost || stateType?.resourceCost || 1;
 				const hasResourceAvailable = !resource || resource.current >= resourceCost;
 
-				// Determine if this is a limited-use ability (uses up charges, doesn't stay active)
-				const isLimitedUse = customAbility?.mode === "limited";
-				const buttonText = isLimitedUse ? "Use" : "Activate";
+				const buttonText = this._getActivationButtonText({activationInfo, customAbility});
 
 				// Get activation action type
 				const activationAction = activationInfo.activationAction || stateType?.activationAction;
@@ -2924,14 +3093,7 @@ class CharacterSheetCombat {
 				`);
 
 				$row.find(".charsheet__activate-btn").on("click", () => {
-					this._page._activateFeatureState?.(feature, stateTypeId, stateType, resource, resourceCost);
-					// Sync both tabs
-					this.renderCombatStates();
-					this._page._renderActiveStates?.();
-					// Also sync custom abilities panel if this was a custom ability
-					if (feature.isCustomAbility) {
-						this._page._customAbilitiesPanel?.render?.();
-					}
+					this._activateCombatFeature(feature, stateTypeId, stateType, resource, resourceCost, activationInfo);
 				});
 
 				$availableSection.append($row);
@@ -2950,6 +3112,25 @@ class CharacterSheetCombat {
 
 		// Set up combat tracker buttons (idempotent)
 		this._initCombatTracker();
+	}
+
+	_activateCombatFeature (feature, stateTypeId, stateType, resource, resourceCost, activationInfo = null) {
+		this._page._activateFeatureState?.(feature, stateTypeId, stateType, resource, resourceCost, activationInfo);
+		this.renderCombatStates();
+		this._page._renderActiveStates?.();
+		if (feature.isCustomAbility) {
+			this._page._customAbilitiesPanel?.render?.();
+		}
+	}
+
+	_getActivationButtonText ({activationInfo = null, customAbility = null} = {}) {
+		const interactionMode = activationInfo?.interactionMode || (activationInfo?.isToggle ? "toggle" : "limited");
+		const isLimitedUse = customAbility?.mode === "limited"
+			|| interactionMode === "limited"
+			|| interactionMode === "trigger"
+			|| interactionMode === "instant";
+
+		return isLimitedUse ? "Use" : "Activate";
 	}
 
 	/**
@@ -3338,18 +3519,33 @@ class CharacterSheetCombat {
 		$("#charsheet-combat-start").off("click").on("click", () => {
 			if (this._state.isInCombat?.()) {
 				this._state.endCombat();
+				this._lastSneakAttackRoundUsed = null;
+				this._sneakAttackEnabled = false;
+				this._sneakAttackHasAdjacentAlly = false;
+				this._lastAttackContext = null;
+				this._resetTurnActionUsage();
 				JqueryUtil.doToast({type: "info", content: "Combat ended."});
 			} else {
 				this._state.startCombat();
+				this._lastSneakAttackRoundUsed = null;
+				this._sneakAttackEnabled = false;
+				this._sneakAttackHasAdjacentAlly = false;
+				this._lastAttackContext = null;
+				this._resetTurnActionUsage();
 				JqueryUtil.doToast({type: "success", content: "Combat started — Round 1!"});
 			}
 			this.renderCombatStates();
+			this.renderCombatActions();
+			this._renderSneakAttackToggle?.();
 			this._page._saveCurrentCharacter?.();
 		});
 
 		$("#charsheet-combat-next-round").off("click").on("click", () => {
 			const expired = this._state.advanceRound?.() || [];
 			const round = this._state.getCombatRound?.() || 0;
+			this._resetTurnActionUsage();
+			this._sneakAttackHasAdjacentAlly = false;
+			this._lastAttackContext = null;
 
 			if (expired.length) {
 				JqueryUtil.doToast({type: "warning", content: `Round ${round} — expired: ${expired.join(", ")}`});
@@ -3358,6 +3554,8 @@ class CharacterSheetCombat {
 			}
 
 			this.renderCombatStates();
+			this.renderCombatActions();
+			this._renderSneakAttackToggle?.();
 			this.renderCombatDefenses();
 			this.renderCombatEffects();
 			this._page._renderActiveStates?.();
@@ -4199,11 +4397,9 @@ class CharacterSheetCombat {
 	 * Get character's selected combat traditions
 	 */
 	_getCharacterTraditions () {
-		// Look for traditions in character data or features
-		const settings = this._state.getSettings?.() || {};
-		if (settings.combatTraditions?.length) {
-			return settings.combatTraditions;
-		}
+		// Prefer canonical state traditions
+		const stateTraditions = this._state.getCombatTraditions?.() || [];
+		if (stateTraditions.length) return stateTraditions;
 
 		// Infer from known combat methods
 		const knownMethods = this._state.getFeatures().filter(f =>
@@ -4226,9 +4422,7 @@ class CharacterSheetCombat {
 	 * Save selected traditions to character settings
 	 */
 	_saveSelectedTraditions (traditions) {
-		const settings = this._state.getSettings?.() || {};
-		settings.combatTraditions = traditions;
-		this._state.setSettings?.(settings);
+		this._state.setCombatTraditions?.(traditions);
 	}
 
 	/**

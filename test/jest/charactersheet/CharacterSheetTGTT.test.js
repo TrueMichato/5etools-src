@@ -1726,7 +1726,7 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				
 				const traditions = state.getCombatTraditions();
 				expect(traditions).toContain("Unarmored Combat");
-				expect(traditions).toContain("Adamant Mountain");
+				expect(traditions).toContain("AM");
 				expect(traditions.length).toBe(2);
 			});
 			
@@ -1739,7 +1739,37 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				
 				const traditions = state.getCombatTraditions();
 				expect(traditions).not.toContain("Unarmored Combat");
-				expect(traditions).toContain("Adamant Mountain");
+				expect(traditions).toContain("AM");
+			});
+
+			it("should store canonical code+name entries while exposing codes via getCombatTraditions", () => {
+				state.setCombatTraditions(["AM", {code: "RC", name: "Rapid Current"}, "Adamant Mountain"]);
+
+				const codes = state.getCombatTraditions();
+				expect(codes).toContain("AM");
+				expect(codes).toContain("RC");
+				expect(codes.length).toBe(2);
+
+				const entries = state.getCombatTraditionEntries();
+				expect(entries).toEqual(expect.arrayContaining([
+					expect.objectContaining({code: "AM", name: "Adamant Mountain"}),
+					expect.objectContaining({code: "RC", name: "Rapid Current"}),
+				]));
+			});
+
+			it("should migrate legacy settings combat traditions into canonical state entries on load", () => {
+				const loaded = new CharacterSheetState();
+				loaded.loadFromJson({
+					settings: {combatTraditions: ["Adamant Mountain", "RC"]},
+					combatTraditions: [],
+				});
+
+				expect(loaded.getCombatTraditions()).toEqual(expect.arrayContaining(["AM", "RC"]));
+				const entries = loaded.getCombatTraditionEntries();
+				expect(entries).toEqual(expect.arrayContaining([
+					expect.objectContaining({code: "AM", name: "Adamant Mountain"}),
+					expect.objectContaining({code: "RC", name: "Rapid Current"}),
+				]));
 			});
 		});
 		

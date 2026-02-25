@@ -3440,6 +3440,12 @@ class CharacterSheetState {
 			this._data.customAbilities = [];
 		}
 
+		// Ensure combat traditions are normalized to canonical entries
+		this._data.combatTraditions = this._normalizeCombatTraditions(this._data.combatTraditions);
+		if ((!this._data.combatTraditions || !this._data.combatTraditions.length) && Array.isArray(this._data.settings?.combatTraditions)) {
+			this._data.combatTraditions = this._normalizeCombatTraditions(this._data.settings.combatTraditions);
+		}
+
 		// Ensure grantedProficiencies tracking object exists
 		if (!this._data.grantedProficiencies) {
 			this._data.grantedProficiencies = {skills: {}, tools: {}, weapons: {}, armor: {}, languages: {}};
@@ -4270,6 +4276,8 @@ class CharacterSheetState {
 	 * @param {Array} [entry.choices.optionalFeatures] - Optional features like invocations
 	 * @param {Array} [entry.choices.featureChoices] - Feature-specific choices
 	 * @param {Array} [entry.choices.expertise] - Expertise choices
+	 * @param {Array<string>} [entry.choices.combatTraditions] - Combat tradition codes
+	 * @param {Array<string>} [entry.choices.weaponMasteries] - Weapon mastery keys (name|source)
 	 */
 	recordLevelChoice (entry) {
 		if (!entry.level || !entry.class) {
@@ -14047,6 +14055,14 @@ class CharacterSheetState {
 						processedFeatures.add(feature.name.toLowerCase());
 					}
 				}
+
+				// Metadata-first fallback: allow feature/effect definitions from source data
+				// without requiring explicit registry entries.
+				const metadataEffects = this._getMetadataFeatureEffects(feature);
+				if (metadataEffects.length > 0) {
+					effects.push(...metadataEffects);
+					processedFeatures.add(feature.name.toLowerCase());
+				}
 			});
 		}
 
@@ -14078,6 +14094,194 @@ class CharacterSheetState {
 		this._aggregateCalculationBasedEffects(calculations, effects, processedFeatures);
 
 		return effects;
+	}
+
+	/**
+	 * Get passive/always-on effects from feature metadata in a generic way.
+	 * Supports both official and homebrew feature schemas.
+	 *
+	 * @param {object} feature
+	 * @returns {Array<object>}
+	 */
+	_getMetadataFeatureEffects (feature) {
+		const sourceName = feature.name || "Feature";
+		const directEffects = Array.isArray(feature.effects) ? feature.effects : [];
+		const activatableEffects = Array.isArray(feature.activatable?.effects) ? feature.activatable.effects : [];
+
+		// By default, activatable effects are state/trigger effects and should not be
+		// applied as passive class modifiers unless explicitly marked.
+		const interactionMode = CharacterSheetState._getInteractionModeFromFeature(feature);
+		const isPassiveMode = interactionMode === "passive";
+		const includeActivatableEffects = isPassiveMode || feature.activatable?.alwaysOn === true;
+
+		const rawEffects = [
+			...directEffects,
+			...(includeActivatableEffects ? activatableEffects : []),
+		];
+		if (!rawEffects.length) return [];
+
+		const mapped = [];
+		rawEffects.forEach(effect => {
+			const asFeatureEffect = this._mapStateEffectToFeatureEffect(effect, sourceName);
+			if (asFeatureEffect) mapped.push(asFeatureEffect);
+		});
+
+		return mapped;
+	}
+
+	/**
+	 * Map active-state effect schema ({type, target, value, ...}) to
+	 * class feature effect schema used by _applyFeatureEffect.
+	 *
+	 * @param {object} effect
+	 * @param {string} sourceName
+	 * @returns {object|null}
+	 */
+	_mapStateEffectToFeatureEffect (effect, sourceName) {
+		if (!effect || !effect.type) return null;
+
+		const normalizedSource = effect.source || sourceName;
+
+		const parseDamageTarget = (target) => {
+			if (!target) return null;
+			if (target.startsWith("damage:")) return target.split(":")[1] || null;
+			return target;
+		};
+
+		switch (effect.type) {
+			case "resistance": {
+				const damageType = effect.damageType || parseDamageTarget(effect.target);
+				if (!damageType) return null;
+				return {
+					type: "resistance",
+					damageType,
+					source: normalizedSource,
+					conditional: effect.condition || effect.conditional,
+					enabled: effect.enabled,
+				};
+			}
+
+			case "immunity": {
+				const target = effect.target || effect.damageType;
+				if (!target) return null;
+
+				if (typeof target === "string" && target.startsWith("condition:")) {
+					return {
+						type: "conditionImmunity",
+						condition: target.split(":")[1],
+						source: normalizedSource,
+					};
+				}
+
+				return {
+					type: "immunity",
+					damageType: parseDamageTarget(target),
+					source: normalizedSource,
+				};
+			}
+
+			case "conditionImmunity": {
+				const condition = effect.condition || effect.target;
+				if (!condition) return null;
+				return {
+					type: "conditionImmunity",
+					condition,
+					source: normalizedSource,
+				};
+			}
+
+			case "sense": {
+				const sense = effect.sense || effect.target;
+				const range = effect.range ?? effect.value;
+				if (!sense || range == null) return null;
+				return {
+					type: "sense",
+					sense,
+					range,
+					source: normalizedSource,
+				};
+			}
+
+			case "bonus": {
+				const target = effect.target;
+				if (!target) return null;
+
+				if (target === "ac") {
+					if (typeof effect.value !== "number") return null;
+					return {
+						type: "acBonus",
+						value: effect.value,
+						source: normalizedSource,
+						conditional: effect.condition || effect.conditional,
+					};
+				}
+
+				if (target === "initiative") {
+					if (typeof effect.value !== "number") return null;
+					return {
+						type: "initiativeBonus",
+						value: effect.value,
+						source: normalizedSource,
+					};
+				}
+
+				if (target === "speed" || target.startsWith("speed:")) {
+					const speedType = target.split(":")[1] || "walk";
+					if (effect.value == null) return null;
+					return {
+						type: "speed",
+						speedType,
+						value: effect.value,
+						source: normalizedSource,
+						conditional: effect.condition || effect.conditional,
+					};
+				}
+
+				if (target === "save" || target.startsWith("save:")) {
+					if (typeof effect.value !== "number") return null;
+					const ability = target.split(":")[1] || "all";
+					if (ability === "all") {
+						return {
+							type: "modifier",
+							modType: "save:all",
+							value: effect.value,
+							source: normalizedSource,
+							conditional: effect.condition || effect.conditional,
+						};
+					}
+					return {
+						type: "saveBonus",
+						ability,
+						value: effect.value,
+						source: normalizedSource,
+					};
+				}
+
+				if (typeof effect.value !== "number") return null;
+				return {
+					type: "modifier",
+					modType: target,
+					value: effect.value,
+					source: normalizedSource,
+					conditional: effect.condition || effect.conditional,
+				};
+			}
+
+			case "advantage":
+			case "disadvantage": {
+				if (!effect.target) return null;
+				return {
+					type: "modifier",
+					modType: `${effect.target}:${effect.type}`,
+					value: 1,
+					source: normalizedSource,
+					conditional: effect.condition || effect.conditional,
+				};
+			}
+
+			default:
+				return null;
+		}
 	}
 
 	/**
@@ -19358,44 +19562,134 @@ class CharacterSheetState {
 	 * @returns {Array<string>} Array of tradition codes like ["AM", "RC"]
 	 */
 	getCombatTraditions () {
-		return [...(this._data.combatTraditions || [])];
+		return (this._data.combatTraditions || []).map(t => t.code);
+	}
+
+	/**
+	 * Get canonical combat tradition entries
+	 * @returns {Array<{code: string, name: string}>}
+	 */
+	getCombatTraditionEntries () {
+		return (this._data.combatTraditions || []).map(t => ({...t}));
 	}
 
 	/**
 	 * Set the full list of combat traditions
-	 * @param {Array<string>} traditions - Array of tradition codes like ["AM", "RC"]
+	 * @param {Array<string|{code: string, name?: string}>} traditions - Array of tradition codes or entries
 	 */
 	setCombatTraditions (traditions) {
-		this._data.combatTraditions = [...traditions];
+		this._data.combatTraditions = this._normalizeCombatTraditions(traditions);
 	}
 
 	/**
 	 * Add a combat tradition
-	 * @param {string} tradCode - Tradition code like "AM" for Adamant Mountain
+	 * @param {string|{code: string, name?: string}} tradCode - Tradition code or tradition entry
 	 */
 	addCombatTradition (tradCode) {
 		if (!this._data.combatTraditions) this._data.combatTraditions = [];
-		if (!this._data.combatTraditions.includes(tradCode)) {
-			this._data.combatTraditions.push(tradCode);
+
+		const normalized = this._normalizeCombatTradition(tradCode);
+		if (!normalized?.code) return;
+
+		if (!this._data.combatTraditions.some(t => t.code === normalized.code)) {
+			this._data.combatTraditions.push(normalized);
 		}
 	}
 
 	/**
 	 * Remove a combat tradition
-	 * @param {string} tradCode - Tradition code to remove
+	 * @param {string|{code: string, name?: string}} tradCode - Tradition code to remove
 	 */
 	removeCombatTradition (tradCode) {
 		if (!this._data.combatTraditions) return;
-		this._data.combatTraditions = this._data.combatTraditions.filter(t => t !== tradCode);
+		const normalized = this._normalizeCombatTradition(tradCode);
+		if (!normalized?.code) return;
+		this._data.combatTraditions = this._data.combatTraditions.filter(t => t.code !== normalized.code);
 	}
 
 	/**
 	 * Check if character is proficient with a specific tradition
-	 * @param {string} tradCode - Tradition code to check
+	 * @param {string|{code: string, name?: string}} tradCode - Tradition code to check
 	 * @returns {boolean}
 	 */
 	hasCombatTradition (tradCode) {
-		return this._data.combatTraditions?.includes(tradCode) ?? false;
+		const normalized = this._normalizeCombatTradition(tradCode);
+		if (!normalized?.code) return false;
+		return this._data.combatTraditions?.some(t => t.code === normalized.code) ?? false;
+	}
+
+	_normalizeCombatTraditions (traditions) {
+		if (!Array.isArray(traditions)) return [];
+
+		const out = [];
+		const seen = new Set();
+		for (const tradition of traditions) {
+			const normalized = this._normalizeCombatTradition(tradition);
+			if (!normalized?.code || seen.has(normalized.code)) continue;
+			seen.add(normalized.code);
+			out.push(normalized);
+		}
+		return out;
+	}
+
+	_normalizeCombatTradition (tradition) {
+		if (!tradition) return null;
+
+		const traditionMap = {
+			"AM": "Adamant Mountain",
+			"AK": "Arcane Knight",
+			"BU": "Beast Unity",
+			"BZ": "Biting Zephyr",
+			"CJ": "Comedic Jabs",
+			"EB": "Eldritch Blackguard",
+			"GH": "Gallant Heart",
+			"MG": "Mirror's Glint",
+			"MS": "Mist and Shade",
+			"RC": "Rapid Current",
+			"RE": "Razor's Edge",
+			"SK": "Sanguine Knot",
+			"SS": "Spirited Steed",
+			"TI": "Tempered Iron",
+			"TC": "Tooth and Claw",
+			"UW": "Unending Wheel",
+			"UH": "Unerring Hawk",
+		};
+
+		const nameToCode = Object.entries(traditionMap)
+			.reduce((acc, [code, name]) => ({...acc, [name.toLowerCase()]: code}), {});
+
+		if (typeof tradition === "string") {
+			const trimmed = tradition.trim();
+			if (!trimmed) return null;
+
+			const upper = trimmed.toUpperCase();
+			const code = traditionMap[upper]
+				? upper
+				: (nameToCode[trimmed.toLowerCase()] || trimmed);
+			return {
+				code,
+				name: traditionMap[code] || trimmed,
+			};
+		}
+
+		if (typeof tradition === "object") {
+			const rawCode = tradition.code || tradition.name;
+			if (!rawCode || typeof rawCode !== "string") return null;
+			const trimmedCode = rawCode.trim();
+			if (!trimmedCode) return null;
+
+			const upper = trimmedCode.toUpperCase();
+			const code = traditionMap[upper]
+				? upper
+				: (nameToCode[trimmedCode.toLowerCase()] || trimmedCode);
+
+			return {
+				code,
+				name: tradition.name || traditionMap[code] || trimmedCode,
+			};
+		}
+
+		return null;
 	}
 	// #endregion
 
@@ -25346,6 +25640,12 @@ class CharacterSheetState {
 		// If the feature has explicit activatable data, use that directly
 		if (feature.activatable) {
 			const act = feature.activatable;
+			const interactionMode = this._getInteractionModeFromFeature(feature);
+			const metadataEffects = Array.isArray(act.effects) && act.effects.length
+				? act.effects
+				: (Array.isArray(feature.effects) ? feature.effects : []);
+			const fallbackEffects = this.parseEffectsFromDescription(rawText);
+			const resolvedEffects = metadataEffects.length ? metadataEffects : fallbackEffects;
 			return {
 				stateTypeId: act.stateTypeId || "homebrewToggle",
 				stateType: act.stateTypeId && this.ACTIVE_STATE_TYPES[act.stateTypeId]
@@ -25358,12 +25658,14 @@ class CharacterSheetState {
 				sorceryPointCost: act.sorceryPointCost || null,
 				resourceCost: act.resourceCost || null,
 				resourceName: act.resourceName || null,
-				effects: act.effects || this.parseEffectsFromDescription(rawText),
+				effects: resolvedEffects,
 				duration: act.duration || "Until ended",
 				endConditions: act.endConditions || [],
 				icon: act.icon || null,
 				isDataDriven: true,
-				isToggle: true,
+				interactionMode,
+				isToggle: interactionMode === "toggle",
+				isInstant: interactionMode === "limited" || interactionMode === "trigger" || interactionMode === "instant",
 			};
 		}
 
@@ -25669,7 +25971,56 @@ class CharacterSheetState {
 			}
 		}
 
+		// ===== LIMITED-USE FEATURE FALLBACK =====
+		// Generic support for official/homebrew features that track uses but don't include
+		// explicit resource keywords like "ki"/"sorcery" in their description.
+		if (feature?.uses?.max > 0) {
+			const isActiveAbility = /\byou can\b|\bas an?\s+(?:action|bonus action|reaction)\b|\bwhen you\b|\bafter you\b/i.test(text);
+			if (isActiveAbility) {
+				const parsedEffects = this.parseEffectsFromDescription(rawText);
+				return {
+					stateTypeId: "custom",
+					isCustom: true,
+					interactionMode: "limited",
+					isToggle: false,
+					isInstant: true,
+					activationAction: activationAction || "special",
+					matchedBy: "featureUses",
+					effects: parsedEffects,
+					duration: toggleAnalysis.duration,
+					endConditions: toggleAnalysis.endConditions,
+					resourceName: feature.name || null,
+					resourceCost: 1,
+				};
+			}
+		}
+
 		return null;
+	}
+
+	/**
+	 * Resolve feature interaction mode from explicit metadata.
+	 * Supported values: toggle, limited, trigger, passive, instant.
+	 * Defaults to toggle.
+	 *
+	 * @param {object} feature
+	 * @returns {string}
+	 */
+	static _getInteractionModeFromFeature (feature) {
+		const act = feature?.activatable || {};
+		const rawMode = (act.interactionMode || act.mode || feature?.interactionMode || "").toString().toLowerCase().trim();
+
+		if (["toggle", "toggleable", "state"].includes(rawMode)) return "toggle";
+		if (["limited", "limited-use", "limited_use", "use"].includes(rawMode)) return "limited";
+		if (["trigger", "reaction", "on-hit", "on_hit"].includes(rawMode)) return "trigger";
+		if (["passive", "always-on", "always_on"].includes(rawMode)) return "passive";
+		if (["instant", "one-shot", "one_shot"].includes(rawMode)) return "instant";
+
+		if (act.isPassive === true) return "passive";
+		if (act.isToggle === true) return "toggle";
+		if (act.isInstant === true) return "instant";
+
+		return "toggle";
 	}
 
 	/**
@@ -25801,7 +26152,9 @@ class CharacterSheetState {
 		if (!feature?.description) return null;
 
 		const activationInfo = this.detectActivatableFeature(feature);
-		const effects = this.parseEffectsFromDescription(feature.description);
+		const effects = activationInfo?.effects?.length
+			? activationInfo.effects
+			: this.parseEffectsFromDescription(feature.description);
 		const rawText = feature.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
 		const toggleAnalysis = this.analyzeToggleability(rawText);
 
@@ -26579,6 +26932,7 @@ class CharacterSheetState {
 		for (const feature of this._data.features) {
 			const activationInfo = CharacterSheetState.detectActivatableFeature(feature);
 			if (!activationInfo) continue;
+			if (activationInfo.interactionMode === "passive") continue;
 
 			// Find associated resource if any
 			let resource = null;
@@ -26659,6 +27013,7 @@ class CharacterSheetState {
 				resource,
 				stateTypeId: activationInfo.stateTypeId,
 				isActive,
+				interactionMode: activationInfo.interactionMode || (activationInfo.isToggle ? "toggle" : "limited"),
 				// Include parsed effects from data-driven features
 				effects: activationInfo.effects || null,
 			});
@@ -26683,8 +27038,9 @@ class CharacterSheetState {
 		// Add toggleable and limited-use custom abilities
 		const customAbilities = this._data.customAbilities || [];
 		for (const ability of customAbilities) {
+			const interactionMode = CharacterSheetState._getInteractionModeFromCustomAbility(ability);
 			// Skip passive abilities - they're always-on
-			if (ability.mode === "passive") continue;
+			if (interactionMode === "passive") continue;
 
 			// Build activation info from ability properties
 			const activationInfo = {
@@ -26693,6 +27049,9 @@ class CharacterSheetState {
 				activationAction: ability.activationAction || "free",
 				duration: ability.duration || null,
 				concentration: ability.concentration || false,
+				interactionMode,
+				isToggle: interactionMode === "toggle",
+				isInstant: interactionMode === "limited" || interactionMode === "trigger" || interactionMode === "instant",
 				isCustomAbility: true,
 			};
 
@@ -26721,12 +27080,34 @@ class CharacterSheetState {
 				resource,
 				stateTypeId: "custom",
 				isActive: ability.isActive || false,
+				interactionMode,
+				isToggle: activationInfo.isToggle,
+				isInstant: activationInfo.isInstant,
 				customAbilityId: ability.id,
 				effects: ability.effects || null,
 			});
 		}
 
 		return activatables;
+	}
+
+	/**
+	 * Resolve custom ability mode to canonical interaction mode.
+	 * Supported output: toggle, limited, trigger, passive, instant.
+	 * @param {object} ability
+	 * @returns {string}
+	 */
+	static _getInteractionModeFromCustomAbility (ability) {
+		const rawMode = (ability?.interactionMode || ability?.mode || "").toString().toLowerCase().trim();
+
+		if (["toggle", "toggleable", "state"].includes(rawMode)) return "toggle";
+		if (["limited", "limited-use", "limited_use", "use"].includes(rawMode)) return "limited";
+		if (["trigger", "reaction", "on-hit", "on_hit"].includes(rawMode)) return "trigger";
+		if (["passive", "always-on", "always_on"].includes(rawMode)) return "passive";
+		if (["instant", "one-shot", "one_shot"].includes(rawMode)) return "instant";
+
+		if (ability?.uses?.max > 0) return "limited";
+		return "toggle";
 	}
 
 	/**
