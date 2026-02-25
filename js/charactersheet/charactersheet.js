@@ -4786,7 +4786,12 @@ class CharacterSheetPage {
 					const hasResourceAvailable = !resource || resource.current >= resourceCost;
 					
 					// Determine if this is a limited-use ability (uses up charges, doesn't stay active)
-					const isLimitedUse = customAbility?.mode === "limited";
+					const interactionMode = activationInfo.interactionMode || (activationInfo.isToggle ? "toggle" : "limited");
+					const isLimitedUse = customAbility?.mode === "limited"
+						|| interactionMode === "limited"
+						|| interactionMode === "trigger"
+						|| interactionMode === "instant"
+						|| activationInfo.isInstant;
 					const buttonText = isLimitedUse ? "Use" : "Activate";
 					
 					// Get activation action type
@@ -4826,7 +4831,7 @@ class CharacterSheetPage {
 					`);
 					
 					$row.find(".charsheet__activate-btn").on("click", () => {
-						this._activateFeatureState(feature, stateTypeId, stateType, resource, resourceCost);
+						this._activateFeatureState(feature, stateTypeId, stateType, resource, resourceCost, activationInfo);
 					});
 					
 					$availableSection.append($row);
@@ -5178,7 +5183,7 @@ class CharacterSheetPage {
 	/**
 	 * Activate a feature's state, deducting resource cost if applicable
 	 */
-	_activateFeatureState (feature, stateTypeId, stateType, resource, resourceCost) {
+	_activateFeatureState (feature, stateTypeId, stateType, resource, resourceCost, activationInfo = null) {
 		// Use passed cost, or fall back to state type default
 		const cost = resourceCost || stateType?.resourceCost || 1;
 		
@@ -5216,6 +5221,17 @@ class CharacterSheetPage {
 			this._renderCharacter();
 			return;
 		}
+
+		const interactionMode = activationInfo?.interactionMode || (activationInfo?.isToggle ? "toggle" : "limited");
+
+		// Passive features should not create active states.
+		if (interactionMode === "passive") {
+			this._saveCurrentCharacter();
+			this._renderResources();
+			this._renderActiveStates();
+			this._renderCharacter();
+			return;
+		}
 		
 		// Determine if we need to parse effects from description
 		// Parse effects for: custom states, generic state types (like combatStance), or state types with empty effects
@@ -5223,10 +5239,32 @@ class CharacterSheetPage {
 			!CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId] ||
 			stateType?.isGeneric || 
 			(stateType?.effects && stateType.effects.length === 0);
-		
-		const parsedEffects = shouldParseEffects 
-			? CharacterSheetState.parseEffectsFromDescription(feature.description)
+
+		const metadataEffects = activationInfo?.effects;
+		const parsedEffects = shouldParseEffects
+			? (metadataEffects?.length ? metadataEffects : CharacterSheetState.parseEffectsFromDescription(feature.description))
 			: null;
+
+		// Limited/trigger/instant abilities consume resources and may apply one-off effects,
+		// but should not persist as toggle states.
+		if (interactionMode === "limited" || interactionMode === "trigger" || interactionMode === "instant") {
+			if (parsedEffects?.length) {
+				this._state.addActiveState("custom", {
+					name: feature.name,
+					icon: "⚡",
+					sourceFeatureId: feature.id,
+					description: feature.description,
+					customEffects: parsedEffects,
+					duration: activationInfo?.duration || "Instant",
+				});
+			}
+
+			this._saveCurrentCharacter();
+			this._renderResources();
+			this._renderActiveStates();
+			this._renderCharacter();
+			return;
+		}
 		
 		// Activate the state
 		if (stateTypeId === "custom" || !CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId]) {
@@ -9420,6 +9458,72 @@ class CharacterSheetPage {
 		await this._saveCurrentCharacter();
 	}
 
+	/**
+	 * Deterministically replay history-backed martial choices.
+	 * Uses level history as source of truth and reapplies the latest recorded
+	 * combat traditions and weapon masteries in level order.
+	 *
+	 * Legacy-safe behavior: if history contains no entry for a choice type,
+	 * preserve the current state value for that type.
+	 *
+	 * @returns {{combatTraditions: string[], weaponMasteries: string[]}}
+	 */
+	replayHistoryMartialChoices () {
+		const baselineTraditions = this._state.getCombatTraditions();
+		const baselineMasteries = this._state.getWeaponMasteries();
+
+		let replayTraditions = [...baselineTraditions];
+		let replayMasteries = [...baselineMasteries];
+
+		const history = [...(this._state.getLevelHistory() || [])].sort((a, b) => a.level - b.level);
+		for (const entry of history) {
+			if (Array.isArray(entry?.choices?.combatTraditions)) {
+				replayTraditions = [...entry.choices.combatTraditions];
+			}
+
+			if (Array.isArray(entry?.choices?.weaponMasteries)) {
+				replayMasteries = [...entry.choices.weaponMasteries];
+			}
+		}
+
+		this._state.setCombatTraditions(replayTraditions);
+		this._state.setWeaponMasteries(replayMasteries);
+
+		return {
+			combatTraditions: replayTraditions,
+			weaponMasteries: replayMasteries,
+		};
+	}
+
+	/**
+	 * Resolve the best history level to write a martial choice to.
+	 * Prefers the latest level that already recorded the choice, otherwise
+	 * falls back to the latest level if history is complete.
+	 *
+	 * @param {"combatTraditions"|"weaponMasteries"} choiceKey
+	 * @returns {number|null}
+	 */
+	_getHistoryLevelForMartialChoice (choiceKey) {
+		const history = [...(this._state.getLevelHistory() || [])].sort((a, b) => a.level - b.level);
+		if (!history.length) return null;
+
+		for (let i = history.length - 1; i >= 0; i--) {
+			const entry = history[i];
+			if (Array.isArray(entry?.choices?.[choiceKey])) return entry.level;
+		}
+
+		if (this._state.hasCompleteLevelHistory?.()) return history[history.length - 1].level;
+		return null;
+	}
+
+	/**
+	 * Public accessor for max weapon masteries based on class progression.
+	 * @returns {number}
+	 */
+	getMaxWeaponMasteries () {
+		return this._getMaxWeaponMasteries();
+	}
+
 	renderCharacter () {
 		this._renderCharacter();
 	}
@@ -9764,7 +9868,12 @@ class CharacterSheetPage {
 		$$`<div class="ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-primary">Save</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => {
-			this._state.setWeaponMasteries(selectedMasteries);
+			const targetLevel = this._getHistoryLevelForMartialChoice("weaponMasteries");
+			if (targetLevel != null && this._state.updateLevelChoice(targetLevel, {weaponMasteries: [...selectedMasteries]})) {
+				this.replayHistoryMartialChoices();
+			} else {
+				this._state.setWeaponMasteries(selectedMasteries);
+			}
 			doClose();
 		});
 	}

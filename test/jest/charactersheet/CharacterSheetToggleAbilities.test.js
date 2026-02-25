@@ -210,6 +210,44 @@ describe("Character Sheet Toggle Abilities", () => {
 			expect(result.effects).toHaveLength(2);
 		});
 
+		test("should support data-driven limited interaction mode", () => {
+			const feature = {
+				name: "Sneak Attack Trigger",
+				description: "When you hit with finesse or ranged weapon attack, deal extra damage.",
+				activatable: {
+					interactionMode: "limited",
+					activationAction: "special",
+					resourceName: "Sneak Attack",
+					resourceCost: 1,
+					effects: [{type: "extraDamage", value: "2d6"}],
+				},
+			};
+			const result = CharacterSheetState.detectActivatableFeature(feature);
+
+			expect(result).not.toBeNull();
+			expect(result.interactionMode).toBe("limited");
+			expect(result.isToggle).toBe(false);
+			expect(result.isInstant).toBe(true);
+		});
+
+		test("should fall back to feature.effects when activatable effects are omitted", () => {
+			const feature = {
+				name: "Metadata Fallback Toggle",
+				description: "A custom ability.",
+				effects: [
+					{type: "bonus", target: "ac", value: 2},
+				],
+				activatable: {
+					stateTypeId: "homebrewToggle",
+					activationAction: "bonus",
+				},
+			};
+
+			const result = CharacterSheetState.detectActivatableFeature(feature);
+			expect(result).not.toBeNull();
+			expect(result.effects).toContainEqual({type: "bonus", target: "ac", value: 2});
+		});
+
 		test("should exclude non-activatable features", () => {
 			const excluded = [
 				{name: "Suggested Characteristics", description: "..."},
@@ -221,6 +259,21 @@ describe("Character Sheet Toggle Abilities", () => {
 			excluded.forEach(feature => {
 				expect(CharacterSheetState.detectActivatableFeature(feature)).toBeNull();
 			});
+		});
+
+		test("should detect limited-use activatable from feature uses without keyworded resource text", () => {
+			const feature = {
+				name: "Holy Nimbus",
+				description: "As an action, you can emanate bright light and gain a radiant aura.",
+				uses: {current: 1, max: 1, recharge: "long"},
+			};
+			const result = CharacterSheetState.detectActivatableFeature(feature);
+
+			expect(result).not.toBeNull();
+			expect(result.matchedBy).toBe("featureUses");
+			expect(result.interactionMode).toBe("limited");
+			expect(result.resourceName).toBe("Holy Nimbus");
+			expect(result.resourceCost).toBe(1);
 		});
 	});
 
@@ -525,6 +578,88 @@ describe("Character Sheet Toggle Abilities", () => {
 			expect(custom).toBeDefined();
 			expect(custom.activationInfo.isDataDriven).toBe(true);
 			expect(custom.effects).toContainEqual({type: "bonus", target: "ac", value: 2});
+		});
+
+		test("should exclude passive interaction-mode features from activatable list", () => {
+			charState.addFeature({
+				name: "Passive Ward",
+				description: "You are always protected.",
+				activatable: {
+					interactionMode: "passive",
+					effects: [{type: "bonus", target: "ac", value: 1}],
+				},
+			});
+
+			const activatables = charState.getActivatableFeatures();
+			expect(activatables.some(a => a.feature.name === "Passive Ward")).toBe(false);
+		});
+
+		test("should include limited-use features with uses as activatable resources", () => {
+			charState.addFeature({
+				name: "Holy Nimbus",
+				description: "As an action, you can emanate bright light and gain a radiant aura.",
+				uses: {current: 1, max: 1, recharge: "long"},
+			});
+
+			const activatables = charState.getActivatableFeatures();
+			const holyNimbus = activatables.find(a => a.feature.name === "Holy Nimbus");
+
+			expect(holyNimbus).toBeDefined();
+			expect(holyNimbus.interactionMode).toBe("limited");
+			expect(holyNimbus.resource).toBeDefined();
+			expect(holyNimbus.resource.current).toBe(1);
+			expect(holyNimbus.resource.max).toBe(1);
+		});
+
+		test("should expose toggleable custom abilities with normalized interaction mode", () => {
+			const abilityId = charState.addCustomAbility({
+				name: "Arcane Ward",
+				mode: "toggleable",
+				description: "A ward you can toggle on and off.",
+				effects: [{type: "bonus", target: "ac", value: 1}],
+			});
+
+			const activatables = charState.getActivatableFeatures();
+			const ward = activatables.find(a => a.customAbilityId === abilityId);
+
+			expect(ward).toBeDefined();
+			expect(ward.interactionMode).toBe("toggle");
+			expect(ward.isToggle).toBe(true);
+			expect(ward.isInstant).toBe(false);
+			expect(ward.activationInfo.interactionMode).toBe("toggle");
+			expect(ward.activationInfo.isToggle).toBe(true);
+			expect(ward.activationInfo.isInstant).toBe(false);
+		});
+
+		test("should expose limited and trigger custom abilities with normalized interaction mode", () => {
+			const limitedId = charState.addCustomAbility({
+				name: "Holy Nimbus",
+				mode: "limited",
+				description: "A limited-use burst.",
+				uses: {max: 1, recharge: "long"},
+			});
+
+			const triggerId = charState.addCustomAbility({
+				name: "Riposte Trigger",
+				mode: "toggleable",
+				description: "A trigger-style reaction ability.",
+			});
+			charState.updateCustomAbility(triggerId, {interactionMode: "trigger"});
+
+			const activatables = charState.getActivatableFeatures();
+			const limited = activatables.find(a => a.customAbilityId === limitedId);
+			const trigger = activatables.find(a => a.customAbilityId === triggerId);
+
+			expect(limited).toBeDefined();
+			expect(limited.interactionMode).toBe("limited");
+			expect(limited.isToggle).toBe(false);
+			expect(limited.isInstant).toBe(true);
+
+			expect(trigger).toBeDefined();
+			expect(trigger.interactionMode).toBe("trigger");
+			expect(trigger.isToggle).toBe(false);
+			expect(trigger.isInstant).toBe(true);
+			expect(trigger.activationInfo.interactionMode).toBe("trigger");
 		});
 	});
 

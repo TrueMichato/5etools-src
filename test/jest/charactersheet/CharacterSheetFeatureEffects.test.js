@@ -125,6 +125,44 @@ describe("Monk Feature Effects", () => {
 });
 
 // =============================================================================
+// METADATA-DRIVEN FEATURE EFFECTS
+// =============================================================================
+describe("Metadata-Driven Feature Effects", () => {
+	it("should apply passive feature.effects through generic pipeline", () => {
+		state.addFeature({
+			name: "Homebrew Resilient Skin",
+			description: "Your hide is naturally resilient.",
+			effects: [
+				{type: "resistance", target: "fire"},
+				{type: "bonus", target: "ac", value: 1},
+			],
+		});
+
+		state.applyClassFeatureEffects();
+
+		expect(state.hasResistance("fire")).toBe(true);
+		expect(state.getNamedModifiers().some(m => m.type === "ac" && m.name.includes("Homebrew Resilient Skin"))).toBe(true);
+	});
+
+	it("should apply passive activatable.effects through generic pipeline", () => {
+		state.addFeature({
+			name: "Aura of Vigilance",
+			description: "An ever-present aura protects you.",
+			activatable: {
+				interactionMode: "passive",
+				effects: [
+					{type: "bonus", target: "initiative", value: 2},
+				],
+			},
+		});
+
+		state.applyClassFeatureEffects();
+
+		expect(state.getNamedModifiers().some(m => m.type === "initiative" && m.name.includes("Aura of Vigilance"))).toBe(true);
+	});
+});
+
+// =============================================================================
 // BARBARIAN FEATURE EFFECTS
 // =============================================================================
 describe("Barbarian Feature Effects", () => {

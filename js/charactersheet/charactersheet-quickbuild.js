@@ -2233,6 +2233,11 @@ class CharacterSheetQuickBuild {
 
 		// Get known traditions — from state or inferred from existing features
 		let knownTraditions = CharacterSheetClassUtils.getKnownCombatTraditions(existingOptFeatures, this._state);
+		const classFeatures = this._page.getClassFeatures();
+		const traditionCount = CharacterSheetClassUtils.getCombatTraditionSelectionCount({
+			classData: gain.classData,
+			classFeatures,
+		});
 
 		// If no traditions selected, we need a tradition picker first
 		if (!this._selections._combatTraditions) {
@@ -2250,9 +2255,13 @@ class CharacterSheetQuickBuild {
 		const $methodsContainer = $(`<div></div>`);
 
 		// Tradition picker (if no traditions are known yet)
-		if (knownTraditions.length === 0) {
-			const availableTraditions = CharacterSheetClassUtils.getAvailableTraditions(allOptFeatures);
-			const traditionCount = 2; // Default combat tradition count
+		if (knownTraditions.length < traditionCount) {
+			const availableTraditions = CharacterSheetClassUtils.getAvailableTraditionsForClass(
+				allOptFeatures,
+				gain.featureTypes || [],
+				gain.className,
+				classFeatures,
+			);
 
 			$tradContainer.append(`
 				<p class="ve-small ve-muted mb-1">Choose ${traditionCount} Combat Traditions:</p>
@@ -3580,6 +3589,7 @@ class CharacterSheetQuickBuild {
 	async _applyQuickBuild () {
 
 		const conMod = this._state.getAbilityMod("con");
+		const pendingHistoryEntries = [];
 
 		// Process each level in order
 		for (const analysis of this._levelAnalysis) {
@@ -3691,37 +3701,15 @@ class CharacterSheetQuickBuild {
 			this._state.setCurrentHp(this._state.getCurrentHp() + hpIncrease);
 
 			// 10. Add features
-			const asiFeatureNames = ["ability score improvement", "ability score increase", "asi"];
 			const existingClassFeatureNames = this._state.getFeatures()
 				.filter(f => f.className === className && !f.subclassName && !f.isSubclassFeature)
 				.map(f => f.name.toLowerCase());
 
-			const featuresToAdd = levelFeatures.filter(f => {
-				if (f.gainSubclassFeature) return false;
-				const nameLower = f.name.toLowerCase();
-				if (asiFeatureNames.some(asi => nameLower.includes(asi))) return false;
-				if (!f.isSubclassFeature && !f.subclassName && existingClassFeatureNames.includes(nameLower)) return false;
-				return true;
-			});
-
-			featuresToAdd.forEach(feature => {
-				let description = feature.description;
-				if (!description && feature.entries) {
-					try { description = Renderer.get().render({entries: feature.entries}); } catch (e) { description = ""; }
-				}
-				this._state.addFeature({
-					name: feature.name,
-					source: feature.source || classData.source,
-					className: feature.className || className,
-					classSource: feature.classSource || classData.source,
-					level: feature.level || classLevel,
-					subclassName: feature.subclassName,
-					subclassShortName: feature.subclassShortName,
-					subclassSource: feature.subclassSource,
-					featureType: "Class",
-					description: description || "",
-				});
-			});
+			CharacterSheetClassUtils.dedupAndBuildFeatures(levelFeatures, existingClassFeatureNames, {
+				className,
+				classSource: classData.source,
+				level: classLevel,
+			}).forEach(feature => this._state.addFeature(feature));
 
 			// 11. Update hit dice
 			CharacterSheetClassUtils.updateHitDice(this._state, classData);
@@ -3737,9 +3725,9 @@ class CharacterSheetQuickBuild {
 				CharacterSheetClassUtils.updateSpellSlots(this._state, classEntry, classLevel, classData);
 			}
 
-			// 14. Record level history
+			// 14. Stage level history entry (record after global selections are finalized)
 			const historyEntry = this._buildHistoryEntry(analysis, levelKey);
-			this._state.recordLevelChoice(historyEntry);
+			pendingHistoryEntries.push(historyEntry);
 		}
 
 		// Post-loop finalizations
@@ -3752,6 +3740,42 @@ class CharacterSheetQuickBuild {
 		// Apply combat traditions (if selected during QB)
 		if (this._selections._combatTraditions?.length > 0) {
 			this._state.setCombatTraditions(this._selections._combatTraditions);
+		}
+
+		// Record level history after global selections have been applied
+		pendingHistoryEntries.forEach(entry => this._state.recordLevelChoice(entry));
+
+		// Enrich history with replay-critical global choices at selection-relevant levels
+		const finalCombatTraditions = this._state.getCombatTraditions?.() || [];
+		if (finalCombatTraditions.length > 0) {
+			const firstCtmLevel = this._levelAnalysis
+				.find(a => a.optionalFeatureGains?.some(g => (g.featureTypes || []).some(ft => ft.startsWith("CTM:"))))
+				?.characterLevel;
+
+			if (firstCtmLevel != null) {
+				this._state.updateLevelChoice(firstCtmLevel, {
+					combatTraditions: [...finalCombatTraditions],
+				});
+			}
+		}
+
+		const finalWeaponMasteries = this._state.getWeaponMasteries?.() || [];
+		if (finalWeaponMasteries.length > 0) {
+			let lastCount = 0;
+			let lastMasteryGainLevel = null;
+			this._levelAnalysis.forEach(a => {
+				const currentCount = a.weaponMasteryCount || 0;
+				if (currentCount > lastCount) {
+					lastMasteryGainLevel = a.characterLevel;
+				}
+				lastCount = Math.max(lastCount, currentCount);
+			});
+
+			if (lastMasteryGainLevel != null) {
+				this._state.updateLevelChoice(lastMasteryGainLevel, {
+					weaponMasteries: [...finalWeaponMasteries],
+				});
+			}
 		}
 
 		// Apply spellbook spells
@@ -3896,18 +3920,13 @@ class CharacterSheetQuickBuild {
 			const assigned = allSelected.slice(startIdx, endIdx);
 
 			assigned.forEach(opt => {
-				const featureData = {
-					name: opt.name,
-					source: opt.source,
+				this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(opt, {
 					className: analysis.className,
 					classSource: analysis.classSource,
 					level: analysis.classLevel,
 					featureType: "Optional Feature",
 					optionalFeatureTypes: opt.featureType || gain.featureTypes,
-					description: opt.entries ? Renderer.get().render({entries: opt.entries}) : "",
-					entries: opt.entries,
-				};
-				this._state.addFeature(featureData);
+				}));
 			});
 		});
 	}
@@ -3937,48 +3956,53 @@ class CharacterSheetQuickBuild {
 					const fullOpt = classFeatures.find(f =>
 						f.name === parts[0] && f.className === parts[1] && f.source === parts[2],
 					);
-					this._state.addFeature({
-						name: opt.name,
-						source: opt.source || fullOpt?.source || analysis.classSource,
-						level: opt.level || analysis.classLevel,
-						className: analysis.className,
-						classSource: analysis.classSource,
-						featureType: "Class",
-						entries: fullOpt?.entries,
-						description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
-						isFeatureOption: true,
-						parentFeature: optGroup.featureName,
-					});
+					this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(
+						{
+							...(fullOpt || {}),
+							...opt,
+							entries: fullOpt?.entries ?? opt.entries,
+						},
+						{
+							className: analysis.className,
+							classSource: analysis.classSource,
+							level: opt.level || analysis.classLevel,
+							featureType: "Class",
+							isFeatureOption: true,
+							parentFeature: optGroup.featureName,
+						},
+					));
 				} else if (opt.type === "subclassFeature" && opt.ref) {
 					const subclass = this._getSubclassForClass(analysis.className, analysis.classSource, analysis.classLevel);
-					this._state.addFeature({
-						name: opt.name,
-						source: opt.subclassSource || subclass?.source || analysis.classSource,
-						level: opt.level || analysis.classLevel,
+					this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(opt, {
 						className: analysis.className,
 						classSource: analysis.classSource,
+						level: opt.level || analysis.classLevel,
+						featureType: "Class",
 						subclassName: subclass?.name,
 						subclassShortName: opt.subclassShortName || subclass?.shortName,
-						featureType: "Class",
+						subclassSource: opt.subclassSource || subclass?.source,
 						isSubclassFeature: true,
 						isFeatureOption: true,
 						parentFeature: optGroup.featureName,
-					});
+					}));
 				} else if (opt.type === "optionalfeature" && opt.ref) {
 					const allOptFeats = this._page.getOptionalFeatures();
 					const fullOpt = allOptFeats.find(f => f.name === opt.name);
-					this._state.addFeature({
-						name: opt.name,
-						source: opt.source || fullOpt?.source,
-						level: analysis.classLevel,
-						className: analysis.className,
-						classSource: analysis.classSource,
-						featureType: "Optional Feature",
-						entries: fullOpt?.entries,
-						description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
-						isFeatureOption: true,
-						parentFeature: optGroup.featureName,
-					});
+					this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(
+						{
+							...(fullOpt || {}),
+							...opt,
+							entries: fullOpt?.entries ?? opt.entries,
+						},
+						{
+							className: analysis.className,
+							classSource: analysis.classSource,
+							level: analysis.classLevel,
+							featureType: "Optional Feature",
+							isFeatureOption: true,
+							parentFeature: optGroup.featureName,
+						},
+					));
 				}
 			});
 		});
@@ -4014,6 +4038,7 @@ class CharacterSheetQuickBuild {
 
 		// Optional features
 		const optFeatures = [];
+		const optFeatureReplay = [];
 		analysis.optionalFeatureGains.forEach(gain => {
 			const key = gain.featureTypes.join("_");
 			const startIdx = this._getOptionalFeatureStartIndex(key, analysis);
@@ -4021,20 +4046,36 @@ class CharacterSheetQuickBuild {
 			const assigned = allSelected.slice(startIdx, startIdx + gain.newCount);
 			assigned.forEach(opt => {
 				optFeatures.push({name: opt.name, source: opt.source, type: key});
+				optFeatureReplay.push(CharacterSheetClassUtils.buildHistoryFeatureSnapshot(opt, {
+					type: key,
+				}));
 			});
 		});
-		if (optFeatures.length > 0) entry.choices.optionalFeatures = optFeatures;
+		if (optFeatures.length > 0) {
+			entry.choices.optionalFeatures = optFeatures;
+			entry.choices.replayData = entry.choices.replayData || {};
+			entry.choices.replayData.optionalFeatures = optFeatureReplay;
+		}
 
 		// Feature options
 		const featureChoices = [];
+		const featureChoiceReplay = [];
 		analysis.featureOptions.forEach(optGroup => {
 			const selKey = `${analysis.className}_${analysis.classLevel}_${optGroup.featureName}`;
 			const selected = this._selections.featureOptions[selKey] || [];
 			selected.forEach(opt => {
 				featureChoices.push({featureName: optGroup.featureName, choice: opt.name, source: opt.source});
+				featureChoiceReplay.push(CharacterSheetClassUtils.buildHistoryFeatureSnapshot(opt, {
+					type: opt.type || "featureOption",
+					parentFeature: optGroup.featureName,
+				}));
 			});
 		});
-		if (featureChoices.length > 0) entry.choices.featureChoices = featureChoices;
+		if (featureChoices.length > 0) {
+			entry.choices.featureChoices = featureChoices;
+			entry.choices.replayData = entry.choices.replayData || {};
+			entry.choices.replayData.featureChoices = featureChoiceReplay;
+		}
 
 		// Expertise
 		analysis.expertiseGrants.forEach(grant => {

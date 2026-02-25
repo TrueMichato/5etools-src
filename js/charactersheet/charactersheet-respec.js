@@ -204,6 +204,33 @@ class CharacterSheetRespec {
 				`);
 			}
 
+			// Combat traditions
+			if (history.choices.combatTraditions?.length > 0) {
+				const traditionsText = history.choices.combatTraditions.slice(0, 3).join(", ");
+				const more = history.choices.combatTraditions.length > 3 ? ` +${history.choices.combatTraditions.length - 3} more` : "";
+				$choices.append(`
+					<span class="charsheet__level-choice charsheet__level-choice--feature">
+						<span class="charsheet__level-choice-icon">⚔️</span>
+						Traditions: ${traditionsText}${more}
+					</span>
+				`);
+			}
+
+			// Weapon masteries
+			if (history.choices.weaponMasteries?.length > 0) {
+				const masteryText = history.choices.weaponMasteries
+					.map(m => m.split("|")[0])
+					.slice(0, 2)
+					.join(", ");
+				const more = history.choices.weaponMasteries.length > 2 ? ` +${history.choices.weaponMasteries.length - 2} more` : "";
+				$choices.append(`
+					<span class="charsheet__level-choice charsheet__level-choice--feature">
+						<span class="charsheet__level-choice-icon">🗡️</span>
+						Masteries: ${masteryText}${more}
+					</span>
+				`);
+			}
+
 			// Language choices
 			if (history.choices.languages?.length > 0) {
 				const langText = history.choices.languages.map(l => l.language).join(", ");
@@ -321,6 +348,22 @@ class CharacterSheetRespec {
 			});
 		}
 
+		if (history.choices?.combatTraditions?.length > 0) {
+			editable.push({
+				type: "combatTraditions",
+				label: "Combat Traditions",
+				current: history.choices.combatTraditions.join(", "),
+			});
+		}
+
+		if (history.choices?.weaponMasteries?.length > 0) {
+			editable.push({
+				type: "weaponMasteries",
+				label: "Weapon Masteries",
+				current: history.choices.weaponMasteries.map(m => m.split("|")[0]).join(", "),
+			});
+		}
+
 		// Note: Skills and other level 1 choices are typically not editable
 		// as they would require extensive recalculation
 
@@ -398,9 +441,220 @@ class CharacterSheetRespec {
 			case "subclass":
 				await this._editSubclass(level, history, closeParentModal);
 				break;
+			case "combatTraditions":
+				await this._editCombatTraditions(level, history, closeParentModal);
+				break;
+			case "weaponMasteries":
+				await this._editWeaponMasteries(level, history, closeParentModal);
+				break;
 			default:
 				JqueryUtil.doToast({type: "warning", content: "Editing this choice type is not yet implemented."});
 		}
+	}
+
+	async _editCombatTraditions (level, history, closeParentModal) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `Change Level ${level} Combat Traditions`,
+			isMinHeight0: true,
+			isWidth100: true,
+			isUncappedWidth: true,
+			cbClose: () => {},
+		});
+
+		const classData = this._page.getClasses()?.find(c => c.name === history.class?.name && c.source === history.class?.source);
+		let allTraditions = CharacterSheetClassUtils.getAvailableTraditionsForClass(
+			this._page.getOptionalFeatures() || [],
+			[],
+			classData?.name || history.class?.name,
+			this._page.getClassFeatures() || [],
+		);
+		if (!allTraditions.length && history.choices?.combatTraditions?.length) {
+			allTraditions = history.choices.combatTraditions.map(code => ({
+				code,
+				name: CharacterSheetClassUtils.getTraditionName(code),
+			}));
+		}
+
+		const classFeatures = this._page.getClassFeatures() || [];
+		const maxTraditions = CharacterSheetClassUtils.getCombatTraditionSelectionCount({
+			classData,
+			classFeatures,
+			defaultCount: Math.max(1, history.choices?.combatTraditions?.length || 2),
+		});
+		const requiredTraditions = Math.min(maxTraditions, allTraditions.length || maxTraditions);
+
+		let selectedTraditions = [...(history.choices?.combatTraditions || [])];
+
+		$modalInner.append(`
+			<p class="ve-muted mb-2">Choose up to ${requiredTraditions} traditions for this level history entry.</p>
+			<div class="ve-small ve-muted mb-2">Selected: <span id="respec-tradition-count">${selectedTraditions.length}</span>/${requiredTraditions}</div>
+		`);
+
+		const $list = $(`<div style="display:flex; flex-wrap:wrap; gap:8px;"></div>`).appendTo($modalInner);
+		allTraditions.forEach(trad => {
+			const isSelected = selectedTraditions.includes(trad.code);
+			const $label = $(`
+				<label style="display:flex; align-items:center; cursor:pointer; padding:4px 8px; border:1px solid var(--rgb-border-grey); border-radius:4px; ${isSelected ? "background: var(--rgb-bg-highlight);" : ""}">
+					<input type="checkbox" value="${trad.code}" ${isSelected ? "checked" : ""} style="margin-right:6px;">
+					<span>${trad.name}</span>
+					<span class="ve-small text-muted ml-1">(${trad.code})</span>
+				</label>
+			`);
+
+			$label.find("input").on("change", (evt) => {
+				if (evt.target.checked) {
+					if (selectedTraditions.length < requiredTraditions) {
+						selectedTraditions.push(trad.code);
+						$label.css("background", "var(--rgb-bg-highlight)");
+					} else {
+						evt.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${requiredTraditions} combat traditions.`});
+					}
+				} else {
+					selectedTraditions = selectedTraditions.filter(t => t !== trad.code);
+					$label.css("background", "");
+				}
+				$("#respec-tradition-count").text(selectedTraditions.length);
+			});
+
+			$list.append($label);
+		});
+
+		$$`<div class="ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default mr-2">Cancel</button>
+			<button class="ve-btn ve-btn-primary">Apply Changes</button>
+		</div>`.appendTo($modalInner)
+			.find("button")
+			.eq(0)
+			.on("click", () => doClose());
+
+		$modalInner.find(".ve-btn-primary").on("click", async () => {
+			if (selectedTraditions.length !== requiredTraditions) {
+				JqueryUtil.doToast({type: "warning", content: `Please select exactly ${requiredTraditions} traditions.`});
+				return;
+			}
+
+			const didUpdate = this._state.updateLevelChoice(level, {combatTraditions: [...selectedTraditions]});
+			if (!didUpdate) {
+				JqueryUtil.doToast({type: "danger", content: "Failed to update level history entry."});
+				return;
+			}
+			this._page.replayHistoryMartialChoices();
+
+			doClose();
+			closeParentModal();
+			this.render();
+			this._page.renderCharacter();
+			await this._page.saveCharacter();
+			JqueryUtil.doToast({type: "success", content: `Updated level ${level} combat traditions.`});
+		});
+	}
+
+	async _editWeaponMasteries (level, history, closeParentModal) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `Change Level ${level} Weapon Masteries`,
+			isMinHeight0: true,
+			isWidth100: true,
+			isUncappedWidth: true,
+			cbClose: () => {},
+		});
+
+		const globalMaxMasteries = Math.max(1, this._page.getMaxWeaponMasteries?.() || 1);
+		const requiredMasteries = Math.max(
+			1,
+			history.choices?.weaponMasteries?.length || Math.min(globalMaxMasteries, this._state.getWeaponMasteries().length || 1),
+		);
+		let selectedMasteries = [...(history.choices?.weaponMasteries || [])];
+
+		$modalInner.append(`
+			<p class="ve-muted mb-2">Choose up to ${requiredMasteries} weapon masteries for this level history entry.</p>
+			<div class="ve-small ve-muted mb-2">Selected: <span id="respec-mastery-count">${selectedMasteries.length}</span>/${requiredMasteries}</div>
+		`);
+
+		const weaponsWithMastery = (this._page.getItems() || []).filter(item => {
+			if (!item._isBaseItem) return false;
+			if (!item.weaponCategory && !["M", "R", "S"].includes(item.type)) return false;
+			return item.mastery?.length > 0;
+		});
+
+		const simpleWeapons = weaponsWithMastery
+			.filter(w => w.weaponCategory === "simple" || w.type === "S")
+			.sort((a, b) => a.name.localeCompare(b.name));
+
+		const martialWeapons = weaponsWithMastery
+			.filter(w => w.weaponCategory === "martial" || w.type === "M")
+			.sort((a, b) => a.name.localeCompare(b.name));
+
+		const renderWeaponGroup = (weapons, groupName) => {
+			if (!weapons.length) return;
+
+			const $group = $(`<div class="mb-3"><strong>${groupName}:</strong></div>`);
+			const $checkboxes = $(`<div style="display:flex; flex-wrap:wrap; gap:8px;"></div>`);
+
+			weapons.forEach(weapon => {
+				const weaponKey = `${weapon.name}|${weapon.source}`;
+				const isSelected = selectedMasteries.includes(weaponKey);
+				const $label = $(`
+					<label style="display:flex; align-items:center; cursor:pointer; padding:4px 8px; border:1px solid var(--rgb-border-grey); border-radius:4px; ${isSelected ? "background: var(--rgb-bg-highlight);" : ""}">
+						<input type="checkbox" value="${weaponKey}" ${isSelected ? "checked" : ""} style="margin-right:6px;">
+						<span>${weapon.name}</span>
+					</label>
+				`);
+
+				$label.find("input").on("change", (evt) => {
+					if (evt.target.checked) {
+						if (selectedMasteries.length < requiredMasteries) {
+							selectedMasteries.push(weaponKey);
+							$label.css("background", "var(--rgb-bg-highlight)");
+						} else {
+							evt.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${requiredMasteries} weapon masteries.`});
+						}
+					} else {
+						selectedMasteries = selectedMasteries.filter(m => m !== weaponKey);
+						$label.css("background", "");
+					}
+					$("#respec-mastery-count").text(selectedMasteries.length);
+				});
+
+				$checkboxes.append($label);
+			});
+
+			$group.append($checkboxes);
+			$modalInner.append($group);
+		};
+
+		renderWeaponGroup(simpleWeapons, "Simple Weapons");
+		renderWeaponGroup(martialWeapons, "Martial Weapons");
+
+		$$`<div class="ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default mr-2">Cancel</button>
+			<button class="ve-btn ve-btn-primary">Apply Changes</button>
+		</div>`.appendTo($modalInner)
+			.find("button")
+			.eq(0)
+			.on("click", () => doClose());
+
+		$modalInner.find(".ve-btn-primary").on("click", async () => {
+			if (selectedMasteries.length !== requiredMasteries) {
+				JqueryUtil.doToast({type: "warning", content: `Please select exactly ${requiredMasteries} weapon masteries.`});
+				return;
+			}
+
+			const didUpdate = this._state.updateLevelChoice(level, {weaponMasteries: [...selectedMasteries]});
+			if (!didUpdate) {
+				JqueryUtil.doToast({type: "danger", content: "Failed to update level history entry."});
+				return;
+			}
+			this._page.replayHistoryMartialChoices();
+
+			doClose();
+			closeParentModal();
+			this.render();
+			this._page.renderCharacter();
+			await this._page.saveCharacter();
+			JqueryUtil.doToast({type: "success", content: `Updated level ${level} weapon masteries.`});
+		});
 	}
 
 	/**

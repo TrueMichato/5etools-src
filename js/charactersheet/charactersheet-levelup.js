@@ -114,6 +114,7 @@ class CharacterSheetLevelUp {
 		let hpMethod = "average";
 		let currentFeatures = newFeatures;
 		let selectedOptionalFeatures = {};
+		let selectedCombatTraditions = null;
 		let selectedFeatureOptions = {};
 		let featureOptionGroups = [];
 		this._selectedFeatureSkillChoices = {};
@@ -443,8 +444,9 @@ class CharacterSheetLevelUp {
 		if (optionalFeatureGains.length) {
 			$summaryItems.append(createSummaryItem("optfeatures", "✨", "Class Options", {required: true}));
 
-			const $optContent = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features) => {
+			const $optContent = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features, meta = null) => {
 				selectedOptionalFeatures[featureType] = features;
+				if (meta?.combatTraditions?.length) selectedCombatTraditions = [...meta.combatTraditions];
 				updateOptFeaturesStatus();
 			}, newLevel);
 
@@ -836,6 +838,7 @@ class CharacterSheetLevelUp {
 				selectedFeat,
 				selectedSubclass,
 				selectedOptionalFeatures,
+				selectedCombatTraditions,
 				selectedFeatureOptions,
 				selectedExpertise,
 				selectedLanguages,
@@ -2022,13 +2025,17 @@ class CharacterSheetLevelUp {
 
 		// Track selected traditions during this level-up (for characters without traditions)
 		let tempSelectedTraditions = [...knownTraditions];
+		const classFeatures = this._page.getClassFeatures();
+		const traditionCount = CharacterSheetClassUtils.getCombatTraditionSelectionCount({
+			classData,
+			classFeatures,
+		});
 
 		// If no traditions set, allow selecting them now (retroactive fix)
-		if (knownTraditions.length === 0) {
+		if (knownTraditions.length < traditionCount) {
 			// Filter traditions to only those the class has access to
 			const classAllowedTypes = gain.featureTypes || [];
-			const availableTraditions = CharacterSheetClassUtils.getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, classData?.name);
-			const traditionCount = 2; // Default tradition count
+			const availableTraditions = CharacterSheetClassUtils.getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, classData?.name, classFeatures);
 
 			const $section = $(`
 				<div class="charsheet__levelup-opt-gain mb-3">
@@ -2058,8 +2065,6 @@ class CharacterSheetLevelUp {
 					if (e.target.checked) {
 						if (tempSelectedTraditions.length < traditionCount) {
 							tempSelectedTraditions.push(trad.code);
-							// Save to state immediately
-							this._state.setCombatTraditions([...tempSelectedTraditions]);
 						} else {
 							e.target.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only choose ${traditionCount} traditions.`});
@@ -2067,9 +2072,9 @@ class CharacterSheetLevelUp {
 						}
 					} else {
 						tempSelectedTraditions = tempSelectedTraditions.filter(t => t !== trad.code);
-						this._state.setCombatTraditions([...tempSelectedTraditions]);
 					}
 					$section.find(".tradition-count").text(tempSelectedTraditions.length);
+					onSelect(featureKey, [...selectedForType], {combatTraditions: [...tempSelectedTraditions]});
 					// Re-render methods when traditions change
 					this._renderMethodsForLevelUp($methodsContainer, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, tempSelectedTraditions, maxDegree, selectedForType);
 				});
@@ -2200,7 +2205,7 @@ class CharacterSheetLevelUp {
 						$item.css("background", "");
 					}
 					$gainSection.find(".opt-count").text(selectedForType.length);
-					onSelect(featureKey, [...selectedForType]);
+					onSelect(featureKey, [...selectedForType], {combatTraditions: [...knownTraditions]});
 				});
 
 				$tradGroup.append($item);
@@ -2381,68 +2386,7 @@ class CharacterSheetLevelUp {
 	 * @returns {Object|null} - { type: "proficiency"|"expertise"|"bonus", count: number, from: "any_proficient"|string[] }
 	 */
 	_parseFeatureSkillChoice (opt) {
-		if (opt.type !== "classFeature" || !opt.ref) return null;
-
-		const parts = opt.ref.split("|");
-		const classFeatures = this._page.getClassFeatures();
-		const fullOpt = classFeatures.find(f =>
-			f.name === parts[0] && f.className === parts[1] && f.source === parts[2],
-		);
-		if (!fullOpt?.entries) return null;
-
-		const text = JSON.stringify(fullOpt.entries);
-
-		if (text.includes("You gain proficiency in one of the following")) {
-			const skills = this._extractSkillListFromText(text);
-			return {type: "proficiency", count: 1, from: skills.length ? skills : "any_proficient"};
-		}
-		if (text.includes("bonus equal to your proficiency bonus on checks made with one of")) {
-			const skills = this._extractSkillListFromText(text);
-			return {type: "bonus", count: 1, from: skills.length ? skills : "any_proficient"};
-		}
-		if (text.includes("Choose one skill you are proficient in")) {
-			return {type: "bonus", count: 1, from: "any_proficient"};
-		}
-		if (/Choose two (more )?of your skill proficiencies/.test(text)) {
-			return {type: "expertise", count: 2, from: "any_proficient"};
-		}
-		if (text.includes("Choose one of the following skills in which you have proficiency")) {
-			const skills = this._extractSkillListFromText(text);
-			return {type: "expertise", count: 1, from: skills.length ? skills : "any_proficient"};
-		}
-		if (text.includes("Choose one skill proficiency") && text.includes("Expertise")) {
-			return {type: "expertise", count: 1, from: "any_proficient"};
-		}
-		if (text.includes("Choose two skill proficiencies") && text.includes("Expertise")) {
-			return {type: "expertise", count: 2, from: "any_proficient"};
-		}
-
-		return null;
-	}
-
-	/** Extract skill names from feature text */
-	_extractSkillListFromText (text) {
-		const allSkills = [
-			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
-			"History", "Insight", "Intimidation", "Investigation", "Medicine",
-			"Nature", "Perception", "Performance", "Persuasion", "Religion",
-			"Sleight of Hand", "Stealth", "Survival",
-		];
-
-		const found = [];
-		const tagMatches = text.matchAll(/\{@skill\s+([^}]+)\}/gi);
-		for (const m of tagMatches) {
-			const skillName = m[1].trim();
-			if (allSkills.some(s => s.toLowerCase() === skillName.toLowerCase())) {
-				found.push(skillName.toTitleCase());
-			}
-		}
-		if (found.length) return [...new Set(found)];
-
-		for (const skill of allSkills) {
-			if (text.includes(skill)) found.push(skill);
-		}
-		return [...new Set(found)];
+		return CharacterSheetClassUtils.parseFeatureSkillChoice(opt, this._page.getClassFeatures());
 	}
 
 	/**
@@ -2452,80 +2396,7 @@ class CharacterSheetLevelUp {
 	 * @returns {Array} Array of effect objects: [{type, value, note}]
 	 */
 	_parseFeatureAutoEffects (opt) {
-		if (opt.type !== "classFeature" || !opt.ref) return [];
-
-		const parts = opt.ref.split("|");
-		const classFeatures = this._page.getClassFeatures();
-		const fullOpt = classFeatures.find(f =>
-			f.name === parts[0] && f.className === parts[1] && f.source === parts[2],
-		);
-		if (!fullOpt?.entries) return [];
-
-		const text = JSON.stringify(fullOpt.entries);
-		const effects = [];
-
-		// Pattern: "passive [Ability] ({@skill SkillName}) score increases by X"
-		// e.g., "your passive Wisdom ({@skill Perception}) score increases by 3"
-		const passiveIncreaseMatch = text.match(/passive\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*(?:score\s+)?increases?\s+by\s+(\d+)/i);
-		if (passiveIncreaseMatch) {
-			const skill = passiveIncreaseMatch[1].toLowerCase().replace(/\s+/g, "");
-			const value = parseInt(passiveIncreaseMatch[2]);
-			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveIncreaseMatch[1]}`});
-		}
-
-		// Pattern: "bonus to [Ability] ({@skill SkillName}) checks equal to your proficiency bonus"
-		// e.g., "You gain a bonus to Wisdom ({@skill Perception}) checks equal to your proficiency bonus"
-		const skillBonusProfMatch = text.match(/bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?\s+equal\s+to\s+(?:your\s+)?proficiency\s+bonus/i);
-		if (skillBonusProfMatch) {
-			const skill = skillBonusProfMatch[1].toLowerCase().replace(/\s+/g, "");
-			effects.push({type: `skill:${skill}`, value: "proficiency", note: `+PB to ${skillBonusProfMatch[1]} checks`});
-		}
-
-		// Pattern: "gain a +X bonus to [Ability] ({@skill SkillName}) checks"
-		const skillBonusFixedMatch = text.match(/gain\s+a?\s*\+?(\d+)\s*bonus\s+to\s+\w+\s*\(\{@skill\s+([^}]+)\}\)\s*checks?/i);
-		if (skillBonusFixedMatch) {
-			const value = parseInt(skillBonusFixedMatch[1]);
-			const skill = skillBonusFixedMatch[2].toLowerCase().replace(/\s+/g, "");
-			effects.push({type: `skill:${skill}`, value, note: `+${value} to ${skillBonusFixedMatch[2]} checks`});
-		}
-
-		// Pattern: "Speed increases by X feet" or "your speed increases by X"
-		const speedIncreaseMatch = text.match(/(?:your\s+)?speed\s+increases?\s+by\s+(\d+)\s*(?:feet|ft)?/i);
-		if (speedIncreaseMatch) {
-			const value = parseInt(speedIncreaseMatch[1]);
-			effects.push({type: "speed", value, note: `+${value} ft. speed`});
-		}
-
-		// Pattern: "+X to passive {@skill SkillName}" or "passive {@skill SkillName} +X"
-		const passiveSimpleMatch = text.match(/\+(\d+)\s*(?:bonus\s+)?(?:to\s+)?(?:your\s+)?passive\s+\{@skill\s+([^}]+)\}/i);
-		if (passiveSimpleMatch) {
-			const value = parseInt(passiveSimpleMatch[1]);
-			const skill = passiveSimpleMatch[2].toLowerCase().replace(/\s+/g, "");
-			effects.push({type: `passive:${skill}`, value, note: `+${value} passive ${passiveSimpleMatch[2]}`});
-		}
-
-		// Pattern: "darkvision increases by X feet" or "gain darkvision out to X feet"
-		const darkvisionIncreaseMatch = text.match(/darkvision\s+(?:increases?\s+by|out\s+to)\s+(\d+)\s*(?:feet|ft)?/i);
-		if (darkvisionIncreaseMatch) {
-			const value = parseInt(darkvisionIncreaseMatch[1]);
-			effects.push({type: "sense:darkvision", value, note: `Darkvision ${value} ft.`});
-		}
-
-		// Pattern: "AC increases by X" or "+X to AC"
-		const acMatch = text.match(/(?:AC|armor\s+class)\s+increases?\s+by\s+(\d+)|\+(\d+)\s+(?:to\s+)?(?:AC|armor\s+class)/i);
-		if (acMatch) {
-			const value = parseInt(acMatch[1] || acMatch[2]);
-			effects.push({type: "ac", value, note: `+${value} AC`});
-		}
-
-		// Pattern: "+X to initiative" or "initiative bonus of +X"
-		const initMatch = text.match(/\+(\d+)\s+(?:to\s+)?initiative|initiative\s+(?:bonus\s+(?:of\s+)?|increases?\s+by\s+)\+?(\d+)/i);
-		if (initMatch) {
-			const value = parseInt(initMatch[1] || initMatch[2]);
-			effects.push({type: "initiative", value, note: `+${value} initiative`});
-		}
-
-		return effects;
+		return CharacterSheetClassUtils.parseFeatureAutoEffects(opt, this._page.getClassFeatures());
 	}
 
 	/**
@@ -2976,7 +2847,9 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, newFeatures, hpMethod, classData}) {
+		const prevCombatTraditions = this._state.getCombatTraditions?.() || [];
+		const prevWeaponMasteries = this._state.getWeaponMasteries?.() || [];
 
 		// If a subclass was just selected, re-compute features to include actual subclass features
 		if (selectedSubclass) {
@@ -3082,6 +2955,10 @@ class CharacterSheetLevelUp {
 			}
 		}
 
+		if (selectedCombatTraditions?.length) {
+			this._state.setCombatTraditions([...selectedCombatTraditions]);
+		}
+
 		// Apply selected optional features (invocations, metamagic, maneuvers, etc.)
 		if (selectedOptionalFeatures) {
 			Object.entries(selectedOptionalFeatures).forEach(([featureKey, opts]) => {
@@ -3092,18 +2969,13 @@ class CharacterSheetLevelUp {
 					// This preserves the full type info including tradition codes
 					const originalTypes = opt.featureType || featureTypes;
 
-					const featureData = {
-						name: opt.name,
-						source: opt.source,
+					this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(opt, {
 						className: classEntry.name,
 						classSource: classEntry.source,
 						level: newLevel,
 						featureType: "Optional Feature",
-						optionalFeatureTypes: originalTypes, // Store original types for proper grouping
-						description: opt.entries ? Renderer.get().render({entries: opt.entries}) : "",
-						entries: opt.entries,
-					};
-					this._state.addFeature(featureData);
+						optionalFeatureTypes: originalTypes,
+					}));
 				});
 			});
 		}
@@ -3111,6 +2983,9 @@ class CharacterSheetLevelUp {
 		// Apply selected feature options (specialties, etc. - features with embedded options)
 		if (selectedFeatureOptions) {
 			const classFeatures = this._page.getClassFeatures();
+			const allOptFeatures = this._page.getOptionalFeatures();
+			const subclassFeatures = this._page.getSubclassFeatures() || [];
+			const currentSubclass = this._state.getClasses().find(c => c.name === classEntry.name)?.subclass;
 			Object.entries(selectedFeatureOptions).forEach(([featureKey, options]) => {
 				options.forEach(opt => {
 					if (opt.type === "classFeature" && opt.ref) {
@@ -3122,18 +2997,21 @@ class CharacterSheetLevelUp {
 							&& f.source === parts[2],
 						);
 
-						this._state.addFeature({
-							name: opt.name,
-							source: opt.source || fullOpt?.source || classEntry.source,
-							level: opt.level || newLevel,
-							className: opt.className || classEntry.name,
-							classSource: classEntry.source,
-							featureType: "Class",
-							entries: fullOpt?.entries,
-							description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
-							isFeatureOption: true,
-							parentFeature: featureKey.split("_")[0],
-						});
+						this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(
+							{
+								...(fullOpt || {}),
+								...opt,
+								entries: fullOpt?.entries ?? opt.entries,
+							},
+							{
+								className: opt.className || classEntry.name,
+								classSource: classEntry.source,
+								level: opt.level || newLevel,
+								featureType: "Class",
+								isFeatureOption: true,
+								parentFeature: featureKey.split("_")[0],
+							},
+						));
 
 						// Apply any skill sub-choices for this specialty
 						const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
@@ -3172,47 +3050,49 @@ class CharacterSheetLevelUp {
 							});
 						});
 					} else if (opt.type === "subclassFeature" && opt.ref) {
-						const currentSubclass = this._state.getClasses().find(c => c.name === classEntry.name)?.subclass;
-						// Look up full subclass feature data for description
-						const subclassFeatures = this._page.getSubclassFeatures() || [];
 						const fullSubFeature = subclassFeatures.find(f =>
 							f.name === opt.name
 							&& (f.subclassShortName === currentSubclass?.shortName || f.subclassShortName === opt.subclassShortName),
 						);
-						this._state.addFeature({
-							name: opt.name,
-							source: opt.subclassSource || currentSubclass?.source || classEntry.source,
-							level: opt.level || newLevel,
-							className: opt.className || classEntry.name,
-							classSource: classEntry.source,
-							subclassName: currentSubclass?.name,
-							subclassShortName: opt.subclassShortName || currentSubclass?.shortName,
-							subclassSource: opt.subclassSource || currentSubclass?.source,
-							featureType: "Class",
-							isSubclassFeature: true,
-							isFeatureOption: true,
-							parentFeature: featureKey.split("_")[0],
-							entries: fullSubFeature?.entries,
-							description: fullSubFeature?.entries ? Renderer.get().render({entries: fullSubFeature.entries}) : "",
-						});
+						this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(
+							{
+								...(fullSubFeature || {}),
+								...opt,
+								entries: fullSubFeature?.entries ?? opt.entries,
+							},
+							{
+								className: opt.className || classEntry.name,
+								classSource: classEntry.source,
+								level: opt.level || newLevel,
+								featureType: "Class",
+								subclassName: currentSubclass?.name,
+								subclassShortName: opt.subclassShortName || currentSubclass?.shortName,
+								subclassSource: opt.subclassSource || currentSubclass?.source,
+								isSubclassFeature: true,
+								isFeatureOption: true,
+								parentFeature: featureKey.split("_")[0],
+							},
+						));
 					} else if (opt.type === "optionalfeature" && opt.ref) {
-						const allOptFeatures = this._page.getOptionalFeatures();
 						const fullOpt = allOptFeatures.find(f =>
 							f.name === opt.name
 							&& (f.source === opt.source || !opt.source),
 						);
-						this._state.addFeature({
-							name: opt.name,
-							source: opt.source || fullOpt?.source,
-							level: newLevel,
-							className: classEntry.name,
-							classSource: classEntry.source,
-							featureType: "Optional Feature",
-							entries: fullOpt?.entries,
-							description: fullOpt?.entries ? Renderer.get().render({entries: fullOpt.entries}) : "",
-							isFeatureOption: true,
-							parentFeature: featureKey.split("_")[0],
-						});
+						this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(
+							{
+								...(fullOpt || {}),
+								...opt,
+								entries: fullOpt?.entries ?? opt.entries,
+							},
+							{
+								className: classEntry.name,
+								classSource: classEntry.source,
+								level: newLevel,
+								featureType: "Optional Feature",
+								isFeatureOption: true,
+								parentFeature: featureKey.split("_")[0],
+							},
+						));
 					}
 				});
 			});
@@ -3307,37 +3187,21 @@ class CharacterSheetLevelUp {
 			.filter(f => f.className === classEntry.name && !f.subclassName && !f.isSubclassFeature)
 			.map(f => f.name.toLowerCase());
 
-		const featuresToAdd = newFeatures.filter(f => {
-			if (f.gainSubclassFeature) return false;
-			// Filter out ASI features since we handle them in the UI
-			const nameLower = f.name.toLowerCase();
-			if (asiFeatureNames.some(asi => nameLower.includes(asi))) return false;
-			// Filter out duplicate non-subclass features (e.g., "Metamagic" at level 3 and 10)
-			// But always include subclass features
-			if (!f.isSubclassFeature && !f.subclassName && existingClassFeatureNames.includes(nameLower)) return false;
-			return true;
-		});
-		featuresToAdd.forEach(feature => {
-			// Render description from entries if not already rendered
-			let description = feature.description;
-			if (!description && feature.entries) {
-				description = Renderer.get().render({entries: feature.entries});
-			}
-
-			const featureData = {
-				name: feature.name,
-				source: feature.source || classData.source,
-				className: feature.className || classEntry.name,
-				classSource: feature.classSource || classData.source,
-				level: feature.level || newLevel,
-				subclassName: feature.subclassName,
-				subclassShortName: feature.subclassShortName,
-				subclassSource: feature.subclassSource,
-				featureType: "Class",
-				description: description || "",
-			};
-			this._state.addFeature(featureData);
-		});
+		CharacterSheetClassUtils.dedupAndBuildFeatures(
+			newFeatures.filter(f => {
+				if (f.gainSubclassFeature) return false;
+				const nameLower = f.name.toLowerCase();
+				if (asiFeatureNames.some(asi => nameLower.includes(asi))) return false;
+				if (!f.isSubclassFeature && !f.subclassName && existingClassFeatureNames.includes(nameLower)) return false;
+				return true;
+			}),
+			existingClassFeatureNames,
+			{
+				className: classEntry.name,
+				classSource: classData.source,
+				level: newLevel,
+			},
+		).forEach(feature => this._state.addFeature(feature));
 
 		// Update hit dice
 		CharacterSheetClassUtils.updateHitDice(this._state, classData);
@@ -3397,6 +3261,7 @@ class CharacterSheetLevelUp {
 		// Record optional features (invocations, metamagic, etc.)
 		if (selectedOptionalFeatures && Object.keys(selectedOptionalFeatures).length > 0) {
 			const optFeatures = [];
+			const optFeatureReplay = [];
 			Object.entries(selectedOptionalFeatures).forEach(([key, opts]) => {
 				opts.forEach(opt => {
 					optFeatures.push({
@@ -3404,27 +3269,40 @@ class CharacterSheetLevelUp {
 						source: opt.source,
 						type: key, // e.g., "EI", "MM"
 					});
+					optFeatureReplay.push(CharacterSheetClassUtils.buildHistoryFeatureSnapshot(opt, {
+						type: key,
+					}));
 				});
 			});
 			if (optFeatures.length > 0) {
 				historyEntry.choices.optionalFeatures = optFeatures;
+				historyEntry.choices.replayData = historyEntry.choices.replayData || {};
+				historyEntry.choices.replayData.optionalFeatures = optFeatureReplay;
 			}
 		}
 
 		// Record feature options (fighting styles, specialties, etc.)
 		if (selectedFeatureOptions && Object.keys(selectedFeatureOptions).length > 0) {
 			const featureChoices = [];
+			const featureChoiceReplay = [];
 			Object.entries(selectedFeatureOptions).forEach(([featureName, options]) => {
+				const parentFeature = featureName.split("_")[0];
 				options.forEach(opt => {
 					featureChoices.push({
-						featureName: featureName.split("_")[0],
+						featureName: parentFeature,
 						choice: opt.name,
 						source: opt.source,
 					});
+					featureChoiceReplay.push(CharacterSheetClassUtils.buildHistoryFeatureSnapshot(opt, {
+						type: opt.type || "featureOption",
+						parentFeature,
+					}));
 				});
 			});
 			if (featureChoices.length > 0) {
 				historyEntry.choices.featureChoices = featureChoices;
+				historyEntry.choices.replayData = historyEntry.choices.replayData || {};
+				historyEntry.choices.replayData.featureChoices = featureChoiceReplay;
 			}
 		}
 
@@ -3467,6 +3345,16 @@ class CharacterSheetLevelUp {
 				source: spell.source,
 				level: spell.level,
 			}));
+		}
+
+		const nextCombatTraditions = this._state.getCombatTraditions?.() || [];
+		if (JSON.stringify(prevCombatTraditions) !== JSON.stringify(nextCombatTraditions)) {
+			historyEntry.choices.combatTraditions = [...nextCombatTraditions];
+		}
+
+		const nextWeaponMasteries = this._state.getWeaponMasteries?.() || [];
+		if (JSON.stringify(prevWeaponMasteries) !== JSON.stringify(nextWeaponMasteries)) {
+			historyEntry.choices.weaponMasteries = [...nextWeaponMasteries];
 		}
 
 		// Record the history entry
@@ -3936,42 +3824,24 @@ class CharacterSheetLevelUp {
 
 		// Add first level features
 		features.forEach(f => {
-			let description = f.description;
-			if (!description && f.entries) {
-				description = Renderer.get().render({entries: f.entries});
-			}
-
-			this._state.addFeature({
-				name: f.name,
-				source: f.source || selectedClass.source,
-				level: f.level || 1,
+			this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(f, {
 				className: f.className || selectedClass.name,
 				classSource: f.classSource || selectedClass.source,
-				subclassName: f.subclassName,
-				subclassShortName: f.subclassShortName,
-				subclassSource: f.subclassSource,
+				level: f.level || 1,
 				featureType: "Class",
-				description: description || "",
-			});
+			}));
 		});
 
 		// Add selected optional features (Fighting Style, etc.)
 		for (const [featureKey, optFeatures] of Object.entries(selectedOptionalFeatures)) {
 			for (const optFeat of optFeatures) {
-				const description = optFeat.entries
-					? Renderer.get().render({entries: optFeat.entries})
-					: "";
-
-				this._state.addFeature({
-					name: optFeat.name,
-					source: optFeat.source,
-					level: 1,
+				this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(optFeat, {
 					className: selectedClass.name,
 					classSource: selectedClass.source,
+					level: 1,
 					featureType: "Optional Feature",
 					optionalFeatureTypes: optFeat.featureType,
-					description,
-				});
+				}));
 			}
 		}
 
@@ -3979,20 +3849,14 @@ class CharacterSheetLevelUp {
 		for (const [featureKey, options] of Object.entries(selectedFeatureOptions)) {
 			const [featureName] = featureKey.split("_");
 			for (const option of options) {
-				const description = option.entries
-					? Renderer.get().render({entries: option.entries})
-					: option.description || "";
-
-				this._state.addFeature({
-					name: option.name || `${featureName} Option`,
-					source: option.source || selectedClass.source,
-					level: 1,
+				this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(option, {
 					className: selectedClass.name,
 					classSource: selectedClass.source,
+					level: 1,
 					featureType: "Class",
+					isFeatureOption: true,
 					parentFeature: featureName,
-					description,
-				});
+				}));
 
 				// Apply any skill sub-choices for this specialty
 				const choiceKey = `${featureKey}__${option.name}__${option.ref || ""}`;

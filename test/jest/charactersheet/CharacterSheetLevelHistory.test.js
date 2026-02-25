@@ -102,6 +102,44 @@ describe("CharacterSheetLevelHistory", () => {
 			expect(entry.choices.asi.wis).toBe(1);
 		});
 
+		it("should persist combat traditions and weapon masteries in history choices", () => {
+			state.recordLevelChoice({
+				level: 2,
+				class: {name: "Fighter", source: "TGTT"},
+				choices: {
+					combatTraditions: ["AM", "RC"],
+					weaponMasteries: ["Longsword|XPHB", "Spear|XPHB"],
+				},
+			});
+
+			const entry = state.getLevelHistoryEntry(2);
+			expect(entry.choices.combatTraditions).toEqual(["AM", "RC"]);
+			expect(entry.choices.weaponMasteries).toEqual(["Longsword|XPHB", "Spear|XPHB"]);
+		});
+
+		it("should persist additive replayData snapshots in choices", () => {
+			state.recordLevelChoice({
+				level: 3,
+				class: {name: "Warlock", source: "PHB"},
+				choices: {
+					optionalFeatures: [{name: "Devil's Sight", source: "PHB", type: "EI"}],
+					replayData: {
+						optionalFeatures: [{
+							name: "Devil's Sight",
+							source: "PHB",
+							type: "EI",
+							effects: [{type: "sense", target: "darkvision", value: 120}],
+						}],
+					},
+				},
+			});
+
+			const entry = state.getLevelHistoryEntry(3);
+			expect(entry.choices.replayData).toBeDefined();
+			expect(entry.choices.replayData.optionalFeatures).toHaveLength(1);
+			expect(entry.choices.replayData.optionalFeatures[0].name).toBe("Devil's Sight");
+		});
+
 		it("should return false when updating non-existent level", () => {
 			const updated = state.updateLevelChoice(10, {asi: {str: 2}});
 			expect(updated).toBe(false);
@@ -292,7 +330,16 @@ describe("CharacterSheetLevelHistory", () => {
 			state.recordLevelChoice({
 				level: 2,
 				class: {name: "Fighter", source: "PHB"},
-				choices: {},
+				choices: {
+					replayData: {
+						featureChoices: [{
+							name: "Specialty",
+							source: "TGTT",
+							type: "classFeature",
+							parentFeature: "Specialties",
+						}],
+					},
+				},
 				complete: true,
 			});
 
@@ -304,6 +351,8 @@ describe("CharacterSheetLevelHistory", () => {
 			expect(history.length).toBe(2);
 			expect(history[0].choices.skills).toEqual(["athletics", "perception"]);
 			expect(history[0].timestamp).toBe(12345);
+			expect(history[1].choices.replayData).toBeDefined();
+			expect(history[1].choices.replayData.featureChoices[0].parentFeature).toBe("Specialties");
 		});
 
 		it("should handle missing level history in old saves", () => {
