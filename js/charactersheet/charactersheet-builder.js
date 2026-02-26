@@ -34,6 +34,7 @@ class CharacterSheetBuilder {
 		this._selectedRacialTools = []; // For racial tool proficiency choices (e.g., Dwarf)
 		this._selectedRacialLanguages = []; // For racial language proficiency choices (TGTT races with choose/anyStandard)
 		this._selectedRacialAbilityChoices = {}; // For races with choose-based ASI (TGTT races)
+		this._selectedRacialSpells = []; // For racial spell choices (e.g., Child of the Empire cantrip)
 		this._useTashasRules = false; // For Tasha's Custom Origin rules - reassign racial ASI
 		this._tashasAbilityBonuses = {}; // Stores custom ASI when using Tasha's rules
 		this._customBackground = null; // Stores custom background object
@@ -992,8 +993,9 @@ class CharacterSheetBuilder {
 			// Handle choice objects like {"choose": "level=0|class=Wizard"}
 			if (typeof spellList === "object") {
 				if (spellList.choose) {
-					// This requires UI - store for later handling
-					// For now, skip choices - they'll need a picker UI
+					// User-selected spell from _selectedRacialSpells
+					// Find matching choice and use selected spell
+					this._applySelectedRacialSpells(sourceName, spellAbility);
 					return;
 				}
 				// Handle "_" key which contains an array
@@ -1005,9 +1007,47 @@ class CharacterSheetBuilder {
 		}
 
 		spellList.forEach(spellRef => {
+			if (typeof spellRef === "object" && spellRef.choose) {
+				// User-selected spell from _selectedRacialSpells
+				this._applySelectedRacialSpells(sourceName, spellAbility);
+				return;
+			}
 			const spellData = this._resolveSpellReference(spellRef, allSpells);
 			if (spellData) {
 				this._addRacialSpell(spellData, sourceName, isAlwaysPrepared);
+			}
+		});
+	}
+
+	/**
+	 * Apply user-selected racial spells from the builder UI
+	 */
+	_applySelectedRacialSpells (sourceName, spellAbility) {
+		if (!this._selectedRacialSpells?.length) return;
+
+		this._selectedRacialSpells.forEach(spell => {
+			if (!spell?.name) return;
+
+			// Add the spell as a known cantrip or spell
+			if (spell.level === 0) {
+				this._state.addCantrip({
+					name: spell.name,
+					source: spell.source,
+					level: 0,
+					isPermanent: true,
+					sourceFeature: sourceName,
+					castingAbility: spellAbility,
+				});
+			} else {
+				this._state.addSpell({
+					name: spell.name,
+					source: spell.source,
+					level: spell.level || 1,
+					isPermanent: true,
+					sourceFeature: sourceName,
+					castingAbility: spellAbility,
+					isKnown: true,
+				});
 			}
 		});
 	}
@@ -2023,6 +2063,7 @@ class CharacterSheetBuilder {
 					this._selectedRacialSkills = [];
 					this._selectedRacialTools = [];
 					this._selectedRacialLanguages = [];
+					this._selectedRacialSpells = [];
 
 					if (hasSubraces) {
 						// Show subrace selection in preview
@@ -2109,6 +2150,7 @@ class CharacterSheetBuilder {
 				this._selectedRacialSkills = [];
 				this._selectedRacialTools = [];
 				this._selectedRacialLanguages = [];
+				this._selectedRacialSpells = [];
 				this._renderSubraceDetails($detailsContainer, selectedSubrace, group.baseName);
 			} else {
 				this._selectedRace = null;
@@ -2117,6 +2159,7 @@ class CharacterSheetBuilder {
 				this._selectedRacialSkills = [];
 				this._selectedRacialTools = [];
 				this._selectedRacialLanguages = [];
+				this._selectedRacialSpells = [];
 				$detailsContainer.empty();
 			}
 		});
@@ -2216,6 +2259,12 @@ class CharacterSheetBuilder {
 		const $profChoices = this._renderRacialProficiencyChoices(race);
 		if ($profChoices) {
 			$details.append($profChoices);
+		}
+
+		// Racial spell choices (e.g., Child of the Empire cantrip)
+		const $spellChoices = this._renderRacialSpellChoices(race);
+		if ($spellChoices) {
+			$details.append($spellChoices);
 		}
 
 		$container.append($details);
@@ -2626,6 +2675,164 @@ class CharacterSheetBuilder {
 		return count;
 	}
 
+	/**
+	 * Extract racial spell choices from additionalSpells data
+	 * @param {Object} race - The race data
+	 * @returns {Array} Array of {filter, ability, count, featureName} objects
+	 */
+	_getRacialSpellChoices (race) {
+		const choices = [];
+		if (!race.additionalSpells?.length) return choices;
+
+		for (const spellBlock of race.additionalSpells) {
+			// Skip subrace-specific spell blocks if they don't match
+			if (spellBlock.name && race._subraceName && spellBlock.name.toLowerCase() !== race._subraceName.toLowerCase()) {
+				continue;
+			}
+
+			// Get spellcasting ability
+			let ability = null;
+			if (spellBlock.ability) {
+				if (typeof spellBlock.ability === "string") {
+					ability = spellBlock.ability;
+				} else if (spellBlock.ability.choose) {
+					ability = spellBlock.ability.choose; // Array of options
+				}
+			}
+
+			// Process "known" spells at character level 1
+			if (spellBlock.known?.["1"]) {
+				const spellsAtLevel = spellBlock.known["1"];
+				this._extractSpellChoices(spellsAtLevel, ability, race.name, choices);
+			}
+		}
+
+		return choices;
+	}
+
+	/**
+	 * Recursively extract spell choices from a spell list structure
+	 */
+	_extractSpellChoices (spellList, ability, sourceName, choices) {
+		if (!spellList) return;
+
+		if (typeof spellList === "object" && !Array.isArray(spellList)) {
+			// Handle "_" key
+			if (spellList._) {
+				this._extractSpellChoices(spellList._, ability, sourceName, choices);
+			}
+			// Handle "choose" specification
+			if (spellList.choose) {
+				choices.push({
+					filter: spellList.choose,
+					ability: ability,
+					count: 1,
+					featureName: sourceName,
+				});
+			}
+		} else if (Array.isArray(spellList)) {
+			spellList.forEach(item => {
+				if (typeof item === "object" && item.choose) {
+					choices.push({
+						filter: item.choose,
+						ability: item.ability || ability,
+						count: item.count || 1,
+						featureName: sourceName,
+					});
+				}
+			});
+		}
+	}
+
+	/**
+	 * Render UI for racial spell choices
+	 * @param {Object} race - The race data
+	 * @returns {jQuery|null} - jQuery element containing spell choices, or null if none
+	 */
+	_renderRacialSpellChoices (race) {
+		const choices = this._getRacialSpellChoices(race);
+		if (choices.length === 0) return null;
+
+		const $container = $(`<div class="charsheet__builder-racial-spells mt-3"></div>`);
+
+		choices.forEach((choice, choiceIdx) => {
+			const $section = this._renderRacialSpellChoice(choice, choiceIdx);
+			$container.append($section);
+		});
+
+		return $container;
+	}
+
+	/**
+	 * Render a single racial spell choice UI section
+	 */
+	_renderRacialSpellChoice (choice, choiceIdx) {
+		// Parse the filter to get a description
+		const filterParts = choice.filter.split("|");
+		const levelPart = filterParts.find(p => p.startsWith("level="));
+		const isCantrip = levelPart === "level=0";
+		const spellType = isCantrip ? "cantrip" : "spell";
+
+		// Get ability choice description
+		let abilityDesc = "";
+		if (Array.isArray(choice.ability)) {
+			abilityDesc = ` (${choice.ability.map(a => a.toUpperCase()).join(", ")} as spellcasting ability)`;
+		} else if (choice.ability) {
+			abilityDesc = ` (${choice.ability.toUpperCase()} as spellcasting ability)`;
+		}
+
+		const $section = $(`
+			<div class="charsheet__builder-racial-spell-selection mt-2">
+				<p><strong>Racial ${spellType.toTitleCase()}:</strong> Choose ${choice.count} ${spellType}${abilityDesc}</p>
+				<div class="charsheet__builder-spell-choice">
+					<button class="btn btn-sm btn-outline-primary charsheet__builder-spell-btn">
+						${this._selectedRacialSpells[choiceIdx] ? this._selectedRacialSpells[choiceIdx].name : `Select ${spellType}...`}
+					</button>
+					${this._selectedRacialSpells[choiceIdx] ? `<span class="ms-2 ve-muted">(${Parser.sourceJsonToAbv(this._selectedRacialSpells[choiceIdx].source)})</span>` : ""}
+				</div>
+			</div>
+		`);
+
+		const $btn = $section.find(".charsheet__builder-spell-btn");
+
+		$btn.on("click", async () => {
+			await this._showRacialSpellPicker(choice, choiceIdx, $btn, $section);
+		});
+
+		return $section;
+	}
+
+	/**
+	 * Show spell picker modal for racial spell choice
+	 */
+	async _showRacialSpellPicker (choice, choiceIdx, $btn, $section) {
+		if (!this._page._spells?.showFilteredSpellPicker) {
+			JqueryUtil.doToast({type: "warning", content: "Spell data not loaded yet. Please wait..."});
+			return;
+		}
+
+		const choiceObj = {
+			filter: choice.filter,
+			featureName: choice.featureName || "Racial Spell",
+		};
+
+		await this._page._spells.showFilteredSpellPicker(choiceObj, (spell) => {
+			// Store the selected spell
+			this._selectedRacialSpells[choiceIdx] = spell;
+
+			// Update the button text
+			$btn.text(spell.name);
+
+			// Add source indicator
+			const existingSource = $section.find(".ve-muted");
+			if (existingSource.length) {
+				existingSource.text(`(${Parser.sourceJsonToAbv(spell.source)})`);
+			} else {
+				$btn.after(`<span class="ms-2 ve-muted">(${Parser.sourceJsonToAbv(spell.source)})</span>`);
+			}
+		});
+	}
+
 	_renderRacePreview ($preview, race) {
 		$preview.empty();
 
@@ -2689,6 +2896,12 @@ class CharacterSheetBuilder {
 		const $profChoices = this._renderRacialProficiencyChoices(race);
 		if ($profChoices) {
 			$content.append($profChoices);
+		}
+
+		// Racial spell choices (e.g., Child of the Empire cantrip)
+		const $spellChoices = this._renderRacialSpellChoices(race);
+		if ($spellChoices) {
+			$content.append($spellChoices);
 		}
 
 		// Subraces

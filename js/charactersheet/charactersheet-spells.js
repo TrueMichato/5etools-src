@@ -3943,6 +3943,7 @@ class CharacterSheetSpells {
 			level: null,
 			schools: [],
 			classes: [],
+			exclude: [], // List of spell names to exclude (lowercase)
 		};
 
 		if (!filterString) return criteria;
@@ -3962,6 +3963,10 @@ class CharacterSheetSpells {
 					break;
 				case "class":
 					criteria.classes = value.split(";").map(c => c.trim().toLowerCase());
+					break;
+				case "exclude":
+					// Spell names to exclude, separated by ;
+					criteria.exclude = value.split(";").map(s => s.trim().toLowerCase());
 					break;
 			}
 		});
@@ -3988,6 +3993,12 @@ class CharacterSheetSpells {
 				const spellClasses = spell.classes?.fromClassList?.map(c => c.name.toLowerCase()) || [];
 				const hasMatchingClass = criteria.classes.some(cls => spellClasses.includes(cls));
 				if (!hasMatchingClass) return false;
+			}
+
+			// Exclusion filter - exclude specific spells by name
+			if (criteria.exclude?.length > 0) {
+				const spellNameLower = spell.name?.toLowerCase() || "";
+				if (criteria.exclude.includes(spellNameLower)) return false;
 			}
 
 			return true;

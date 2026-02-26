@@ -6041,7 +6041,7 @@ class CharacterSheetPage {
 		const STORAGE_KEY = "charsheet-text-size";
 		const DEFAULT_SIZE = 100;
 		const MIN_SIZE = 80;
-		const MAX_SIZE = 120;
+		const MAX_SIZE = 150;
 		const STEP = 5;
 
 		// Load saved text size (global setting)
@@ -8648,6 +8648,7 @@ class CharacterSheetPage {
 			const $nameInput = $form.find("#mod-name");
 			const $typeSelect = $form.find("#mod-type");
 			const $valueInput = $form.find("#mod-value");
+			const $scalingSelect = $form.find("#mod-scaling");
 			const $noteInput = $form.find("#mod-note");
 			const $advSelect = $form.find("#mod-advantage");
 			const $minInput = $form.find("#mod-minimum");
@@ -8661,6 +8662,14 @@ class CharacterSheetPage {
 				$nameInput.val(existingMod.name);
 				$typeSelect.val(existingMod.type);
 				$valueInput.val(existingMod.value || 0);
+				// Determine scaling value
+				let scalingVal = "";
+				if (existingMod.proficiencyBonus) scalingVal = "proficiencyBonus";
+				else if (existingMod.halfProficiency) scalingVal = "halfProficiency";
+				else if (existingMod.doubleProficiency) scalingVal = "doubleProficiency";
+				else if (existingMod.abilityMod) scalingVal = `abilityMod:${existingMod.abilityMod}`;
+				else if (existingMod.perLevel) scalingVal = "perLevel";
+				$scalingSelect.val(scalingVal);
 				$noteInput.val(existingMod.note || "");
 				$advSelect.val(existingMod.advantage ? "advantage" : existingMod.disadvantage ? "disadvantage" : "");
 				$minInput.val(existingMod.setMinimum != null ? existingMod.setMinimum : "");
@@ -8684,6 +8693,7 @@ class CharacterSheetPage {
 				$nameInput.val("");
 				$typeSelect.val("ac");
 				$valueInput.val(0);
+				$scalingSelect.val("");
 				$noteInput.val("");
 				$advSelect.val("");
 				$minInput.val("");
@@ -8739,6 +8749,28 @@ class CharacterSheetPage {
 					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--value">
 						<label class="charsheet__modifier-form-label">Bonus</label>
 						<input type="number" class="form-control form-control--minimal" id="mod-value" value="0" placeholder="±0">
+					</div>
+					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--scaling">
+						<label class="charsheet__modifier-form-label">Scaling</label>
+						<select class="form-control form-control--minimal" id="mod-scaling">
+							<option value="">None</option>
+							<optgroup label="Proficiency">
+								<option value="proficiencyBonus">+ Proficiency</option>
+								<option value="halfProficiency">+ Half Prof</option>
+								<option value="doubleProficiency">+ Double Prof</option>
+							</optgroup>
+							<optgroup label="Ability Modifier">
+								<option value="abilityMod:str">+ STR mod</option>
+								<option value="abilityMod:dex">+ DEX mod</option>
+								<option value="abilityMod:con">+ CON mod</option>
+								<option value="abilityMod:int">+ INT mod</option>
+								<option value="abilityMod:wis">+ WIS mod</option>
+								<option value="abilityMod:cha">+ CHA mod</option>
+							</optgroup>
+							<optgroup label="Level">
+								<option value="perLevel">× Character Level</option>
+							</optgroup>
+						</select>
 					</div>
 				</div>
 				<div class="charsheet__modifier-form-row charsheet__modifier-form-row--custom-skill" style="display: none;">
@@ -8925,6 +8957,7 @@ class CharacterSheetPage {
 			const name = $form.find("#mod-name").val().trim();
 			let type = $form.find("#mod-type").val();
 			const value = parseInt($form.find("#mod-value").val()) || 0;
+			const scalingVal = $form.find("#mod-scaling").val();
 			const note = $form.find("#mod-note").val().trim();
 			const advantageVal = $form.find("#mod-advantage").val();
 			const minimumVal = $form.find("#mod-minimum").val();
@@ -8953,6 +8986,12 @@ class CharacterSheetPage {
 			// Build modifier object with only non-empty properties
 			const modifier = {name, type, value, enabled: true};
 			if (note) modifier.note = note;
+			// Handle scaling options
+			if (scalingVal === "proficiencyBonus") modifier.proficiencyBonus = true;
+			else if (scalingVal === "halfProficiency") modifier.halfProficiency = true;
+			else if (scalingVal === "doubleProficiency") modifier.doubleProficiency = true;
+			else if (scalingVal?.startsWith("abilityMod:")) modifier.abilityMod = scalingVal.replace("abilityMod:", "");
+			else if (scalingVal === "perLevel") modifier.perLevel = true;
 			if (advantageVal === "advantage") modifier.advantage = true;
 			if (advantageVal === "disadvantage") modifier.disadvantage = true;
 			if (minimumVal && !isNaN(parseInt(minimumVal))) modifier.setMinimum = parseInt(minimumVal);

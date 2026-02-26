@@ -19046,6 +19046,14 @@ class CharacterSheetState {
 			return;
 		}
 
+		// Skip combat methods (stances) - their effects are handled dynamically by the stance system
+		// (activateStance, _getActiveStanceEffects, getSkillBonusFromStates, etc.)
+		// Registering them as named modifiers would make them active even when the stance is not.
+		const isCombatMethod = feature.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"));
+		if (isCombatMethod) {
+			return;
+		}
+
 		const modifiers = FeatureModifierParser.parseModifiers(feature.description, feature.name);
 		if (!modifiers.length) return;
 
@@ -24137,10 +24145,38 @@ class CharacterSheetState {
 	// ============================================================================
 
 	/**
+	 * Parse a modifier type string that may contain advantage/disadvantage flags.
+	 * E.g., "save:advantage:wis" → {baseType: "save:wis", advantage: true}
+	 * E.g., "save:dex:advantage" → {baseType: "save:dex", advantage: true}
+	 * E.g., "save:advantage:wis:magic" → {baseType: "save:wis:magic", advantage: true}
+	 * @private
+	 */
+	_parseModifierType (modType) {
+		if (!modType) return {baseType: modType, advantage: false, disadvantage: false};
+
+		const parts = modType.split(":");
+		const advantageIdx = parts.indexOf("advantage");
+		const disadvantageIdx = parts.indexOf("disadvantage");
+
+		if (advantageIdx === -1 && disadvantageIdx === -1) {
+			return {baseType: modType, advantage: false, disadvantage: false};
+		}
+
+		// Remove advantage/disadvantage from parts and reconstruct
+		const filteredParts = parts.filter((p, i) => i !== advantageIdx && i !== disadvantageIdx);
+		return {
+			baseType: filteredParts.join(":"),
+			advantage: advantageIdx !== -1,
+			disadvantage: disadvantageIdx !== -1,
+		};
+	}
+
+	/**
 	 * Get all enabled modifiers that apply to a specific type
 	 * Handles type hierarchies (e.g., "attack:melee" matches "attack" and "attack:melee")
+	 * Also handles advantage/disadvantage encoded in type strings (e.g., "save:advantage:wis")
 	 * @param {string} type - The target type (e.g., "skill:stealth", "save:dex", "attack")
-	 * @returns {Array} Array of matching modifier objects
+	 * @returns {Array} Array of matching modifier objects (with advantage/disadvantage flags added)
 	 */
 	getModifiersForType (type) {
 		if (!type) return [];
@@ -24148,41 +24184,59 @@ class CharacterSheetState {
 		const category = parts[0];
 		const specific = parts[1];
 
-		return this._data.namedModifiers.filter(mod => {
-			if (!mod.enabled) return false;
+		const matchingMods = [];
 
-			const modParts = mod.type.split(":");
+		this._data.namedModifiers.forEach(mod => {
+			if (!mod.enabled) return;
+
+			// Parse the modifier type to extract advantage/disadvantage flags
+			const {baseType, advantage, disadvantage} = this._parseModifierType(mod.type);
+			const modParts = baseType.split(":");
 			const modCategory = modParts[0];
 			const modSpecific = modParts[1];
+			const modExtra = modParts.slice(2).join(":"); // Additional qualifiers like "magic"
 
-			// Exact match
-			if (mod.type === type) return true;
+			let matches = false;
+
+			// Exact match (with or without advantage/disadvantage in original)
+			if (baseType === type || mod.type === type) matches = true;
 
 			// "all" types match everything in that category
-			if (modSpecific === "all" && modCategory === category) return true;
+			if (modSpecific === "all" && modCategory === category) matches = true;
 
 			// d20:all matches all d20 rolls
-			if (mod.type === "d20:all" && ["attack", "save", "check", "skill", "initiative", "deathSave", "concentration"].includes(category)) {
-				return true;
+			if (baseType === "d20:all" && ["attack", "save", "check", "skill", "initiative", "deathSave", "concentration"].includes(category)) {
+				matches = true;
 			}
 
 			// Category-level modifier matches specific subtypes
 			// e.g., "attack" modifier applies to "attack:melee" type
-			if (!modSpecific && modCategory === category) return true;
+			if (!modSpecific && modCategory === category) matches = true;
 
 			// Skill checks also get ability check modifiers
 			if (category === "skill" && modCategory === "check") {
 				// Get the skill's ability
 				const skillAbility = this._getSkillAbility(specific);
-				if (modSpecific === "all" || modSpecific === skillAbility) return true;
+				if (modSpecific === "all" || modSpecific === skillAbility) matches = true;
 			}
 
 			// Initiative is a special case - it's a DEX check
-			if (type === "initiative" && mod.type === "check:dex") return true;
-			if (type === "initiative" && mod.type === "check:all") return true;
+			if (type === "initiative" && (baseType === "check:dex" || baseType === "check:all")) matches = true;
 
-			return false;
+			if (matches) {
+				// Clone the modifier and add parsed advantage/disadvantage flags
+				const resultMod = {...mod};
+				if (advantage && !resultMod.advantage) resultMod.advantage = true;
+				if (disadvantage && !resultMod.disadvantage) resultMod.disadvantage = true;
+				// Store extra qualifiers for conditional display
+				if (modExtra && !resultMod.conditional) {
+					resultMod.conditional = modExtra;
+				}
+				matchingMods.push(resultMod);
+			}
 		});
+
+		return matchingMods;
 	}
 
 	/**

@@ -2369,6 +2369,30 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				expect(calcs.stanceSkillBonuses.athletics).toBe(3); // Prof bonus at level 5
 			});
 
+			it("should NOT register combat method effects as named modifiers", () => {
+				// Bug fix: Combat methods were registering their effects as permanent named modifiers
+				// This caused +3 to Athletics to appear even before the stance was activated
+				state.addFeature({
+					name: "Wary Stance",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1TI", "CTM:TI", "CTM"],
+					description: "Bonus Action (1 Exertion Point). You gain a bonus to Strength (Athletics) checks equal to your proficiency bonus. This stance lasts until you end it."
+				});
+
+				// Combat method effects should NOT appear as named modifiers
+				const namedModifiers = state.getNamedModifiers();
+				const athleticsModifier = namedModifiers.find(m =>
+					m.type?.includes("skill:athletics") || m.type?.includes("check:str:athletics")
+				);
+				expect(athleticsModifier).toBeUndefined();
+
+				// The modifier should only be applied via stance calculations when activated
+				state.activateStance("Wary Stance");
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.stanceSkillBonuses?.athletics).toBe(3);
+			});
+
 			it("should only apply effects from the ACTIVATED stance when multiple stances are on sheet", () => {
 				// Add both stances to sheet
 				state.addFeature({
@@ -9273,6 +9297,10 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 				);
 				expect(wisAdvMod).toBeDefined();
 				expect(wisAdvMod.enabled).toBe(true);
+				
+				// Verify advantage is actually detected when aggregating WIS save modifiers
+				const wisSaveAgg = state.aggregateModifiers("save:wis");
+				expect(wisSaveAgg.advantage).toBe(true);
 			});
 		});
 		

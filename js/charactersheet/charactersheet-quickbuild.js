@@ -345,7 +345,8 @@ class CharacterSheetQuickBuild {
 
 	_getLevelFeatures (classData, level, subclass = null) {
 		const classFeatures = this._page.getClassFeatures();
-		return CharacterSheetClassUtils.getLevelFeatures(classData, level, subclass, classFeatures);
+		const subclassFeatures = this._page.getSubclassFeatures?.() || [];
+		return CharacterSheetClassUtils.getLevelFeatures(classData, level, subclass, classFeatures, subclassFeatures);
 	}
 
 	_getOptionalFeatureGains (classData, classLevel, runningCounts) {
