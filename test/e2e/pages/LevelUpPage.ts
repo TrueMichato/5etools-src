@@ -1,0 +1,387 @@
+import {Locator, Page, expect} from "@playwright/test";
+
+/**
+ * Page Object Model for the Level-Up wizard modal
+ * Provides methods to complete level-up choices
+ */
+export class LevelUpPage {
+	readonly page: Page;
+
+	// Modal container
+	readonly modalContainer: Locator;
+
+	// Progress elements
+	readonly progressBar: Locator;
+	readonly progressText: Locator;
+
+	// Accordion sections
+	readonly accordionSubclass: Locator;
+	readonly accordionAsi: Locator;
+	readonly accordionFeatures: Locator;
+	readonly accordionHp: Locator;
+	readonly accordionExpertise: Locator;
+	readonly accordionKnownSpells: Locator;
+	readonly accordionOptFeatures: Locator;
+
+	// Buttons
+	readonly btnFinish: Locator;
+	readonly btnCancel: Locator;
+
+	constructor (page: Page) {
+		this.page = page;
+
+		// Modal
+		this.modalContainer = page.locator(".charsheet__levelup-wizard");
+
+		// Progress
+		this.progressBar = page.locator(".charsheet__levelup-progress-fill");
+		this.progressText = page.locator(".charsheet__levelup-progress-text");
+
+		// Accordions - these are dynamically shown based on level/class
+		this.accordionSubclass = page.locator('[data-accordion-id="subclass"]');
+		this.accordionAsi = page.locator('[data-accordion-id="asi"]');
+		this.accordionFeatures = page.locator('[data-accordion-id="features"]');
+		this.accordionHp = page.locator('[data-accordion-id="hp"]');
+		this.accordionExpertise = page.locator('[data-accordion-id="expertise"]');
+		this.accordionKnownSpells = page.locator('[data-accordion-id="knownspells"]');
+		this.accordionOptFeatures = page.locator('[data-accordion-id="optfeatures"]');
+
+		// Action buttons
+		this.btnFinish = page.locator('[data-testid="levelup-finish"]');
+		this.btnCancel = page.locator('[data-testid="levelup-cancel"]');
+	}
+
+	/**
+	 * Wait for the level-up modal to appear
+	 */
+	async waitForModal (): Promise<void> {
+		await this.modalContainer.waitFor({state: "visible", timeout: 10000});
+	}
+
+	/**
+	 * Check if level-up modal is visible
+	 */
+	async isVisible (): Promise<boolean> {
+		return await this.modalContainer.isVisible();
+	}
+
+	/**
+	 * Expand an accordion section by clicking its header
+	 */
+	async expandAccordion (accordionId: string): Promise<void> {
+		// Try data-accordion-id first
+		const accordion = this.page.locator(`[data-accordion-id="${accordionId}"]`);
+		if (await accordion.count() > 0 && await accordion.isVisible()) {
+			const header = accordion.locator(".charsheet__levelup-accordion-header");
+			if (await header.count() > 0) {
+				await header.click();
+				await this.page.waitForTimeout(200);
+				return;
+			}
+			// Click the accordion itself
+			await accordion.click();
+			await this.page.waitForTimeout(200);
+			return;
+		}
+
+		// Fallback: click the clickable element that contains the text
+		const textMap: Record<string, string> = {
+			subclass: "Choose",
+			asi: "Ability Score",
+			hp: "Hit Points",
+			optfeatures: "Optional Feature",
+			featoptions: "Feature Option",
+			expertise: "Expertise",
+			knownspells: "Spells",
+			features: "New Features",
+		};
+
+		const searchText = textMap[accordionId];
+		if (searchText) {
+			// Find a clickable ancestor of the text within the wizard
+			const textEl = this.page.locator(".charsheet__levelup-wizard").getByText(searchText, {exact: false}).first();
+			if (await textEl.count() > 0) {
+				await textEl.click();
+				await this.page.waitForTimeout(300);
+			}
+		}
+	}
+
+	/**
+	 * Check if an accordion section is visible
+	 */
+	async isAccordionVisible (accordionId: string): Promise<boolean> {
+		// Try data-accordion-id first
+		const accordion = this.page.locator(`[data-accordion-id="${accordionId}"]`);
+		if (await accordion.count() > 0) {
+			return await accordion.isVisible();
+		}
+
+		// Fallback: check by text content in the wizard
+		const textMap: Record<string, string> = {
+			subclass: "Choose",
+			asi: "Ability Score",
+			hp: "Hit Points",
+			optfeatures: "Optional Feature",
+			featoptions: "Feature Option",
+			expertise: "Expertise",
+			knownspells: "Spells Known",
+			features: "New Features",
+		};
+
+		const searchText = textMap[accordionId];
+		if (searchText) {
+			const el = this.page.locator(".charsheet__levelup-wizard").getByText(searchText, {exact: false});
+			return await el.count() > 0;
+		}
+		return false;
+	}
+
+	/**
+	 * Check if an accordion section is completed
+	 */
+	async isAccordionCompleted (accordionId: string): Promise<boolean> {
+		const accordion = this.page.locator(`[data-accordion-id="${accordionId}"]`);
+		return await accordion.locator(".completed").count() > 0 ||
+			(await accordion.getAttribute("class"))?.includes("completed") || false;
+	}
+
+	// ========== HP SECTION ==========
+
+	/**
+	 * Select HP option (take average or roll)
+	 */
+	async selectHpOption (option: "average" | "roll"): Promise<void> {
+		const btn = this.page.locator(`[data-testid="levelup-hp-${option}"]`);
+		if (await btn.isVisible()) {
+			await btn.click();
+		} else {
+			// Fallback: look for button by text
+			const avgBtn = this.page.getByRole("button", {name: option === "average" ? /average/i : /roll/i});
+			if (await avgBtn.isVisible()) {
+				await avgBtn.click();
+			}
+		}
+		await this.page.waitForTimeout(100);
+	}
+
+	// ========== ASI/FEAT SECTION ==========
+
+	/**
+	 * Select ASI option (increase ability score)
+	 */
+	async selectAsi (ability: string): Promise<void> {
+		const select = this.page.locator(`[data-testid="levelup-asi-${ability.toLowerCase()}"]`);
+		if (await select.isVisible()) {
+			await select.click();
+		}
+	}
+
+	/**
+	 * Select a feat from the feat picker
+	 */
+	async selectFeat (featName: string): Promise<void> {
+		// Click the "feat" option first
+		const featOption = this.page.getByRole("button", {name: /feat/i});
+		if (await featOption.isVisible()) {
+			await featOption.click();
+			await this.page.waitForTimeout(100);
+		}
+
+		// Then select the specific feat
+		const featItem = this.page.locator(".charsheet__levelup-feat-item").filter({hasText: featName});
+		if (await featItem.isVisible()) {
+			await featItem.click();
+		}
+	}
+
+	/**
+	 * Select the +2/+1 ability score increase option for ASI
+	 */
+	async selectAsiScore (firstAbility: string, secondAbility?: string): Promise<void> {
+		// Look for ability score selectors in the ASI accordion
+		const firstSelect = this.page.locator(`[data-testid="levelup-asi-first"]`);
+		if (await firstSelect.isVisible()) {
+			await firstSelect.selectOption(firstAbility);
+		}
+		if (secondAbility) {
+			const secondSelect = this.page.locator(`[data-testid="levelup-asi-second"]`);
+			if (await secondSelect.isVisible()) {
+				await secondSelect.selectOption(secondAbility);
+			}
+		}
+	}
+
+	// ========== SUBCLASS SECTION ==========
+
+	/**
+	 * Select a subclass by name (clicks the radio button container)
+	 */
+	async selectSubclass (subclassName: string, sourceAbbv?: string): Promise<void> {
+		// First ensure the subclass accordion is expanded
+		// Wait for radio buttons to appear within the wizard
+		await this.page.waitForTimeout(500);
+
+		// Try to find and click the "Choose ... Subclass" accordion header to expand it
+		const chooseHeader = this.page.locator(".charsheet__levelup-wizard").getByText(/Choose.*Subclass/i).first();
+		if (await chooseHeader.count() > 0 && await chooseHeader.isVisible()) {
+			await chooseHeader.click();
+			await this.page.waitForTimeout(500);
+		}
+
+		// Wait for radio buttons to appear
+		const radios = this.page.locator(".charsheet__levelup-wizard input[type='radio']");
+		try {
+			await radios.first().waitFor({state: "visible", timeout: 5000});
+		} catch {
+			// Radio buttons might not appear — try clicking the accordion header again
+			const headers = this.page.locator(".charsheet__levelup-wizard").getByText("Subclass");
+			if (await headers.count() > 0) {
+				await headers.first().click();
+				await this.page.waitForTimeout(500);
+			}
+		}
+
+		// Now find and click the subclass radio
+		const allRadios = this.page.locator(".charsheet__levelup-wizard input[type='radio']");
+		const radioCount = await allRadios.count();
+
+		for (let i = radioCount - 1; i >= 0; i--) { // Iterate backwards to prefer PHB'24
+			const radio = allRadios.nth(i);
+			if (!(await radio.isVisible())) continue;
+
+			// Get the parent container text
+			const container = radio.locator("xpath=ancestor::*[position()=1]");
+			const text = await container.textContent() || "";
+			if (text.includes(subclassName)) {
+				if (sourceAbbv && !text.includes(sourceAbbv)) continue;
+				await radio.click({force: true});
+				await this.page.waitForTimeout(300);
+				return;
+			}
+		}
+
+		// Fallback: click text within wizard that matches subclass name
+		const nameLink = this.page.locator(`.charsheet__levelup-wizard a`).filter({hasText: subclassName});
+		if (await nameLink.count() > 0) {
+			const lastMatch = nameLink.last();
+			if (await lastMatch.isVisible()) {
+				// Click the parent container (which has the radio)
+				await lastMatch.locator("xpath=ancestor::*[.//input[@type='radio']][1]").click();
+				await this.page.waitForTimeout(300);
+			}
+		}
+	}
+
+	// ========== KNOWN SPELLS SECTION ==========
+
+	/**
+	 * Add a spell to known spells
+	 */
+	async addKnownSpell (spellName: string): Promise<void> {
+		const spellItem = this.page.locator(".charsheet__levelup-spell-item").filter({hasText: spellName});
+		if (await spellItem.isVisible()) {
+			await spellItem.click();
+		}
+	}
+
+	// ========== COMPLETION ==========
+
+	// ========== GENERIC OPTIONS ==========
+
+	/**
+	 * Select first available options in the currently expanded accordion
+	 * (works for optional features, feature options, etc.)
+	 */
+	async selectFirstAvailableOptions (): Promise<void> {
+		await this.page.waitForTimeout(200);
+		// Try clicking first unchecked checkbox labels in the active accordion body
+		const labels = this.page.locator(".charsheet__levelup-accordion-body:visible label:has(input[type='checkbox'])");
+		const count = await labels.count();
+		for (let i = 0; i < count && i < 5; i++) {
+			const label = labels.nth(i);
+			const checkbox = label.locator("input[type='checkbox']");
+			if (await label.isVisible() && await checkbox.count() > 0 && !(await checkbox.isChecked())) {
+				await label.click();
+				await this.page.waitForTimeout(100);
+			}
+		}
+	}
+
+	// ========== COMPLETION ==========
+
+	/**
+	 * Click finish to complete level-up
+	 */
+	async finish (): Promise<void> {
+		// Primary: button text pattern (most reliable based on actual DOM)
+		const levelUpBtn = this.page.locator(".charsheet__levelup-wizard button").filter({hasText: /Level Up to/i});
+		if (await levelUpBtn.count() > 0 && await levelUpBtn.first().isVisible()) {
+			await levelUpBtn.first().click();
+			await this.page.waitForTimeout(1000);
+			return;
+		}
+		// Try data-testid
+		const finishBtn = this.page.locator('[data-testid="levelup-finish"]');
+		if (await finishBtn.count() > 0 && await finishBtn.isVisible()) {
+			await finishBtn.click();
+			await this.page.waitForTimeout(1000);
+			return;
+		}
+		// Fallback: primary button in the wizard
+		const primaryBtn = this.page.locator(".charsheet__levelup-wizard .ve-btn-primary");
+		if (await primaryBtn.count() > 0 && await primaryBtn.first().isVisible()) {
+			await primaryBtn.first().click();
+			await this.page.waitForTimeout(1000);
+		}
+	}
+
+	/**
+	 * Cancel level-up
+	 */
+	async cancel (): Promise<void> {
+		// Try data-testid first
+		const cancelBtn = this.page.locator('[data-testid="levelup-cancel"]');
+		if (await cancelBtn.count() > 0 && await cancelBtn.isVisible()) {
+			await cancelBtn.click();
+			await this.page.waitForTimeout(500);
+			return;
+		}
+		// Fallback: button text in wizard container
+		const closeBtn = this.page.locator(".charsheet__levelup-wizard button").filter({hasText: /Cancel/});
+		if (await closeBtn.count() > 0 && await closeBtn.first().isVisible()) {
+			await closeBtn.first().click();
+			await this.page.waitForTimeout(500);
+			return;
+		}
+		// Final fallback: default button in wizard
+		const defaultBtn = this.page.locator(".charsheet__levelup-wizard .ve-btn-default");
+		if (await defaultBtn.count() > 0 && await defaultBtn.first().isVisible()) {
+			await defaultBtn.first().click();
+			await this.page.waitForTimeout(500);
+			return;
+		}
+		// Last resort: click modal overlay to close
+		const overlay = this.page.locator(".ui-modal__overlay");
+		if (await overlay.count() > 0) {
+			await overlay.click({position: {x: 5, y: 5}});
+			await this.page.waitForTimeout(500);
+		}
+	}
+
+	/**
+	 * Verify modal is closed after completion
+	 */
+	async expectModalClosed (): Promise<void> {
+		await expect(this.modalContainer).not.toBeVisible({timeout: 10000});
+	}
+
+	/**
+	 * Get progress percentage
+	 */
+	async getProgressPercentage (): Promise<number> {
+		const text = await this.progressText.textContent();
+		const match = text?.match(/(\d+)%/);
+		return match ? parseInt(match[1], 10) : 0;
+	}
+}
