@@ -676,11 +676,11 @@ class CharacterSheetLevelUp {
 		const $hpContent = $(`
 			<div class="charsheet__levelup-hp">
 				<label class="ve-flex-v-center">
-					<input type="radio" name="hp-method-wizard" value="average" checked class="mr-2">
+					<input type="radio" name="hp-method-wizard" value="average" checked class="mr-2" data-testid="levelup-hp-average">
 					<span>Take average: <strong>${averageHp}</strong> HP (${Math.ceil(hitDie / 2) + 1} + ${conMod} CON)</span>
 				</label>
 				<label class="ve-flex-v-center">
-					<input type="radio" name="hp-method-wizard" value="roll" class="mr-2">
+					<input type="radio" name="hp-method-wizard" value="roll" class="mr-2" data-testid="levelup-hp-roll">
 					<span>Roll: 1d${hitDie} + ${conMod} CON</span>
 				</label>
 			</div>
@@ -712,8 +712,8 @@ class CharacterSheetLevelUp {
 		// ========== FOOTER BUTTONS ==========
 		const $footer = $$`
 			<div class="ve-flex-v-center ve-flex-h-right mt-3 pt-3" style="border-top: 1px solid var(--rgb-border-grey);">
-				<button class="ve-btn ve-btn-default mr-2">Cancel</button>
-				<button class="ve-btn ve-btn-primary ve-btn-lg">
+				<button class="ve-btn ve-btn-default mr-2" data-testid="levelup-cancel">Cancel</button>
+				<button class="ve-btn ve-btn-primary ve-btn-lg" data-testid="levelup-finish">
 					<span class="glyphicon glyphicon-arrow-up"></span> Level Up to ${newLevel}
 				</button>
 			</div>

@@ -27,6 +27,10 @@
 		"test:json": "node test/test-json.js",
 		"test:tags": "node test/test-tags.js",
 		"test:unit": "node --localstorage-file test/localstorage.tmp --experimental-vm-modules node_modules/jest/bin/jest.js",
+		"test:e2e": "npx playwright test",
+		"test:e2e:ui": "npx playwright test --ui",
+		"test:e2e:debug": "npx playwright test --debug",
+		"test:e2e:report": "npx playwright show-report",
 		"test": "npm run test:js && npm run test:unit && npm run test:css && npm run test:data",
 		"lint": "npm run lint:js && npm run lint:css && npm run lint:data",
 		"build:css": "sass --style=compressed scss/:css/ && node node/rm.js css/includes/ css/vars/",
@@ -50,6 +54,7 @@
 		"url": "git+https://github.com/5etools-mirror-3/5etools-src"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.58.2",
 		"5etools-utils": "^0.14.26",
 		"ajv": "^8.12.0",
 		"ajv-formats": "^2.1.1",

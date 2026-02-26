@@ -1,0 +1,51 @@
+{
+	"id": "test-fighter-level-1",
+	"name": "Test Fighter",
+	"race": {
+		"name": "Human",
+		"source": "PHB"
+	},
+	"classes": [
+		{
+			"name": "Fighter",
+			"source": "PHB",
+			"level": 1,
+			"subclass": null
+		}
+	],
+	"background": {
+		"name": "Soldier",
+		"source": "PHB"
+	},
+	"abilities": {
+		"str": 16,
+		"dex": 14,
+		"con": 14,
+		"int": 10,
+		"wis": 12,
+		"cha": 8
+	},
+	"hp": {
+		"max": 12,
+		"current": 12,
+		"temp": 0
+	},
+	"xp": 0,
+	"proficiencyBonus": 2,
+	"inspiration": false,
+	"savingThrows": {
+		"str": true,
+		"dex": false,
+		"con": true,
+		"int": false,
+		"wis": false,
+		"cha": false
+	},
+	"skills": {},
+	"inventory": [],
+	"spells": {
+		"known": [],
+		"prepared": [],
+		"slots": {}
+	}
+}
