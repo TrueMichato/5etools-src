@@ -755,8 +755,27 @@ class CharacterSheetFeatures {
 			// Group by optional feature types
 			const optFeatureGroups = {};
 			optionalFeatures.forEach(f => {
-				// Get the group name from optionalFeatureTypes or use a default
-				const groupKey = f.optionalFeatureTypes?.join("_") || "other";
+				// Get the group key and name from optionalFeatureTypes
+				// For combat methods, use the tradition code as the key (so all AM methods group together)
+				let groupKey = f.optionalFeatureTypes?.join("_") || "other";
+
+				// Check if this is a combat method - if so, group by tradition
+				const types = f.optionalFeatureTypes || [];
+				for (const ft of types) {
+					// Match CTM:1AM, CTM:2RC, etc. - extract tradition code
+					const ctmMatch = ft.match(/^CTM:\d([A-Z]{2,3})$/);
+					if (ctmMatch) {
+						groupKey = `CTM:${ctmMatch[1]}`; // Normalize to just "CTM:AM", "CTM:RC", etc.
+						break;
+					}
+					// Also match CTM:AM (tradition-only type)
+					const ctmTradMatch = ft.match(/^CTM:([A-Z]{2,3})$/);
+					if (ctmTradMatch && !ft.match(/^CTM:\d/)) {
+						groupKey = `CTM:${ctmTradMatch[1]}`;
+						break;
+					}
+				}
+
 				const groupName = this._getOptionalFeatureGroupName(f.optionalFeatureTypes);
 				if (!optFeatureGroups[groupKey]) {
 					optFeatureGroups[groupKey] = {name: groupName, features: []};
@@ -1352,13 +1371,45 @@ class CharacterSheetFeatures {
 		// Get description - look it up if not stored
 		const description = this._getFeatureDescription(feature) || "<em class='ve-muted'>No description available</em>";
 
-		return $(`
+		// Check if this is the Primal Focus feature (TGTT Ranger)
+		const isPrimalFocus = feature.name === "Primal Focus" && feature.classSource === "TGTT";
+		let primalFocusHtml = "";
+		if (isPrimalFocus && this._state.hasPrimalFocus?.()) {
+			const currentMode = this._state.getPrimalFocusMode?.() || "predator";
+			const switchesRemaining = this._state.getFocusSwitchesRemaining?.() || 0;
+			const switchText = typeof switchesRemaining === "string" ? switchesRemaining : `${switchesRemaining} remaining`;
+
+			primalFocusHtml = `
+				<div class="charsheet__primal-focus-controls mt-2 p-2" style="background: var(--bs-body-bg-alt, #f8f9fa); border-radius: 8px; border: 1px solid var(--bs-border-color, #dee2e6);">
+					<div class="ve-flex-v-center gap-2 mb-2">
+						<strong>Current Focus:</strong>
+						<span class="badge ${currentMode === "predator" ? "badge-danger" : "badge-info"}" style="font-size: 1em; padding: 5px 10px;">
+							${currentMode === "predator" ? "🎯 Predator" : "🛡️ Prey"}
+						</span>
+					</div>
+					<div class="ve-flex-v-center gap-2 mb-2">
+						<em class="ve-muted">Focus Switches: ${switchText}</em>
+					</div>
+					<div class="ve-flex gap-2">
+						<button class="ve-btn ve-btn-sm ${currentMode === "predator" ? "ve-btn-danger" : "ve-btn-outline-danger"} charsheet__primal-focus-btn" data-mode="predator" ${currentMode === "predator" ? "disabled" : ""}>
+							🎯 Predator
+						</button>
+						<button class="ve-btn ve-btn-sm ${currentMode === "prey" ? "ve-btn-info" : "ve-btn-outline-info"} charsheet__primal-focus-btn" data-mode="prey" ${currentMode === "prey" ? "disabled" : ""}>
+							🛡️ Prey
+						</button>
+					</div>
+				</div>
+			`;
+		}
+
+		const $feature = $(`
 			<div class="charsheet__feature" data-feature-id="${feature.id}">
 				<div class="charsheet__feature-header">
 					<span class="charsheet__feature-toggle glyphicon ${isExpanded ? "glyphicon-chevron-down" : "glyphicon-chevron-right"}"></span>
 					<span class="charsheet__feature-name">${featureNameHtml}</span>
 					${feature.level ? `<span class="badge badge-secondary">Lvl ${feature.level}</span>` : ""}
 					${hasUses ? `<span class="badge badge-info">${feature.uses.current}/${feature.uses.max}</span>` : ""}
+					${isPrimalFocus && this._state.hasPrimalFocus?.() ? `<span class="badge ${this._state.getPrimalFocusMode?.() === "predator" ? "badge-danger" : "badge-info"}">${this._state.getPrimalFocusMode?.() === "predator" ? "🎯" : "🛡️"} ${(this._state.getPrimalFocusMode?.() || "predator").toTitleCase()}</span>` : ""}
 					<div class="charsheet__feature-actions">
 						${hasUses ? `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__feature-use" title="Use Feature">Use</button>` : ""}
 						<button class="ve-btn ve-btn-xs ${this._state.getFeatureNote?.(feature.id) ? "ve-btn-warning" : "ve-btn-default"} charsheet__feature-note" title="${this._state.getFeatureNote?.(feature.id) ? "Edit Note" : "Add Note"}">
@@ -1370,10 +1421,33 @@ class CharacterSheetFeatures {
 					</div>
 				</div>
 				<div class="charsheet__feature-body" style="display: ${isExpanded ? "block" : "none"};">
+					${primalFocusHtml}
 					${description}
 				</div>
 			</div>
 		`);
+
+		// Add Primal Focus switch button handlers
+		if (isPrimalFocus) {
+			$feature.find(".charsheet__primal-focus-btn").on("click", (e) => {
+				const targetMode = $(e.currentTarget).data("mode");
+				const currentMode = this._state.getPrimalFocusMode?.();
+
+				if (targetMode === currentMode) return;
+
+				// Try to switch
+				const success = this._state.switchPrimalFocus?.();
+				if (success) {
+					// Re-render features to update UI
+					this._page._features?.render?.();
+					JqueryUtil.doToast({type: "success", content: `Switched to ${targetMode.toTitleCase()} Focus`});
+				} else {
+					JqueryUtil.doToast({type: "warning", content: "No focus switches remaining! Rest to regain switches."});
+				}
+			});
+		}
+
+		return $feature;
 	}
 
 	_renderFeats () {

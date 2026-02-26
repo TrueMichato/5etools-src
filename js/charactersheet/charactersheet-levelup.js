@@ -79,7 +79,7 @@ class CharacterSheetLevelUp {
 		}
 
 		// Get features for the new level
-		const newFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, fullSubclassData, this._page.getClassFeatures());
+		const newFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, fullSubclassData, this._page.getClassFeatures(), this._page.getSubclassFeatures());
 
 		// Check if this level grants an ASI
 		const hasAsi = CharacterSheetClassUtils.levelGrantsAsi(classData, newLevel);
@@ -365,7 +365,7 @@ class CharacterSheetLevelUp {
 
 			const $subclassContent = this._renderSubclassSelectionCompact(classData, (subclass) => {
 				selectedSubclass = subclass;
-				currentFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, subclass, this._page.getClassFeatures());
+				currentFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, subclass, this._page.getClassFeatures(), this._page.getSubclassFeatures());
 
 				// Update dependent sections
 				featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(currentFeatures, newLevel, this._page.getClassFeatures());
@@ -2854,7 +2854,7 @@ class CharacterSheetLevelUp {
 		// If a subclass was just selected, re-compute features to include actual subclass features
 		if (selectedSubclass) {
 			// Get the subclass features for this level (replacing placeholders like "Subclass Feature")
-			newFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, selectedSubclass, this._page.getClassFeatures());
+			newFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, selectedSubclass, this._page.getClassFeatures(), this._page.getSubclassFeatures());
 		}
 
 		// Update class level
@@ -3640,7 +3640,7 @@ class CharacterSheetLevelUp {
 	 */
 	async _showMulticlassChoices (selectedClass) {
 		// Get level 1 features
-		const features = CharacterSheetClassUtils.getLevelFeatures(selectedClass, 1, undefined, this._page.getClassFeatures());
+		const features = CharacterSheetClassUtils.getLevelFeatures(selectedClass, 1, undefined, this._page.getClassFeatures(), this._page.getSubclassFeatures());
 
 		// Get optional feature gains (Fighting Style, etc.)
 		const optionalFeatureGains = CharacterSheetClassUtils.getOptionalFeatureGains(selectedClass, 0, 1, this._state);

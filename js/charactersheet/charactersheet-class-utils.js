@@ -718,9 +718,10 @@ class CharacterSheetClassUtils {
 	 * @param {number} level - The class level
 	 * @param {Object|null} subclass - The subclass object (optional)
 	 * @param {Array} classFeatures - All loaded class features (for description lookup)
+	 * @param {Array} subclassFeatures - All loaded subclass features (for homebrew fallback lookup)
 	 * @returns {Array} Array of feature objects
 	 */
-	static getLevelFeatures (classData, level, subclass, classFeatures = []) {
+	static getLevelFeatures (classData, level, subclass, classFeatures = [], subclassFeatures = []) {
 		const features = [];
 
 		// Get base class features for this level
@@ -856,6 +857,33 @@ class CharacterSheetClassUtils {
 						});
 					}
 				}
+			});
+		}
+
+		// Fallback: If subclass exists but has no subclassFeatures inline (common with homebrew),
+		// look up features from the separate subclassFeatures array by subclass name/source
+		if (subclass && (!subclass.subclassFeatures || subclass.subclassFeatures.length === 0) && subclassFeatures?.length > 0) {
+			const matchingFeatures = subclassFeatures.filter(f => {
+				// Match by subclass name and class name
+				if (f.subclassShortName !== subclass.shortName && f.subclassShortName !== subclass.name) return false;
+				if (f.className !== (subclass.className || classData.name)) return false;
+				if (f.level !== level) return false;
+				return true;
+			});
+
+			matchingFeatures.forEach(feature => {
+				features.push({
+					name: feature.name,
+					className: feature.className || subclass.className || classData.name,
+					classSource: feature.classSource || subclass.classSource || classData.source,
+					subclassName: subclass.name,
+					subclassShortName: feature.subclassShortName || subclass.shortName,
+					subclassSource: feature.subclassSource || subclass.source || classData.source,
+					source: feature.source || subclass.source || classData.source,
+					level: feature.level,
+					entries: feature.entries,
+					isSubclassFeature: true,
+				});
 			});
 		}
 

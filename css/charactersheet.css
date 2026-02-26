@@ -1296,6 +1296,10 @@
 .charsheet-page[data-textsize="120"] { --cs-text-scale: 1.2; }
 .charsheet-page[data-textsize="125"] { --cs-text-scale: 1.25; }
 .charsheet-page[data-textsize="130"] { --cs-text-scale: 1.3; }
+.charsheet-page[data-textsize="135"] { --cs-text-scale: 1.35; }
+.charsheet-page[data-textsize="140"] { --cs-text-scale: 1.4; }
+.charsheet-page[data-textsize="145"] { --cs-text-scale: 1.45; }
+.charsheet-page[data-textsize="150"] { --cs-text-scale: 1.5; }
 
 /* Apply scaling to the entire character sheet content area */
 .charsheet-page[data-textsize] .tab-content {
