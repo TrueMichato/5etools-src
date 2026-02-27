@@ -145,18 +145,19 @@ describe("TGTT Arcane Archer Fighter", () => {
 		});
 
 		it("should use the combat system", () => {
-			state.addCombatTradition("Adamant Mountain");
+			// TGTT Arcane Archer traditions: Biting Zephyr, Razor's Edge, Unending Wheel, Unerring Hawk
+			state.addCombatTradition("Biting Zephyr");
 			expect(state.usesCombatSystem()).toBe(true);
 		});
 
 		it("should have exertion pool = 2 × prof", () => {
-			state.addCombatTradition("Adamant Mountain");
+			state.addCombatTradition("Biting Zephyr");
 			state.ensureExertionInitialized();
 			expect(state.getExertionMax()).toBe(6); // prof 3 × 2
 		});
 
 		it("should calculate combat method DC from DEX (higher)", () => {
-			state.addCombatTradition("Adamant Mountain");
+			state.addCombatTradition("Biting Zephyr");
 			state.applyClassFeatureEffects();
 			const calcs = state.getFeatureCalculations();
 			// DC = 8 + prof(3) + DEX(4) = 15
@@ -164,7 +165,7 @@ describe("TGTT Arcane Archer Fighter", () => {
 		});
 
 		it("should spend and track exertion", () => {
-			state.addCombatTradition("Adamant Mountain");
+			state.addCombatTradition("Biting Zephyr");
 			state.ensureExertionInitialized();
 			const max = state.getExertionMax();
 

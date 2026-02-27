@@ -82,20 +82,21 @@ describe("TGTT Divine Soul Sorcerer", () => {
 	// FONT OF MAGIC — starts at L1 in TGTT (not L2)
 	// =========================================================================
 	describe("Font of Magic (TGTT: starts at Level 1)", () => {
-		it("should grant sorcery points at level 1", () => {
+		it("should grant sorcery points at level 1 (TGTT: SP = level + 1)", () => {
 			makeDivineSoul(1);
-			state.setSorceryPoints(1);
-			const sp = state.getSorceryPoints();
-			expect(sp.max).toBe(1);
+			const calcs = state.getFeatureCalculations();
+			// TGTT: Font of Magic at L1 with SP = level + 1 = 2
+			expect(calcs.hasFontOfMagic).toBe(true);
+			expect(calcs.sorceryPoints).toBe(2);
 		});
 
-		it("should scale sorcery points with Sorcerer level", () => {
+		it("should scale sorcery points = level + 1 per TGTT table", () => {
 			const levels = [1, 2, 5, 10, 15, 20];
 			levels.forEach(lvl => {
 				const s = new CharacterSheetState();
 				s.addClass({name: "Sorcerer", source: "TGTT", level: lvl});
-				s.setSorceryPoints(lvl);
-				expect(s.getSorceryPoints().max).toBe(lvl);
+				const calcs = s.getFeatureCalculations();
+				expect(calcs.sorceryPoints).toBe(lvl + 1);
 			});
 		});
 	});
@@ -445,12 +446,12 @@ describe("TGTT Divine Soul Sorcerer", () => {
 			}
 		});
 
-		it("should track sorcery points = level at every level", () => {
+		it("should track sorcery points = level + 1 at every level (TGTT)", () => {
 			for (let lvl = 1; lvl <= 20; lvl++) {
 				const s = new CharacterSheetState();
 				s.addClass({name: "Sorcerer", source: "TGTT", level: lvl});
-				s.setSorceryPoints(lvl);
-				expect(s.getSorceryPoints().max).toBe(lvl);
+				const calcs = s.getFeatureCalculations();
+				expect(calcs.sorceryPoints).toBe(lvl + 1);
 			}
 		});
 

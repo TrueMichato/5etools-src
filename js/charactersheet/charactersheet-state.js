@@ -10356,8 +10356,12 @@ class CharacterSheetState {
 						calculations.spellsKnown = spellsKnown;
 					}
 
-					// Font of Magic / Sorcery Points (level 2+)
-					if (level >= 2) {
+					// Font of Magic / Sorcery Points
+					if (source === "TGTT") {
+						// TGTT: Font of Magic starts at L1, SP = level + 1 (L1=2, L2=3, ..., L20=21)
+						calculations.hasFontOfMagic = true;
+						calculations.sorceryPoints = level + 1;
+					} else if (level >= 2) {
 						calculations.hasFontOfMagic = true;
 						calculations.sorceryPoints = level;
 					}
@@ -13659,6 +13663,25 @@ class CharacterSheetState {
 			} else {
 				// Standard DC: 8 + prof + max(STR, DEX) - exhaustion
 				calculations.combatMethodDc = 8 + profBonus + Math.max(strMod, dexMod) - exhaustionPenalty;
+			}
+
+			// Hexblade/Bladesinger override: TGTT explicitly grants "You can use your spellcasting
+			// ability modifier and your spellcasting DC in place of Strength or Dexterity and your
+			// method DC when using combat methods." — take the higher of physical DC or spell DC.
+			if (calculations.spellSaveDc) {
+				const hasSpellDcOverride = this._data.classes?.some(c => {
+					const sub = c.subclass?.name;
+					if (!sub) return false;
+					// Hexblade Warlock
+					if ((c.name?.toLowerCase() === "warlock") && (sub === "Hexblade" || sub === "The Hexblade")) return true;
+					// Bladesinger Wizard
+					if ((c.name?.toLowerCase() === "wizard") && (sub === "Bladesinger" || sub === "Bladesinging")) return true;
+					return false;
+				});
+				if (hasSpellDcOverride) {
+					calculations.combatMethodDc = Math.max(calculations.combatMethodDc, calculations.spellSaveDc);
+					calculations.combatMethodDcUsesSpellcasting = true;
+				}
 			}
 		}
 
