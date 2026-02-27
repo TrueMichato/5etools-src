@@ -197,23 +197,26 @@ describe("TGTT Hexblade Warlock", () => {
 			expect(maxEx).toBeGreaterThan(0);
 		});
 
-		it("should calculate combat method DC from physical stats", () => {
+		it("should use higher of physical or spellcasting DC per TGTT", () => {
 			state.ensureExertionInitialized();
 			state.applyClassFeatureEffects();
 			const calcs = state.getFeatureCalculations();
-			// Combat method DC = 8 + prof + max(STR, DEX)
-			// STR 10(+0), DEX 14(+2), prof +3 → 8 + 3 + 2 = 13
-			expect(calcs.combatMethodDc).toBe(13);
+			// TGTT Hexblade: "You can use your spellcasting DC in place of your method DC"
+			// Physical DC = 8 + prof(3) + DEX(+2) = 13
+			// Spell DC = 8 + prof(3) + CHA(+4) = 15 → higher wins
+			expect(calcs.combatMethodDc).toBe(15);
+			expect(calcs.combatMethodDcUsesSpellcasting).toBe(true);
 		});
 
 		it("should have 7 combat traditions from Hexblade subclass", () => {
-			// Already has 1 from beforeEach, add 6 more
+			// TGTT Hexblade traditions: Adamant Mountain, Arcane Knight, Eldritch Blackguard,
+			// Mirror's Glint, Spirited Steed, Tempered Iron, Unending Wheel
 			state.addCombatTradition({name: "Adamant Mountain", source: "TGTT"});
-			state.addCombatTradition({name: "Rapid Current", source: "TGTT"});
-			state.addCombatTradition({name: "Razor's Edge", source: "TGTT"});
+			state.addCombatTradition({name: "Arcane Knight", source: "TGTT"});
+			state.addCombatTradition({name: "Eldritch Blackguard", source: "TGTT"});
 			state.addCombatTradition({name: "Spirited Steed", source: "TGTT"});
 			state.addCombatTradition({name: "Tempered Iron", source: "TGTT"});
-			state.addCombatTradition({name: "Tooth and Claw", source: "TGTT"});
+			state.addCombatTradition({name: "Unending Wheel", source: "TGTT"});
 
 			const traditions = state.getCombatTraditions();
 			expect(traditions.length).toBe(7);
@@ -302,6 +305,41 @@ describe("TGTT Hexblade Warlock", () => {
 			const res = state.getResource("Hexblade's Curse");
 			expect(res.max).toBe(1);
 			expect(res.recharge).toBe("short");
+		});
+
+		it("should calculate Hexblade's Curse bonus damage = proficiency bonus", () => {
+			state.applyClassFeatureEffects();
+			const calcs = state.getFeatureCalculations();
+			// At level 5, prof = 3
+			expect(calcs.hexbladesCurseDamage).toBe(3);
+		});
+
+		it("should calculate Hexblade's Curse healing on kill = CHA mod + level", () => {
+			state.applyClassFeatureEffects();
+			const calcs = state.getFeatureCalculations();
+			// CHA 18 (+4), level 5 → healing = 4 + 5 = 9
+			expect(calcs.hexbladesCurseHealing).toBe(9);
+		});
+
+		it("should scale curse mechanics with level", () => {
+			const cases = [
+				{level: 3, prof: 2, curseDmg: 2, curseHeal: 7},   // CHA +4, 4+3=7
+				{level: 10, prof: 4, curseDmg: 4, curseHeal: 14}, // CHA +4, 4+10=14
+				{level: 17, prof: 6, curseDmg: 6, curseHeal: 21}, // CHA +4, 4+17=21
+			];
+
+			for (const {level, curseDmg, curseHeal} of cases) {
+				const s = new CharacterSheetState();
+				s.addClass({
+					name: "Warlock", source: "TGTT", level,
+					subclass: {name: "The Hexblade", shortName: "Hexblade", source: "TGTT"},
+				});
+				s.setAbilityBase("cha", 18); // +4
+				s.applyClassFeatureEffects();
+				const calcs = s.getFeatureCalculations();
+				expect(calcs.hexbladesCurseDamage).toBe(curseDmg);
+				expect(calcs.hexbladesCurseHealing).toBe(curseHeal);
+			}
 		});
 	});
 

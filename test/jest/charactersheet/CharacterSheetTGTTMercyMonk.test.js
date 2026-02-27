@@ -154,20 +154,18 @@ describe("TGTT Way of Mercy Monk", () => {
 	});
 
 	// =========================================================================
-	// COMBAT METHOD DC (Monk special: WIS-based, +1 bonus)
+	// COMBAT METHOD DC (Monk special: base 9, WIS-based)
 	// =========================================================================
 	describe("Combat Method DC", () => {
-		it("should calculate DC = 8 + prof + WIS mod for Monk", () => {
+		it("should calculate DC = 9 + prof + max(STR, DEX, WIS) for TGTT Monk", () => {
 			makeMercyMonk(5);
 			state.addCombatTradition("SK");
 			state.applyClassFeatureEffects();
 
 			const calcs = state.getFeatureCalculations();
-			// Monks can use WIS for methods: DC = 8 + 3 (prof) + 3 (WIS) = 14
-			// With Monk +1 bonus: 15
-			if (calcs.combatMethodDc) {
-				expect(calcs.combatMethodDc).toBeGreaterThanOrEqual(14);
-			}
+			// Monk DC base is 9 (not 8). DEX +4, WIS +3, prof +3 → 9 + 3 + 4 = 16
+			expect(calcs.combatMethodDc).toBe(16);
+			expect(calcs.monkCombatMethodDcBonus).toBe(true);
 		});
 
 		it("should scale DC with proficiency and ability increases", () => {
@@ -176,16 +174,39 @@ describe("TGTT Way of Mercy Monk", () => {
 				name: "Monk", source: "TGTT", level: 9,
 				subclass: {name: "Warrior of Mercy", shortName: "Mercy", source: "TGTT"},
 			});
-			s.setAbilityBase("dex", 18);
+			s.setAbilityBase("dex", 18); // +4
 			s.setAbilityBase("wis", 18); // +4
 			s.addCombatTradition("SK");
 			s.applyClassFeatureEffects();
 
 			const calcs = s.getFeatureCalculations();
-			// DC = 8 + 4 (prof) + 4 (WIS) = 16, possibly +1 Monk bonus = 17
-			if (calcs.combatMethodDc) {
-				expect(calcs.combatMethodDc).toBeGreaterThanOrEqual(16);
-			}
+			// DC = 9 + prof(4) + max(DEX +4, WIS +4) = 17
+			expect(calcs.combatMethodDc).toBe(17);
+		});
+	});
+
+	// =========================================================================
+	// MARTIAL ARTS DIE SCALING
+	// =========================================================================
+	describe("Martial Arts Die", () => {
+		const dieLevels = [
+			{level: 1, die: "1d6"},
+			{level: 4, die: "1d6"},
+			{level: 5, die: "1d8"},
+			{level: 10, die: "1d8"},
+			{level: 11, die: "1d10"},
+			{level: 16, die: "1d10"},
+			{level: 17, die: "1d12"},
+			{level: 20, die: "1d12"},
+		];
+
+		dieLevels.forEach(({level, die}) => {
+			it(`should have Martial Arts die ${die} at level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Monk", source: "TGTT", level});
+				const calcs = s.getFeatureCalculations();
+				expect(calcs.martialArtsDie).toBe(die);
+			});
 		});
 	});
 

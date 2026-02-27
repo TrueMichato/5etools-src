@@ -249,10 +249,11 @@ describe("TGTT Multiclass Builds", () => {
 		});
 
 		describe("Resource Independence", () => {
-			it("should have sorcery points from Sorcerer level", () => {
+			it("should have sorcery points from Sorcerer level (TGTT: level + 1)", () => {
 				makeSorlock(7, 3);
-				state.setSorceryPoints(7); // Sorcerer level only
-				expect(state.getSorceryPoints().max).toBe(7);
+				const calcs = state.getFeatureCalculations();
+				// TGTT Sorcerer L7: SP = 7 + 1 = 8
+				expect(calcs.sorceryPoints).toBe(8);
 			});
 
 			it("should have Metamagic from Sorcerer level", () => {
@@ -264,12 +265,12 @@ describe("TGTT Multiclass Builds", () => {
 			it("should maintain Hexblade Curse resource independently", () => {
 				makeSorlock(7, 3);
 				state.addResource({name: "Hexblade's Curse", max: 1, current: 1, recharge: "short"});
-				state.setSorceryPoints(7);
 
 				// Use Hexblade Curse — shouldn't affect SP
 				const res = state.getResource("Hexblade's Curse");
 				expect(res.max).toBe(1);
-				expect(state.getSorceryPoints().max).toBe(7);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.sorceryPoints).toBe(8); // TGTT: 7 + 1
 			});
 		});
 
@@ -285,6 +286,18 @@ describe("TGTT Multiclass Builds", () => {
 				state.addCombatTradition("Mirror's Glint");
 				state.ensureExertionInitialized();
 				expect(state.getExertionMax()).toBe(8); // 2 × 4
+			});
+
+			it("should use Hexblade spellcasting DC override for combat methods", () => {
+				makeSorlock(7, 3);
+				state.addCombatTradition("Mirror's Glint");
+				state.ensureExertionInitialized();
+				state.applyClassFeatureEffects();
+				const calcs = state.getFeatureCalculations();
+				// Physical DC = 8 + prof(4) + DEX(+2) = 14
+				// Spell DC = 8 + prof(4) + CHA(+5) = 17 → higher wins
+				expect(calcs.combatMethodDc).toBe(17);
+				expect(calcs.combatMethodDcUsesSpellcasting).toBe(true);
 			});
 		});
 
@@ -327,7 +340,7 @@ describe("TGTT Multiclass Builds", () => {
 		describe("Coffeelock Pattern (SP → Pact Slot Cycling)", () => {
 			it("should allow converting pact slots to sorcery points pattern", () => {
 				makeSorlock(7, 3); // Pact slots are 2nd level
-				state.setSorceryPoints(7);
+				state.setSorceryPoints(8); // TGTT: Sorcerer L7 = 7 + 1 = 8
 
 				// Pattern: Use all pact slots → short rest → regain → convert
 				// This test verifies the resources exist and are independent
@@ -339,8 +352,9 @@ describe("TGTT Multiclass Builds", () => {
 				state.setPactSlotsCurrent(state.getPactSlots().max);
 				expect(state.getPactSlots().current).toBe(2);
 
-				// SP still at max
-				expect(state.getSorceryPoints().max).toBe(7);
+				// SP still at TGTT value (7 + 1 = 8)
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.sorceryPoints).toBe(8);
 			});
 		});
 	});

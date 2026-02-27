@@ -142,7 +142,7 @@ describe("TGTT Zodiac Druid (Circle of the Stars)", () => {
 		const monthConstellations = [
 			"Griffon", "Beaver", "Aurochs", "Horse",
 			"Octopus", "Peacock", "Bee", "Hound",
-			"Cat", "Bulette", "Phoenix",
+			"Cat", "Bulette", "Phoenix", "Roc",
 		];
 
 		beforeEach(() => {
@@ -163,7 +163,7 @@ describe("TGTT Zodiac Druid (Circle of the Stars)", () => {
 			});
 		});
 
-		it("should calculate all 11 constellation-specific values", () => {
+		it("should calculate all 12 constellation-specific values", () => {
 			const calcs = state.getFeatureCalculations();
 			// Spot-check representative calcs from existing coverage
 			expect(calcs.griffonBonusAttack).toBe(true);
@@ -177,6 +177,77 @@ describe("TGTT Zodiac Druid (Circle of the Stars)", () => {
 			expect(calcs.catPerceptionBonus).toBeTruthy();
 			expect(calcs.buletteAcBonus).toBeGreaterThan(0);
 			expect(calcs.phoenixStabilizeHeal).toBeTruthy();
+			expect(calcs.rocFreeWindSpells).toBe(true);
+		});
+
+		it("should calculate Bee damage scaling across tiers", () => {
+			// L6 (Druid 6, WIS 18 +4): 1d8+4
+			const calcs6 = state.getFeatureCalculations();
+			expect(calcs6.beeDamage).toBe("1d8+4");
+
+			// L10 (WIS 18 +4): 2d8+4
+			const s10 = new CharacterSheetState();
+			s10.addClass({name: "Druid", source: "TGTT", level: 10,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s10.setAbilityBase("wis", 18);
+			expect(s10.getFeatureCalculations().beeDamage).toBe("2d8+4");
+
+			// L14 (WIS 20 +5): 3d8+5
+			const s14 = new CharacterSheetState();
+			s14.addClass({name: "Druid", source: "TGTT", level: 14,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s14.setAbilityBase("wis", 20);
+			expect(s14.getFeatureCalculations().beeDamage).toBe("3d8+5");
+		});
+
+		it("should calculate Bulette AC bonus = ceil(prof / 2)", () => {
+			// L6 (prof 3): ceil(3/2) = 2
+			expect(state.getFeatureCalculations().buletteAcBonus).toBe(2);
+
+			// L3 (prof 2): ceil(2/2) = 1
+			const s3 = new CharacterSheetState();
+			s3.addClass({name: "Druid", source: "TGTT", level: 3,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s3.setAbilityBase("wis", 16);
+			expect(s3.getFeatureCalculations().buletteAcBonus).toBe(1);
+
+			// L9 (prof 4): ceil(4/2) = 2
+			const s9 = new CharacterSheetState();
+			s9.addClass({name: "Druid", source: "TGTT", level: 9,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s9.setAbilityBase("wis", 16);
+			expect(s9.getFeatureCalculations().buletteAcBonus).toBe(2);
+		});
+
+		it("should calculate Beaver damage reduction = druid level + prof", () => {
+			// L6 (prof 3): 6 + 3 = 9
+			expect(state.getFeatureCalculations().beaverDamageReduction).toBe(9);
+
+			// L3 (prof 2): 3 + 2 = 5
+			const s3 = new CharacterSheetState();
+			s3.addClass({name: "Druid", source: "TGTT", level: 3,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s3.setAbilityBase("wis", 16);
+			expect(s3.getFeatureCalculations().beaverDamageReduction).toBe(5);
+
+			// L10 (prof 4): 10 + 4 = 14
+			const s10 = new CharacterSheetState();
+			s10.addClass({name: "Druid", source: "TGTT", level: 10,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s10.setAbilityBase("wis", 18);
+			expect(s10.getFeatureCalculations().beaverDamageReduction).toBe(14);
+		});
+
+		it("should calculate Phoenix heal = 2d8 + WIS mod", () => {
+			// L6 (WIS 18 +4): 2d8+4
+			expect(state.getFeatureCalculations().phoenixStabilizeHeal).toBe("2d8+4");
+
+			// L14 (WIS 20 +5): 2d8+5
+			const s14 = new CharacterSheetState();
+			s14.addClass({name: "Druid", source: "TGTT", level: 14,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s14.setAbilityBase("wis", 20);
+			expect(s14.getFeatureCalculations().phoenixStabilizeHeal).toBe("2d8+5");
 		});
 	});
 

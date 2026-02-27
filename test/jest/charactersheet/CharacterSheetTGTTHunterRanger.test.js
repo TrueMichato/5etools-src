@@ -262,9 +262,11 @@ describe("TGTT Hunter Ranger", () => {
 		});
 
 		it("should support 6 combat traditions", () => {
+			// TGTT Ranger traditions: Biting Zephyr, Mirror's Glint, Rapid Current,
+			// Razor's Edge, Spirited Steed, Unending Wheel
 			const traditions = [
-				"Adamant Mountain", "Mirror's Glint", "Rapid Current",
-				"Razor's Edge", "Spirited Steed", "Tooth and Claw",
+				"Biting Zephyr", "Mirror's Glint", "Rapid Current",
+				"Razor's Edge", "Spirited Steed", "Unending Wheel",
 			];
 			traditions.forEach(t => state.addCombatTradition(t));
 			expect(state.getCombatTraditions().length).toBe(6);

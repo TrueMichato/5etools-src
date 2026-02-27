@@ -165,6 +165,41 @@ describe("TGTT Bladesinger Wizard", () => {
 			const res = l9State.getResource("Bladesong");
 			expect(res.max).toBe(4);
 		});
+
+		it("should calculate bladesongAcBonus = INT modifier", () => {
+			const calcs = state.getFeatureCalculations();
+			// INT 18 → +4
+			expect(calcs.bladesongAcBonus).toBe(4);
+		});
+
+		it("should scale bladesongAcBonus with INT changes", () => {
+			state.setAbilityBase("int", 14); // +2
+			expect(state.getFeatureCalculations().bladesongAcBonus).toBe(2);
+
+			state.setAbilityBase("int", 20); // +5
+			expect(state.getFeatureCalculations().bladesongAcBonus).toBe(5);
+		});
+
+		it("should produce all 4 Bladesong effects when active", () => {
+			state.addFeature({
+				name: "Bladesong",
+				description: "Starting at 2nd level, you can invoke a secret elven magic called the Bladesong as a bonus action.",
+				className: "Wizard",
+				level: 2,
+			});
+			state.addResource({name: "Bladesong", max: 2, current: 2, recharge: "long"});
+			state.activateState("bladesong");
+
+			const effects = state.getActiveStateEffects();
+			// AC bonus (INT mod)
+			expect(effects.some(e => e.type === "bonus" && e.target === "ac" && e.abilityMod === "int")).toBe(true);
+			// Speed +10
+			expect(effects.some(e => e.type === "bonus" && e.target === "speed:walk" && e.value === 10)).toBe(true);
+			// Advantage on Acrobatics
+			expect(effects.some(e => e.type === "advantage" && e.target === "skill:acrobatics")).toBe(true);
+			// INT bonus to concentration saves
+			expect(effects.some(e => e.type === "bonus" && e.target === "concentration" && e.abilityMod === "int")).toBe(true);
+		});
 	});
 
 	// =========================================================================
@@ -207,11 +242,14 @@ describe("TGTT Bladesinger Wizard", () => {
 			}
 		});
 
-		it("should calculate combat method DC from physical stats", () => {
+		it("should use higher of physical or spellcasting DC per TGTT", () => {
 			state.applyClassFeatureEffects();
 			const calcs = state.getFeatureCalculations();
-			// Combat method DC = 8 + prof(3) + max(STR(-1), DEX(+3)) = 14
-			expect(calcs.combatMethodDc).toBe(14);
+			// TGTT Bladesinger: "You can use your spellcasting DC in place of your method DC"
+			// Physical DC = 8 + prof(3) + DEX(+3) = 14
+			// Spell DC = 8 + prof(3) + INT(+4) = 15 → higher wins
+			expect(calcs.combatMethodDc).toBe(15);
+			expect(calcs.combatMethodDcUsesSpellcasting).toBe(true);
 		});
 
 		it("should track Arcane Knight tradition in getCombatTraditions()", () => {
