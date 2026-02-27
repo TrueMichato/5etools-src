@@ -308,6 +308,44 @@ export class LevelUpPage {
 		}
 	}
 
+	/**
+	 * Auto-fill all remaining required selections in the level-up wizard.
+	 * Uses jQuery to find and check unchecked checkboxes in sections that need more selections.
+	 */
+	async autoFillAllSelections (): Promise<void> {
+		await this.page.evaluate(() => {
+			const $ = (window as any).jQuery || (window as any).$;
+			if (!$) return;
+
+			$(".charsheet__levelup-wizard").find("*").filter(function (this: HTMLElement) {
+				const text = $(this).text();
+				return /^Selected:\s*\d+\s*\/\s*\d+$/.test(text.trim());
+			}).each(function (this: HTMLElement) {
+				const text = $(this).text().trim();
+				const match = text.match(/Selected:\s*(\d+)\s*\/\s*(\d+)/);
+				if (!match) return;
+				const current = parseInt(match[1]);
+				const max = parseInt(match[2]);
+				if (current >= max) return;
+
+				const needed = max - current;
+				let $el = $(this);
+				for (let depth = 0; depth < 8; depth++) {
+					$el = $el.parent();
+					if (!$el.length) break;
+					const $checkboxes = $el.find("input[type='checkbox']:not(:checked)");
+					if ($checkboxes.length > 0) {
+						$checkboxes.slice(0, needed).each(function (this: HTMLInputElement) {
+							$(this).prop("checked", true).trigger("change");
+						});
+						break;
+					}
+				}
+			});
+		});
+		await this.page.waitForTimeout(500);
+	}
+
 	// ========== COMPLETION ==========
 
 	/**

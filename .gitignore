@@ -32,3 +32,5 @@ dev-*.sh
 5etools Thelemar State *.json
 5etools-src.code-workspace
 TravelersGuidetoThelemar.json
+
+playwright-report/
