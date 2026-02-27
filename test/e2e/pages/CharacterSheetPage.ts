@@ -212,4 +212,146 @@ export class CharacterSheetPage {
 	async expectLevel (level: number): Promise<void> {
 		await expect(this.characterLevel).toContainText(String(level));
 	}
+
+	// ========== TGTT — FEATURE TOGGLES & RESOURCES ==========
+
+	/**
+	 * Get all feature toggle buttons (activatable features) on the Features tab.
+	 */
+	async getActivatableFeatureNames (): Promise<string[]> {
+		await this.switchToTab(this.tabFeatures);
+		const toggles = this.page.locator(".charsheet__feature-toggle, [data-testid='feature-toggle']");
+		const count = await toggles.count();
+		const names: string[] = [];
+		for (let i = 0; i < count; i++) {
+			const text = await toggles.nth(i)
+				.locator(".charsheet__feature-toggle-name, .charsheet__feature-name")
+				.first()
+				.textContent();
+			if (text) names.push(text.trim());
+		}
+		return names;
+	}
+
+	/**
+	 * Activate a toggleable feature by name (e.g. "Bladesong", "Hexblade's Curse").
+	 */
+	async activateFeature (featureName: string): Promise<void> {
+		await this.switchToTab(this.tabFeatures);
+		const toggle = this.page
+			.locator(".charsheet__feature-toggle, [data-testid='feature-toggle']")
+			.filter({hasText: featureName});
+		const btn = toggle.locator("button, .charsheet__feature-toggle-btn").first();
+		await btn.click();
+		await this.page.waitForTimeout(200);
+	}
+
+	/**
+	 * Deactivate a toggleable feature by name.
+	 */
+	async deactivateFeature (featureName: string): Promise<void> {
+		await this.activateFeature(featureName); // toggle off
+	}
+
+	/**
+	 * Check whether a feature is currently active (has "active" class or aria attribute).
+	 */
+	async isFeatureActive (featureName: string): Promise<boolean> {
+		await this.switchToTab(this.tabFeatures);
+		const toggle = this.page
+			.locator(".charsheet__feature-toggle, [data-testid='feature-toggle']")
+			.filter({hasText: featureName});
+		const hasActive = await toggle.evaluate(el => {
+			return el.classList.contains("active")
+				|| el.querySelector(".active") !== null
+				|| el.getAttribute("aria-pressed") === "true";
+		});
+		return hasActive;
+	}
+
+	// ========== TGTT — RESOURCE TRACKERS ==========
+
+	/**
+	 * Get the current/max value of a named resource (e.g. "Sorcery Points", "Exertion").
+	 */
+	async getResource (resourceName: string): Promise<{current: number; max: number}> {
+		const container = this.page
+			.locator(".charsheet__resource-tracker, [data-testid='resource-tracker']")
+			.filter({hasText: resourceName});
+		const currentEl = container.locator(".charsheet__resource-current, input").first();
+		const maxEl = container.locator(".charsheet__resource-max").first();
+
+		const currentText = await currentEl.inputValue().catch(() => currentEl.textContent());
+		const maxText = await maxEl.textContent();
+
+		return {
+			current: parseInt(String(currentText) || "0", 10),
+			max: parseInt(maxText || "0", 10),
+		};
+	}
+
+	// ========== TGTT — COMBAT TAB DCs ==========
+
+	/**
+	 * Read the spell save DC displayed on the Combat tab.
+	 */
+	async getSpellSaveDC (): Promise<number> {
+		await this.switchToTab(this.tabCombat);
+		const dcEl = this.page.locator("#charsheet-disp-spell-save-dc, .charsheet__spell-dc-value").first();
+		const text = await dcEl.textContent();
+		return parseInt(text || "0", 10);
+	}
+
+	/**
+	 * Read the combat method DC (if Combat Methods are active).
+	 */
+	async getCombatMethodDC (): Promise<number> {
+		await this.switchToTab(this.tabCombat);
+		const dcEl = this.page.locator("#charsheet-disp-combat-method-dc, .charsheet__combat-dc-value").first();
+		const text = await dcEl.textContent();
+		return parseInt(text || "0", 10);
+	}
+
+	// ========== TGTT — SPELL SLOTS DISPLAY ==========
+
+	/**
+	 * Get the displayed spell slot counts {current, max} for a given level.
+	 */
+	async getSpellSlots (level: number): Promise<{current: number; max: number}> {
+		await this.switchToTab(this.tabSpells);
+		const slotContainer = this.page.locator(
+			`[data-spell-level="${level}"], .charsheet__spell-slot-level-${level}`,
+		);
+		const currentEl = slotContainer.locator(".charsheet__slot-current, input").first();
+		const maxEl = slotContainer.locator(".charsheet__slot-max").first();
+
+		const currentText = await currentEl.inputValue().catch(() => currentEl.textContent());
+		const maxText = await maxEl.textContent();
+
+		return {
+			current: parseInt(String(currentText) || "0", 10),
+			max: parseInt(maxText || "0", 10),
+		};
+	}
+
+	/**
+	 * Read a pact slot display (for Warlocks).
+	 */
+	async getPactSlots (): Promise<{current: number; max: number; level: number}> {
+		await this.switchToTab(this.tabSpells);
+		const pactContainer = this.page.locator(".charsheet__pact-slots, [data-testid='pact-slots']");
+		const currentEl = pactContainer.locator(".charsheet__slot-current, input").first();
+		const maxEl = pactContainer.locator(".charsheet__slot-max").first();
+		const levelEl = pactContainer.locator(".charsheet__pact-level").first();
+
+		const currentText = await currentEl.inputValue().catch(() => currentEl.textContent());
+		const maxText = await maxEl.textContent();
+		const levelText = await levelEl.textContent();
+
+		return {
+			current: parseInt(String(currentText) || "0", 10),
+			max: parseInt(maxText || "0", 10),
+			level: parseInt(levelText || "0", 10),
+		};
+	}
 }
