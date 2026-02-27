@@ -263,69 +263,71 @@ export class BuilderWizardPage {
 	 * Select the first N available weapon mastery checkboxes (for PHB'24 Fighter/other martial classes)
 	 */
 	async selectFirstAvailableWeaponMasteries (count: number): Promise<void> {
-		// Weapon mastery checkboxes have a title attribute with "Mastery:"
+		// Weapon mastery checkboxes have a title attribute with "Mastery:" on parent label
 		const masteryCheckboxes = this.page.locator(".charsheet__builder-skill-checkbox input[type='checkbox']").filter({
 			has: this.page.locator("xpath=ancestor::label[@title]"),
 		});
-		// Fallback: look for weapon names in checkbox values (things like "(Nick)", "(Sap)", "(Vex)", etc.)
-		let checkboxes = await masteryCheckboxes.count() > 0
-			? masteryCheckboxes
-			: this.page.locator("input[type='checkbox'][value*='(']");
 
-		if (await checkboxes.count() === 0) {
-			// No masteries found, skip
+		if (await masteryCheckboxes.count() === 0) {
 			return;
 		}
 
-		const visibleCount = await checkboxes.count();
-		const toSelect = Math.min(count, visibleCount);
-		for (let i = 0; i < toSelect; i++) {
-			const checkbox = checkboxes.nth(i);
-			if (await checkbox.isVisible() && !(await checkbox.isChecked())) {
-				await checkbox.check();
-				await this.page.waitForTimeout(50);
+		let selected = 0;
+		const visibleCount = await masteryCheckboxes.count();
+		for (let i = 0; i < visibleCount && selected < count; i++) {
+			const checkbox = masteryCheckboxes.nth(i);
+			try {
+				if (await checkbox.isVisible() && !(await checkbox.isChecked())) {
+					await checkbox.check();
+					await this.page.waitForTimeout(50);
+					if (await checkbox.isChecked()) {
+						selected++;
+					}
+				}
+			} catch {
+				// Handler may reject — at capacity, stop trying
+				break;
 			}
 		}
 	}
 
 	/**
-	 * Select first available optional features (fighting styles, divine order, invocations, etc.)
-	 * Uses specific CSS selectors for optional feature sections (NOT skill checkboxes)
+	 * Select first available optional features (fighting styles, divine order, combat methods, etc.)
+	 * Handles multiple UI patterns: label-wrapped checkboxes and bare checkbox containers.
 	 */
 	async selectFirstAvailableOptionalFeatures (count: number): Promise<void> {
-		// Wait for optional features section to appear
 		await this.page.waitForTimeout(300);
 
 		let selected = 0;
 
-		// Primary approach: use label elements for optional feature items
-		// Clicking the label toggles the checkbox
-		let optFeatLabels = this.page.locator(".charsheet__builder-opt-feat-item");
+		// Broad approach: find ALL clickable labels/containers with checkboxes
+		// across optional feature sections, combat method sections, etc.
+		const allOptFeatLabels = this.page.locator(
+			".charsheet__builder-opt-feat-item, " +
+			".charsheet__builder-opt-feat-section label, " +
+			".charsheet__builder-optional-features label, " +
+			".charsheet__builder-method-item, " +
+			".charsheet__builder-combat-methods label",
+		);
 
-		if (await optFeatLabels.count() === 0) {
-			// Try the section class with labels
-			optFeatLabels = this.page.locator(".charsheet__builder-opt-feat-section label");
-		}
-
-		if (await optFeatLabels.count() === 0) {
-			// Try the container class
-			optFeatLabels = this.page.locator(".charsheet__builder-optional-features label");
-		}
-
-		const visibleCount = await optFeatLabels.count();
-		for (let i = 0; i < visibleCount && selected < count; i++) {
-			const label = optFeatLabels.nth(i);
+		const labelCount = await allOptFeatLabels.count();
+		for (let i = 0; i < labelCount && selected < count; i++) {
+			const label = allOptFeatLabels.nth(i);
 			const checkbox = label.locator("input[type='checkbox']");
 			if (await label.isVisible() && await checkbox.count() > 0 && !(await checkbox.isChecked())) {
+				await label.scrollIntoViewIfNeeded();
 				await label.click();
-				await this.page.waitForTimeout(100);
-				selected++;
+				await this.page.waitForTimeout(150);
+				// Verify the click was accepted (handler may reject if section is at max)
+				if (await checkbox.isChecked()) {
+					selected++;
+				}
 			}
 		}
 
 		if (selected >= count) return;
 
-		// Fallback: try known Fighting Style names by label
+		// Fallback: try known Fighting Style names
 		const knownFightingStyles = ["Archery", "Defense", "Dueling", "Great Weapon Fighting", "Protection", "Two-Weapon Fighting"];
 		for (const styleName of knownFightingStyles) {
 			if (selected >= count) break;
@@ -335,7 +337,7 @@ export class BuilderWizardPage {
 				if (await cb.count() > 0 && !(await cb.isChecked())) {
 					await label.first().click();
 					await this.page.waitForTimeout(100);
-					selected++;
+					if (await cb.isChecked()) selected++;
 				}
 			}
 		}
@@ -369,6 +371,70 @@ export class BuilderWizardPage {
 				await this.page.waitForTimeout(100);
 				selected++;
 			}
+		}
+	}
+
+	/**
+	 * Auto-fill all remaining required selections on the current builder step.
+	 * Uses jQuery to trigger checkbox changes (the app uses jQuery event handlers).
+	 */
+	async autoFillRemainingSelections (): Promise<void> {
+		// Strategy: Find all "Selected: X / Y" where X < Y, then walk up the DOM
+		// to find and check unchecked checkboxes until the count is met.
+		// Run multiple passes to handle cascading dependencies.
+		for (let pass = 0; pass < 3; pass++) {
+			await this.page.evaluate(() => {
+				const $ = (window as any).jQuery || (window as any).$;
+				if (!$) return;
+
+				// Use a more aggressive approach: find ALL text nodes matching the pattern
+				const walker = document.createTreeWalker(
+					document.body,
+					NodeFilter.SHOW_TEXT,
+					null,
+				);
+
+				const matchingNodes: {node: Node; current: number; max: number}[] = [];
+				let textNode;
+				while ((textNode = walker.nextNode())) {
+					const text = (textNode.textContent || "").trim();
+					const match = text.match(/^Selected:\s*(\d+)\s*\/\s*(\d+)$/);
+					if (match) {
+						const current = parseInt(match[1]);
+						const max = parseInt(match[2]);
+						if (current < max) {
+							matchingNodes.push({node: textNode, current, max});
+						}
+					}
+				}
+
+				for (const {node, current, max} of matchingNodes) {
+					const needed = max - current;
+					// Walk up from the text node to find checkboxes at increasing depths
+					let el: Element | null = node.parentElement;
+					let filled = 0;
+					for (let depth = 0; depth < 6 && el && filled < needed; depth++) {
+						el = el.parentElement;
+						if (!el) break;
+						const checkboxes = el.querySelectorAll("input[type='checkbox']:not(:checked)");
+						if (checkboxes.length > 0) {
+							for (const cb of checkboxes) {
+								if (filled >= needed) break;
+								// Click the parent clickable element (label or div) to trigger jQuery handlers
+								const clickTarget = cb.closest("label") || cb.parentElement;
+								if (clickTarget) {
+									(clickTarget as HTMLElement).click();
+								} else {
+									(cb as HTMLElement).click();
+								}
+								filled++;
+							}
+							break;
+						}
+					}
+				}
+			});
+			await this.page.waitForTimeout(300);
 		}
 	}
 
