@@ -420,6 +420,7 @@ class CharacterSheetPage {
 		this._renderSavingThrows();
 		this._renderSkills();
 		this._initTabs();
+		this._initHoverLinkSafetyNet();
 	}
 
 	/**
@@ -443,6 +444,20 @@ class CharacterSheetPage {
 			// Update tab content
 			$tabContent.find(".tab-pane").removeClass("active in");
 			$(targetId).addClass("active in");
+		});
+	}
+
+	/**
+	 * Safety-net: ensure any hover link (created via Renderer.hover.getHoverElementAttributes)
+	 * opens in a new tab instead of navigating away from the character sheet.
+	 * This catches direct usages that don't go through getHoverLink/getSubclassHoverLink.
+	 */
+	_initHoverLinkSafetyNet () {
+		$(document).on("click", "a[data-vet-page]", function (e) {
+			if (!this.target) {
+				this.target = "_blank";
+				this.rel = "noopener noreferrer";
+			}
 		});
 	}
 
@@ -7680,7 +7695,7 @@ class CharacterSheetPage {
 			// Create hash manually - don't use autoEncodeHash which uses getCurrentPage()
 			const finalHash = hash || UrlUtil.encodeForHash([name, source].join(HASH_LIST_SEP));
 			const hoverAttrs = Renderer.hover.getHoverElementAttributes({page, source, hash: finalHash});
-			const link = `<a href="${page}#${finalHash}" ${hoverAttrs}>${name}</a>`;
+			const link = `<a href="${page}#${finalHash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${name}</a>`;
 			return link;
 		} catch (e) {
 			console.error("[CharSheet] getHoverLink error:", e);
@@ -7701,7 +7716,7 @@ class CharacterSheetPage {
 				source: subclass.source,
 				hash,
 			});
-			return `<a href="${UrlUtil.PG_CLASSES}#${hash}" ${hoverAttrs} onclick="event.preventDefault();">${subclass.name}</a>`;
+			return `<a href="${UrlUtil.PG_CLASSES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${subclass.name}</a>`;
 		} catch (e) {
 			console.error("[CharSheet] getSubclassHoverLink error:", e);
 			return subclass.name; // Fallback to just the name

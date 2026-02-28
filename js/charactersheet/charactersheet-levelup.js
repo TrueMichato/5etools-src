@@ -2185,7 +2185,6 @@ class CharacterSheetLevelUp {
 						Parser.SRC_PHB,
 					]);
 					$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, resolvedSource));
-					$methodName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
 				} catch (e) {
 					$methodName.html(`<strong>${method.name}</strong>`);
 				}
@@ -2345,7 +2344,6 @@ class CharacterSheetLevelUp {
 						Parser.SRC_PHB,
 					]);
 					$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
-					$optName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
 				} catch (e) {
 					$optName.html(`<strong>${opt.name}</strong>`);
 				}
@@ -2545,7 +2543,7 @@ class CharacterSheetLevelUp {
 						const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
 						try {
 							const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
-							$nameSpan.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} onclick="event.preventDefault(); event.stopPropagation();">${opt.name}</a>`);
+							$nameSpan.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`);
 						} catch (e) {
 							$nameSpan.text(opt.name);
 						}
@@ -2560,7 +2558,6 @@ class CharacterSheetLevelUp {
 						]);
 						try {
 							$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
-							$nameSpan.find("a").on("click", (e) => e.preventDefault());
 						} catch (e) {
 							$nameSpan.text(opt.name);
 						}
