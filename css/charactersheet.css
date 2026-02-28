@@ -11037,15 +11037,15 @@ body:has(.charsheet__quickbuild-overlay) .toast__container {
 
 /* ========================================================================
    Modern Modal Enhancements - Character Sheet Specific
-   Modals are appended to body, so we use :has() to check if charactersheet exists
+   Modals are appended to body, so we use :has() to check if charsheet-page exists
    ======================================================================== */
-body:has(.charactersheet) .ui-modal__overlay {
+body:has(.charsheet-page) .ui-modal__overlay {
 	background: rgba(0, 0, 0, 0.7);
 	backdrop-filter: blur(4px);
 	-webkit-backdrop-filter: blur(4px);
 }
 
-body:has(.charactersheet) .ui-modal__inner {
+body:has(.charsheet-page) .ui-modal__inner {
 	background: var(--cs-bg-surface, #1e1e2e);
 	border: 1px solid var(--cs-border, rgba(99, 102, 241, 0.2));
 	border-radius: var(--cs-radius-lg, 12px);
@@ -11054,19 +11054,32 @@ body:has(.charactersheet) .ui-modal__inner {
 		0 25px 50px -12px rgba(0, 0, 0, 0.5),
 		0 0 40px rgba(99, 102, 241, 0.15);
 	max-width: 800px;
+	max-height: calc(85vh - 60px) !important;
 	overflow: visible !important;
 }
 
+/* Content-heavy modals (those using full width) get a taller height */
+body:has(.charsheet-page) .ui-modal__inner.w-100 {
+	height: min(600px, 70vh) !important;
+}
+
+/* The scroller inside needs to fill the available height */
+body:has(.charsheet-page) .ui-modal__inner.w-100 > .ui-modal__scroller {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
 /* Larger modals for item/spell pickers */
-body:has(.charactersheet) .ui-modal__inner:has(.charsheet__source-multiselect),
-body:has(.charactersheet) .ui-modal__inner:has(.charsheet__spell-list),
-body:has(.charactersheet) .ui-modal__inner:has(.charsheet__item-list) {
+body:has(.charsheet-page) .ui-modal__inner:has(.charsheet__source-multiselect),
+body:has(.charsheet-page) .ui-modal__inner:has(.charsheet__spell-list),
+body:has(.charsheet-page) .ui-modal__inner:has(.charsheet__item-list) {
 	max-width: 900px;
-	min-height: 500px;
+	height: min(700px, 75vh) !important;
 }
 
 /* Level-up wizard modal - much larger */
-body:has(.charactersheet) .ui-modal__inner:has(.charsheet__levelup-wizard) {
+body:has(.charsheet-page) .ui-modal__inner:has(.charsheet__levelup-wizard) {
 	max-width: 95vw !important;
 	width: 95vw !important;
 	max-height: 90vh !important;
@@ -11085,50 +11098,50 @@ body:has(.charsheet__levelup-wizard) .hwin .hoverborder {
 }
 
 /* Ensure modal scroller allows overflow for dropdowns */
-body:has(.charactersheet) .ui-modal__scroller:has(.charsheet__source-multiselect) {
+body:has(.charsheet-page) .ui-modal__scroller:has(.charsheet__source-multiselect) {
 	overflow: visible !important;
 }
 
-body:has(.charactersheet) .ui-modal__inner h4,
-body:has(.charactersheet) .ui-modal__inner h5 {
+body:has(.charsheet-page) .ui-modal__inner h4,
+body:has(.charsheet-page) .ui-modal__inner h5 {
 	color: var(--cs-text, inherit);
 	font-weight: 700;
 }
 
-body:has(.charactersheet) .ui-modal__inner h4 {
+body:has(.charsheet-page) .ui-modal__inner h4 {
 	background: linear-gradient(90deg, var(--cs-primary, #6366f1) 0%, var(--cs-accent, #8b5cf6) 100%);
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 	background-clip: text;
 }
 
-body:has(.charactersheet) .ui-modal__inner hr {
+body:has(.charsheet-page) .ui-modal__inner hr {
 	border-color: var(--cs-border, rgba(99, 102, 241, 0.2));
 	margin: var(--cs-space-md, 0.75rem) 0;
 }
 
 /* Modal Scrollbar */
-body:has(.charactersheet) .ui-modal__scroller::-webkit-scrollbar {
+body:has(.charsheet-page) .ui-modal__scroller::-webkit-scrollbar {
 	width: 8px;
 }
 
-body:has(.charactersheet) .ui-modal__scroller::-webkit-scrollbar-track {
+body:has(.charsheet-page) .ui-modal__scroller::-webkit-scrollbar-track {
 	background: var(--cs-bg-base, rgba(0, 0, 0, 0.2));
 	border-radius: 4px;
 }
 
-body:has(.charactersheet) .ui-modal__scroller::-webkit-scrollbar-thumb {
+body:has(.charsheet-page) .ui-modal__scroller::-webkit-scrollbar-thumb {
 	background: var(--cs-primary, #6366f1);
 	border-radius: 4px;
 }
 
-body:has(.charactersheet) .ui-modal__scroller::-webkit-scrollbar-thumb:hover {
+body:has(.charsheet-page) .ui-modal__scroller::-webkit-scrollbar-thumb:hover {
 	background: var(--cs-accent, #8b5cf6);
 }
 
 /* Modal Form Controls */
-body:has(.charactersheet) .ui-modal__inner .form-control,
-body:has(.charactersheet) .ui-modal__inner .ve-form-control {
+body:has(.charsheet-page) .ui-modal__inner .form-control,
+body:has(.charsheet-page) .ui-modal__inner .ve-form-control {
 	background: var(--cs-bg-base, rgba(0, 0, 0, 0.3));
 	border: 2px solid var(--cs-border, rgba(99, 102, 241, 0.2));
 	border-radius: var(--cs-radius-md, 8px);
@@ -11136,14 +11149,14 @@ body:has(.charactersheet) .ui-modal__inner .ve-form-control {
 	transition: all var(--cs-transition-fast, 0.15s ease);
 }
 
-body:has(.charactersheet) .ui-modal__inner .form-control:focus,
-body:has(.charactersheet) .ui-modal__inner .ve-form-control:focus {
+body:has(.charsheet-page) .ui-modal__inner .form-control:focus,
+body:has(.charsheet-page) .ui-modal__inner .ve-form-control:focus {
 	border-color: var(--cs-primary, #6366f1);
 	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 	outline: none;
 }
 
-body:has(.charactersheet) .ui-modal__inner select.form-control {
+body:has(.charsheet-page) .ui-modal__inner select.form-control {
 	appearance: none;
 	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236366f1' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
 	background-repeat: no-repeat;
@@ -11152,47 +11165,47 @@ body:has(.charactersheet) .ui-modal__inner select.form-control {
 }
 
 /* Modal Buttons */
-body:has(.charactersheet) .ui-modal__inner .ve-btn,
-body:has(.charactersheet) .ui-modal__inner button {
+body:has(.charsheet-page) .ui-modal__inner .ve-btn,
+body:has(.charsheet-page) .ui-modal__inner button {
 	border-radius: var(--cs-radius-md, 8px);
 	transition: all var(--cs-transition-fast, 0.15s ease);
 	font-weight: 600;
 }
 
-body:has(.charactersheet) .ui-modal__inner .ve-btn-primary {
+body:has(.charsheet-page) .ui-modal__inner .ve-btn-primary {
 	background: linear-gradient(135deg, var(--cs-primary, #6366f1) 0%, var(--cs-accent, #8b5cf6) 100%);
 	border: none;
 	box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
-body:has(.charactersheet) .ui-modal__inner .ve-btn-primary:hover {
+body:has(.charsheet-page) .ui-modal__inner .ve-btn-primary:hover {
 	transform: translateY(-1px);
 	box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }
 
-body:has(.charactersheet) .ui-modal__inner .ve-btn-default {
+body:has(.charsheet-page) .ui-modal__inner .ve-btn-default {
 	background: var(--cs-bg-base, rgba(0, 0, 0, 0.3));
 	border: 1px solid var(--cs-border, rgba(99, 102, 241, 0.2));
 }
 
-body:has(.charactersheet) .ui-modal__inner .ve-btn-default:hover {
+body:has(.charsheet-page) .ui-modal__inner .ve-btn-default:hover {
 	background: var(--cs-bg-surface, rgba(99, 102, 241, 0.1));
 	border-color: var(--cs-primary, #6366f1);
 }
 
-body:has(.charactersheet) .ui-modal__inner .ve-btn-success {
+body:has(.charsheet-page) .ui-modal__inner .ve-btn-success {
 	background: linear-gradient(135deg, var(--cs-success, #10b981) 0%, #059669 100%);
 	border: none;
 }
 
-body:has(.charactersheet) .ui-modal__inner .ve-btn-danger {
+body:has(.charsheet-page) .ui-modal__inner .ve-btn-danger {
 	background: linear-gradient(135deg, var(--cs-danger, #ef4444) 0%, #dc2626 100%);
 	border: none;
 }
 
 /* Modal Checkboxes and Radio */
-body:has(.charactersheet) .ui-modal__inner input[type="checkbox"],
-body:has(.charactersheet) .ui-modal__inner input[type="radio"] {
+body:has(.charsheet-page) .ui-modal__inner input[type="checkbox"],
+body:has(.charsheet-page) .ui-modal__inner input[type="radio"] {
 	appearance: none;
 	width: 18px;
 	height: 18px;
@@ -11204,17 +11217,17 @@ body:has(.charactersheet) .ui-modal__inner input[type="radio"] {
 	position: relative;
 }
 
-body:has(.charactersheet) .ui-modal__inner input[type="radio"] {
+body:has(.charsheet-page) .ui-modal__inner input[type="radio"] {
 	border-radius: 50%;
 }
 
-body:has(.charactersheet) .ui-modal__inner input[type="checkbox"]:checked,
-body:has(.charactersheet) .ui-modal__inner input[type="radio"]:checked {
+body:has(.charsheet-page) .ui-modal__inner input[type="checkbox"]:checked,
+body:has(.charsheet-page) .ui-modal__inner input[type="radio"]:checked {
 	background: var(--cs-primary, #6366f1);
 	border-color: var(--cs-primary, #6366f1);
 }
 
-body:has(.charactersheet) .ui-modal__inner input[type="checkbox"]:checked::after {
+body:has(.charsheet-page) .ui-modal__inner input[type="checkbox"]:checked::after {
 	content: "✓";
 	position: absolute;
 	top: 50%;
@@ -11225,7 +11238,7 @@ body:has(.charactersheet) .ui-modal__inner input[type="checkbox"]:checked::after
 	font-weight: bold;
 }
 
-body:has(.charactersheet) .ui-modal__inner input[type="radio"]:checked::after {
+body:has(.charsheet-page) .ui-modal__inner input[type="radio"]:checked::after {
 	content: "";
 	position: absolute;
 	top: 50%;
@@ -11237,8 +11250,8 @@ body:has(.charactersheet) .ui-modal__inner input[type="radio"]:checked::after {
 	border-radius: 50%;
 }
 
-body:has(.charactersheet) .ui-modal__inner input[type="checkbox"]:focus,
-body:has(.charactersheet) .ui-modal__inner input[type="radio"]:focus {
+body:has(.charsheet-page) .ui-modal__inner input[type="checkbox"]:focus,
+body:has(.charsheet-page) .ui-modal__inner input[type="radio"]:focus {
 	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 	outline: none;
 }
@@ -11380,7 +11393,7 @@ body:has(.charactersheet) .ui-modal__inner input[type="radio"]:focus {
 }
 
 /* High-specificity active state for filter buttons */
-body:has(.charactersheet) .ui-modal__inner .charsheet__modal-filter-btn.active,
+body:has(.charsheet-page) .ui-modal__inner .charsheet__modal-filter-btn.active,
 .charsheet__modal-filter-btn.active {
 	background: linear-gradient(135deg, var(--cs-primary, #6366f1) 0%, var(--cs-accent, #8b5cf6) 100%) !important;
 	color: white !important;
@@ -11388,7 +11401,7 @@ body:has(.charactersheet) .ui-modal__inner .charsheet__modal-filter-btn.active,
 	box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
 }
 
-body:has(.charactersheet) .ui-modal__inner .charsheet__modal-filter-btn.active:hover,
+body:has(.charsheet-page) .ui-modal__inner .charsheet__modal-filter-btn.active:hover,
 .charsheet__modal-filter-btn.active:hover {
 	box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
 }
