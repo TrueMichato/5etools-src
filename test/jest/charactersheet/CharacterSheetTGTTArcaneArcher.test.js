@@ -292,6 +292,219 @@ describe("TGTT Arcane Archer Fighter", () => {
 	});
 
 	// =========================================================================
+	// ARCANE SHOT OPTIONS PROGRESSION
+	// =========================================================================
+	describe("Arcane Shot Options Known", () => {
+		const optionsProgression = [
+			{level: 3, expected: 2},
+			{level: 6, expected: 2},
+			{level: 7, expected: 3},
+			{level: 9, expected: 3},
+			{level: 10, expected: 4},
+			{level: 14, expected: 4},
+			{level: 15, expected: 5},
+			{level: 17, expected: 5},
+			{level: 18, expected: 6},
+			{level: 20, expected: 6},
+		];
+
+		optionsProgression.forEach(({level, expected}) => {
+			it(`should have ${expected} Arcane Shot options at Fighter level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({
+					name: "Fighter", source: "TGTT", level,
+					hitDice: "d10",
+					subclass: {name: "Arcane Archer", shortName: "Arcane Archer", source: "TGTT"},
+				});
+				expect(s.getFeatureCalculations().arcaneShotOptions).toBe(expected);
+			});
+		});
+	});
+
+	// =========================================================================
+	// SECOND WIND SCALING (TGTT)
+	// =========================================================================
+	describe("Second Wind (TGTT)", () => {
+		describe("Second Wind Healing", () => {
+			const healingProgression = [
+				{level: 1, expected: "1d10+1"},
+				{level: 5, expected: "1d10+5"},
+				{level: 10, expected: "1d10+10"},
+				{level: 20, expected: "1d10+20"},
+			];
+
+			healingProgression.forEach(({level, expected}) => {
+				it(`should compute secondWindHealing = "${expected}" at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({name: "Fighter", source: "TGTT", level, hitDice: "d10"});
+					expect(s.getFeatureCalculations().secondWindHealing).toBe(expected);
+				});
+			});
+		});
+
+		describe("Second Wind Uses (TGTT schedule)", () => {
+			const usesProgression = [
+				{level: 1, expected: 2},
+				{level: 3, expected: 2},
+				{level: 4, expected: 3},
+				{level: 9, expected: 3},
+				{level: 10, expected: 4},
+				{level: 15, expected: 4},
+				{level: 16, expected: 5},
+				{level: 20, expected: 5},
+			];
+
+			usesProgression.forEach(({level, expected}) => {
+				it(`should have ${expected} Second Wind uses at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({name: "Fighter", source: "TGTT", level, hitDice: "d10"});
+					expect(s.getFeatureCalculations().secondWindUses).toBe(expected);
+				});
+			});
+
+			it("should differ from PHB Fighter (always 1 use)", () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Fighter", source: "PHB", level: 10, hitDice: "d10"});
+				expect(s.getFeatureCalculations().secondWindUses).toBe(1);
+			});
+		});
+	});
+
+	// =========================================================================
+	// ACTION SURGE USES (Computed)
+	// =========================================================================
+	describe("Action Surge Uses (Computed)", () => {
+		const surgeProgression = [
+			{level: 2, expected: 1},
+			{level: 10, expected: 1},
+			{level: 16, expected: 1},
+			{level: 17, expected: 2},
+			{level: 20, expected: 2},
+		];
+
+		surgeProgression.forEach(({level, expected}) => {
+			it(`should have ${expected} Action Surge use(s) at level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Fighter", source: "TGTT", level, hitDice: "d10"});
+				expect(s.getFeatureCalculations().actionSurgeUses).toBe(expected);
+			});
+		});
+	});
+
+	// =========================================================================
+	// INDOMITABLE USES
+	// =========================================================================
+	describe("Indomitable Uses", () => {
+		const indomProgression = [
+			{level: 9, expected: 1},
+			{level: 12, expected: 1},
+			{level: 13, expected: 2},
+			{level: 16, expected: 2},
+			{level: 17, expected: 3},
+			{level: 20, expected: 3},
+		];
+
+		indomProgression.forEach(({level, expected}) => {
+			it(`should have ${expected} Indomitable use(s) at level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({
+					name: "Fighter", source: "TGTT", level,
+					hitDice: "d10",
+					subclass: level >= 3 ? {name: "Arcane Archer", shortName: "Arcane Archer", source: "TGTT"} : undefined,
+				});
+				expect(s.getFeatureCalculations().indomitableUses).toBe(expected);
+			});
+		});
+	});
+
+	// =========================================================================
+	// BATTLE TACTICS COMPUTED VALUES
+	// =========================================================================
+	describe("Battle Tactics Computed Values", () => {
+		const flatBonusTactics = [
+			{name: "High Ground", calcKey: "highGroundBonus", expected: 2},
+			{name: "Sweeping Blows", calcKey: "sweepingBlowsBonus", expected: 2},
+			{name: "Hammer and Anvil", calcKey: "hammerAndAnvilBonus", expected: 2},
+			{name: "Flanking", calcKey: "flankingBonus", expected: 2},
+		];
+
+		flatBonusTactics.forEach(({name, calcKey, expected}) => {
+			it(`should compute ${calcKey} = ${expected} for ${name}`, () => {
+				makeArcaneArcher(5);
+				state.addFeature({
+					name,
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["BT"],
+				});
+				const calcs = state.getFeatureCalculations();
+				expect(calcs[calcKey]).toBe(expected);
+			});
+		});
+
+		it("should compute daringFeintCritRange = 19 at Fighter level 9+", () => {
+			makeArcaneArcher(9);
+			state.addFeature({
+				name: "Daring Feint",
+				source: "TGTT",
+				featureType: "Optional Feature",
+				optionalFeatureTypes: ["BT"],
+			});
+			expect(state.getFeatureCalculations().daringFeintCritRange).toBe(19);
+		});
+
+		it("should compute sheathingTheSwordCritRange = 19 at Fighter level 9+", () => {
+			makeArcaneArcher(9);
+			state.addFeature({
+				name: "Sheathing the Sword",
+				source: "TGTT",
+				featureType: "Optional Feature",
+				optionalFeatureTypes: ["BT"],
+			});
+			expect(state.getFeatureCalculations().sheathingTheSwordCritRange).toBe(19);
+		});
+
+		it("should NOT grant crit range bonuses before Fighter level 9", () => {
+			makeArcaneArcher(8);
+			state.addFeature({
+				name: "Daring Feint",
+				source: "TGTT",
+				featureType: "Optional Feature",
+				optionalFeatureTypes: ["BT"],
+			});
+			expect(state.getFeatureCalculations().daringFeintCritRange).toBeUndefined();
+		});
+	});
+
+	// =========================================================================
+	// COMBAT METHOD DEGREE PROGRESSION (Fighter schedule)
+	// =========================================================================
+	describe("Combat Method Degree Progression", () => {
+		// Fighter: L1→1st, L4→2nd, L8→3rd, L12→4th, L16→5th
+		const degreeProgression = [
+			{level: 1, expected: 1},
+			{level: 3, expected: 1},
+			{level: 4, expected: 2},
+			{level: 7, expected: 2},
+			{level: 8, expected: 3},
+			{level: 11, expected: 3},
+			{level: 12, expected: 4},
+			{level: 15, expected: 4},
+			{level: 16, expected: 5},
+			{level: 20, expected: 5},
+		];
+
+		degreeProgression.forEach(({level, expected}) => {
+			it(`should have degree ${expected} access at Fighter level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Fighter", source: "TGTT", level, hitDice: "d10"});
+				s.addCombatTradition("Biting Zephyr");
+				expect(s.getMethodDegreeAccess()).toBe(expected);
+			});
+		});
+	});
+
+	// =========================================================================
 	// ARCANE ARCHER SUBCLASS FEATURES
 	// =========================================================================
 	describe("Arcane Archer Subclass Features", () => {
@@ -349,7 +562,7 @@ describe("TGTT Arcane Archer Fighter", () => {
 	});
 
 	// =========================================================================
-	// ACTION SURGE / EXTRA ATTACK
+	// ACTION SURGE AND EXTRA ATTACK
 	// =========================================================================
 	describe("Action Surge and Extra Attack", () => {
 		it("should have Extra Attack at level 5", () => {
@@ -357,6 +570,20 @@ describe("TGTT Arcane Archer Fighter", () => {
 			state.applyClassFeatureEffects();
 			const calcs = state.getFeatureCalculations();
 			expect(calcs.extraAttacks).toBeGreaterThanOrEqual(1);
+		});
+
+		it("should have 2 extra attacks at level 11", () => {
+			makeArcaneArcher(11);
+			state.applyClassFeatureEffects();
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.extraAttacks).toBeGreaterThanOrEqual(2);
+		});
+
+		it("should have 3 extra attacks at level 20", () => {
+			makeArcaneArcher(20);
+			state.applyClassFeatureEffects();
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.extraAttacks).toBeGreaterThanOrEqual(3);
 		});
 
 		it("should track Action Surge uses", () => {

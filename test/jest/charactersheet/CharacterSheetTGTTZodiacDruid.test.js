@@ -252,6 +252,139 @@ describe("TGTT Zodiac Druid (Circle of the Stars)", () => {
 	});
 
 	// =========================================================================
+	// EXACT CONSTELLATION VALUES — Scaling
+	// =========================================================================
+	describe("Exact Constellation Value Scaling", () => {
+		describe("Aurochs STR Bonus = proficiency bonus", () => {
+			const aurochsProgression = [
+				{level: 3, prof: 2, expected: 2},
+				{level: 5, prof: 3, expected: 3},
+				{level: 6, prof: 3, expected: 3},
+				{level: 9, prof: 4, expected: 4},
+				{level: 13, prof: 5, expected: 5},
+				{level: 17, prof: 6, expected: 6},
+			];
+
+			aurochsProgression.forEach(({level, prof, expected}) => {
+				it(`should have aurochsStrBonus = ${expected} (prof ${prof}) at Druid level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({name: "Druid", source: "TGTT", level,
+						subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+					s.setAbilityBase("wis", 18);
+					expect(s.getFeatureCalculations().aurochsStrBonus).toBe(expected);
+				});
+			});
+		});
+
+		describe("Peacock Save DC = Spell Save DC", () => {
+			const peacockProgression = [
+				{level: 3, wis: 16, expected: 13},  // 8+2+3
+				{level: 5, wis: 18, expected: 15},  // 8+3+4
+				{level: 9, wis: 18, expected: 16},  // 8+4+4
+				{level: 13, wis: 20, expected: 18},  // 8+5+5
+				{level: 17, wis: 20, expected: 19},  // 8+6+5
+			];
+
+			peacockProgression.forEach(({level, wis, expected}) => {
+				it(`should have peacockSaveDc = ${expected} at Druid level ${level} (WIS ${wis})`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({name: "Druid", source: "TGTT", level,
+						subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+					s.setAbilityBase("wis", wis);
+					s.setSpellcastingAbility("wis");
+					expect(s.getFeatureCalculations().peacockSaveDc).toBe(expected);
+				});
+			});
+		});
+
+		describe("Cat Perception Bonus = \"1d4\"", () => {
+			it("should have catPerceptionBonus = \"1d4\" at level 3", () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Druid", source: "TGTT", level: 3,
+					subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+				s.setAbilityBase("wis", 18);
+				expect(s.getFeatureCalculations().catPerceptionBonus).toBe("1d4");
+			});
+
+			it("should have catPerceptionBonus = \"1d4\" at level 14", () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Druid", source: "TGTT", level: 14,
+					subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+				s.setAbilityBase("wis", 20);
+				expect(s.getFeatureCalculations().catPerceptionBonus).toBe("1d4");
+			});
+		});
+
+		describe("Hound Mark Range stays constant", () => {
+			[3, 6, 10, 14, 20].forEach(level => {
+				it(`should have houndMarkRange = 60 at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({name: "Druid", source: "TGTT", level,
+						subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+					s.setAbilityBase("wis", 18);
+					expect(s.getFeatureCalculations().houndMarkRange).toBe(60);
+				});
+			});
+		});
+
+		describe("Horse Speed Multiplier stays constant", () => {
+			[3, 6, 10, 14, 20].forEach(level => {
+				it(`should have horseSpeedMultiplier = 2 at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({name: "Druid", source: "TGTT", level,
+						subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+					s.setAbilityBase("wis", 18);
+					expect(s.getFeatureCalculations().horseSpeedMultiplier).toBe(2);
+				});
+			});
+		});
+
+		describe("Octopus Reach Bonus stays constant", () => {
+			[3, 6, 10, 14, 20].forEach(level => {
+				it(`should have octopusReachBonus = 5 at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({name: "Druid", source: "TGTT", level,
+						subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+					s.setAbilityBase("wis", 18);
+					expect(s.getFeatureCalculations().octopusReachBonus).toBe(5);
+				});
+			});
+		});
+	});
+
+	// =========================================================================
+	// WILD SHAPE USES PROGRESSION
+	// =========================================================================
+	describe("Wild Shape Uses Progression", () => {
+		// Standard Druid: 2 uses at L2+, Archdruid (L20) grants unlimited
+		const wsProgression = [
+			{level: 3, expected: 2},
+			{level: 6, expected: 2},
+			{level: 10, expected: 2},
+			{level: 14, expected: 2},
+			{level: 18, expected: 2},
+		];
+
+		wsProgression.forEach(({level, expected}) => {
+			it(`should have ${expected} Wild Shape uses at Druid level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Druid", source: "TGTT", level,
+					subclass: level >= 3 ? {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"} : undefined});
+				s.setAbilityBase("wis", 18);
+				expect(s.getFeatureCalculations().wildShapeUses).toBe(expected);
+			});
+		});
+
+		it("should have unlimited (Infinity) Wild Shape uses at Druid level 20 (Archdruid)", () => {
+			const s = new CharacterSheetState();
+			s.addClass({name: "Druid", source: "TGTT", level: 20,
+				subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+			s.setAbilityBase("wis", 18);
+			expect(s.getFeatureCalculations().wildShapeUses).toBe(Infinity);
+		});
+	});
+
+	// =========================================================================
 	// COSMIC OMEN (L6 feature)
 	// =========================================================================
 	describe("Cosmic Omen (Level 6)", () => {

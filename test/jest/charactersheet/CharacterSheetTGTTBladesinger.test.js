@@ -327,6 +327,18 @@ describe("TGTT Bladesinger Wizard", () => {
 				expect(calcs.hasExtraAttack).toBe(true);
 				expect(calcs.attacksPerAction).toBeGreaterThanOrEqual(2);
 			});
+
+			it("should allow replacing one attack with a cantrip at level 6", () => {
+				makeBladesinger(6);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.canReplaceAttackWithCantrip).toBe(true);
+			});
+
+			it("should NOT allow cantrip replacement before level 6", () => {
+				makeBladesinger(5);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.canReplaceAttackWithCantrip).toBeFalsy();
+			});
 		});
 
 		describe("Song of Defense (Level 10)", () => {
@@ -382,6 +394,75 @@ describe("TGTT Bladesinger Wizard", () => {
 				const features = state.getFeatures();
 				expect(features.some(f => f.name === "Song of Victory")).toBe(true);
 			});
+
+			it("should compute songOfVictoryDamageBonus = INT modifier (4)", () => {
+				makeBladesinger(14);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.songOfVictoryDamageBonus).toBe(4); // INT 18 → +4
+			});
+
+			it("should scale songOfVictoryDamageBonus with INT", () => {
+				makeBladesinger(14);
+				state.setAbilityBase("int", 20); // +5
+				expect(state.getFeatureCalculations().songOfVictoryDamageBonus).toBe(5);
+
+				state.setAbilityBase("int", 14); // +2
+				expect(state.getFeatureCalculations().songOfVictoryDamageBonus).toBe(2);
+			});
+
+			it("should NOT have songOfVictoryDamageBonus before level 14", () => {
+				makeBladesinger(13);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.songOfVictoryDamageBonus).toBeFalsy();
+			});
+		});
+	});
+
+	// =========================================================================
+	// ACTIVE STATE TOGGLE LIFECYCLE
+	// =========================================================================
+	describe("Active State Toggle Lifecycle", () => {
+		beforeEach(() => {
+			makeBladesinger(6);
+			state.addFeature({
+				name: "Bladesong",
+				description: "Starting at 2nd level, you can invoke a secret elven magic called the Bladesong as a bonus action.",
+				className: "Wizard",
+				level: 2,
+			});
+			state.addResource({name: "Bladesong", max: 2, current: 2, recharge: "long"});
+		});
+
+		it("should activate via activateState() and confirm via isStateTypeActive()", () => {
+			expect(state.isStateTypeActive("bladesong")).toBe(false);
+			state.activateState("bladesong");
+			expect(state.isStateTypeActive("bladesong")).toBe(true);
+		});
+
+		it("should deactivate via deactivateState() and clear all effects", () => {
+			state.activateState("bladesong");
+			expect(state.getActiveStateEffects().length).toBeGreaterThan(0);
+
+			state.deactivateState("bladesong");
+			expect(state.isStateTypeActive("bladesong")).toBe(false);
+			expect(state.getActiveStateEffects()).toHaveLength(0);
+		});
+
+		it("should toggle via toggleActiveState()", () => {
+			const stateId = state.activateState("bladesong");
+			expect(state.isStateTypeActive("bladesong")).toBe(true);
+
+			state.toggleActiveState(stateId);
+			expect(state.isStateTypeActive("bladesong")).toBe(false);
+		});
+
+		it("should re-activate cleanly after deactivation", () => {
+			state.activateState("bladesong");
+			state.deactivateState("bladesong");
+
+			state.activateState("bladesong");
+			expect(state.isStateTypeActive("bladesong")).toBe(true);
+			expect(state.getActiveStateEffects().length).toBeGreaterThan(0);
 		});
 	});
 

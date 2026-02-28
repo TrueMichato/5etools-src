@@ -275,6 +275,59 @@ describe("TGTT Way of Mercy Monk", () => {
 			});
 		});
 
+		// =================================================================
+		// HAND OF HEALING / HARM SCALING (martial arts die + WIS mod)
+		// =================================================================
+		describe("Hand of Healing Amount Scaling", () => {
+			// TGTT Monk martial arts die: 1d6(<5), 1d8(5-10), 1d10(11-16), 1d12(17+)
+			// WIS 16 = +3
+			const healingProgression = [
+				{level: 3, expected: "1d6+3"},
+				{level: 4, expected: "1d6+3"},
+				{level: 5, expected: "1d8+3"},
+				{level: 10, expected: "1d8+3"},
+				{level: 11, expected: "1d10+3"},
+				{level: 16, expected: "1d10+3"},
+				{level: 17, expected: "1d12+3"},
+				{level: 20, expected: "1d12+3"},
+			];
+
+			healingProgression.forEach(({level, expected}) => {
+				it(`should compute handOfHealingAmount = "${expected}" at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({
+						name: "Monk", source: "TGTT", level,
+						subclass: {name: "Warrior of Mercy", shortName: "Mercy", source: "TGTT"},
+					});
+					s.setAbilityBase("wis", 16); // +3
+					const calcs = s.getFeatureCalculations();
+					expect(calcs.handOfHealingAmount).toBe(expected);
+				});
+			});
+		});
+
+		describe("Hand of Harm Damage Scaling", () => {
+			const harmProgression = [
+				{level: 3, expected: "1d6+3"},
+				{level: 5, expected: "1d8+3"},
+				{level: 11, expected: "1d10+3"},
+				{level: 17, expected: "1d12+3"},
+			];
+
+			harmProgression.forEach(({level, expected}) => {
+				it(`should compute handOfHarmDamage = "${expected}" at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({
+						name: "Monk", source: "TGTT", level,
+						subclass: {name: "Warrior of Mercy", shortName: "Mercy", source: "TGTT"},
+					});
+					s.setAbilityBase("wis", 16); // +3
+					const calcs = s.getFeatureCalculations();
+					expect(calcs.handOfHarmDamage).toBe(expected);
+				});
+			});
+		});
+
 		describe("Physician's Touch (Level 6)", () => {
 			it("should grant Physician's Touch at level 6", () => {
 				makeMercyMonk(6);
@@ -352,6 +405,41 @@ describe("TGTT Way of Mercy Monk", () => {
 				const res = state.getResource("Hand of Ultimate Mercy");
 				expect(res.max).toBe(1);
 				expect(res.recharge).toBe("long");
+			});
+
+			it("should compute handOfUltimateMercyCost = 5", () => {
+				makeMercyMonk(17);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.handOfUltimateMercyCost).toBe(5);
+			});
+		});
+	});
+
+	// =========================================================================
+	// COMBAT METHOD DEGREE PROGRESSION (Monk schedule)
+	// =========================================================================
+	describe("Combat Method Degree Progression", () => {
+		// Monk: L2→1st, L4→2nd, L8→3rd, L13→4th, L17→5th
+		const degreeProgression = [
+			{level: 1, expected: 0},
+			{level: 2, expected: 1},
+			{level: 3, expected: 1},
+			{level: 4, expected: 2},
+			{level: 7, expected: 2},
+			{level: 8, expected: 3},
+			{level: 12, expected: 3},
+			{level: 13, expected: 4},
+			{level: 16, expected: 4},
+			{level: 17, expected: 5},
+			{level: 20, expected: 5},
+		];
+
+		degreeProgression.forEach(({level, expected}) => {
+			it(`should have degree ${expected} access at Monk level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Monk", source: "TGTT", level});
+				s.addCombatTradition("SK");
+				expect(s.getMethodDegreeAccess()).toBe(expected);
 			});
 		});
 	});

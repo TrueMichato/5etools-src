@@ -120,6 +120,36 @@ describe("TGTT Multiclass Builds", () => {
 				expect(state.getFeatureCalculations().huntersDodgeUses).toBe(4);
 			});
 
+			it("should have focusSwitchesMax based on Ranger level", () => {
+				makeRangerDruid(7, 3);
+				state.applyClassFeatureEffects();
+				const calcs = state.getFeatureCalculations();
+				// Ranger L7 → focusSwitchesMax is Ranger-level-based
+				expect(calcs.focusSwitchesMax).toBeGreaterThanOrEqual(1);
+			});
+
+			it("should scale focusSwitchesMax with Ranger level progression", () => {
+				// higher Ranger level → more switches
+				const s1 = new CharacterSheetState();
+				s1.addClass({name: "Ranger", source: "TGTT", level: 5,
+					subclass: {name: "Hunter", shortName: "Hunter", source: "TGTT"}});
+				s1.addClass({name: "Druid", source: "TGTT", level: 1});
+				s1.setAbilityBase("wis", 18);
+				s1.applyClassFeatureEffects();
+				const low = s1.getFeatureCalculations().focusSwitchesMax;
+
+				const s2 = new CharacterSheetState();
+				s2.addClass({name: "Ranger", source: "TGTT", level: 14,
+					subclass: {name: "Hunter", shortName: "Hunter", source: "TGTT"}});
+				s2.addClass({name: "Druid", source: "TGTT", level: 6,
+					subclass: {name: "Circle of the Stars", shortName: "Stars", source: "TGTT"}});
+				s2.setAbilityBase("wis", 18);
+				s2.applyClassFeatureEffects();
+				const high = s2.getFeatureCalculations().focusSwitchesMax;
+
+				expect(high).toBeGreaterThanOrEqual(low);
+			});
+
 			it("should have Zodiac Form from Druid subclass", () => {
 				makeRangerDruid(7, 3);
 				const calcs = state.getFeatureCalculations();
@@ -131,6 +161,12 @@ describe("TGTT Multiclass Builds", () => {
 				const calcs = state.getFeatureCalculations();
 				// Bee damage uses druid level: level 3 = before 10 scaling, 1d8+WIS
 				expect(calcs.beeDamage).toBe("1d8+4");
+			});
+
+			it("should have aurochsStrBonus = total prof bonus in multiclass", () => {
+				makeRangerDruid(7, 3); // total 10, prof 4
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.aurochsStrBonus).toBe(4);
 			});
 		});
 
@@ -262,6 +298,13 @@ describe("TGTT Multiclass Builds", () => {
 				expect(calcs.hasMetamagic).toBe(true);
 			});
 
+			it("should have 4 Metamagic options at Sorcerer level 7 (TGTT)", () => {
+				makeSorlock(7, 3);
+				const calcs = state.getFeatureCalculations();
+				// TGTT Sorc: 3@L3, 4@L6, 5@L10 — Sorc L7 ≥ 6 → 4 options
+				expect(calcs.metamagicOptions).toBe(4);
+			});
+
 			it("should maintain Hexblade Curse resource independently", () => {
 				makeSorlock(7, 3);
 				state.addResource({name: "Hexblade's Curse", max: 1, current: 1, recharge: "short"});
@@ -271,6 +314,55 @@ describe("TGTT Multiclass Builds", () => {
 				expect(res.max).toBe(1);
 				const calcs = state.getFeatureCalculations();
 				expect(calcs.sorceryPoints).toBe(8); // TGTT: 7 + 1
+			});
+
+			it("should compute Hexblade's Curse bonus damage = proficiency bonus in multiclass", () => {
+				makeSorlock(7, 3); // total 10, prof 4
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hexbladesCurseDamage).toBe(4); // equals prof bonus
+			});
+
+			it("should compute Hexblade's Curse healing = CHA mod + warlock level in multiclass", () => {
+				makeSorlock(7, 3); // CHA 20 (+5), Warlock level 3
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hexbladesCurseHealing).toBe(8); // CHA(5) + warlock(3)
+			});
+		});
+
+		describe("SP ↔ Slot Conversion in Multiclass", () => {
+			it("should convert spell slot to SP in multiclass context", () => {
+				makeSorlock(7, 3);
+				state.setSorceryPoints(8);
+				// Drain SP first so conversion is visible
+				state.useSorceryPoint(4);
+				const spBefore = state.getSorceryPoints().current;
+				state.convertSlotToSorceryPoints(1); // L1 slot → 1 SP
+				expect(state.getSorceryPoints().current).toBe(spBefore + 1);
+			});
+
+			it("should convert SP to spell slot in multiclass context", () => {
+				makeSorlock(7, 3);
+				state.setSorceryPoints(8);
+				state.calculateSpellSlots();
+				const slotsBefore = state.getSpellSlotsCurrent(1);
+				// Spend a slot first
+				state.useSpellSlot(1);
+				expect(state.getSpellSlotsCurrent(1)).toBe(slotsBefore - 1);
+				// Convert SP → slot
+				state.convertSorceryPointsToSlot(1); // costs 2 SP
+				expect(state.getSpellSlotsCurrent(1)).toBe(slotsBefore);
+			});
+
+			it("should respect max convertible level = 5 (TGTT) in multiclass", () => {
+				makeSorlock(7, 3);
+				expect(state.getMaxConvertibleSlotLevel()).toBe(5);
+			});
+
+			it("should use TGTT SP/Slot cost tables in multiclass", () => {
+				makeSorlock(7, 3);
+				expect(state.getSpToSlotCost(1)).toBe(2);
+				expect(state.getSpToSlotCost(2)).toBe(3);
+				expect(state.getSpToSlotCost(3)).toBe(5);
 			});
 		});
 
