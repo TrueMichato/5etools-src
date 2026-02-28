@@ -2181,7 +2181,6 @@ class CharacterSheetQuickBuild {
 							Parser.SRC_PHB,
 						]);
 						$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
-						$optName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
 					} catch (e) {
 						$optName.html(`<strong>${opt.name}</strong>`);
 					}
@@ -2389,7 +2388,6 @@ class CharacterSheetQuickBuild {
 								Parser.SRC_PHB,
 							]);
 							$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
-							$methodName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
 						} catch (e) {
 							$methodName.html(`<strong>${opt.name}</strong>`);
 						}
@@ -2715,7 +2713,7 @@ class CharacterSheetQuickBuild {
 					const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
 					try {
 						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
-						$featOptName.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} onclick="event.preventDefault(); event.stopPropagation();">${opt.name}</a>`);
+						$featOptName.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`);
 					} catch (e) {
 						$featOptName.html(`<strong>${opt.name}</strong>`);
 					}
@@ -2729,7 +2727,6 @@ class CharacterSheetQuickBuild {
 							Parser.SRC_PHB,
 						]);
 						$featOptName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
-						$featOptName.find("a").on("click", (e) => { e.preventDefault(); e.stopPropagation(); });
 					} catch (e) {
 						$featOptName.html(`<strong>${opt.name}</strong>`);
 					}
@@ -3245,7 +3242,7 @@ class CharacterSheetQuickBuild {
 				const source = entity.source || "XPHB";
 				const hash = UrlUtil.URL_TO_HASH_BUILDER[page]?.(entity) || `${UrlUtil.encodeForHash(entity.name)}${HASH_PART_SEP}${UrlUtil.encodeForHash(source)}`;
 				const hoverAttrs = Renderer.hover.getHoverElementAttributes({page, source, hash});
-				return `<a href="${page}#${hash}" ${hoverAttrs} onclick="event.preventDefault();">${entity.name}</a>`;
+				return `<a href="${page}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${entity.name}</a>`;
 			} catch (e) {
 				return entity.name;
 			}
@@ -3260,7 +3257,7 @@ class CharacterSheetQuickBuild {
 					source: subclass.source,
 					hash,
 				});
-				return `<a href="${UrlUtil.PG_CLASSES}#${hash}" ${hoverAttrs} onclick="event.preventDefault();">${subclass.name}</a>`;
+				return `<a href="${UrlUtil.PG_CLASSES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${subclass.name}</a>`;
 			} catch (e) {
 				return subclass.name;
 			}
@@ -3355,7 +3352,7 @@ class CharacterSheetQuickBuild {
 								const featureSource = refParts[2] || f.source || "XPHB";
 								const hash = UrlUtil.encodeArrayForHash(refParts[0], refParts[1], refParts[2], refParts[3], featureSource);
 								const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
-								return `<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} onclick="event.preventDefault();">${f.name}</a>`;
+								return `<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${f.name}</a>`;
 							} catch (e) {
 								return f.name;
 							}
@@ -3559,7 +3556,7 @@ class CharacterSheetQuickBuild {
 							source: featureSource,
 							hash,
 						});
-						$featureName.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} onclick="event.preventDefault(); event.stopPropagation();"><strong>${feature.name}</strong></a>`);
+						$featureName.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer"><strong>${feature.name}</strong></a>`);
 					} else {
 						$featureName.html(`<strong>${feature.name}</strong>`);
 					}
