@@ -1,11 +1,32 @@
 Open bugs:
 
-[X] Dual MInd ability of Kalashtar and Nyuidj becomes a simple +1 to the save in the modifiers instead of advantage, and doesn't seem to be applied
-[X] Modifier options does not seem to include all the new functionalities from the custom abilities
-[X] Stances from combat methods don't seem to apply correctly and have an active modifier before they are activated. Wary stance for example adds proficiency bonus +3 to roll, instead of proficiency bonus, and +3 to passive. 
-[X] Text is way too small and multiple players complained, this is an accesebility issue that should be fixed as soon as possible.
-[X] Combat Methods are not bunched together under the same tradition
-[X] Ranger Primal Focus supports activation (though using it from abilities and not ctive states does nothing), but not switching between states.
-[X] Wizard subclasses from TGTT don't seem to be added upon choice, might extend to other wixard classes as well, but haven't been tested yet.
-[X] Children of the empire can't choose cantrip like they are supposed to in the builder.
+[x] Some races (Tortle for example) have traits that aren't implemented in calculations (e.g. Shell Defense). These should be added to `getFeatureCalculations()` and tested.
+  - FIXED: Added ~30 official race trait registrations to `FeatureEffectRegistry._registerRaceFeatures()` covering Tortle (Natural Armor AC=17, Shell Defense +4 AC toggle, Claws), Lizardfolk (Natural Armor AC=13+DEX, Bite), Half-Orc (Relentless Endurance, Savage Attacks extra crit die), Goblin (Fury of the Small damage=proficiency, Nimble Escape), Bugbear (Surprise Attack +2d6, Long-Limbed +5 reach), Dragonborn (official Breath Weapon DC/damage scaling for PHB and XPHB editions), Warforged (Integrated Protection +1 AC), Autognome/Thri-kreen (AC=13+DEX), Loxodon (AC=12+CON), Tabaxi (Claws), Shifter, and more. Added scaling calculations in `getFeatureCalculations()` for Tortle, Lizardfolk, Goblin, Bugbear, and official Dragonborn Breath Weapon (both PHB 2d6 and XPHB 1d10 progressions).
+[x] Some races (Tortle for example) get a +1 +1 as their racial ASI, but it should be at min +2 +1. 
+  - FIXED: TGTT Tortle correctly inherits +2/+1 from TTP copy. The actual offender was the Nyuidj race whose `choose` block used `{count: 2, amount: 1}` (two +1s). Changed to `{weighted: {from: [...], weights: [2, 1]}}` for proper +2/+1.
+[x] Sorcerer doesn't give choice of starting items, but it should. It seems there is some confusion on what type of the data to access.
+  - FIXED: Implemented full equipment type picker for `equipmentType` items in the builder. Added `_getItemsForEquipmentType()` with match functions for all 12 equipment types (simple/martial melee/ranged weapons, arcane/holy/druidic focuses, etc.), `_renderEquipmentTypePickers()` for dropdown UI, and `_addEquipmentItems()` resolution logic. Equipment type pickers now render for both radio-choice and fixed-row equipment, with XPHB-preferred deduplication.
+[x] Backgrounds that give proficiency in musical instrument do not let you choose which one, and don't add it to the character sheet. This should be fixed by allowing the user to select the instrument and adding it to the proficiencies.
+  - FIXED: Added `anyMusicalInstrument` handling in `_renderBackgroundToolProficiencies` mirroring the existing `anyArtisansTool` pattern. Renders dropdown with `Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS`, stores selection with `isMusicalInstrument: true` flag, and excludes from fixed tool proficiency apply.
+[x] classes that have starting amount of spells don't have a time to choose the spells during character creation, and so when doing a quickbuild it appears as if they have less spells to choose then they should. This should be fixed by adding a step in the character creation process to choose the starting spells for classes that have them, but if quickubild is detected, the step should be skipped and the amount of spells needed should be added to the amount of spells the quickbuild will say that needs to be chosen. 
+  - FIXED: Added Step 6 "Spells" to the builder between Equipment and Details (bumped to 7 steps). `_getKnownCasterInfoForBuilder()` detects known-spell casters (Sorcerer, Bard, Warlock 2014) at level 1 via `getKnownSpellsAtLevel`. `_renderSpellsStep()` shows full spell picker with class filtering and Divine Soul support. Non-spellcasters see an informational skip message. Validation enforces spell/cantrip counts. Apply adds spells to state.
+[x] Divine soul sorcerer doesn't have the option to choose cleric spells as sorcerer spells, and so they don't get the correct amount of spells to choose from. This should be fixed by adding an option for divine soul sorcerers to choose cleric spells as sorcerer spells, and adjusting the amount of spells they need to choose accordingly.
+  - FIXED: Added `additionalClassNames` parameter to `CharacterSheetSpellPicker.renderKnownSpellPicker()`. When subclass is "Divine Soul", passes `["Cleric"]` as additional class names. The spell filter now checks both the primary class list and additional lists. Applied in all three call sites: levelup.js, quickbuild.js, and builder.js.
+[x] Warlock needs to choose horror invocations even when not using the horror subclass. This should be fixed by only giving the option to choose horror invocations when the horror subclass is selected.
+  - FIXED: Added `prereq.pact` filtering in both `_renderStandardOptionalFeatures` (builder) and `_renderStandardOptionalFeaturesLevelUp` (levelup). Invocations requiring e.g. "Pact of Transformation" now only appear when the character has that pact.
+[x] Magical cunning feature has a broken link.
+  - FIXED: Added official source fallback lookup in charactersheet-features.js. When a feature's stored source is homebrew but it matches an official feature, the hover link now resolves to the correct official source.
+[x] When leveling up a warlock regularly, there is a bug that doesn't allow me to choose new invocations because the modal is bunched up and not showing the invocations.
+  - FIXED: Changed invocation modal `max-height` from `250px` to `60vh` in charactersheet-levelup.js.
+[x] eldritch blast beams don't scale correctly, should be by general level and not class specific level.
+  - FIXED: Changed beam calculation in charactersheet-state.js to use `this.getTotalLevel()` instead of `cls.level`. Added 6 regression tests in CharacterSheetBugFixes.test.js.
+[x] When multiclassing sorcerer/warlock it doesn't give option for warlock spells to choose, only sorcerer. 
+  - FIXED: Added prepared-caster detection (`isPreparedCaster`) alongside known-caster detection in both levelup.js and quickbuild.js. XPHB Warlock (which has `preparedSpellsProgression` instead of `spellsKnownProgression`) now gets its own spell picker section (8c) using the same `renderKnownSpellPicker` UI. Calculated gains are stored as `prepared: true` spells. Added full prepared-caster support in quickbuild including aggregation, rendering, validation, and apply steps.
+[x] XPHB Warlock builder shows duplicate invocation counters. The `optionalfeatureProgression` and `classFeatures` "Eldritch Invocation Options" both render counters — first shows 1/1 after selection but second stays 0/1, causing validation failure.
+  - FIXED: Added `_isOptionGroupCoveredByOptFeatProgression()` helper that detects when a classFeature option group's entries are all `type: "optionalfeature"` AND their featureTypes overlap with `optionalfeatureProgression`. Used it to filter duplicate groups in both `_renderClassFeatureOptions` and `_getFeatureOptionsAtLevel`.
 
+Unverified bugs:
+
+[] Some subclasses have features that aren't fully implemented in calculations (e.g. Alchemist's Experimental Elixir count, Alchemical Savant bonus, Restorative Reagents uses). These should be added to `getFeatureCalculations()` and tested.
+
+[] Some tests use weak patterns that don't verify the actual calculations (e.g. checking for presence of text instead of verifying calculated values). These should be converted to stronger patterns that directly check the calculated values in `calculations`.

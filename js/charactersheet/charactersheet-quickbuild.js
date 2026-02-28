@@ -129,6 +129,8 @@ class CharacterSheetQuickBuild {
 			spellbookSpells: [],
 			knownSpells: [], // Known-caster spells (Sorcerer, Bard, etc.)
 			knownCantrips: [], // Known-caster cantrips
+			preparedSpells: [], // Prepared-caster spells (XPHB Warlock, etc.)
+			preparedCantrips: [], // Prepared-caster cantrips
 			spells: [],
 			hpMethod: "average",
 			hpRolls: {},
@@ -231,6 +233,35 @@ class CharacterSheetQuickBuild {
 			// Check for weapon mastery progression
 			const weaponMasteryCount = this._getWeaponMasteryCountAtLevel(classData, classLevel);
 
+			// Prepared-spell caster detection (XPHB Warlock, etc.)
+			let isPreparedCaster = false;
+			let preparedSpellsGainAtLevel = 0;
+			let preparedCantripsGainAtLevel = 0;
+			let preparedMaxSpellLevel = 0;
+
+			if (!isWizard && !isKnownCaster && classData.preparedSpellsProgression) {
+				isPreparedCaster = true;
+				const prog = classData.preparedSpellsProgression;
+				const newPrepared = prog[classLevel - 1] || 0;
+				const prevPrepared = classLevel >= 2 ? (prog[classLevel - 2] || 0) : 0;
+				preparedSpellsGainAtLevel = Math.max(0, newPrepared - prevPrepared);
+
+				const newCantrips = CharacterSheetClassUtils.getCantripsAtLevel(classData, className, classLevel);
+				if (newCantrips !== null) {
+					const prevCantrips = classLevel >= 2 ? (CharacterSheetClassUtils.getCantripsAtLevel(classData, className, classLevel - 1) || 0) : 0;
+					preparedCantripsGainAtLevel = Math.max(0, newCantrips - prevCantrips);
+				}
+
+				const casterProg = classData.casterProgression;
+				if (casterProg === "pact") {
+					preparedMaxSpellLevel = Math.min(5, Math.ceil(classLevel / 2));
+				} else if (casterProg === "full") {
+					preparedMaxSpellLevel = Math.min(9, Math.ceil(classLevel / 2));
+				} else {
+					preparedMaxSpellLevel = Math.min(9, Math.ceil(classLevel / 2));
+				}
+			}
+
 			// Update running optional feature counts
 			for (const gain of optionalFeatureGains) {
 				const key = gain.featureTypes.join("_");
@@ -257,6 +288,10 @@ class CharacterSheetQuickBuild {
 				knownSpellsGainAtLevel,
 				knownCantripsGainAtLevel,
 				knownMaxSpellLevel,
+				isPreparedCaster,
+				preparedSpellsGainAtLevel,
+				preparedCantripsGainAtLevel,
+				preparedMaxSpellLevel,
 				weaponMasteryCount,
 			};
 
@@ -567,23 +602,57 @@ class CharacterSheetQuickBuild {
 			knownCasterClassName = a.className;
 			knownCasterClassSource = a.classSource;
 		}
+		// Resolve subclass for the known caster to support features like Divine Soul
+		let knownCasterSubclassName = null;
+		if (knownCasterClassName) {
+			const sub = this._getSubclassForClass(knownCasterClassName, knownCasterClassSource, 0);
+			knownCasterSubclassName = sub?.name || null;
+			// Also check existing character state
+			if (!knownCasterSubclassName) {
+				const existing = this._state.getClasses().find(c => c.name === knownCasterClassName && c.source === knownCasterClassSource);
+				knownCasterSubclassName = existing?.subclass?.name || null;
+			}
+		}
 		const knownCasterInfo = totalKnownSpellsGain > 0 || totalKnownCantripsGain > 0 ? {
 			className: knownCasterClassName,
 			classSource: knownCasterClassSource,
+			subclassName: knownCasterSubclassName,
 			totalSpells: totalKnownSpellsGain,
 			totalCantrips: totalKnownCantripsGain,
 			maxSpellLevel: knownMaxSpellLevel,
 		} : null;
 
-		if (hasSpellcasting || spellbookLevels.length > 0 || knownCasterInfo) {
+		// Aggregate prepared-spell gains across all levels (XPHB Warlock, etc.)
+		const preparedCasterLevels = analysis.filter(a => a.isPreparedCaster && (a.preparedSpellsGainAtLevel > 0 || a.preparedCantripsGainAtLevel > 0));
+		let totalPreparedSpellsGain = 0;
+		let totalPreparedCantripsGain = 0;
+		let preparedMaxSpellLevel = 0;
+		let preparedCasterClassName = null;
+		let preparedCasterClassSource = null;
+		for (const a of preparedCasterLevels) {
+			totalPreparedSpellsGain += a.preparedSpellsGainAtLevel;
+			totalPreparedCantripsGain += a.preparedCantripsGainAtLevel;
+			preparedMaxSpellLevel = Math.max(preparedMaxSpellLevel, a.preparedMaxSpellLevel);
+			preparedCasterClassName = a.className;
+			preparedCasterClassSource = a.classSource;
+		}
+		const preparedCasterInfo = totalPreparedSpellsGain > 0 || totalPreparedCantripsGain > 0 ? {
+			className: preparedCasterClassName,
+			classSource: preparedCasterClassSource,
+			totalSpells: totalPreparedSpellsGain,
+			totalCantrips: totalPreparedCantripsGain,
+			maxSpellLevel: preparedMaxSpellLevel,
+		} : null;
+
+		if (hasSpellcasting || spellbookLevels.length > 0 || knownCasterInfo || preparedCasterInfo) {
 			this._steps.push({
 				id: "spells",
 				label: "Spells",
 				icon: "🔮",
 				required: true,
-				data: {hasSpellcasting, spellbookLevels, knownCasterInfo},
-				render: ($content) => this._renderSpellsStep($content, {hasSpellcasting, spellbookLevels, knownCasterInfo}),
-				validate: () => this._validateSpellsStep({hasSpellcasting, spellbookLevels, knownCasterInfo}),
+				data: {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo},
+				render: ($content) => this._renderSpellsStep($content, {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}),
+				validate: () => this._validateSpellsStep({hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}),
 			});
 		}
 
@@ -2985,7 +3054,7 @@ class CharacterSheetQuickBuild {
 	// Step 7: Spells
 	// ==========================================
 
-	_renderSpellsStep ($content, {hasSpellcasting, spellbookLevels, knownCasterInfo}) {
+	_renderSpellsStep ($content, {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}) {
 		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
 		$step.append(`
 			<div class="charsheet__quickbuild-step-header">
@@ -3021,11 +3090,18 @@ class CharacterSheetQuickBuild {
 			$step.append($section);
 		}
 
-		// Known-spell caster picker (Sorcerer, Bard, Ranger, Warlock, etc.)
+		// Known-spell caster picker (Sorcerer, Bard, Ranger, 2014 Warlock, etc.)
 		if (knownCasterInfo) {
 			this._renderKnownSpellPicker($step, knownCasterInfo);
-		} else if (hasSpellcasting && spellbookLevels.length === 0) {
-			// Prepared casters only need slot management
+		}
+
+		// Prepared-spell caster picker (XPHB Warlock, etc.)
+		if (preparedCasterInfo) {
+			this._renderPreparedSpellPicker($step, preparedCasterInfo);
+		}
+
+		if (!knownCasterInfo && !preparedCasterInfo && hasSpellcasting && spellbookLevels.length === 0) {
+			// Full-access prepared casters (Cleric, Druid) only need slot management
 			$step.append(`
 				<div class="charsheet__quickbuild-section mb-3">
 					<p class="ve-muted">Spell preparation and known spell management can be done from the Spells tab after building your character. Your spell slots will be automatically calculated based on your class levels.</p>
@@ -3052,6 +3128,9 @@ class CharacterSheetQuickBuild {
 		const allSpells = this._page.getSpells() || [];
 		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
 
+		// Divine Soul sorcerers also get access to the Cleric spell list
+		const additionalClassNames = (className === "Sorcerer" && knownCasterInfo.subclassName === "Divine Soul") ? ["Cleric"] : [];
+
 		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
 			className,
 			classSource,
@@ -3060,6 +3139,7 @@ class CharacterSheetQuickBuild {
 			maxSpellLevel,
 			allSpells: sourceFiltered,
 			knownSpellIds,
+			additionalClassNames,
 			onSelect: (spells, cantrips) => {
 				this._selections.knownSpells = spells;
 				this._selections.knownCantrips = cantrips;
@@ -3072,7 +3152,43 @@ class CharacterSheetQuickBuild {
 		$step.append($section);
 	}
 
-	_validateSpellsStep ({hasSpellcasting, spellbookLevels, knownCasterInfo}) {
+	/**
+	 * Render a prepared-spell picker section for the Quick Build spells step.
+	 * Uses the shared CharacterSheetSpellPicker component (same UI as known-spell picker).
+	 */
+	_renderPreparedSpellPicker ($step, preparedCasterInfo) {
+		const {className, classSource, totalSpells, totalCantrips, maxSpellLevel} = preparedCasterInfo;
+
+		// Get already-known/prepared spells to mark them
+		const knownSpells = this._state.getSpells?.() || [];
+		const knownCantrips = this._state.getCantripsKnown?.() || [];
+		const preparedSpells = this._state.getPreparedSpells?.() || [];
+		const knownSpellIds = new Set([...knownSpells, ...knownCantrips, ...preparedSpells].map(s => `${s.name}|${s.source}`));
+
+		const allSpells = this._page.getSpells() || [];
+		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
+
+		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
+			className,
+			classSource,
+			spellCount: totalSpells,
+			cantripCount: totalCantrips,
+			maxSpellLevel,
+			allSpells: sourceFiltered,
+			knownSpellIds,
+			onSelect: (spells, cantrips) => {
+				this._selections.preparedSpells = spells;
+				this._selections.preparedCantrips = cantrips;
+			},
+			getHoverLink: (page, name, source) => CharacterSheetPage.getHoverLink(page, name, source),
+			preSelectedSpells: this._selections.preparedSpells || [],
+			preSelectedCantrips: this._selections.preparedCantrips || [],
+		});
+
+		$step.append($section);
+	}
+
+	_validateSpellsStep ({hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}) {
 		if (spellbookLevels.length > 0) {
 			const totalNeeded = spellbookLevels.length * 2;
 			if (this._selections.spellbookSpells.length < totalNeeded) {
@@ -3087,6 +3203,18 @@ class CharacterSheetQuickBuild {
 			}
 			if (knownCasterInfo.totalCantrips > 0 && this._selections.knownCantrips.length < knownCasterInfo.totalCantrips) {
 				JqueryUtil.doToast({type: "warning", content: `Please select ${knownCasterInfo.totalCantrips} cantrips (currently ${this._selections.knownCantrips.length}).`});
+				return false;
+			}
+		}
+		if (preparedCasterInfo) {
+			const prepSpells = this._selections.preparedSpells || [];
+			const prepCantrips = this._selections.preparedCantrips || [];
+			if (preparedCasterInfo.totalSpells > 0 && prepSpells.length < preparedCasterInfo.totalSpells) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedCasterInfo.totalSpells} prepared spells (currently ${prepSpells.length}).`});
+				return false;
+			}
+			if (preparedCasterInfo.totalCantrips > 0 && prepCantrips.length < preparedCasterInfo.totalCantrips) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedCasterInfo.totalCantrips} cantrips (currently ${prepCantrips.length}).`});
 				return false;
 			}
 		}
@@ -3809,6 +3937,33 @@ class CharacterSheetQuickBuild {
 				this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(spell, {
 					sourceFeature: "Cantrips Known",
 					sourceClass: knownClassName || "",
+				}));
+			});
+		}
+
+		// Apply prepared spells (XPHB Warlock, etc.)
+		if (this._selections.preparedSpells?.length > 0) {
+			const prepClassName = this._classAllocations.find(a =>
+				a.classData?.preparedSpellsProgression,
+			)?.className;
+			this._selections.preparedSpells.forEach(spell => {
+				this._state.addSpell(CharacterSheetClassUtils.buildSpellStateObject(spell, {
+					sourceFeature: "Prepared Spells",
+					sourceClass: prepClassName || "",
+					prepared: true,
+				}));
+			});
+		}
+
+		// Apply prepared cantrips
+		if (this._selections.preparedCantrips?.length > 0) {
+			const prepClassName = this._classAllocations.find(a =>
+				a.classData?.preparedSpellsProgression,
+			)?.className;
+			this._selections.preparedCantrips.forEach(spell => {
+				this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(spell, {
+					sourceFeature: "Prepared Spells",
+					sourceClass: prepClassName || "",
 				}));
 			});
 		}

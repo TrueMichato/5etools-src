@@ -7,7 +7,7 @@ class CharacterSheetBuilder {
 		this._page = page;
 		this._state = page.getState();
 		this._currentStep = 1;
-		this._maxSteps = 6;
+		this._maxSteps = 7;
 
 		this._selectedRace = null;
 		this._selectedSubrace = null;
@@ -39,6 +39,8 @@ class CharacterSheetBuilder {
 		this._tashasAbilityBonuses = {}; // Stores custom ASI when using Tasha's rules
 		this._customBackground = null; // Stores custom background object
 		this._customBackgroundData = null; // Stores custom background form data
+		this._selectedKnownSpells = []; // For known-caster spell choices at level 1
+		this._selectedKnownCantrips = []; // For known-caster cantrip choices at level 1
 		this._quickBuildTargetLevel = 1; // Target level for Quick Build integration
 
 		this._init();
@@ -382,6 +384,20 @@ class CharacterSheetBuilder {
 				}
 				return true;
 
+			case 6: { // Spells
+				const knownInfo = this._getKnownCasterInfoForBuilder();
+				if (!knownInfo) return true; // Not a known-caster class — nothing to validate
+				if (knownInfo.spellCount > 0 && this._selectedKnownSpells.length < knownInfo.spellCount) {
+					JqueryUtil.doToast({type: "warning", content: `Please select ${knownInfo.spellCount} spells (currently ${this._selectedKnownSpells.length}).`});
+					return false;
+				}
+				if (knownInfo.cantripCount > 0 && this._selectedKnownCantrips.length < knownInfo.cantripCount) {
+					JqueryUtil.doToast({type: "warning", content: `Please select ${knownInfo.cantripCount} cantrips (currently ${this._selectedKnownCantrips.length}).`});
+					return false;
+				}
+				return true;
+			}
+
 			default:
 				return true;
 		}
@@ -527,7 +543,11 @@ class CharacterSheetBuilder {
 				this._applyEquipmentChoices();
 				break;
 
-			case 6: // Details
+			case 6: // Spells
+				this._applyBuilderSpellChoices();
+				break;
+
+			case 7: // Details
 				// Details are saved directly in the details step
 				break;
 		}
@@ -609,17 +629,18 @@ class CharacterSheetBuilder {
 		defaultData.forEach((choiceSet, idx) => {
 			const selectedKey = this._equipmentChoices?.[idx] || Object.keys(choiceSet).filter(k => k !== "_")[0] || "_";
 			const items = choiceSet[selectedKey] || choiceSet._ || [];
+			const pickerPrefix = selectedKey === "_" ? `${idx}__` : `${idx}_${selectedKey}`;
 
-			this._addEquipmentItems(items);
+			this._addEquipmentItems(items, pickerPrefix);
 		});
 	}
 
-	_addEquipmentItems (items) {
+	_addEquipmentItems (items, pickerPrefix = "") {
 		if (!Array.isArray(items)) return;
 
 		const allItems = this._page.getItems();
 
-		items.forEach(itemEntry => {
+		items.forEach((itemEntry, itemIdx) => {
 			if (typeof itemEntry === "string") {
 				// Direct item reference like "chain mail|phb"
 				const [name, source] = itemEntry.split("|");
@@ -641,9 +662,21 @@ class CharacterSheetBuilder {
 					this._state.addItem(item, itemEntry.quantity || 1);
 				}
 			} else if (itemEntry.equipmentType) {
-				// Generic equipment type - user would need to choose
-				// For now, we'll skip these and let user add manually
-				// In a full implementation, this would show a picker
+				// Generic equipment type - look up user's selection from the equipment type picker
+				const eqType = itemEntry.equipmentType;
+				const quantity = itemEntry.quantity || 1;
+				for (let q = 0; q < quantity; q++) {
+					const selectKey = quantity > 1
+						? `${pickerPrefix}${eqType}_${itemIdx}_${q}`
+						: `${pickerPrefix}${eqType}_${itemIdx}`;
+					const selectedItemName = this._equipmentTypeChoices?.[selectKey];
+					if (selectedItemName) {
+						const item = allItems.find(i => i.name === selectedItemName);
+						if (item) {
+							this._state.addItem(item, 1);
+						}
+					}
+				}
 			}
 		});
 	}
@@ -1668,8 +1701,8 @@ class CharacterSheetBuilder {
 		if (this._selectedBackground.toolProficiencies) {
 			this._selectedBackground.toolProficiencies.forEach(toolSet => {
 				Object.entries(toolSet).forEach(([key, value]) => {
-					// Only add fixed tool proficiencies here (not choose/any)
-					if (key !== "choose" && key !== "any" && key !== "anyArtisansTool" && value === true) {
+					// Only add fixed tool proficiencies here (not choose/any/anyMusical)
+					if (key !== "choose" && key !== "any" && key !== "anyArtisansTool" && key !== "anyMusicalInstrument" && value === true) {
 						this._state.addToolProficiency(key.toTitleCase());
 					}
 				});
@@ -1944,6 +1977,9 @@ class CharacterSheetBuilder {
 				this._renderEquipmentStep($content);
 				break;
 			case 6:
+				this._renderSpellsStep($content);
+				break;
+			case 7:
 				this._renderDetailsStep($content);
 				break;
 		}
@@ -2998,6 +3034,7 @@ class CharacterSheetBuilder {
 						this._selectedWeaponMasteries = [];
 						// Reset equipment choices when changing class
 						this._equipmentChoices = {};
+						this._equipmentTypeChoices = {};
 						this._useGoldAlternative = false;
 						// Reset optional features when changing class
 						this._selectedOptionalFeatures = {};
@@ -3855,6 +3892,10 @@ class CharacterSheetBuilder {
 			// Check for embedded options
 			const featureOptions = this._findFeatureOptions(fullFeature, level);
 			for (const optionGroup of featureOptions) {
+				// Skip option groups already covered by optionalfeatureProgression
+				// (e.g. "Eldritch Invocation Options" is handled by _renderClassOptionalFeatures)
+				if (this._isOptionGroupCoveredByOptFeatProgression(optionGroup, cls)) continue;
+
 				result.push({
 					// Use same key format as _renderClassFeatureOptions
 					featureKey: `${fullFeature.name}_${fullFeature.source}`,
@@ -4554,6 +4595,12 @@ class CharacterSheetBuilder {
 						const reqLevel = prereq.level.level || prereq.level;
 						if (reqLevel > 1) return false;
 					}
+					// Check pact prerequisite — e.g. "Pact of Transformation" invocations
+					if (prereq.pact) {
+						const hasPact = Object.values(this._selectedOptionalFeatures).flat()
+							.some(f => f.name === prereq.pact);
+						if (!hasPact) return false;
+					}
 				}
 			}
 			return true;
@@ -4719,6 +4766,40 @@ class CharacterSheetBuilder {
 	}
 
 	/**
+	 * Check if a feature option group is already handled by optionalfeatureProgression.
+	 * This prevents duplicate rendering for features like "Eldritch Invocation Options" which
+	 * appear both as a classFeature with {type: "options"} entries AND in optionalfeatureProgression.
+	 * @param {Object} optionGroup - {options: Array, count, featureName, ...}
+	 * @param {Object} cls - Class data with optionalfeatureProgression
+	 * @returns {boolean}
+	 */
+	_isOptionGroupCoveredByOptFeatProgression (optionGroup, cls) {
+		if (!cls.optionalfeatureProgression?.length) return false;
+		// Only suppress if ALL options in the group are optional features (not class features, etc.)
+		if (!optionGroup.options?.length) return false;
+		if (!optionGroup.options.every(opt => opt.type === "optionalfeature")) return false;
+
+		// Collect all featureTypes covered by optionalfeatureProgression
+		const progFeatureTypes = new Set();
+		for (const prog of cls.optionalfeatureProgression) {
+			if (prog.featureType) {
+				for (const ft of prog.featureType) progFeatureTypes.add(ft);
+			}
+		}
+
+		// Check if ANY option in this group references a feature type covered by the progression.
+		// We resolve the optional features from the page data to check their featureType.
+		const allOptFeatures = this._page.getOptionalFeatures?.() || [];
+		for (const opt of optionGroup.options) {
+			const optName = opt.name;
+			const match = allOptFeatures.find(f => f.name === optName);
+			if (match?.featureType?.some(ft => progFeatureTypes.has(ft))) return true;
+		}
+
+		return false;
+	}
+
+	/**
 	 * Render selection UI for class features that have embedded options (like Specialties)
 	 * These are features with {type: "options", count: N, entries: [refClassFeature, ...]}
 	 */
@@ -4796,11 +4877,15 @@ class CharacterSheetBuilder {
 			});
 		}
 
-		if (allOptions.length === 0) return null;
+		// Filter out option groups already covered by optionalfeatureProgression
+		// (e.g. "Eldritch Invocation Options" is handled by _renderClassOptionalFeatures)
+		const filteredOptions = allOptions.filter(og => !this._isOptionGroupCoveredByOptFeatProgression(og, cls));
+
+		if (filteredOptions.length === 0) return null;
 
 		const $container = $(`<div class="charsheet__builder-feature-options mt-3"></div>`);
 
-		for (const optGroup of allOptions) {
+		for (const optGroup of filteredOptions) {
 			const featureKey = `${optGroup.featureName}_${optGroup.featureSource}`;
 
 			// Initialize storage if needed
@@ -6030,6 +6115,7 @@ class CharacterSheetBuilder {
 		const choiceOptions = [];
 		let anyToolCount = 0;
 		let anyArtisanCount = 0;
+		let anyMusicalInstrumentCount = 0;
 
 		bg.toolProficiencies.forEach(toolSet => {
 			Object.entries(toolSet).forEach(([key, value]) => {
@@ -6042,6 +6128,8 @@ class CharacterSheetBuilder {
 					anyToolCount += (typeof value === "number" ? value : 1);
 				} else if (key === "anyArtisansTool") {
 					anyArtisanCount += (typeof value === "number" ? value : 1);
+				} else if (key === "anyMusicalInstrument") {
+					anyMusicalInstrumentCount += (typeof value === "number" ? value : 1);
 				} else if (value === true) {
 					fixedTools.push(key);
 				}
@@ -6178,7 +6266,48 @@ class CharacterSheetBuilder {
 			$toolSection.append($artisanSection);
 		}
 
-		if (fixedTools.length || choiceOptions.length || anyToolCount || anyArtisanCount) {
+		// Render "any musical instrument" selection
+		if (anyMusicalInstrumentCount > 0) {
+			const $instrumentSection = $(`<div class="charsheet__builder-tool-instrument mt-1"></div>`);
+			$instrumentSection.append(`<p class="mb-1"><strong>Choose ${anyMusicalInstrumentCount} musical instrument${anyMusicalInstrumentCount > 1 ? "s" : ""}:</strong></p>`);
+
+			const musicalInstruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS;
+			for (let i = 0; i < anyMusicalInstrumentCount; i++) {
+				const selectId = `bg-tool-instrument-${i}`;
+				const $select = $(`
+					<select class="form-control form-control--minimal mb-1" id="${selectId}">
+						<option value="">-- Select Musical Instrument --</option>
+					</select>
+				`);
+
+				musicalInstruments.forEach(instrument => {
+					$select.append(`<option value="${instrument}">${instrument.toTitleCase()}</option>`);
+				});
+
+				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isMusicalInstrument);
+				if (existingChoice) {
+					$select.val(existingChoice.tool);
+				}
+
+				$select.on("change", (e) => {
+					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
+						t => !(t.anyIdx === i && t.isMusicalInstrument),
+					);
+					if (e.target.value) {
+						this._selectedToolProficiencies.push({
+							anyIdx: i,
+							tool: e.target.value,
+							isMusicalInstrument: true,
+						});
+					}
+				});
+
+				$instrumentSection.append($select);
+			}
+			$toolSection.append($instrumentSection);
+		}
+
+		if (fixedTools.length || choiceOptions.length || anyToolCount || anyArtisanCount || anyMusicalInstrumentCount) {
 			$content.append($toolSection);
 		}
 	}
@@ -6604,6 +6733,13 @@ class CharacterSheetBuilder {
 
 				if (choiceKeys.length > 1) {
 					const $choiceGroup = $(`<div class="charsheet__builder-equipment-choice"></div>`);
+					const $pickerContainer = $(`<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`);
+
+					const renderPickersForKey = (key) => {
+						$pickerContainer.empty();
+						const items = choiceData[key] || [];
+						this._renderEquipmentTypePickers($pickerContainer, items, `${idx}_${key}`);
+					};
 
 					choiceKeys.forEach((key, choiceIdx) => {
 						const choiceLabel = this._getEquipmentChoiceLabel(choiceData[key], key);
@@ -6611,6 +6747,10 @@ class CharacterSheetBuilder {
 
 						if (!this._equipmentChoices[idx]) {
 							this._equipmentChoices[idx] = choiceKeys[0]; // Default to first choice
+						}
+
+						if (isSelected) {
+							renderPickersForKey(key);
 						}
 
 						const $option = $(`
@@ -6622,20 +6762,32 @@ class CharacterSheetBuilder {
 
 						$option.find("input").on("change", () => {
 							this._equipmentChoices[idx] = key;
+							renderPickersForKey(key);
 						});
 
 						$choiceGroup.append($option);
 					});
 
 					$row.append($choiceGroup);
+					$row.append($pickerContainer);
 				} else if (choiceData._) {
 					// Fixed equipment (no choice)
 					const label = this._getEquipmentChoiceLabel(choiceData._, "_");
 					$row.append(`<p>${Renderer.get().render(label)}</p>`);
+					// Render equipment type pickers for fixed data items
+					const $fixedPickers = $(`<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`);
+					this._renderEquipmentTypePickers($fixedPickers, choiceData._, `${idx}__`);
+					$row.append($fixedPickers);
 				}
 			} else {
 				// Not a choice, just display the entry
 				$row.append(`<p>${Renderer.get().render(entry)}</p>`);
+				// If there's defaultData for this idx, check for equipmentType items
+				if (defaultData[idx]?._) {
+					const $nonChoicePickers = $(`<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`);
+					this._renderEquipmentTypePickers($nonChoicePickers, defaultData[idx]._, `${idx}__`);
+					$row.append($nonChoicePickers);
+				}
 			}
 
 			$container.append($row);
@@ -6660,6 +6812,114 @@ class CharacterSheetBuilder {
 		}
 	}
 
+	/**
+	 * Render dropdown pickers for items with equipmentType in an equipment item list.
+	 * @param {jQuery} $container - Container to append pickers to
+	 * @param {Array} items - Equipment items array (from defaultData)
+	 * @param {string} prefix - Unique prefix for picker keys
+	 */
+	_renderEquipmentTypePickers ($container, items, prefix) {
+		if (!Array.isArray(items)) return;
+		if (!this._equipmentTypeChoices) this._equipmentTypeChoices = {};
+
+		const allItems = this._page.getItems();
+
+		items.forEach((itemEntry, itemIdx) => {
+			if (!itemEntry.equipmentType) return;
+
+			const eqType = itemEntry.equipmentType;
+			const pickerKey = `${eqType}_${itemIdx}`;
+			const label = CharacterSheetBuilder._EQUIPMENT_TYPE_LABELS[eqType] || eqType;
+			const matchingItems = this._getItemsForEquipmentType(eqType, allItems);
+
+			if (matchingItems.length === 0) return;
+
+			const quantity = itemEntry.quantity || 1;
+			for (let q = 0; q < quantity; q++) {
+				const selectKey = quantity > 1 ? `${prefix}${pickerKey}_${q}` : `${prefix}${pickerKey}`;
+				const $picker = $(`
+					<div class="charsheet__builder-equipment-type-picker mb-1">
+						<label class="ve-small ve-muted">Choose ${label}:</label>
+						<select class="form-control form-control--minimal" style="max-width: 300px;">
+							<option value="">-- Select --</option>
+						</select>
+					</div>
+				`);
+
+				const $select = $picker.find("select");
+				matchingItems.forEach(item => {
+					$select.append(`<option value="${item.name}">${item.name}</option>`);
+				});
+
+				// Pre-select if already chosen
+				if (this._equipmentTypeChoices[selectKey]) {
+					$select.val(this._equipmentTypeChoices[selectKey]);
+				}
+
+				$select.on("change", (e) => {
+					this._equipmentTypeChoices[selectKey] = e.target.value || null;
+				});
+
+				$container.append($picker);
+			}
+		});
+	}
+
+	/**
+	 * Map equipmentType values to display labels
+	 */
+	static _EQUIPMENT_TYPE_LABELS = {
+		"weaponSimple": "any simple weapon",
+		"weaponMartial": "any martial weapon",
+		"weaponSimpleMelee": "any simple melee weapon",
+		"weaponMartialMelee": "any martial melee weapon",
+		"armorLight": "any light armor",
+		"armorMedium": "any medium armor",
+		"armorHeavy": "any heavy armor",
+		"instrumentMusical": "any musical instrument",
+		"toolArtisan": "any artisan's tools",
+		"focusSpellcastingArcane": "any arcane focus",
+		"focusSpellcastingHoly": "any holy symbol",
+		"focusSpellcastingDruidic": "any druidic focus",
+	};
+
+	/**
+	 * Filter items matching an equipmentType value.
+	 * @param {string} equipmentType - e.g. "weaponSimple", "focusSpellcastingArcane"
+	 * @param {Array} allItems - All items from page data
+	 * @returns {Array} Matching items sorted by name
+	 */
+	_getItemsForEquipmentType (equipmentType, allItems) {
+		const matchFns = {
+			"weaponSimple": (i) => i.weaponCategory === "simple",
+			"weaponMartial": (i) => i.weaponCategory === "martial",
+			"weaponSimpleMelee": (i) => i.weaponCategory === "simple" && (i.type === "M" || i.type === "M|XPHB"),
+			"weaponMartialMelee": (i) => i.weaponCategory === "martial" && (i.type === "M" || i.type === "M|XPHB"),
+			"armorLight": (i) => i.type === "LA" || i.type === "LA|XPHB",
+			"armorMedium": (i) => i.type === "MA" || i.type === "MA|XPHB",
+			"armorHeavy": (i) => i.type === "HA" || i.type === "HA|XPHB",
+			"instrumentMusical": (i) => i.type === "INS" || i.type === "INS|XPHB",
+			"toolArtisan": (i) => i.type === "AT" || i.type === "AT|XPHB",
+			"focusSpellcastingArcane": (i) => (i.type === "SCF" || i.type === "SCF|XPHB") && i.scfType === "arcane",
+			"focusSpellcastingHoly": (i) => (i.type === "SCF" || i.type === "SCF|XPHB") && i.scfType === "holy",
+			"focusSpellcastingDruidic": (i) => (i.type === "SCF" || i.type === "SCF|XPHB") && i.scfType === "druid",
+		};
+
+		const matchFn = matchFns[equipmentType];
+		if (!matchFn) return [];
+
+		// Deduplicate by name (prefer XPHB source over PHB)
+		const matched = allItems.filter(matchFn);
+		const byName = new Map();
+		for (const item of matched) {
+			const existing = byName.get(item.name);
+			if (!existing || (item.source === "XPHB" && existing.source !== "XPHB")) {
+				byName.set(item.name, item);
+			}
+		}
+		return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+	}
+
 	_getEquipmentChoiceLabel (items, key) {
 		if (!Array.isArray(items)) return String(items);
 
@@ -6670,18 +6930,7 @@ class CharacterSheetBuilder {
 				return `{@item ${item}|${name}}`;
 			} else if (item.equipmentType) {
 				// Generic equipment type
-				const typeLabels = {
-					"weaponSimple": "any simple weapon",
-					"weaponMartial": "any martial weapon",
-					"weaponSimpleMelee": "any simple melee weapon",
-					"weaponMartialMelee": "any martial melee weapon",
-					"armorLight": "any light armor",
-					"armorMedium": "any medium armor",
-					"armorHeavy": "any heavy armor",
-					"instrumentMusical": "any musical instrument",
-					"toolArtisan": "any artisan's tools",
-				};
-				const label = typeLabels[item.equipmentType] || item.equipmentType;
+				const label = CharacterSheetBuilder._EQUIPMENT_TYPE_LABELS[item.equipmentType] || item.equipmentType;
 				return item.quantity > 1 ? `${item.quantity} ${label}s` : label;
 			} else if (item.item) {
 				// Item with quantity
@@ -6708,7 +6957,122 @@ class CharacterSheetBuilder {
 
 	// #endregion
 
-	// #region Step 6: Details
+	// #region Step 6: Spells (for known-spell casters)
+
+	/**
+	 * Detect if the selected class is a known-spell caster at level 1 and return
+	 * the count of spells/cantrips they need plus the max spell level and class info.
+	 */
+	_getKnownCasterInfoForBuilder () {
+		if (!this._selectedClass) return null;
+		const cls = this._selectedClass;
+		const className = cls.name;
+
+		// Skip Wizard (uses spellbook, not known-spells) and prepared-spell casters
+		if (className === "Wizard") return null;
+		if (cls.preparedSpellsProgression) return null;
+
+		const knownAtLevel1 = CharacterSheetClassUtils.getKnownSpellsAtLevel(cls, className, 1);
+		const cantripsAtLevel1 = CharacterSheetClassUtils.getCantripsAtLevel(cls, className, 1);
+
+		if (!knownAtLevel1 && !cantripsAtLevel1) return null;
+
+		const maxSpellLevel = CharacterSheetClassUtils.getMaxSpellLevelFromProgression(
+			cls.casterProgression || this._selectedSubclass?.casterProgression, 1,
+		);
+
+		// Determine additional class spell lists (e.g. Cleric for Divine Soul)
+		const additionalClassNames = (className === "Sorcerer" && this._selectedSubclass?.name === "Divine Soul")
+			? ["Cleric"] : [];
+
+		return {
+			className,
+			classSource: cls.source,
+			spellCount: knownAtLevel1 || 0,
+			cantripCount: cantripsAtLevel1 || 0,
+			maxSpellLevel,
+			additionalClassNames,
+		};
+	}
+
+	_renderSpellsStep ($content) {
+		const knownInfo = this._getKnownCasterInfoForBuilder();
+
+		if (!knownInfo) {
+			// Not a known-spell caster — show informational message
+			const $container = $(`<div>
+				<h4>Spells</h4>
+				<p class="ve-muted">Your class does not require spell selection at level 1. You may choose spells later via Level Up.</p>
+			</div>`);
+			$content.append($container);
+			return;
+		}
+
+		const $container = $(`<div>
+			<h4>Starting Spells</h4>
+			<p class="ve-muted mb-2">Choose your starting spells as a <b>${knownInfo.className}</b>.</p>
+			<div id="builder-spell-picker"></div>
+		</div>`);
+
+		$content.append($container);
+
+		const allSpells = this._page.getSpells() || [];
+		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
+
+		// Existing known spell IDs (empty for builder — first-time creation)
+		const knownSpellIds = new Set();
+
+		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
+			className: knownInfo.className,
+			classSource: knownInfo.classSource,
+			spellCount: knownInfo.spellCount,
+			cantripCount: knownInfo.cantripCount,
+			maxSpellLevel: knownInfo.maxSpellLevel,
+			allSpells: sourceFiltered,
+			knownSpellIds,
+			additionalClassNames: knownInfo.additionalClassNames,
+			onSelect: (spells, cantrips) => {
+				this._selectedKnownSpells = spells;
+				this._selectedKnownCantrips = cantrips;
+			},
+			getHoverLink: (page, name, source) => CharacterSheetPage.getHoverLink(page, name, source),
+			preSelectedSpells: this._selectedKnownSpells,
+			preSelectedCantrips: this._selectedKnownCantrips,
+		});
+
+		$("#builder-spell-picker").append($section);
+	}
+
+	_applyBuilderSpellChoices () {
+		const knownInfo = this._getKnownCasterInfoForBuilder();
+		if (!knownInfo) return;
+
+		// Add selected spells to character state
+		for (const spell of this._selectedKnownSpells) {
+			this._state.addSpell({
+				name: spell.name,
+				source: spell.source,
+				level: spell.level,
+				className: knownInfo.className,
+				classSource: knownInfo.classSource,
+				isKnown: true,
+			});
+		}
+		for (const cantrip of this._selectedKnownCantrips) {
+			this._state.addSpell({
+				name: cantrip.name,
+				source: cantrip.source,
+				level: 0,
+				className: knownInfo.className,
+				classSource: knownInfo.classSource,
+				isKnown: true,
+			});
+		}
+	}
+
+	// #endregion
+
+	// #region Step 7: Details
 	_renderDetailsStep ($content) {
 		const $container = $(`
 			<div class="ve-flex">
