@@ -200,6 +200,41 @@ class CharacterSheetLevelUp {
 		let selectedKnownSpells = [];
 		let selectedKnownCantrips = [];
 
+		// Prepared-spell caster detection (XPHB Warlock has preparedSpellsProgression)
+		let isPreparedCaster = false;
+		let preparedSpellsGain = 0;
+		let preparedCantripsGain = 0;
+		let preparedMaxSpellLevel = 0;
+
+		if (!isWizard && !isKnownCaster && classData.preparedSpellsProgression) {
+			isPreparedCaster = true;
+			const prog = classData.preparedSpellsProgression;
+			const currentPrepared = prog[newLevel - 2] || 0;
+			const newPrepared = prog[newLevel - 1] || 0;
+			preparedSpellsGain = Math.max(0, newPrepared - currentPrepared);
+
+			const cProg = cantripProg || cantripTables[classEntry.name];
+			if (cProg) {
+				const currentCantrips = cProg[newLevel - 2] || 0;
+				const newCantrips = cProg[newLevel - 1] || 0;
+				preparedCantripsGain = Math.max(0, newCantrips - currentCantrips);
+			}
+
+			// Max spell level for pact casters
+			if (casterProg === "pact") {
+				preparedMaxSpellLevel = Math.min(5, Math.ceil(newLevel / 2));
+			} else if (casterProg === "full") {
+				preparedMaxSpellLevel = Math.min(9, Math.ceil(newLevel / 2));
+			} else if (casterProg === "1/2") {
+				preparedMaxSpellLevel = Math.min(5, Math.ceil(newLevel / 4));
+			} else {
+				preparedMaxSpellLevel = Math.min(9, Math.ceil(newLevel / 2));
+			}
+		}
+
+		let selectedPreparedSpells = [];
+		let selectedPreparedCantrips = [];
+
 		// ========== FILTER ASI FEATURES ==========
 		const filterAsiFeatures = (features) => {
 			if (!hasAsi) return features;
@@ -632,6 +667,8 @@ class CharacterSheetLevelUp {
 				allSpells: knownAllSpells,
 				knownSpellIds: knownExistingIds,
 				getHoverLink: (...args) => CharacterSheetPage.getHoverLink(...args),
+				// Divine Soul sorcerers also get access to the Cleric spell list
+				additionalClassNames: (classEntry.name === "Sorcerer" && classEntry.subclass?.name === "Divine Soul") ? ["Cleric"] : [],
 				onSelect: (spells, cantrips) => {
 					selectedKnownSpells = spells;
 					selectedKnownCantrips = cantrips;
@@ -652,6 +689,49 @@ class CharacterSheetLevelUp {
 			if (knownSpellsGain > 0) sectionLabel.push(`+${knownSpellsGain} Spell${knownSpellsGain !== 1 ? "s" : ""}`);
 			if (knownCantripsGain > 0) sectionLabel.push(`+${knownCantripsGain} Cantrip${knownCantripsGain !== 1 ? "s" : ""}`);
 			$main.append(createAccordion("knownspells", "✨", `Spells Known (${sectionLabel.join(", ")})`, $knownSpellsContent, {required: totalGain > 0}));
+		}
+
+		// ========== 8c. PREPARED SPELLS (XPHB Warlock, etc.) ==========
+		if (isPreparedCaster && (preparedSpellsGain > 0 || preparedCantripsGain > 0)) {
+			const totalGain = preparedSpellsGain + preparedCantripsGain;
+			$summaryItems.append(createSummaryItem("preparedspells", "✨", "Prepared Spells", {required: totalGain > 0}));
+
+			const prepAllSpells = this._page.filterByAllowedSources?.(this._page.getSpells?.() || []) || [];
+			const prepExistingIds = new Set([
+				...(this._state.getSpells?.() || []),
+				...(this._state.getCantripsKnown?.() || []),
+				...(this._state.getPreparedSpells?.() || []),
+			].map(s => `${s.name}|${s.source}`));
+
+			const $preparedContent = CharacterSheetSpellPicker.renderKnownSpellPicker({
+				className: classEntry.name,
+				classSource: classEntry.source,
+				spellCount: preparedSpellsGain,
+				cantripCount: preparedCantripsGain,
+				maxSpellLevel: preparedMaxSpellLevel,
+				allSpells: prepAllSpells,
+				knownSpellIds: prepExistingIds,
+				getHoverLink: (...args) => CharacterSheetPage.getHoverLink(...args),
+				onSelect: (spells, cantrips) => {
+					selectedPreparedSpells = spells;
+					selectedPreparedCantrips = cantrips;
+					const spellComplete = spells.length >= preparedSpellsGain;
+					const cantripComplete = cantrips.length >= preparedCantripsGain;
+					const complete = spellComplete && cantripComplete;
+					const parts = [];
+					if (preparedSpellsGain > 0) parts.push(`${spells.length}/${preparedSpellsGain} spells`);
+					if (preparedCantripsGain > 0) parts.push(`${cantrips.length}/${preparedCantripsGain} cantrips`);
+					const summary = parts.join(", ") || "Select spells";
+					const allNames = [...cantrips, ...spells].map(s => s.name).join(", ");
+					summaryItems.preparedspells.setStatus(complete, allNames || summary);
+					accordions.preparedspells.setComplete(complete, parts.join(", "));
+				},
+			});
+
+			const sectionLabel = [];
+			if (preparedSpellsGain > 0) sectionLabel.push(`+${preparedSpellsGain} Spell${preparedSpellsGain !== 1 ? "s" : ""}`);
+			if (preparedCantripsGain > 0) sectionLabel.push(`+${preparedCantripsGain} Cantrip${preparedCantripsGain !== 1 ? "s" : ""}`);
+			$main.append(createAccordion("preparedspells", "✨", `Prepared Spells (${sectionLabel.join(", ")})`, $preparedContent, {required: totalGain > 0}));
 		}
 
 		// ========== 9. NEW FEATURES (Info Only) ==========
@@ -830,6 +910,18 @@ class CharacterSheetLevelUp {
 				return;
 			}
 
+			if (isPreparedCaster && preparedSpellsGain > 0 && selectedPreparedSpells.length < preparedSpellsGain) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedSpellsGain} prepared spell(s).`});
+				accordions.preparedspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				return;
+			}
+
+			if (isPreparedCaster && preparedCantripsGain > 0 && selectedPreparedCantrips.length < preparedCantripsGain) {
+				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedCantripsGain} cantrip(s).`});
+				accordions.preparedspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				return;
+			}
+
 			// ========== APPLY LEVEL UP ==========
 			await this._applyLevelUp({
 				classEntry,
@@ -846,6 +938,8 @@ class CharacterSheetLevelUp {
 				selectedSpellbookSpells,
 				selectedKnownSpells,
 				selectedKnownCantrips,
+				selectedPreparedSpells,
+				selectedPreparedCantrips,
 				newFeatures: currentFeatures,
 				hpMethod,
 				classData,
@@ -2262,6 +2356,11 @@ class CharacterSheetLevelUp {
 							return false;
 						}
 					}
+					// Check pact prerequisite — e.g. "Pact of Transformation" invocations
+					if (prereq.pact) {
+						const hasPact = existingOptFeatures.some(f => f.name === prereq.pact);
+						if (!hasPact) return false;
+					}
 				}
 			}
 			return true;
@@ -2286,7 +2385,7 @@ class CharacterSheetLevelUp {
 		const $gainSection = $(`
 			<div class="charsheet__levelup-opt-gain mb-3">
 				<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new option${gain.newCount > 1 ? "s" : ""}</p>
-				<div class="charsheet__levelup-opt-list" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
+				<div class="charsheet__levelup-opt-list" style="max-height: 60vh; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
 			</div>
 		`);
@@ -2844,7 +2943,7 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, selectedPreparedSpells, selectedPreparedCantrips, newFeatures, hpMethod, classData}) {
 		const prevCombatTraditions = this._state.getCombatTraditions?.() || [];
 		const prevWeaponMasteries = this._state.getWeaponMasteries?.() || [];
 
@@ -3135,6 +3234,27 @@ class CharacterSheetLevelUp {
 			selectedKnownCantrips.forEach(spell => {
 				this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(spell, {
 					sourceFeature: "Spells Known",
+					sourceClass: classEntry.name,
+				}));
+			});
+		}
+
+		// Apply prepared-spell caster spell selections (XPHB Warlock, etc.)
+		if (selectedPreparedSpells && selectedPreparedSpells.length > 0) {
+			selectedPreparedSpells.forEach(spell => {
+				this._state.addSpell(CharacterSheetClassUtils.buildSpellStateObject(spell, {
+					sourceFeature: "Prepared Spells",
+					sourceClass: classEntry.name,
+					prepared: true,
+				}));
+			});
+		}
+
+		// Apply prepared-spell caster cantrip selections
+		if (selectedPreparedCantrips && selectedPreparedCantrips.length > 0) {
+			selectedPreparedCantrips.forEach(spell => {
+				this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(spell, {
+					sourceFeature: "Prepared Spells",
 					sourceClass: classEntry.name,
 				}));
 			});

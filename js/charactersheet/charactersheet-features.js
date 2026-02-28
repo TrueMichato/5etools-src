@@ -910,6 +910,7 @@ class CharacterSheetFeatures {
 						const isOfficialSource = (src) => officialClassSources.includes(src?.toUpperCase?.() || src);
 
 						let actualClassSource = feature.classSource;
+						let actualFeatureSource = feature.source;
 						// If classSource is not set or is a homebrew source but feature.source is official, use feature.source
 						if (!actualClassSource || (!isOfficialSource(actualClassSource) && isOfficialSource(feature.source))) {
 							actualClassSource = feature.source;
@@ -918,13 +919,30 @@ class CharacterSheetFeatures {
 						if (!actualClassSource) {
 							actualClassSource = storedClass?.source || Parser.SRC_XPHB;
 						}
+						// For homebrew classes referencing official features (e.g. TGTT Warlock using XPHB Magical Cunning):
+						// if the resolved source is still non-official, look up the feature in loaded class data
+						if (!isOfficialSource(actualClassSource) && this._page?.getClassFeatures) {
+							try {
+								const classFeatures = this._page.getClassFeatures();
+								const officialMatch = classFeatures?.find(f =>
+									f.name === feature.name
+									&& f.className === feature.className
+									&& f.level === (feature.level || 1)
+									&& isOfficialSource(f.source),
+								);
+								if (officialMatch) {
+									actualClassSource = officialMatch.classSource || officialMatch.source;
+									actualFeatureSource = officialMatch.source;
+								}
+							} catch (e) { /* fall through */ }
+						}
 
 						const hashInput = {
 							name: feature.name,
 							className: feature.className,
 							classSource: actualClassSource,
 							level: feature.level || 1,
-							source: feature.source,
+							source: actualFeatureSource,
 						};
 						if (feature.subclassName) {
 							hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
@@ -934,7 +952,7 @@ class CharacterSheetFeatures {
 						featureNameHtml = this._page.getHoverLink(
 							UrlUtil.PG_CLASS_SUBCLASS_FEATURES,
 							feature.name,
-							feature.source,
+							actualFeatureSource,
 							hash,
 						);
 					// Background features - show feature name but link to background
@@ -1310,6 +1328,7 @@ class CharacterSheetFeatures {
 					const isOfficialSource = (src) => officialClassSources.includes(src?.toUpperCase?.() || src);
 
 					let actualClassSource = feature.classSource;
+					let actualFeatureSource = feature.source || Parser.SRC_XPHB;
 					// If classSource is not set or is a homebrew source but feature.source is official, use feature.source
 					if (!actualClassSource || (!isOfficialSource(actualClassSource) && isOfficialSource(feature.source))) {
 						actualClassSource = feature.source || Parser.SRC_XPHB;
@@ -1318,13 +1337,30 @@ class CharacterSheetFeatures {
 					if (!actualClassSource) {
 						actualClassSource = storedClass?.source || Parser.SRC_XPHB;
 					}
+					// For homebrew classes referencing official features (e.g. TGTT Warlock using XPHB Magical Cunning):
+					// if the resolved source is still non-official, look up the feature in loaded class data
+					if (!isOfficialSource(actualClassSource) && this._page?.getClassFeatures) {
+						try {
+							const classFeatures = this._page.getClassFeatures();
+							const officialMatch = classFeatures?.find(f =>
+								f.name === feature.name
+								&& f.className === feature.className
+								&& f.level === (feature.level || 1)
+								&& isOfficialSource(f.source),
+							);
+							if (officialMatch) {
+								actualClassSource = officialMatch.classSource || officialMatch.source;
+								actualFeatureSource = officialMatch.source;
+							}
+						} catch (e) { /* fall through */ }
+					}
 
 					const hashInput = {
 						name: feature.name,
 						className: feature.className,
 						classSource: actualClassSource,
 						level: feature.level || 1,
-						source: feature.source || Parser.SRC_XPHB,
+						source: actualFeatureSource,
 					};
 					if (feature.subclassName || feature.isSubclassFeature) {
 						hashInput.subclassShortName = feature.subclassShortName || feature.subclassName;
@@ -1334,7 +1370,7 @@ class CharacterSheetFeatures {
 					featureNameHtml = this._page.getHoverLink(
 						UrlUtil.PG_CLASS_SUBCLASS_FEATURES,
 						feature.name,
-						feature.source || Parser.SRC_XPHB,
+						actualFeatureSource,
 						hash,
 					);
 				// Species/Race features - link to races page with hover

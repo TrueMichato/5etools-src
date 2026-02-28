@@ -23,6 +23,7 @@ class CharacterSheetSpellPicker {
 	 * @param {Function} [opts.getHoverLink] - Optional hover link builder (page, name, source) => html
 	 * @param {Array} [opts.preSelectedSpells] - Pre-selected leveled spells
 	 * @param {Array} [opts.preSelectedCantrips] - Pre-selected cantrips
+	 * @param {Array} [opts.additionalClassNames] - Additional class names whose spell lists to include (e.g. ["Cleric"] for Divine Soul)
 	 * @returns {jQuery} The section element
 	 */
 	static renderKnownSpellPicker (opts) {
@@ -38,6 +39,7 @@ class CharacterSheetSpellPicker {
 			getHoverLink,
 			preSelectedSpells = [],
 			preSelectedCantrips = [],
+			additionalClassNames = [],
 		} = opts;
 
 		const totalCount = spellCount + cantripCount;
@@ -72,7 +74,10 @@ class CharacterSheetSpellPicker {
 			} else {
 				if (spell.level < 1 || spell.level > maxSpellLevel) return false;
 			}
-			return CharacterSheetClassUtils.spellIsForClass(spell, className);
+			if (CharacterSheetClassUtils.spellIsForClass(spell, className)) return true;
+			// Check additional class spell lists (e.g. Cleric for Divine Soul)
+			if (additionalClassNames.some(cls => CharacterSheetClassUtils.spellIsForClass(spell, cls))) return true;
+			return false;
 		}).sort((a, b) => {
 			if (a.level !== b.level) return a.level - b.level;
 			return a.name.localeCompare(b.name);

@@ -2402,6 +2402,103 @@ const FeatureEffectRegistry = {
 		this.register("Infernal Luck", [
 			// Reroll 1/long rest - resource
 		]);
+
+		// ==============================
+		// OFFICIAL RACE TRAITS
+		// Tortle, Lizardfolk, Half-Orc, Orc, Goblin, Bugbear,
+		// Dragonborn (official), Warforged, Autognome, Thri-kreen, Loxodon
+		// ==============================
+
+		// Tortle (TTP / MPMM)
+		this.register("Natural Armor", [
+			// Tortle: AC = 17 (no DEX modifier), but Lizardfolk: AC = 13 + DEX
+			// Use the text-parsing fallback for AC formula detection since
+			// different races have different natural armor formulas
+		]);
+		this.register("Shell Defense", [
+			{type: "toggle", effect: "acBonus", value: 4, conditional: "withdraw into shell (prone, speed 0)"},
+		]);
+		this.register("Claws", [
+			{type: "unarmedStrike", damage: "1d6", damageType: "slashing"},
+		]);
+
+		// Lizardfolk (MPMM / VGM)
+		this.register("Bite", [
+			{type: "unarmedStrike", damage: "1d6", damageType: "slashing"},
+		]);
+		this.register("Hungry Jaws", [
+			// Bonus action bite + temp HP = proficiency bonus, 1/long rest
+		]);
+
+		// Half-Orc (PHB)
+		this.register("Relentless Endurance", [
+			// 1/long rest: drop to 1 HP instead of 0
+		]);
+		this.register("Savage Attacks", [
+			{type: "modifier", modType: "critDie:melee:extra", value: 1},
+		]);
+
+		// Orc (MPMM / XPHB)
+		this.register("Adrenaline Rush", [
+			// Bonus action: Dash + gain temp HP = proficiency bonus
+		]);
+
+		// Goblin (MPMM / VGM)
+		this.register("Fury of the Small", [
+			{type: "modifier", modType: "damage:bonus:vs-larger", value: "proficiency"},
+		]);
+		this.register("Nimble Escape", [
+			// Bonus action: Disengage or Hide
+		]);
+
+		// Bugbear (MPMM / VGM)
+		this.register("Surprise Attack", [
+			{type: "modifier", modType: "damage:bonus:surprised", value: "2d6"},
+		]);
+		this.register("Long-Limbed", [
+			{type: "modifier", modType: "reach:melee:bonus", value: 5},
+		]);
+
+		// Dragonborn (PHB / XPHB) - official Breath Weapon
+		this.register("Breath Weapon", [
+			// Damage type and DC depend on draconic ancestry — handled by getFeatureCalculations
+		]);
+		this.register("Draconic Flight", [
+			// Fly speed at level 5+ — handled by getFeatureCalculations
+		]);
+
+		// Warforged (ERLW / EFA)
+		this.register("Integrated Protection", [
+			{type: "acBonus", value: 1, conditional: "added to worn armor AC"},
+		]);
+
+		// Autognome (AAG)
+		this.register("Armored Casing", [
+			{type: "acFormula", base: 13, addDex: true, formulaType: "naturalArmor"},
+		]);
+
+		// Thri-kreen (AAG)
+		this.register("Chameleon Carapace", [
+			{type: "acFormula", base: 13, addDex: true, formulaType: "naturalArmor"},
+		]);
+
+		// Loxodon (GGR)
+		this.register("Natural Armor|GGR", [
+			{type: "acFormula", base: 12, addAbility: "con", formulaType: "naturalArmor"},
+		]);
+
+		// Tabaxi (MPMM / VGM)
+		this.register("Cat's Claws", [
+			{type: "unarmedStrike", damage: "1d6", damageType: "slashing"},
+		]);
+		this.register("Feline Agility", [
+			// Double speed for a turn — resource tracking
+		]);
+
+		// Shifter (MPMM / EFA)
+		this.register("Shifting", [
+			// Temp HP + subtype bonus — resource tracking
+		]);
 	},
 
 	// =========================================================================
@@ -9884,8 +9981,9 @@ class CharacterSheetState {
 					const is2024 = source === "XPHB" || source === "TGTT";
 					const chaMod = this.getAbilityMod("cha");
 
-					// Eldritch Blast beams (based on total character level)
-					const beams = level >= 17 ? 4 : level >= 11 ? 3 : level >= 5 ? 2 : 1;
+					// Eldritch Blast beams scale with total character level, not class level
+					const totalLevel = this.getTotalLevel();
+					const beams = totalLevel >= 17 ? 4 : totalLevel >= 11 ? 3 : totalLevel >= 5 ? 2 : 1;
 					calculations.eldritchBlastBeams = beams;
 
 					// Pact Magic - spellcasting
@@ -13713,6 +13811,7 @@ class CharacterSheetState {
 		// RACE SCALING CALCULATIONS (Thelemar homebrew)
 		// =====================================================
 		const raceName = this._data.race?.name?.toLowerCase() || "";
+		const raceSource = this._data.race?.source || "";
 		const subraceName = this._data.subrace?.name?.toLowerCase() || "";
 		const fullRaceName = this.getRaceName()?.toLowerCase() || "";
 		const totalLevel = this.getTotalLevel() || 1;
@@ -13732,23 +13831,70 @@ class CharacterSheetState {
 		// Uses per long rest = proficiency bonus
 		if (raceName === "dragonborn" || raceName.includes("dragonborn")) {
 			const conMod = this.getAbilityMod("con");
-			calculations.terrifyingExhalationDc = 8 + conMod + profBonus;
-			calculations.terrifyingExhalationUses = profBonus;
-			
-			// Damage scaling by level tier
-			let breathDice;
-			if (totalLevel >= 17) breathDice = "4d10";
-			else if (totalLevel >= 11) breathDice = "3d10";
-			else if (totalLevel >= 5) breathDice = "2d10";
-			else breathDice = "1d10";
-			calculations.terrifyingExhalationDamage = breathDice;
-			
-			// Level 5+: Aura abilities
-			if (totalLevel >= 5) {
-				const chaMod = this.getAbilityMod("cha");
-				calculations.auraOfDreadDc = 8 + chaMod + profBonus;
-				calculations.auraOfProtectionTempHp = profBonus;
+
+			// Check source: TGTT uses Terrifying Exhalation, PHB/XPHB use Breath Weapon
+			const isTGTT = raceSource === "TGTT";
+			if (isTGTT) {
+				calculations.terrifyingExhalationDc = 8 + conMod + profBonus;
+				calculations.terrifyingExhalationUses = profBonus;
+
+				let breathDice;
+				if (totalLevel >= 17) breathDice = "4d10";
+				else if (totalLevel >= 11) breathDice = "3d10";
+				else if (totalLevel >= 5) breathDice = "2d10";
+				else breathDice = "1d10";
+				calculations.terrifyingExhalationDamage = breathDice;
+
+				if (totalLevel >= 5) {
+					const chaMod = this.getAbilityMod("cha");
+					calculations.auraOfDreadDc = 8 + chaMod + profBonus;
+					calculations.auraOfProtectionTempHp = profBonus;
+				}
+			} else if (raceSource === "XPHB") {
+				// XPHB Dragonborn: Breath Weapon DC = 8 + CON mod + proficiency
+				// Damage: 1d10 at L1, 2d10 at L5, 3d10 at L11, 4d10 at L17
+				calculations.breathWeaponDc = 8 + conMod + profBonus;
+				calculations.breathWeaponUses = profBonus;
+				let breathDice;
+				if (totalLevel >= 17) breathDice = "4d10";
+				else if (totalLevel >= 11) breathDice = "3d10";
+				else if (totalLevel >= 5) breathDice = "2d10";
+				else breathDice = "1d10";
+				calculations.breathWeaponDamage = breathDice;
+			} else {
+				// PHB 2014 Dragonborn: Breath Weapon DC = 8 + CON mod + proficiency
+				// Damage: 2d6 at L1, 3d6 at L6, 4d6 at L11, 5d6 at L16
+				calculations.breathWeaponDc = 8 + conMod + profBonus;
+				calculations.breathWeaponUses = 1; // 1/short rest (PHB 2014)
+				let breathDice;
+				if (totalLevel >= 16) breathDice = "5d6";
+				else if (totalLevel >= 11) breathDice = "4d6";
+				else if (totalLevel >= 6) breathDice = "3d6";
+				else breathDice = "2d6";
+				calculations.breathWeaponDamage = breathDice;
 			}
+		}
+
+		// Tortle: Natural Armor AC = 17 (flat, no DEX)
+		if (raceName === "tortle" || raceName.includes("tortle")) {
+			calculations.tortleNaturalArmor = 17;
+			calculations.hasShellDefense = true;
+		}
+
+		// Lizardfolk: Natural Armor AC = 13 + DEX
+		if (raceName === "lizardfolk" || raceName.includes("lizardfolk")) {
+			const dexMod = this.getAbilityMod("dex");
+			calculations.lizardfolkNaturalArmor = 13 + dexMod;
+		}
+
+		// Goblin: Fury of the Small — extra damage = proficiency bonus
+		if (raceName === "goblin" || raceName.includes("goblin")) {
+			calculations.furyOfTheSmallDamage = profBonus;
+		}
+
+		// Bugbear: Surprise Attack — +2d6 damage on surprised targets
+		if (raceName === "bugbear" || raceName.includes("bugbear")) {
+			calculations.surpriseAttackDamage = "2d6";
 		}
 
 		// Nyuidj: Mind Link range scales with level

@@ -601,4 +601,78 @@ describe("Bug Fixes", () => {
 			expect(state.hasResistanceFromStates("bludgeoning")).toBe(false);
 		});
 	});
+
+	// ===================================================================
+	// BUG FIX: Eldritch Blast beams scale by total character level
+	// ===================================================================
+	describe("Eldritch Blast Beam Scaling (Bug #10)", () => {
+		it("should scale beams by total character level, not warlock class level", () => {
+			const multiState = new CharacterSheetState();
+			multiState.setRace({name: "Human", source: "PHB"});
+			multiState.setAbilityBase("cha", 16);
+			// Warlock 3 / Fighter 2 = total level 5
+			multiState.addClass({name: "Warlock", source: "PHB", level: 3});
+			multiState.addClass({name: "Fighter", source: "PHB", level: 2});
+
+			const calculations = multiState.getFeatureCalculations();
+			// Total level 5 should give 2 beams, even though warlock is only level 3
+			expect(calculations.eldritchBlastBeams).toBe(2);
+		});
+
+		it("should have 1 beam when total level < 5 even with multiclass", () => {
+			const multiState = new CharacterSheetState();
+			multiState.setRace({name: "Human", source: "PHB"});
+			multiState.setAbilityBase("cha", 16);
+			// Warlock 2 / Rogue 2 = total level 4
+			multiState.addClass({name: "Warlock", source: "PHB", level: 2});
+			multiState.addClass({name: "Rogue", source: "PHB", level: 2});
+
+			const calculations = multiState.getFeatureCalculations();
+			expect(calculations.eldritchBlastBeams).toBe(1);
+		});
+
+		it("should have 3 beams at total level 11 (Warlock 5 / Paladin 6)", () => {
+			const multiState = new CharacterSheetState();
+			multiState.setRace({name: "Human", source: "PHB"});
+			multiState.setAbilityBase("cha", 16);
+			multiState.addClass({name: "Warlock", source: "PHB", level: 5});
+			multiState.addClass({name: "Paladin", source: "PHB", level: 6});
+
+			const calculations = multiState.getFeatureCalculations();
+			expect(calculations.eldritchBlastBeams).toBe(3);
+		});
+
+		it("should have 4 beams at total level 17 (Warlock 3 / Sorcerer 14)", () => {
+			const multiState = new CharacterSheetState();
+			multiState.setRace({name: "Human", source: "PHB"});
+			multiState.setAbilityBase("cha", 16);
+			multiState.addClass({name: "Warlock", source: "PHB", level: 3});
+			multiState.addClass({name: "Sorcerer", source: "PHB", level: 14});
+
+			const calculations = multiState.getFeatureCalculations();
+			expect(calculations.eldritchBlastBeams).toBe(4);
+		});
+
+		it("should still work correctly for single-class warlock", () => {
+			const singleState = new CharacterSheetState();
+			singleState.setRace({name: "Human", source: "PHB"});
+			singleState.setAbilityBase("cha", 16);
+			singleState.addClass({name: "Warlock", source: "PHB", level: 5});
+
+			const calculations = singleState.getFeatureCalculations();
+			expect(calculations.eldritchBlastBeams).toBe(2);
+		});
+
+		it("should work for TGTT warlock multiclass", () => {
+			const multiState = new CharacterSheetState();
+			multiState.setRace({name: "Human", source: "PHB"});
+			multiState.setAbilityBase("cha", 16);
+			// TGTT Warlock 3 / TGTT Sorcerer 8 = total level 11
+			multiState.addClass({name: "Warlock", source: "TGTT", level: 3});
+			multiState.addClass({name: "Sorcerer", source: "TGTT", level: 8});
+
+			const calculations = multiState.getFeatureCalculations();
+			expect(calculations.eldritchBlastBeams).toBe(3);
+		});
+	});
 });
