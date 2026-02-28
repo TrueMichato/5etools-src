@@ -257,6 +257,300 @@ describe("TGTT Divine Soul Sorcerer", () => {
 				expect(state.getMetamagicInfo("nonexistent")).toBeNull();
 			});
 		});
+
+		// =====================================================================
+		// COMPLETE PASSIVE METAMAGIC CATALOG
+		// =====================================================================
+		describe("Complete Passive Metamagic Catalog", () => {
+			const passiveCatalog = [
+				{key: "careful", name: "Careful Spell", cost: 1},
+				{key: "distant", name: "Distant Spell", cost: 1},
+				{key: "empowered", name: "Empowered Spell", cost: 1},
+				{key: "extended", name: "Extended Spell", cost: 1},
+				{key: "transmuted", name: "Transmuted Spell", cost: 1},
+				{key: "resonant", name: "Resonant Spell", cost: 2},
+				{key: "split", name: "Split Spell", cost: 1},
+				{key: "supple", name: "Supple Spell", cost: 2},
+				{key: "warding", name: "Warding Spell", cost: 2},
+			];
+
+			beforeEach(() => {
+				makeDivineSoul(10);
+				state.setSorceryPoints(11); // TGTT L10: 10 + 1 = 11
+			});
+
+			passiveCatalog.forEach(({key, name, cost}) => {
+				it(`should include "${name}" (key=${key}, cost=${cost})`, () => {
+					const passives = state.getPassiveMetamagics();
+					const meta = passives.find(m => m.key === key);
+					expect(meta).toBeDefined();
+					expect(meta.name).toBe(name);
+					expect(meta.cost).toBe(cost);
+				});
+			});
+
+			it("should have exactly 9 passive metamagics", () => {
+				const passives = state.getPassiveMetamagics();
+				expect(passives.length).toBe(9);
+			});
+		});
+
+		// =====================================================================
+		// COMPLETE ACTIVE METAMAGIC CATALOG
+		// =====================================================================
+		describe("Complete Active Metamagic Catalog", () => {
+			const activeCatalog = [
+				{key: "heightened", name: "Heightened Spell", cost: 3},
+				{key: "quickened", name: "Quickened Spell", cost: 2},
+				{key: "seeking", name: "Seeking Spell", cost: 2},
+				{key: "subtle", name: "Subtle Spell", cost: 1},
+				{key: "twinned", name: "Twinned Spell", cost: "level"},
+				{key: "aimed", name: "Aimed Spell", cost: 2},
+				{key: "bestowed", name: "Bestowed Spell", cost: "level"},
+				{key: "bouncing", name: "Bouncing Spell", cost: 3},
+				{key: "focused", name: "Focused Spell", cost: "level"},
+				{key: "lingering", name: "Lingering Spell", cost: "level"},
+				{key: "overcharged", name: "Overcharged Spell", cost: 4},
+				{key: "vampiric", name: "Vampiric Spell", cost: "halfLevel"},
+			];
+
+			beforeEach(() => {
+				makeDivineSoul(10);
+				state.setSorceryPoints(11);
+			});
+
+			activeCatalog.forEach(({key, name, cost}) => {
+				it(`should include "${name}" (key=${key}, cost=${cost})`, () => {
+					const actives = state.getActiveMetamagics();
+					const meta = actives.find(m => m.key === key);
+					expect(meta).toBeDefined();
+					expect(meta.name).toBe(name);
+					expect(meta.cost).toBe(cost);
+				});
+			});
+
+			it("should have exactly 12 active metamagics", () => {
+				const actives = state.getActiveMetamagics();
+				expect(actives.length).toBe(12);
+			});
+		});
+
+		// =====================================================================
+		// TUNE / DETUNE ECONOMICS
+		// =====================================================================
+		describe("Tune/Detune Economics", () => {
+			beforeEach(() => {
+				makeDivineSoul(10); // SP max = 11
+				state.setSorceryPoints(11);
+			});
+
+			it("should track tuned metamagics via getTunedMetamagics()", () => {
+				state.tuneMetamagic("careful");
+				state.tuneMetamagic("distant");
+				const tuned = state.getTunedMetamagics();
+				expect(tuned).toContain("careful");
+				expect(tuned).toContain("distant");
+				expect(tuned.length).toBe(2);
+			});
+
+			it("should reduce effective SP max by cumulative tuning costs", () => {
+				// careful(1) + warding(2) + resonant(2) = 5 locked
+				state.tuneMetamagic("careful");
+				state.tuneMetamagic("warding");
+				state.tuneMetamagic("resonant");
+				expect(state.getLockedSorceryPoints()).toBe(5);
+				expect(state.getEffectiveSorceryPointMax()).toBe(6); // 11 - 5
+			});
+
+			it("should restore effective SP when detuning", () => {
+				state.tuneMetamagic("warding"); // cost 2
+				state.tuneMetamagic("supple"); // cost 2
+				expect(state.getLockedSorceryPoints()).toBe(4);
+				expect(state.getEffectiveSorceryPointMax()).toBe(7);
+
+				state.detuneMetamagic("warding");
+				expect(state.getLockedSorceryPoints()).toBe(2);
+				expect(state.getEffectiveSorceryPointMax()).toBe(9);
+			});
+
+			it("should prevent tuning when effective SP < cost", () => {
+				// Lock 10 SP: careful(1) + distant(1) + empowered(1) + extended(1) + transmuted(1) + split(1) + resonant(2) + warding(2) = 10
+				state.tuneMetamagic("careful");
+				state.tuneMetamagic("distant");
+				state.tuneMetamagic("empowered");
+				state.tuneMetamagic("extended");
+				state.tuneMetamagic("transmuted");
+				state.tuneMetamagic("split");
+				state.tuneMetamagic("resonant");
+				state.tuneMetamagic("warding");
+				expect(state.getLockedSorceryPoints()).toBe(10);
+				expect(state.getEffectiveSorceryPointMax()).toBe(1);
+
+				// supple costs 2, effective max is 1 → should fail
+				const result = state.tuneMetamagic("supple");
+				expect(result).toBe(false);
+			});
+
+			it("should not allow tuning an already-tuned metamagic", () => {
+				state.tuneMetamagic("careful");
+				const result = state.tuneMetamagic("careful");
+				expect(result).toBe(false);
+			});
+
+			it("should report tuned status via getMetamagicInfo()", () => {
+				state.tuneMetamagic("careful");
+				expect(state.getMetamagicInfo("careful").tuned).toBe(true);
+
+				state.detuneMetamagic("careful");
+				expect(state.getMetamagicInfo("careful").tuned).toBe(false);
+			});
+
+			it("should tune all 5 cost-1 passives (total locked = 5)", () => {
+				["careful", "distant", "empowered", "extended", "transmuted"].forEach(k => {
+					expect(state.tuneMetamagic(k)).toBe(true);
+				});
+				expect(state.getLockedSorceryPoints()).toBe(5);
+			});
+		});
+	});
+
+	// =========================================================================
+	// FONT OF MAGIC — SP / SLOT CONVERSION
+	// =========================================================================
+	describe("Font of Magic — SP/Slot Conversion", () => {
+		beforeEach(() => {
+			makeDivineSoul(7); // SP max = 8
+			state.setSorceryPoints(8);
+			state.calculateSpellSlots();
+		});
+
+		describe("Conversion Cost Tables", () => {
+			const spToSlotCosts = [
+				{slotLevel: 1, cost: 2},
+				{slotLevel: 2, cost: 3},
+				{slotLevel: 3, cost: 5},
+				{slotLevel: 4, cost: 6},
+				{slotLevel: 5, cost: 7},
+			];
+
+			spToSlotCosts.forEach(({slotLevel, cost}) => {
+				it(`should cost ${cost} SP to create a level-${slotLevel} slot`, () => {
+					expect(state.getSpToSlotCost(slotLevel)).toBe(cost);
+				});
+			});
+
+			it("should return null for invalid slot levels (0 and 6+)", () => {
+				expect(state.getSpToSlotCost(0)).toBeNull();
+				expect(state.getSpToSlotCost(6)).toBeNull();
+			});
+
+			const slotToSpReturns = [
+				{slotLevel: 1, spReturn: 1},
+				{slotLevel: 2, spReturn: 2},
+				{slotLevel: 3, spReturn: 3},
+				{slotLevel: 4, spReturn: 4},
+				{slotLevel: 5, spReturn: 5},
+			];
+
+			slotToSpReturns.forEach(({slotLevel, spReturn}) => {
+				it(`should return ${spReturn} SP when converting a level-${slotLevel} slot`, () => {
+					expect(state.getSlotToSpReturn(slotLevel)).toBe(spReturn);
+				});
+			});
+		});
+
+		describe("Max Convertible Slot Level", () => {
+			it("should allow converting up to level 5 for TGTT (non-XPHB)", () => {
+				expect(state.getMaxConvertibleSlotLevel()).toBe(5);
+			});
+
+			it("should only allow up to level 3 for XPHB Sorcerer", () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Sorcerer", source: "XPHB", level: 7});
+				expect(s.getMaxConvertibleSlotLevel()).toBe(3);
+			});
+		});
+
+		describe("Slot → SP Conversion", () => {
+			it("should convert a level 1 spell slot to 1 SP", () => {
+				// Drain some SP first so we're below max
+				state.useSorceryPoint(4); // 8 → 4
+				const spBefore = state.getSorceryPoints().current;
+				const slotsBefore = state.getSpellSlotsCurrent(1);
+				const result = state.convertSlotToSorceryPoints(1);
+				expect(result).toBe(true);
+				expect(state.getSorceryPoints().current).toBe(spBefore + 1);
+				expect(state.getSpellSlotsCurrent(1)).toBe(slotsBefore - 1);
+			});
+
+			it("should convert a level 3 spell slot to 3 SP", () => {
+				state.useSorceryPoint(5); // 8 → 3
+				const spBefore = state.getSorceryPoints().current;
+				const result = state.convertSlotToSorceryPoints(3);
+				expect(result).toBe(true);
+				expect(state.getSorceryPoints().current).toBe(spBefore + 3);
+			});
+
+			it("should fail when no slots remaining", () => {
+				// Exhaust all level 4 slots
+				const max4 = state.getSpellSlotsMax(4);
+				for (let i = 0; i < max4; i++) state.convertSlotToSorceryPoints(4);
+				// Now try again — should fail
+				const result = state.convertSlotToSorceryPoints(4);
+				expect(result).toBe(false);
+			});
+		});
+
+		describe("SP → Slot Conversion", () => {
+			it("should create a level 1 slot for 2 SP", () => {
+				const spBefore = state.getSorceryPoints().current;
+				const result = state.convertSorceryPointsToSlot(1);
+				expect(result).toBe(true);
+				expect(state.getSorceryPoints().current).toBe(spBefore - 2);
+			});
+
+			it("should create a level 3 slot for 5 SP", () => {
+				const spBefore = state.getSorceryPoints().current;
+				const result = state.convertSorceryPointsToSlot(3);
+				expect(result).toBe(true);
+				expect(state.getSorceryPoints().current).toBe(spBefore - 5);
+			});
+
+			it("should reject conversion above max convertible level", () => {
+				state.setSorceryPoints(20);
+				const maxLevel = state.getMaxConvertibleSlotLevel();
+				const result = state.convertSorceryPointsToSlot(maxLevel + 1);
+				expect(result).toBe(false);
+			});
+
+			it("should reject conversion with insufficient SP", () => {
+				// Set SP to 1 — L1 slot costs 2
+				state._data.sorceryPoints.current = 1;
+				const result = state.convertSorceryPointsToSlot(1);
+				expect(result).toBe(false);
+			});
+		});
+
+		describe("useSorceryPoint()", () => {
+			it("should deduct SP when sufficient", () => {
+				const result = state.useSorceryPoint(3);
+				expect(result).toBe(true);
+				expect(state.getSorceryPoints().current).toBe(5); // 8 - 3
+			});
+
+			it("should fail when insufficient SP", () => {
+				state._data.sorceryPoints.current = 1;
+				const result = state.useSorceryPoint(3);
+				expect(result).toBe(false);
+				expect(state.getSorceryPoints().current).toBe(1);
+			});
+
+			it("should default to 1 SP", () => {
+				const result = state.useSorceryPoint();
+				expect(result).toBe(true);
+				expect(state.getSorceryPoints().current).toBe(7); // 8 - 1
+			});
+		});
 	});
 
 	// =========================================================================
@@ -333,6 +627,12 @@ describe("TGTT Divine Soul Sorcerer", () => {
 				expect(res.max).toBe(1);
 				expect(res.recharge).toBe("short");
 			});
+
+			it("should compute favoredByTheGodsBonus = '2d4'", () => {
+				makeDivineSoul(3);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.favoredByTheGodsBonus).toBe("2d4");
+			});
 		});
 
 		describe("Empowered Healing (Level 6)", () => {
@@ -369,6 +669,12 @@ describe("TGTT Divine Soul Sorcerer", () => {
 				const features = state.getFeatures();
 				expect(features.some(f => f.name === "Angelic Form")).toBe(true);
 			});
+
+			it("should compute flySpeed = 30", () => {
+				makeDivineSoul(14);
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.flySpeed).toBe(30);
+			});
 		});
 
 		describe("Unearthly Recovery (Level 18)", () => {
@@ -392,6 +698,13 @@ describe("TGTT Divine Soul Sorcerer", () => {
 				const res = state.getResource("Unearthly Recovery");
 				expect(res.max).toBe(1);
 				expect(res.recharge).toBe("long");
+			});
+
+			it("should compute unearthlyRecoveryHp at level 18", () => {
+				makeDivineSoul(18);
+				const calcs = state.getFeatureCalculations();
+				// HP recovery = floor(maxHp / 2), or falls back to level
+				expect(calcs.unearthlyRecoveryHp).toBeGreaterThanOrEqual(18);
 			});
 		});
 	});

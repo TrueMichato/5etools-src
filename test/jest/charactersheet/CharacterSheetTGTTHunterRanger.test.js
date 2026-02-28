@@ -282,6 +282,35 @@ describe("TGTT Hunter Ranger", () => {
 	});
 
 	// =========================================================================
+	// COMBAT METHOD DEGREE PROGRESSION (Ranger schedule)
+	// =========================================================================
+	describe("Combat Method Degree Progression", () => {
+		// Ranger: L2→1st, L5→2nd, L9→3rd, L13→4th, L17→5th
+		const degreeProgression = [
+			{level: 1, expected: 0},
+			{level: 2, expected: 1},
+			{level: 4, expected: 1},
+			{level: 5, expected: 2},
+			{level: 8, expected: 2},
+			{level: 9, expected: 3},
+			{level: 12, expected: 3},
+			{level: 13, expected: 4},
+			{level: 16, expected: 4},
+			{level: 17, expected: 5},
+			{level: 20, expected: 5},
+		];
+
+		degreeProgression.forEach(({level, expected}) => {
+			it(`should have degree ${expected} access at Ranger level ${level}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({name: "Ranger", source: "TGTT", level});
+				s.addCombatTradition("Rapid Current");
+				expect(s.getMethodDegreeAccess()).toBe(expected);
+			});
+		});
+	});
+
+	// =========================================================================
 	// FIGHTING STYLE (L2)
 	// =========================================================================
 	describe("Fighting Style (Level 2)", () => {

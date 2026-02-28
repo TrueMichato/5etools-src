@@ -371,6 +371,33 @@ describe("TGTT Hexblade Warlock", () => {
 				const calcs = state.getFeatureCalculations();
 				expect(calcs.accursedSpecterTempHp).toBe(5);
 			});
+
+			// Full scaling: floor(level / 2)
+			const specterProgression = [
+				{level: 6, expected: 3},
+				{level: 7, expected: 3},
+				{level: 8, expected: 4},
+				{level: 10, expected: 5},
+				{level: 12, expected: 6},
+				{level: 14, expected: 7},
+				{level: 16, expected: 8},
+				{level: 17, expected: 8},
+				{level: 18, expected: 9},
+				{level: 20, expected: 10},
+			];
+
+			specterProgression.forEach(({level, expected}) => {
+				it(`should have accursedSpecterTempHp = ${expected} at level ${level}`, () => {
+					const s = new CharacterSheetState();
+					s.addClass({
+						name: "Warlock", source: "TGTT", level,
+						subclass: {name: "The Hexblade", shortName: "Hexblade", source: "TGTT"},
+					});
+					s.setAbilityBase("cha", 18);
+					s.applyClassFeatureEffects();
+					expect(s.getFeatureCalculations().accursedSpecterTempHp).toBe(expected);
+				});
+			});
 		});
 
 		describe("Armor of Hexes (Level 10)", () => {
@@ -407,6 +434,86 @@ describe("TGTT Hexblade Warlock", () => {
 				const features = state.getFeatures();
 				expect(features.some(f => f.name === "Master of Hexes")).toBe(true);
 			});
+		});
+	});
+
+	// =========================================================================
+	// MYSTIC ARCANUM (Level 11+)
+	// =========================================================================
+	describe("Mystic Arcanum (Level 11+)", () => {
+		const arcanumLevels = [
+			{warlockLevel: 11, arcanumLevel: 6},
+			{warlockLevel: 13, arcanumLevel: 7},
+			{warlockLevel: 15, arcanumLevel: 8},
+			{warlockLevel: 17, arcanumLevel: 9},
+		];
+
+		arcanumLevels.forEach(({warlockLevel, arcanumLevel}) => {
+			it(`should have ${arcanumLevel}th-level Mystic Arcanum available at Warlock level ${warlockLevel}`, () => {
+				const s = new CharacterSheetState();
+				s.addClass({
+					name: "Warlock", source: "TGTT", level: warlockLevel,
+					subclass: {name: "The Hexblade", shortName: "Hexblade", source: "TGTT"},
+				});
+				s.setAbilityBase("cha", 18);
+				expect(s.isMysticArcanumAvailable(arcanumLevel)).toBe(true);
+			});
+		});
+
+		it("should NOT have 6th-level Arcanum before level 11", () => {
+			makeHexblade(10);
+			expect(state.isMysticArcanumAvailable(6)).toBe(false);
+		});
+
+		it("should NOT have 7th-level Arcanum at exactly level 11", () => {
+			makeHexblade(11);
+			expect(state.isMysticArcanumAvailable(7)).toBe(false);
+		});
+
+		it("should use a Mystic Arcanum and mark it unavailable", () => {
+			makeHexblade(11);
+			expect(state.useMysticArcanum(6)).toBe(true);
+			expect(state.isMysticArcanumAvailable(6)).toBe(false);
+		});
+
+		it("should track used arcanum in getMysticArcanumUsage()", () => {
+			makeHexblade(17);
+			state.useMysticArcanum(6);
+			state.useMysticArcanum(9);
+
+			const usage = state.getMysticArcanumUsage();
+			expect(usage[6]).toBe(true);
+			expect(usage[7]).toBe(false);
+			expect(usage[8]).toBe(false);
+			expect(usage[9]).toBe(true);
+		});
+
+		it("should refuse to use already-used Arcanum", () => {
+			makeHexblade(11);
+			state.useMysticArcanum(6);
+			expect(state.useMysticArcanum(6)).toBe(false);
+		});
+
+		it("should reset all Arcanum on long rest", () => {
+			makeHexblade(17);
+			state.useMysticArcanum(6);
+			state.useMysticArcanum(7);
+			state.useMysticArcanum(8);
+			state.useMysticArcanum(9);
+
+			state.resetMysticArcanum();
+
+			expect(state.isMysticArcanumAvailable(6)).toBe(true);
+			expect(state.isMysticArcanumAvailable(7)).toBe(true);
+			expect(state.isMysticArcanumAvailable(8)).toBe(true);
+			expect(state.isMysticArcanumAvailable(9)).toBe(true);
+		});
+
+		it("should reject invalid arcanum levels (< 6 and > 9)", () => {
+			makeHexblade(17);
+			expect(state.isMysticArcanumAvailable(5)).toBe(false);
+			expect(state.isMysticArcanumAvailable(10)).toBe(false);
+			expect(state.useMysticArcanum(5)).toBe(false);
 		});
 	});
 
