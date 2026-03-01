@@ -185,7 +185,9 @@ class CharacterSheetQuickBuild {
 			const features = this._getLevelFeatures(classData, classLevel, subclass);
 
 			// Check what choices this level requires
-			const needsSubclass = CharacterSheetClassUtils.levelGrantsSubclass(classData, classLevel)
+			// Only prompt for subclass selection at the *first* gainSubclassFeature level,
+			// not at every level that grants a subclass feature (e.g. Sorcerer 3/6/14/18)
+			const needsSubclass = classLevel === CharacterSheetClassUtils.getSubclassLevel(classData)
 				&& !this._hasSubclass(className, classSource);
 
 			const hasAsi = CharacterSheetClassUtils.levelGrantsAsi(classData, classLevel);
@@ -988,6 +990,7 @@ class CharacterSheetQuickBuild {
 		const {$modalInner, doClose} = UiUtil.getShowModal({
 			title: "Add Multiclass",
 			isMinHeight0: true,
+			zIndex: 10001, // Above quickbuild overlay (z-index: 9999)
 		});
 
 		const $search = $(`<input type="text" class="form-control mb-2" placeholder="Search classes...">`);
@@ -1386,13 +1389,13 @@ class CharacterSheetQuickBuild {
 			const increase = tempChoices[abl] || 0;
 
 			const $row = $(`
-				<div class="ve-flex-v-center gap-2 mb-1">
-					<span style="width: 70px; font-weight: 600;">${Parser.attAbvToFull(abl)}</span>
-					<span class="ve-muted ve-small" style="width: 30px;">${currentBase}</span>
+				<div class="charsheet__levelup-asi-row">
+					<span class="charsheet__levelup-asi-name">${Parser.attAbvToFull(abl)}</span>
+					<span class="charsheet__levelup-asi-current">${currentBase}</span>
 					<button class="ve-btn ve-btn-xs ve-btn-default qb-asi-minus" data-abl="${abl}">−</button>
-					<span class="qb-asi-val" style="width: 25px; text-align: center; font-weight: 700;">+${increase}</span>
+					<span class="charsheet__levelup-asi-bonus qb-asi-val">+${increase}</span>
 					<button class="ve-btn ve-btn-xs ve-btn-default qb-asi-plus" data-abl="${abl}">+</button>
-					<span class="ve-muted ve-small">→ ${currentBase + increase}</span>
+					<span class="charsheet__levelup-asi-new">→ ${currentBase + increase}</span>
 				</div>
 			`);
 
@@ -3189,36 +3192,42 @@ class CharacterSheetQuickBuild {
 	}
 
 	_validateSpellsStep ({hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}) {
+		const warnings = [];
+		
 		if (spellbookLevels.length > 0) {
 			const totalNeeded = spellbookLevels.length * 2;
 			if (this._selections.spellbookSpells.length < totalNeeded) {
-				JqueryUtil.doToast({type: "warning", content: `Please select ${totalNeeded} spellbook spells (currently ${this._selections.spellbookSpells.length}).`});
-				return false;
+				warnings.push(`Spellbook: ${this._selections.spellbookSpells.length}/${totalNeeded} spells selected`);
 			}
 		}
 		if (knownCasterInfo) {
 			if (knownCasterInfo.totalSpells > 0 && this._selections.knownSpells.length < knownCasterInfo.totalSpells) {
-				JqueryUtil.doToast({type: "warning", content: `Please select ${knownCasterInfo.totalSpells} spells (currently ${this._selections.knownSpells.length}).`});
-				return false;
+				warnings.push(`Known spells: ${this._selections.knownSpells.length}/${knownCasterInfo.totalSpells} selected`);
 			}
 			if (knownCasterInfo.totalCantrips > 0 && this._selections.knownCantrips.length < knownCasterInfo.totalCantrips) {
-				JqueryUtil.doToast({type: "warning", content: `Please select ${knownCasterInfo.totalCantrips} cantrips (currently ${this._selections.knownCantrips.length}).`});
-				return false;
+				warnings.push(`Cantrips: ${this._selections.knownCantrips.length}/${knownCasterInfo.totalCantrips} selected`);
 			}
 		}
 		if (preparedCasterInfo) {
 			const prepSpells = this._selections.preparedSpells || [];
 			const prepCantrips = this._selections.preparedCantrips || [];
 			if (preparedCasterInfo.totalSpells > 0 && prepSpells.length < preparedCasterInfo.totalSpells) {
-				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedCasterInfo.totalSpells} prepared spells (currently ${prepSpells.length}).`});
-				return false;
+				warnings.push(`Prepared spells: ${prepSpells.length}/${preparedCasterInfo.totalSpells} selected`);
 			}
 			if (preparedCasterInfo.totalCantrips > 0 && prepCantrips.length < preparedCasterInfo.totalCantrips) {
-				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedCasterInfo.totalCantrips} cantrips (currently ${prepCantrips.length}).`});
-				return false;
+				warnings.push(`Cantrips: ${prepCantrips.length}/${preparedCasterInfo.totalCantrips} selected`);
 			}
 		}
-		return true;
+		
+		// Show warning but allow continuation
+		if (warnings.length > 0) {
+			JqueryUtil.doToast({
+				type: "warning",
+				content: `Spell selection incomplete (${warnings.join("; ")}). You can complete this later via the spells tab.`,
+			});
+		}
+		
+		return true; // Always allow continuation
 	}
 
 	// ==========================================

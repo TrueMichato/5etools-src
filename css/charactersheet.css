@@ -8975,7 +8975,7 @@ body:has(.charsheet__quickbuild-overlay) .toast__container {
 
 .charsheet__levelup-asi-grid {
 	display: grid;
-	grid-template-columns: repeat(2, 1fr);
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 	gap: var(--cs-space-sm, 0.5rem);
 }
 
@@ -9002,13 +9002,18 @@ body:has(.charsheet__quickbuild-overlay) .toast__container {
 }
 
 .charsheet__levelup-asi-name {
-	width: 90px;
+	width: 110px;
+	flex-shrink: 0;
 	font-weight: 600;
 	color: var(--cs-text-primary, var(--rgb-text));
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .charsheet__levelup-asi-current {
 	width: 32px;
+	flex-shrink: 0;
 	text-align: center;
 	color: var(--cs-text-muted, var(--rgb-text-muted));
 	font-size: var(--cs-text-sm, 0.875rem);
