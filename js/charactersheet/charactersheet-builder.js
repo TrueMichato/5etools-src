@@ -37,10 +37,13 @@ class CharacterSheetBuilder {
 		this._selectedRacialSpells = []; // For racial spell choices (e.g., Child of the Empire cantrip)
 		this._useTashasRules = false; // For Tasha's Custom Origin rules - reassign racial ASI
 		this._tashasAbilityBonuses = {}; // Stores custom ASI when using Tasha's rules
+		this._tashasSkillReplacements = []; // Stores replacement skill proficiencies when using Tasha's rules
+		this._tashasLanguageReplacements = []; // Stores replacement languages when using Tasha's rules
 		this._customBackground = null; // Stores custom background object
 		this._customBackgroundData = null; // Stores custom background form data
 		this._selectedKnownSpells = []; // For known-caster spell choices at level 1
 		this._selectedKnownCantrips = []; // For known-caster cantrip choices at level 1
+		this._includeDivineSoulSpells = false; // For Divine Soul Sorcerer to include Cleric spells
 		this._quickBuildTargetLevel = 1; // Target level for Quick Build integration
 
 		this._init();
@@ -531,7 +534,12 @@ class CharacterSheetBuilder {
 					if (score != null) {
 						this._state.setAbilityBase(abl, score);
 					}
+					// Clear existing racial ability bonuses before re-applying
+					// (Tasha toggle is in this step, so the step-1 bonuses may be stale)
+					this._state.setAbilityBonus(abl, 0);
 				});
+				// Re-apply racial ability bonuses with current Tasha state
+				this._applyRacialAbilityBonuses();
 				break;
 
 			case 4: // Background
@@ -736,72 +744,46 @@ class CharacterSheetBuilder {
 			}
 		}
 
-		// Ability score bonuses
-		if (this._selectedRace.ability) {
-			this._selectedRace.ability.forEach((abiSet, abiIdx) => {
-				if (abiSet.choose) {
-					// Handle choose-based ASI — apply stored choices for THIS ability set only
-					const raceKey = `${this._selectedRace.name}|${this._selectedRace.source}`;
-					const choices = this._selectedRacialAbilityChoices[raceKey] || {};
-					Object.entries(choices).forEach(([key, abi]) => {
-						// Only process choices that belong to this ability set index
-						if (!key.startsWith(`choose_${abiIdx}_`) || key.includes("_amount") || !abi) return;
-						const amount = choices[`${key}_amount`] || 1;
-						this._state.setAbilityBonus(abi, (this._state.getAbilityBonus(abi) || 0) + amount);
-					});
-				} else {
-					Object.entries(abiSet).forEach(([abi, bonus]) => {
-						if (Parser.ABIL_ABVS.includes(abi)) {
-							this._state.setAbilityBonus(abi, bonus);
-						}
-					});
-				}
-			});
-		}
+		// Ability score bonuses — delegate to reusable method
+		// (also called from _applyCurrentStep case 3 when Tasha toggle may have changed)
+		this._applyRacialAbilityBonuses();
 
-		// Subrace bonuses
-		if (this._selectedSubrace?.ability) {
-			this._selectedSubrace.ability.forEach((abiSet, abiIdx) => {
-				if (abiSet.choose) {
-					// Handle choose-based ASI — apply stored choices for THIS ability set only
-					const raceKey = `${this._selectedSubrace.name}|${this._selectedSubrace.source}`;
-					const choices = this._selectedRacialAbilityChoices[raceKey] || {};
-					Object.entries(choices).forEach(([key, abi]) => {
-						// Only process choices that belong to this ability set index
-						if (!key.startsWith(`choose_${abiIdx}_`) || key.includes("_amount") || !abi) return;
-						const amount = choices[`${key}_amount`] || 1;
-						const current = this._state.getAbilityBonus(abi);
-						this._state.setAbilityBonus(abi, current + amount);
-					});
-				} else {
-					Object.entries(abiSet).forEach(([abi, bonus]) => {
-						if (Parser.ABIL_ABVS.includes(abi)) {
-							const current = this._state.getAbilityBonus(abi);
-							this._state.setAbilityBonus(abi, current + bonus);
-						}
-					});
-				}
-			});
-		}
-
-		// Languages - base race
-		if (this._selectedRace.languageProficiencies) {
-			this._selectedRace.languageProficiencies.forEach(langProf => {
-				Object.keys(langProf).forEach(lang => {
-					if (lang === "anyStandard" || lang === "any" || lang === "choose") return;
-					this._state.addLanguage(lang.toTitleCase());
+		// Languages - base race and subrace
+		// When using Tasha's Custom Origin, replace fixed racial languages (except Common) with user's choices
+		if (this._useTashasRules && this._tashasLanguageReplacements.length) {
+			// Always add Common (cannot be replaced per Tasha's rules)
+			const addCommon = (langProficiencies) => {
+				if (!langProficiencies) return;
+				langProficiencies.forEach(langProf => {
+					if (langProf["common"]) this._state.addLanguage("Common");
 				});
-			});
-		}
+			};
+			addCommon(this._selectedRace?.languageProficiencies);
+			addCommon(this._selectedSubrace?.languageProficiencies);
 
-		// Languages - subrace
-		if (this._selectedSubrace?.languageProficiencies) {
-			this._selectedSubrace.languageProficiencies.forEach(langProf => {
-				Object.keys(langProf).forEach(lang => {
-					if (lang === "anyStandard" || lang === "any" || lang === "choose") return;
-					this._state.addLanguage(lang.toTitleCase());
-				});
+			// Add user-chosen replacement languages
+			this._tashasLanguageReplacements.forEach(lang => {
+				if (lang) this._state.addLanguage(lang.toTitleCase());
 			});
+		} else {
+			if (this._selectedRace.languageProficiencies) {
+				this._selectedRace.languageProficiencies.forEach(langProf => {
+					Object.keys(langProf).forEach(lang => {
+						if (lang === "anyStandard" || lang === "any" || lang === "choose") return;
+						this._state.addLanguage(lang.toTitleCase());
+					});
+				});
+			}
+
+			// Languages - subrace
+			if (this._selectedSubrace?.languageProficiencies) {
+				this._selectedSubrace.languageProficiencies.forEach(langProf => {
+					Object.keys(langProf).forEach(lang => {
+						if (lang === "anyStandard" || lang === "any" || lang === "choose") return;
+						this._state.addLanguage(lang.toTitleCase());
+					});
+				});
+			}
 		}
 
 		// Apply selected racial language choices
@@ -838,27 +820,37 @@ class CharacterSheetBuilder {
 		}
 
 		// Skill proficiencies from race data
-		if (this._selectedRace.skillProficiencies) {
-			this._selectedRace.skillProficiencies.forEach(skillProf => {
-				Object.keys(skillProf).forEach(skill => {
-					if (skill !== "any" && skill !== "choose") {
-						const skillKey = skill.toLowerCase().replace(/\s+/g, "");
-						this._state.setSkillProficiency(skillKey, 1);
-					}
-				});
+		// When using Tasha's Custom Origin, replace fixed racial skills with user's choices
+		if (this._useTashasRules && this._tashasSkillReplacements.length) {
+			this._tashasSkillReplacements.forEach(skill => {
+				if (skill) {
+					const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+					this._state.setSkillProficiency(skillKey, 1);
+				}
 			});
-		}
+		} else {
+			if (this._selectedRace.skillProficiencies) {
+				this._selectedRace.skillProficiencies.forEach(skillProf => {
+					Object.keys(skillProf).forEach(skill => {
+						if (skill !== "any" && skill !== "choose") {
+							const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+							this._state.setSkillProficiency(skillKey, 1);
+						}
+					});
+				});
+			}
 
-		// Skill proficiencies from subrace
-		if (this._selectedSubrace?.skillProficiencies) {
-			this._selectedSubrace.skillProficiencies.forEach(skillProf => {
-				Object.keys(skillProf).forEach(skill => {
-					if (skill !== "any" && skill !== "choose") {
-						const skillKey = skill.toLowerCase().replace(/\s+/g, "");
-						this._state.setSkillProficiency(skillKey, 1);
-					}
+			// Skill proficiencies from subrace
+			if (this._selectedSubrace?.skillProficiencies) {
+				this._selectedSubrace.skillProficiencies.forEach(skillProf => {
+					Object.keys(skillProf).forEach(skill => {
+						if (skill !== "any" && skill !== "choose") {
+							const skillKey = skill.toLowerCase().replace(/\s+/g, "");
+							this._state.setSkillProficiency(skillKey, 1);
+						}
+					});
 				});
-			});
+			}
 		}
 
 		// Apply selected racial skill proficiency choices
@@ -938,6 +930,70 @@ class CharacterSheetBuilder {
 
 		if (this._selectedSubrace?.entries) {
 			this._addFeatureEntries(this._selectedSubrace.entries, this._selectedSubrace.source, "Subrace");
+		}
+	}
+
+	/**
+	 * Apply racial ability score bonuses.
+	 * When Tasha's Custom Origin is enabled, applies the user's reassigned bonuses
+	 * instead of the original racial/subrace bonuses.
+	 * Called from both _applyRacialTraits (step 1) and _applyCurrentStep case 3 (Abilities).
+	 */
+	_applyRacialAbilityBonuses () {
+		if (!this._selectedRace) return;
+
+		if (this._useTashasRules) {
+			Object.entries(this._tashasAbilityBonuses).forEach(([key, value]) => {
+				if (key.includes("_amount") || !value) return;
+				const amountKey = `${key}_amount`;
+				const amount = this._tashasAbilityBonuses[amountKey] || 0;
+				if (amount && Parser.ABIL_ABVS.includes(value)) {
+					const current = this._state.getAbilityBonus(value) || 0;
+					this._state.setAbilityBonus(value, current + amount);
+				}
+			});
+		} else {
+			if (this._selectedRace.ability) {
+				this._selectedRace.ability.forEach((abiSet, abiIdx) => {
+					if (abiSet.choose) {
+						const raceKey = `${this._selectedRace.name}|${this._selectedRace.source}`;
+						const choices = this._selectedRacialAbilityChoices[raceKey] || {};
+						Object.entries(choices).forEach(([key, abi]) => {
+							if (!key.startsWith(`choose_${abiIdx}_`) || key.includes("_amount") || !abi) return;
+							const amount = choices[`${key}_amount`] || 1;
+							this._state.setAbilityBonus(abi, (this._state.getAbilityBonus(abi) || 0) + amount);
+						});
+					} else {
+						Object.entries(abiSet).forEach(([abi, bonus]) => {
+							if (Parser.ABIL_ABVS.includes(abi)) {
+								this._state.setAbilityBonus(abi, bonus);
+							}
+						});
+					}
+				});
+			}
+
+			if (this._selectedSubrace?.ability) {
+				this._selectedSubrace.ability.forEach((abiSet, abiIdx) => {
+					if (abiSet.choose) {
+						const raceKey = `${this._selectedSubrace.name}|${this._selectedSubrace.source}`;
+						const choices = this._selectedRacialAbilityChoices[raceKey] || {};
+						Object.entries(choices).forEach(([key, abi]) => {
+							if (!key.startsWith(`choose_${abiIdx}_`) || key.includes("_amount") || !abi) return;
+							const amount = choices[`${key}_amount`] || 1;
+							const current = this._state.getAbilityBonus(abi);
+							this._state.setAbilityBonus(abi, current + amount);
+						});
+					} else {
+						Object.entries(abiSet).forEach(([abi, bonus]) => {
+							if (Parser.ABIL_ABVS.includes(abi)) {
+								const current = this._state.getAbilityBonus(abi);
+								this._state.setAbilityBonus(abi, current + bonus);
+							}
+						});
+					}
+				});
+			}
 		}
 	}
 
@@ -5088,15 +5144,17 @@ class CharacterSheetBuilder {
 			<label class="ve-flex-v-center mb-2" style="cursor: pointer;">
 				<input type="checkbox" class="mr-2" id="builder-tashas-rules" ${this._useTashasRules ? "checked" : ""}>
 				<span>Use Tasha's Custom Origin Rules</span>
-				<span class="ve-muted ve-small ml-1" title="Allows you to reassign your racial ability score bonuses to different abilities">(reassign ASI)</span>
+				<span class="ve-muted ve-small ml-1" title="Allows you to reassign racial ability scores, skill proficiencies, and languages">(reassign ASI, skills &amp; languages)</span>
 			</label>
 		`);
 
 		$tashasOption.find("input").on("change", (e) => {
 			this._useTashasRules = e.target.checked;
 			if (!this._useTashasRules) {
-				// Reset custom bonuses when disabling
+				// Reset all custom choices when disabling
 				this._tashasAbilityBonuses = {};
+				this._tashasSkillReplacements = [];
+				this._tashasLanguageReplacements = [];
 			}
 			this._renderRacialBonusesSection();
 			this._updateAbilitySummary();
@@ -5107,9 +5165,135 @@ class CharacterSheetBuilder {
 		// Show either default bonuses or custom selection UI
 		if (this._useTashasRules) {
 			this._renderTashasASIChoices($container);
+			this._renderTashasSkillReplacements($container);
+			this._renderTashasLanguageReplacements($container);
 		} else {
 			$container.append(`<div class="mt-2">${this._getRacialBonusesHtml()}</div>`);
 		}
+	}
+
+	/**
+	 * Get fixed racial skill proficiencies (non-choice) from race and subrace.
+	 * @returns {string[]} Array of skill keys (lowercase, no spaces)
+	 */
+	_getFixedRacialSkills () {
+		const skills = [];
+		const collectFixed = (skillProficiencies) => {
+			if (!skillProficiencies) return;
+			skillProficiencies.forEach(skillProf => {
+				Object.keys(skillProf).forEach(skill => {
+					if (skill !== "any" && skill !== "choose") {
+						skills.push(skill);
+					}
+				});
+			});
+		};
+		collectFixed(this._selectedRace?.skillProficiencies);
+		collectFixed(this._selectedSubrace?.skillProficiencies);
+		return skills;
+	}
+
+	/**
+	 * Get fixed racial languages (non-choice, excluding Common) from race and subrace.
+	 * @returns {string[]} Array of language names
+	 */
+	_getFixedRacialLanguages () {
+		const languages = [];
+		const collectFixed = (langProficiencies) => {
+			if (!langProficiencies) return;
+			langProficiencies.forEach(langProf => {
+				Object.keys(langProf).forEach(lang => {
+					if (lang === "anyStandard" || lang === "any" || lang === "choose") return;
+					// Common cannot be replaced per Tasha's rules
+					if (lang.toLowerCase() === "common") return;
+					languages.push(lang);
+				});
+			});
+		};
+		collectFixed(this._selectedRace?.languageProficiencies);
+		collectFixed(this._selectedSubrace?.languageProficiencies);
+		return languages;
+	}
+
+	/**
+	 * Render Tasha's skill proficiency replacements.
+	 * Replaces fixed racial skills with "choose any N skills".
+	 */
+	_renderTashasSkillReplacements ($container) {
+		const fixedSkills = this._getFixedRacialSkills();
+		if (!fixedSkills.length) return;
+
+		// Use the same data source as other skill pickers (includes homebrew/custom skills)
+		const allSkills = this._page.getSkillsList().map(s => s.name);
+
+		const $section = $(`<div class="charsheet__builder-tashas-skills mt-3"></div>`);
+		$section.append(`<p class="ve-small ve-muted mb-1">Replace ${fixedSkills.length} fixed racial skill${fixedSkills.length > 1 ? "s" : ""} (<em>${fixedSkills.map(s => s.toTitleCase()).join(", ")}</em>) with any skill${fixedSkills.length > 1 ? "s" : ""}:</p>`);
+
+		for (let i = 0; i < fixedSkills.length; i++) {
+			const $select = $(`
+				<select class="form-control form-control--minimal mb-1" id="tashas-skill-${i}">
+					<option value="">-- Select Skill --</option>
+				</select>
+			`);
+
+			allSkills.forEach(skill => {
+				$select.append(`<option value="${skill}">${skill}</option>`);
+			});
+
+			// Pre-select
+			if (this._tashasSkillReplacements[i]) {
+				$select.val(this._tashasSkillReplacements[i]);
+			}
+
+			$select.on("change", (e) => {
+				this._tashasSkillReplacements[i] = e.target.value || null;
+			});
+
+			$section.append($select);
+		}
+
+		$container.append($section);
+	}
+
+	/**
+	 * Render Tasha's language replacements.
+	 * Replaces fixed racial languages (except Common) with "choose any N languages".
+	 */
+	_renderTashasLanguageReplacements ($container) {
+		const fixedLanguages = this._getFixedRacialLanguages();
+		if (!fixedLanguages.length) return;
+
+		// Use the same data source as other language pickers (includes homebrew languages)
+		const allLanguages = this._page.getLanguageNamesSorted();
+		const standardLanguages = allLanguages.length > 0 ? allLanguages : ["Common", "Dwarvish", "Elvish", "Giant", "Gnomish", "Goblin", "Halfling", "Orc"];
+
+		const $section = $(`<div class="charsheet__builder-tashas-languages mt-3"></div>`);
+		$section.append(`<p class="ve-small ve-muted mb-1">Replace ${fixedLanguages.length} fixed racial language${fixedLanguages.length > 1 ? "s" : ""} (<em>${fixedLanguages.map(l => l.toTitleCase()).join(", ")}</em>) with any language${fixedLanguages.length > 1 ? "s" : ""}:</p>`);
+
+		for (let i = 0; i < fixedLanguages.length; i++) {
+			const $select = $(`
+				<select class="form-control form-control--minimal mb-1" id="tashas-lang-${i}">
+					<option value="">-- Select Language --</option>
+				</select>
+			`);
+
+			standardLanguages.forEach(lang => {
+				$select.append(`<option value="${lang}">${lang}</option>`);
+			});
+
+			// Pre-select
+			if (this._tashasLanguageReplacements[i]) {
+				$select.val(this._tashasLanguageReplacements[i]);
+			}
+
+			$select.on("change", (e) => {
+				this._tashasLanguageReplacements[i] = e.target.value || null;
+			});
+
+			$section.append($select);
+		}
+
+		$container.append($section);
 	}
 
 	/**
@@ -6225,6 +6409,83 @@ class CharacterSheetBuilder {
 			$toolSection.append($anySection);
 		}
 
+		// When both artisan and musical instrument are present with count=1 each,
+		// render a combined "choose one OR the other" picker (e.g. TGTT backgrounds,
+		// Mulmaster Aristocrat) instead of two independent dropdowns
+		if (anyArtisanCount === 1 && anyMusicalInstrumentCount === 1) {
+			const $orSection = $(`<div class="charsheet__builder-tool-or-choice mt-1"></div>`);
+			$orSection.append(`<p class="mb-1"><strong>Choose one artisan's tool or musical instrument:</strong></p>`);
+
+			const artisanTools = Renderer.generic.FEATURE__TOOLS_ARTISANS;
+			const musicalInstruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS;
+
+			const $categorySelect = $(`
+				<select class="form-control form-control--minimal mb-1" id="bg-tool-or-category">
+					<option value="">-- Select Category --</option>
+					<option value="artisan">Artisan's Tools</option>
+					<option value="instrument">Musical Instrument</option>
+				</select>
+			`);
+
+			const $toolSelect = $(`
+				<select class="form-control form-control--minimal mb-1" id="bg-tool-or-specific" style="display: none;">
+					<option value="">-- Select Tool --</option>
+				</select>
+			`);
+
+			// Pre-select if already chosen
+			const existingArtisan = this._selectedToolProficiencies.find(t => t.isArtisanOrInstrument && t.isArtisan);
+			const existingInstrument = this._selectedToolProficiencies.find(t => t.isArtisanOrInstrument && t.isMusicalInstrument);
+			const existingOrChoice = existingArtisan || existingInstrument;
+
+			const populateToolSelect = (category) => {
+				$toolSelect.empty().append(`<option value="">-- Select ${category === "artisan" ? "Artisan's Tool" : "Musical Instrument"} --</option>`);
+				const tools = category === "artisan" ? artisanTools : musicalInstruments;
+				tools.forEach(tool => {
+					$toolSelect.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+				});
+				$toolSelect.show();
+			};
+
+			if (existingOrChoice) {
+				const cat = existingArtisan ? "artisan" : "instrument";
+				$categorySelect.val(cat);
+				populateToolSelect(cat);
+				$toolSelect.val(existingOrChoice.tool);
+			}
+
+			$categorySelect.on("change", (e) => {
+				// Clear previous or-choice
+				this._selectedToolProficiencies = this._selectedToolProficiencies.filter(t => !t.isArtisanOrInstrument);
+				if (e.target.value) {
+					populateToolSelect(e.target.value);
+				} else {
+					$toolSelect.hide();
+				}
+			});
+
+			$toolSelect.on("change", (e) => {
+				this._selectedToolProficiencies = this._selectedToolProficiencies.filter(t => !t.isArtisanOrInstrument);
+				const category = $categorySelect.val();
+				if (e.target.value) {
+					this._selectedToolProficiencies.push({
+						anyIdx: 0,
+						tool: e.target.value,
+						isArtisan: category === "artisan",
+						isMusicalInstrument: category === "instrument",
+						isArtisanOrInstrument: true,
+					});
+				}
+			});
+
+			$orSection.append($categorySelect, $toolSelect);
+			$toolSection.append($orSection);
+
+			// Consume both counts so they aren't rendered independently below
+			anyArtisanCount = 0;
+			anyMusicalInstrumentCount = 0;
+		}
+
 		// Render "any artisan's tool" selection
 		if (anyArtisanCount > 0) {
 			const $artisanSection = $(`<div class="charsheet__builder-tool-artisan mt-1"></div>`);
@@ -6243,14 +6504,14 @@ class CharacterSheetBuilder {
 					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
 				});
 
-				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isArtisan);
+				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isArtisan && !t.isArtisanOrInstrument);
 				if (existingChoice) {
 					$select.val(existingChoice.tool);
 				}
 
 				$select.on("change", (e) => {
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
-						t => !(t.anyIdx === i && t.isArtisan),
+						t => !(t.anyIdx === i && t.isArtisan && !t.isArtisanOrInstrument),
 					);
 					if (e.target.value) {
 						this._selectedToolProficiencies.push({
@@ -6284,14 +6545,14 @@ class CharacterSheetBuilder {
 					$select.append(`<option value="${instrument}">${instrument.toTitleCase()}</option>`);
 				});
 
-				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isMusicalInstrument);
+				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isMusicalInstrument && !t.isArtisanOrInstrument);
 				if (existingChoice) {
 					$select.val(existingChoice.tool);
 				}
 
 				$select.on("change", (e) => {
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
-						t => !(t.anyIdx === i && t.isMusicalInstrument),
+						t => !(t.anyIdx === i && t.isMusicalInstrument && !t.isArtisanOrInstrument),
 					);
 					if (e.target.value) {
 						this._selectedToolProficiencies.push({
@@ -6909,7 +7170,8 @@ class CharacterSheetBuilder {
 		if (!matchFn) return [];
 
 		// Deduplicate by name (prefer XPHB source over PHB)
-		const matched = allItems.filter(matchFn);
+		// Only include base items — exclude magical items and variants
+		const matched = allItems.filter(i => i._isBaseItem && matchFn(i));
 		const byName = new Map();
 		for (const item of matched) {
 			const existing = byName.get(item.name);
@@ -6982,7 +7244,7 @@ class CharacterSheetBuilder {
 		);
 
 		// Determine additional class spell lists (e.g. Cleric for Divine Soul)
-		const additionalClassNames = (className === "Sorcerer" && this._selectedSubclass?.name === "Divine Soul")
+		const additionalClassNames = (className === "Sorcerer" && this._includeDivineSoulSpells)
 			? ["Cleric"] : [];
 
 		return {
@@ -7016,21 +7278,47 @@ class CharacterSheetBuilder {
 
 		$content.append($container);
 
+		// Divine Soul toggle for Sorcerers
+		if (knownInfo.className === "Sorcerer") {
+			const $toggleSection = $(`
+				<div class="charsheet__builder-feat-opt-section mb-3" style="padding: 0.75rem; background: var(--cs-bg-secondary, #f8f9fa); border-radius: 4px;">
+					<label class="ve-flex-v-center gap-2 mb-0" style="cursor: pointer;">
+						<input type="checkbox" class="form-check-input" ${this._includeDivineSoulSpells ? "checked" : ""}>
+						<span class="ve-bold">Include Cleric Spells</span>
+						<span class="ve-muted ve-small">(Divine Soul Origin)</span>
+					</label>
+					<p class="ve-small ve-muted mt-1 mb-0">Enable this if your Sorcerous Origin grants access to the Cleric spell list.</p>
+				</div>
+			`);
+			
+			const $checkbox = $toggleSection.find("input[type=checkbox]");
+			$checkbox.on("change", () => {
+				this._includeDivineSoulSpells = $checkbox.prop("checked");
+				// Re-render the spell picker with updated class list
+				this._renderSpellsStep($content.empty());
+			});
+			
+			$container.find("#builder-spell-picker").before($toggleSection);
+		}
+
 		const allSpells = this._page.getSpells() || [];
 		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
 
 		// Existing known spell IDs (empty for builder — first-time creation)
 		const knownSpellIds = new Set();
 
+		// Re-get knownInfo to reflect toggle state
+		const updatedKnownInfo = this._getKnownCasterInfoForBuilder();
+
 		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
-			className: knownInfo.className,
-			classSource: knownInfo.classSource,
-			spellCount: knownInfo.spellCount,
-			cantripCount: knownInfo.cantripCount,
-			maxSpellLevel: knownInfo.maxSpellLevel,
+			className: updatedKnownInfo.className,
+			classSource: updatedKnownInfo.classSource,
+			spellCount: updatedKnownInfo.spellCount,
+			cantripCount: updatedKnownInfo.cantripCount,
+			maxSpellLevel: updatedKnownInfo.maxSpellLevel,
 			allSpells: sourceFiltered,
 			knownSpellIds,
-			additionalClassNames: knownInfo.additionalClassNames,
+			additionalClassNames: updatedKnownInfo.additionalClassNames,
 			onSelect: (spells, cantrips) => {
 				this._selectedKnownSpells = spells;
 				this._selectedKnownCantrips = cantrips;
