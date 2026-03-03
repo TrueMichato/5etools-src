@@ -4094,11 +4094,14 @@ class CharacterSheetSpells {
 				const isKnown = knownSpellIds.includes(spellId);
 				const school = Parser.spSchoolAbvToFull(spell.school);
 
+				// Render spell name with hover capability
+				const spellNameRendered = Renderer.get().render(`{@spell ${spell.name}|${spell.source}}`);
+
 				const $item = $(`
 					<div class="ve-flex-v-center p-2 clickable spell-choice-item ${isKnown ? "ve-muted" : ""}" 
 						 style="border-bottom: 1px solid var(--rgb-border-grey);">
 						<div class="ve-flex-col" style="flex: 1;">
-							<span class="bold">${spell.name}</span>
+							<span class="bold spell-name-hover">${spellNameRendered}</span>
 							<span class="ve-small ve-muted">${school}${spell.ritual ? " (ritual)" : ""} • ${Parser.sourceJsonToAbv(spell.source)}</span>
 						</div>
 						${isKnown
@@ -4143,6 +4146,7 @@ class CharacterSheetSpells {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: spell.name,
 			isMinHeight0: true,
+			zIndex: 10003, // Above spell picker modal (10002)
 		});
 
 		const levelSchool = spell.level === 0
