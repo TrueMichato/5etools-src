@@ -15303,3 +15303,12 @@ body:has(.charsheet__method-picker) .hwin .hoverborder {
 	padding: 4px 8px;
 	font-size: calc(var(--cs-font-base, 14px) * 0.85);
 }
+
+/* ==========================================
+   Hover Windows in High Z-Index Modals
+   ========================================== */
+
+/* Ensure hover windows appear above spell picker and similar modals */
+.hwin {
+	z-index: 10004 !important;
+}

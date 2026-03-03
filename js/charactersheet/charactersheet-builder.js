@@ -32,9 +32,11 @@ class CharacterSheetBuilder {
 		this._selectedCombatTraditions = []; // For combat tradition proficiency choices (Thelemar homebrew)
 		this._selectedRacialSkills = []; // For racial skill proficiency choices (e.g., Elf)
 		this._selectedRacialTools = []; // For racial tool proficiency choices (e.g., Dwarf)
-		this._selectedRacialLanguages = []; // For racial language proficiency choices (TGTT races with choose/anyStandard)
+		this._selectedRacialLanguages = {}; // For racial language proficiency choices, keyed by profIdx
+		this._selectedSubraceLanguages = []; // For subrace language proficiency choices (e.g., Hub Residence Trilingual)
 		this._selectedRacialAbilityChoices = {}; // For races with choose-based ASI (TGTT races)
 		this._selectedRacialSpells = []; // For racial spell choices (e.g., Child of the Empire cantrip)
+		this._selectedRacialSpellAbilities = {}; // For racial spell ability choices (e.g., Child of the Empire INT/WIS/CHA)
 		this._useTashasRules = false; // For Tasha's Custom Origin rules - reassign racial ASI
 		this._tashasAbilityBonuses = {}; // Stores custom ASI when using Tasha's rules
 		this._tashasSkillReplacements = []; // Stores replacement skill proficiencies when using Tasha's rules
@@ -786,9 +788,20 @@ class CharacterSheetBuilder {
 			}
 		}
 
-		// Apply selected racial language choices
-		if (this._selectedRacialLanguages.length) {
-			this._selectedRacialLanguages.forEach(lang => {
+		// Apply selected racial language choices (from all proficiency entries)
+		if (Object.keys(this._selectedRacialLanguages).length) {
+			Object.values(this._selectedRacialLanguages).forEach(langArray => {
+				if (Array.isArray(langArray)) {
+					langArray.forEach(lang => {
+						this._state.addLanguage(lang.toTitleCase());
+					});
+				}
+			});
+		}
+
+		// Apply selected subrace language choices (e.g., Hub Residence Trilingual)
+		if (this._selectedSubraceLanguages.length) {
+			this._selectedSubraceLanguages.forEach(lang => {
 				this._state.addLanguage(lang.toTitleCase());
 			});
 		}
@@ -1025,8 +1038,9 @@ class CharacterSheetBuilder {
 				if (typeof spellBlock.ability === "string") {
 					spellAbility = spellBlock.ability;
 				} else if (spellBlock.ability.choose) {
-					// Default to first option for now - UI choice can be added later
-					spellAbility = spellBlock.ability.choose[0];
+					// Use user-selected ability if available, otherwise default to first option
+					const choiceIdx = race.additionalSpells.indexOf(spellBlock);
+					spellAbility = this._selectedRacialSpellAbilities[choiceIdx] || spellBlock.ability.choose[0];
 				}
 			}
 
@@ -2154,8 +2168,10 @@ class CharacterSheetBuilder {
 					// Reset racial proficiency selections when race group changes
 					this._selectedRacialSkills = [];
 					this._selectedRacialTools = [];
-					this._selectedRacialLanguages = [];
+					this._selectedRacialLanguages = {};
+					this._selectedSubraceLanguages = [];
 					this._selectedRacialSpells = [];
+					this._selectedRacialSpellAbilities = {};
 
 					if (hasSubraces) {
 						// Show subrace selection in preview
@@ -2241,8 +2257,10 @@ class CharacterSheetBuilder {
 				// Reset racial proficiency selections when race changes
 				this._selectedRacialSkills = [];
 				this._selectedRacialTools = [];
-				this._selectedRacialLanguages = [];
+				this._selectedRacialLanguages = {};
+				this._selectedSubraceLanguages = [];
 				this._selectedRacialSpells = [];
+				this._selectedRacialSpellAbilities = {};
 				this._renderSubraceDetails($detailsContainer, selectedSubrace, group.baseName);
 			} else {
 				this._selectedRace = null;
@@ -2250,8 +2268,10 @@ class CharacterSheetBuilder {
 				// Reset racial proficiency selections
 				this._selectedRacialSkills = [];
 				this._selectedRacialTools = [];
-				this._selectedRacialLanguages = [];
+				this._selectedRacialLanguages = {};
+				this._selectedSubraceLanguages = [];
 				this._selectedRacialSpells = [];
+				this._selectedRacialSpellAbilities = {};
 				$detailsContainer.empty();
 			}
 		});
@@ -2485,7 +2505,19 @@ class CharacterSheetBuilder {
 				if (toolProf.any) {
 					hasChoices = true;
 					const anyCount = toolProf.any;
-					const $section = this._renderRacialToolChoice(null, anyCount, profIdx);
+					const $section = this._renderRacialToolChoice(null, anyCount, profIdx, "any");
+					$container.append($section);
+				}
+				if (toolProf.anyArtisansTool) {
+					hasChoices = true;
+					const anyCount = typeof toolProf.anyArtisansTool === "number" ? toolProf.anyArtisansTool : 1;
+					const $section = this._renderRacialToolChoice(null, anyCount, profIdx, "artisan");
+					$container.append($section);
+				}
+				if (toolProf.anyMusicalInstrument) {
+					hasChoices = true;
+					const anyCount = typeof toolProf.anyMusicalInstrument === "number" ? toolProf.anyMusicalInstrument : 1;
+					const $section = this._renderRacialToolChoice(null, anyCount, profIdx, "musical");
 					$container.append($section);
 				}
 			});
@@ -2493,32 +2525,76 @@ class CharacterSheetBuilder {
 
 		// Language proficiency choices
 		if (race.languageProficiencies) {
+			// For merged races, find feature names for subrace language proficiencies
+			const languageFeatureNames = this._findLanguageFeatureNames(race);
+
 			race.languageProficiencies.forEach((langProf, profIdx) => {
+				// Determine the feature name for this language proficiency entry
+				// First entry (profIdx=0) is usually base race, subsequent are from subrace features
+				const featureName = languageFeatureNames[profIdx] || "Racial Languages";
+
 				if (langProf.choose) {
 					hasChoices = true;
 					const chooseFrom = langProf.choose.from || [];
 					const chooseCount = langProf.choose.count || 1;
 					if (chooseFrom.length > 0) {
-						const $section = this._renderRacialLanguageChoice(chooseFrom, chooseCount, profIdx);
+						const $section = this._renderRacialLanguageChoice(chooseFrom, chooseCount, profIdx, featureName);
 						$container.append($section);
 					}
 				}
 				if (langProf.anyStandard) {
 					hasChoices = true;
 					const anyCount = typeof langProf.anyStandard === "number" ? langProf.anyStandard : 1;
-					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx);
+					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx, featureName);
 					$container.append($section);
 				}
 				if (langProf.any) {
 					hasChoices = true;
 					const anyCount = typeof langProf.any === "number" ? langProf.any : 1;
-					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx);
+					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx, featureName);
 					$container.append($section);
 				}
 			});
 		}
 
 		return hasChoices ? $container : null;
+	}
+
+	/**
+	 * Find feature names that grant language proficiencies from race entries
+	 * Returns an array where index corresponds to languageProficiencies index
+	 * @param {Object} race - The race data
+	 * @returns {Array<string|null>} - Array of feature names
+	 */
+	_findLanguageFeatureNames (race) {
+		const names = [];
+		if (!race.entries || !race.languageProficiencies) return names;
+
+		// Count how many language-granting features we need to find
+		const numLangProfs = race.languageProficiencies.length;
+
+		// First entry is typically base race - use "Racial Languages"
+		if (numLangProfs >= 1) {
+			names[0] = "Racial Languages";
+		}
+
+		// For subsequent entries, search entries for language-related features
+		if (numLangProfs > 1) {
+			let foundIdx = 1;
+			for (const entry of race.entries) {
+				if (foundIdx >= numLangProfs) break;
+				if (typeof entry === "object" && entry.name && entry.entries) {
+					const entryText = (entry.entries || []).join(" ").toLowerCase();
+					// Check if this feature mentions languages
+					if (entryText.includes("language") || entry.name.toLowerCase().includes("lingual")) {
+						names[foundIdx] = entry.name;
+						foundIdx++;
+					}
+				}
+			}
+		}
+
+		return names;
 	}
 
 	/**
@@ -2529,14 +2605,17 @@ class CharacterSheetBuilder {
 	 * @returns {jQuery} - jQuery element
 	 */
 	_renderRacialSkillChoice (skills, count, profIdx) {
-		const allSkills = Parser.SKILL_TO_ATB_ABV ? Object.keys(Parser.SKILL_TO_ATB_ABV).map(s => s.toTitleCase()) : [
-			"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
-			"History", "Insight", "Intimidation", "Investigation", "Medicine",
-			"Nature", "Perception", "Performance", "Persuasion", "Religion",
-			"Sleight of Hand", "Stealth", "Survival",
-		];
+		// Get skills dynamically from loaded data (supports homebrew) - fallback to Parser
+		const allSkills = this._page?.getSkillsList?.()?.map(s => s.name)
+			|| (Parser.SKILL_TO_ATB_ABV ? Object.keys(Parser.SKILL_TO_ATB_ABV).map(s => s.toTitleCase()) : [
+				"Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+				"History", "Insight", "Intimidation", "Investigation", "Medicine",
+				"Nature", "Perception", "Performance", "Persuasion", "Religion",
+				"Sleight of Hand", "Stealth", "Survival",
+			]);
 
-		const availableSkills = skills ? skills.map(s => s.toTitleCase()) : allSkills;
+		// Strip source suffix from skill names (e.g., "might|TGTT" -> "might") and title case
+		const availableSkills = skills ? skills.map(s => s.split("|")[0].toTitleCase()) : allSkills;
 		const label = skills ? `Choose ${count} skill${count > 1 ? "s" : ""} from:` : `Choose any ${count} skill${count > 1 ? "s" : ""}:`;
 
 		const $section = $(`
@@ -2580,12 +2659,13 @@ class CharacterSheetBuilder {
 
 	/**
 	 * Render tool choice UI for racial proficiencies
-	 * @param {string[]|null} tools - Array of tool names to choose from, or null for any tool
+	 * @param {string[]|null} tools - Array of tool names to choose from, or null for filtered list
 	 * @param {number} count - Number of tools to choose
 	 * @param {number} profIdx - Index for tracking multiple choice sections
+	 * @param {string} [toolType] - Filter type: 'any', 'artisan', 'musical', or undefined for specific list
 	 * @returns {jQuery} - jQuery element
 	 */
-	_renderRacialToolChoice (tools, count, profIdx) {
+	_renderRacialToolChoice (tools, count, profIdx, toolType) {
 		// Common tools list - used when "any" is specified
 		const allTools = [
 			"Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies",
@@ -2599,8 +2679,37 @@ class CharacterSheetBuilder {
 			"Thieves' Tools",
 		];
 
-		const availableTools = tools ? tools.map(t => t.toTitleCase()) : allTools;
-		const label = tools ? `Choose ${count} tool${count > 1 ? "s" : ""} from:` : `Choose any ${count} tool${count > 1 ? "s" : ""}:`;
+		// Artisan's tools only
+		const artisanTools = [
+			"Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies",
+			"Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools",
+			"Cook's Utensils", "Glassblower's Tools", "Jeweler's Tools",
+			"Leatherworker's Tools", "Mason's Tools", "Painter's Supplies",
+			"Potter's Tools", "Smith's Tools", "Tinker's Tools",
+			"Weaver's Tools", "Woodcarver's Tools",
+		];
+
+		// Musical instruments
+		const musicalInstruments = [
+			"Bagpipes", "Drum", "Dulcimer", "Flute", "Lute",
+			"Lyre", "Horn", "Pan Flute", "Shawm", "Viol",
+		];
+
+		let availableTools;
+		let label;
+		if (tools) {
+			availableTools = tools.map(t => t.toTitleCase());
+			label = `Choose ${count} tool${count > 1 ? "s" : ""} from:`;
+		} else if (toolType === "artisan") {
+			availableTools = artisanTools;
+			label = `Choose ${count} artisan's tool${count > 1 ? "s" : ""}:`;
+		} else if (toolType === "musical") {
+			availableTools = musicalInstruments;
+			label = `Choose ${count} musical instrument${count > 1 ? "s" : ""}:`;
+		} else {
+			availableTools = allTools;
+			label = `Choose any ${count} tool${count > 1 ? "s" : ""}:`;
+		}
 
 		const $section = $(`
 			<div class="charsheet__builder-racial-tool-selection mt-2">
@@ -2646,9 +2755,10 @@ class CharacterSheetBuilder {
 	 * @param {string[]|null} languages - Array of language names to choose from (may include source suffix like "lexalian|TGTT"), or null for any standard language
 	 * @param {number} count - Number of languages to choose
 	 * @param {number} profIdx - Index for tracking multiple choice sections
+	 * @param {string} featureName - Name of the feature granting these languages (e.g., "Racial Languages" or "Trilinguals")
 	 * @returns {jQuery} - jQuery element
 	 */
-	_renderRacialLanguageChoice (languages, count, profIdx) {
+	_renderRacialLanguageChoice (languages, count, profIdx, featureName = "Racial Languages") {
 		// Get all available languages from the page, sorted by priority sources
 		const allLanguages = this._page.getLanguageNamesSorted();
 		const prioritySources = this._state.getPrioritySources() || [];
@@ -2690,16 +2800,21 @@ class CharacterSheetBuilder {
 
 		const $section = $(`
 			<div class="charsheet__builder-racial-lang-selection mt-2">
-				<p><strong>Racial Languages:</strong> ${label}</p>
+				<p><strong>${featureName}:</strong> ${label}</p>
 				<div class="charsheet__builder-lang-checkboxes"></div>
-				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-lang-count">${this._selectedRacialLanguages.length}</span>/${count}</div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-lang-count">${(this._selectedRacialLanguages[profIdx] || []).length}</span>/${count}</div>
 			</div>
 		`);
 
 		const $checkboxes = $section.find(".charsheet__builder-lang-checkboxes");
 
+		// Ensure array exists for this profIdx
+		if (!this._selectedRacialLanguages[profIdx]) {
+			this._selectedRacialLanguages[profIdx] = [];
+		}
+
 		availableLanguages.forEach(lang => {
-			const isSelected = this._selectedRacialLanguages.includes(lang);
+			const isSelected = this._selectedRacialLanguages[profIdx].includes(lang);
 			const $label = $(`
 				<label class="charsheet__builder-lang-checkbox mr-3 mb-1">
 					<input type="checkbox" value="${lang}" ${isSelected ? "checked" : ""}>
@@ -2709,16 +2824,158 @@ class CharacterSheetBuilder {
 
 			$label.find("input").on("change", (e) => {
 				if (e.target.checked) {
-					if (this._selectedRacialLanguages.length < count) {
-						this._selectedRacialLanguages.push(lang);
+					if (this._selectedRacialLanguages[profIdx].length < count) {
+						this._selectedRacialLanguages[profIdx].push(lang);
 					} else {
 						e.target.checked = false;
 						JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} language${count > 1 ? "s" : ""}.`});
 					}
 				} else {
-					this._selectedRacialLanguages = this._selectedRacialLanguages.filter(l => l !== lang);
+					this._selectedRacialLanguages[profIdx] = this._selectedRacialLanguages[profIdx].filter(l => l !== lang);
 				}
-				$section.find(".racial-lang-count").text(this._selectedRacialLanguages.length);
+				$section.find(".racial-lang-count").text(this._selectedRacialLanguages[profIdx].length);
+			});
+
+			$checkboxes.append($label);
+		});
+
+		return $section;
+	}
+
+	/**
+	 * Render proficiency choice UI for subrace-specific proficiencies (e.g., Hub Residence Trilingual)
+	 * @param {Object} subrace - The subrace data
+	 * @returns {jQuery|null} - jQuery element or null if no choices
+	 */
+	_renderSubraceProficiencyChoices (subrace) {
+		if (!subrace) return null;
+
+		const $container = $(`<div class="charsheet__builder-subrace-prof-choices mt-3"></div>`);
+		let hasChoices = false;
+
+		// Try to find the feature name for language proficiencies from entries
+		// (e.g., "Trilinguals" for Hub Residence)
+		const languageFeatureName = this._findSubraceLanguageFeatureName(subrace) || `${subrace.name} Languages`;
+
+		// Language proficiency choices (e.g., Trilingual from Hub Residence)
+		if (subrace.languageProficiencies) {
+			subrace.languageProficiencies.forEach((langProf, profIdx) => {
+				if (langProf.choose) {
+					hasChoices = true;
+					const chooseFrom = langProf.choose.from || [];
+					const chooseCount = langProf.choose.count || 1;
+					if (chooseFrom.length > 0) {
+						const $section = this._renderSubraceLanguageChoice(chooseFrom, chooseCount, profIdx, languageFeatureName);
+						$container.append($section);
+					}
+				}
+				if (langProf.anyStandard) {
+					hasChoices = true;
+					const anyCount = typeof langProf.anyStandard === "number" ? langProf.anyStandard : 1;
+					const $section = this._renderSubraceLanguageChoice(null, anyCount, profIdx, languageFeatureName);
+					$container.append($section);
+				}
+				if (langProf.any) {
+					hasChoices = true;
+					const anyCount = typeof langProf.any === "number" ? langProf.any : 1;
+					const $section = this._renderSubraceLanguageChoice(null, anyCount, profIdx, languageFeatureName);
+					$container.append($section);
+				}
+			});
+		}
+
+		return hasChoices ? $container : null;
+	}
+
+	/**
+	 * Find the feature name for language proficiencies from subrace entries
+	 * Looks for entries mentioning "language" to find the feature name (e.g., "Trilinguals")
+	 * @param {Object} subrace - The subrace data
+	 * @returns {string|null} - Feature name or null if not found
+	 */
+	_findSubraceLanguageFeatureName (subrace) {
+		if (!subrace.entries) return null;
+
+		for (const entry of subrace.entries) {
+			if (typeof entry === "object" && entry.name && entry.entries) {
+				// Check if this entry mentions languages
+				const entryText = entry.entries.join(" ").toLowerCase();
+				if (entryText.includes("language") || entry.name.toLowerCase().includes("lingual")) {
+					return entry.name;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Render language choice UI for subrace language proficiencies (separate from base race)
+	 * @param {string[]|null} languages - Array of language names to choose from, or null for any
+	 * @param {number} count - Number of languages to choose
+	 * @param {number} profIdx - Index for tracking
+	 * @param {string} featureName - Name of the feature for labeling (e.g., "Trilinguals")
+	 * @returns {jQuery} - jQuery element
+	 */
+	_renderSubraceLanguageChoice (languages, count, profIdx, featureName) {
+		const allLanguages = this._page.getLanguageNamesSorted();
+		const standardLanguages = [
+			"Common", "Dwarvish", "Elvish", "Giant", "Gnomish",
+			"Goblin", "Halfling", "Orc", "Abyssal", "Celestial",
+			"Draconic", "Deep Speech", "Infernal", "Primordial",
+			"Sylvan", "Undercommon",
+		];
+
+		let availableLanguages;
+		if (languages) {
+			availableLanguages = languages.map(l => {
+				const name = l.split("|")[0];
+				return name.toTitleCase();
+			});
+			availableLanguages.sort((a, b) => {
+				const aInAll = allLanguages.indexOf(a);
+				const bInAll = allLanguages.indexOf(b);
+				if (aInAll >= 0 && bInAll >= 0) return aInAll - bInAll;
+				return a.localeCompare(b);
+			});
+		} else {
+			availableLanguages = allLanguages.length > 0 ? allLanguages : standardLanguages;
+		}
+
+		const label = languages
+			? `Choose ${count} language${count > 1 ? "s" : ""} from:`
+			: `Choose any ${count} language${count > 1 ? "s" : ""}:`;
+
+		const $section = $(`
+			<div class="charsheet__builder-subrace-lang-selection mt-2">
+				<p><strong>${featureName}:</strong> ${label}</p>
+				<div class="charsheet__builder-lang-checkboxes"></div>
+				<div class="ve-small ve-muted mt-1">Selected: <span class="subrace-lang-count">${this._selectedSubraceLanguages.length}</span>/${count}</div>
+			</div>
+		`);
+
+		const $checkboxes = $section.find(".charsheet__builder-lang-checkboxes");
+
+		availableLanguages.forEach(lang => {
+			const isSelected = this._selectedSubraceLanguages.includes(lang);
+			const $label = $(`
+				<label class="charsheet__builder-lang-checkbox mr-3 mb-1">
+					<input type="checkbox" value="${lang}" ${isSelected ? "checked" : ""}>
+					${lang}
+				</label>
+			`);
+
+			$label.find("input").on("change", (e) => {
+				if (e.target.checked) {
+					if (this._selectedSubraceLanguages.length < count) {
+						this._selectedSubraceLanguages.push(lang);
+					} else {
+						e.target.checked = false;
+						JqueryUtil.doToast({type: "warning", content: `You can only choose ${count} language${count > 1 ? "s" : ""}.`});
+					}
+				} else {
+					this._selectedSubraceLanguages = this._selectedSubraceLanguages.filter(l => l !== lang);
+				}
+				$section.find(".subrace-lang-count").text(this._selectedSubraceLanguages.length);
 			});
 
 			$checkboxes.append($label);
@@ -2865,12 +3122,14 @@ class CharacterSheetBuilder {
 		const isCantrip = levelPart === "level=0";
 		const spellType = isCantrip ? "cantrip" : "spell";
 
-		// Get ability choice description
+		// Check if ability is a choosable array
+		const hasAbilityChoice = Array.isArray(choice.ability) && choice.ability.length > 1;
+
+		// Get ability description for fixed ability
 		let abilityDesc = "";
-		if (Array.isArray(choice.ability)) {
-			abilityDesc = ` (${choice.ability.map(a => a.toUpperCase()).join(", ")} as spellcasting ability)`;
-		} else if (choice.ability) {
-			abilityDesc = ` (${choice.ability.toUpperCase()} as spellcasting ability)`;
+		if (!hasAbilityChoice && choice.ability) {
+			const abi = Array.isArray(choice.ability) ? choice.ability[0] : choice.ability;
+			abilityDesc = ` (${abi.toUpperCase()} as spellcasting ability)`;
 		}
 
 		const $section = $(`
@@ -2884,6 +3143,32 @@ class CharacterSheetBuilder {
 				</div>
 			</div>
 		`);
+
+		// Add ability selector if multiple options
+		if (hasAbilityChoice) {
+			const currentAbility = this._selectedRacialSpellAbilities[choiceIdx] || choice.ability[0];
+			const $abilityRow = $(`
+				<div class="charsheet__builder-spell-ability-choice mt-1">
+					<label class="ve-small">
+						Spellcasting Ability:
+						<select class="form-control form-control--minimal ve-inline-block w-auto ms-1">
+							${choice.ability.map(ab => `<option value="${ab}" ${ab === currentAbility ? "selected" : ""}>${ab.toUpperCase()}</option>`).join("")}
+						</select>
+					</label>
+				</div>
+			`);
+
+			$abilityRow.find("select").on("change", (e) => {
+				this._selectedRacialSpellAbilities[choiceIdx] = e.target.value;
+			});
+
+			// Initialize the selection if not already set
+			if (!this._selectedRacialSpellAbilities[choiceIdx]) {
+				this._selectedRacialSpellAbilities[choiceIdx] = choice.ability[0];
+			}
+
+			$section.find(".charsheet__builder-spell-choice").after($abilityRow);
+		}
 
 		const $btn = $section.find(".charsheet__builder-spell-btn");
 
@@ -3016,9 +3301,14 @@ class CharacterSheetBuilder {
 				const idx = e.target.value;
 				if (idx !== "") {
 					this._selectedSubrace = race.subraces[parseInt(idx)];
+					// Clear previous subrace language selections
+					this._selectedSubraceLanguages = [];
 				} else {
 					this._selectedSubrace = null;
+					this._selectedSubraceLanguages = [];
 				}
+				// Re-render to show subrace proficiency choices
+				this._renderRacePreview($preview, race);
 			});
 
 			// Pre-select if already chosen
@@ -3028,6 +3318,14 @@ class CharacterSheetBuilder {
 			}
 
 			$content.append($subraces);
+		}
+
+		// Subrace-specific proficiency choices (e.g., Hub Residence Trilingual)
+		if (this._selectedSubrace) {
+			const $subraceProfChoices = this._renderSubraceProficiencyChoices(this._selectedSubrace);
+			if ($subraceProfChoices) {
+				$content.append($subraceProfChoices);
+			}
 		}
 
 		$preview.append($content);
@@ -3270,10 +3568,12 @@ class CharacterSheetBuilder {
 			}
 		});
 
-		// Match available skills to proper names
+		// Match available skills to proper names (strip source suffix like "might|TGTT" -> "might")
 		const formattedSkills = availableSkills.map(skill => {
-			const match = allSkills.find(s => s.name.toLowerCase().replace(/\s+/g, "") === skill.toLowerCase().replace(/\s+/g, ""));
-			return match?.name || skill;
+			// Remove source suffix if present (e.g., "might|TGTT" -> "might")
+			const skillNameOnly = skill.split("|")[0];
+			const match = allSkills.find(s => s.name.toLowerCase().replace(/\s+/g, "") === skillNameOnly.toLowerCase().replace(/\s+/g, ""));
+			return match?.name || skillNameOnly.toTitleCase();
 		});
 
 		const $section = $(`
