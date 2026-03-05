@@ -2087,6 +2087,7 @@ class CharacterSheetCombat {
 					${typeBadge}
 				</div>
 				<div class="charsheet__combat-action-info">
+					<span class="badge badge-outline-secondary ve-small mr-1">${actionIcon} ${actionType}</span>
 					${usesHtml}
 					<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__combat-action-use" data-action-id="${featureId}" title="${canUse ? "Use this ability" : `No ${actionType} available`}" ${canUse ? "" : "disabled"}>Use</button>
 				</div>
@@ -3052,6 +3053,7 @@ class CharacterSheetCombat {
 				const $state = $(`
 					<div class="charsheet__combat-state-item badge ${this._getStateBadgeClass(state.stateTypeId)} mr-1 mb-1" data-state-id="${state.id}" title="${tooltip}">
 						${state.icon || stateType?.icon || "⚡"} <span class="charsheet__state-name-link">${stateNameHtml}</span>${roundsLabel}
+						${stateType?.activationAction ? `<span class="ve-small" style="opacity: 0.7"> (${this._getActionTypeShortLabel(stateType.activationAction)})</span>` : ""}
 						${isEndable ? `<span class="charsheet__state-remove ml-1" title="End">&times;</span>` : ""}
 					</div>
 				`);
@@ -3183,10 +3185,24 @@ class CharacterSheetCombat {
 	 */
 	_getActionLabel (actionType) {
 		switch (actionType) {
-			case "bonus": return "🎯";
-			case "action": return "⚔️";
-			case "reaction": return "↩️";
-			case "free": return "✨";
+			case "bonus": return "⚡ Bonus";
+			case "action": return "⚔️ Action";
+			case "reaction": return "🔄 Reaction";
+			case "free": return "✨ Free";
+			case "special": return "🔶 Special";
+			case "varies": return "🔷 Varies";
+			default: return "";
+		}
+	}
+
+	_getActionTypeShortLabel (actionType) {
+		switch (actionType) {
+			case "bonus": return "Bonus";
+			case "action": return "Action";
+			case "reaction": return "Reaction";
+			case "free": return "Free";
+			case "special": return "Special";
+			case "varies": return "Varies";
 			default: return "";
 		}
 	}
