@@ -64,3 +64,77 @@ describe("CharacterSheetClassUtils feature payload normalization", () => {
 		expect(out[0].description).toBeTruthy();
 	});
 });
+
+describe("CharacterSheetClassUtils optional feature parsing", () => {
+	const observerFeature = {
+		name: "Observer",
+		source: "TGTT",
+		entries: [
+			"You gain a bonus to Wisdom ({@skill Perception}) checks equal to your proficiency bonus. In addition, your passive Wisdom ({@skill Perception}) score increases by 3.",
+		],
+	};
+
+	const extraSkillFeature = {
+		name: "Extra Skill Training",
+		source: "TGTT",
+		entries: [
+			"You gain proficiency in one of the following: {@skill Acrobatics}, {@skill Athletics}, {@skill Investigation}, {@skill Perception}, {@skill Stealth}, or any tool.",
+		],
+	};
+
+	const expertiseTrainingFeature = {
+		name: "Expertise Training",
+		source: "TGTT",
+		entries: [
+			"You gain a bonus equal to your proficiency bonus on checks made with one of the following skills or tools: {@skill Acrobatics}, {@skill Athletics}, {@skill Investigation}, {@skill Perception}, {@skill Stealth}, or any tool.",
+		],
+	};
+
+	const allOptFeatures = [observerFeature, extraSkillFeature, expertiseTrainingFeature];
+
+	test("parseFeatureAutoEffects should parse passive bonus from optionalfeature", () => {
+		const opt = {type: "optionalfeature", ref: "Observer|TGTT", name: "Observer", source: "TGTT"};
+		const effects = CharacterSheetClassUtils.parseFeatureAutoEffects(opt, [], {optionalFeatures: allOptFeatures});
+		const passiveEffect = effects.find(e => e.type === "passive:perception");
+		expect(passiveEffect).toBeDefined();
+		expect(passiveEffect.value).toBe(3);
+	});
+
+	test("parseFeatureAutoEffects should parse skill PB bonus from optionalfeature", () => {
+		const opt = {type: "optionalfeature", ref: "Observer|TGTT", name: "Observer", source: "TGTT"};
+		const effects = CharacterSheetClassUtils.parseFeatureAutoEffects(opt, [], {optionalFeatures: allOptFeatures});
+		const skillEffect = effects.find(e => e.type === "skill:perception");
+		expect(skillEffect).toBeDefined();
+		expect(skillEffect.value).toBe("proficiency");
+	});
+
+	test("parseFeatureSkillChoice should parse proficiency choice from optionalfeature", () => {
+		const opt = {type: "optionalfeature", ref: "Extra Skill Training|TGTT", name: "Extra Skill Training", source: "TGTT"};
+		const choice = CharacterSheetClassUtils.parseFeatureSkillChoice(opt, [], {optionalFeatures: allOptFeatures});
+		expect(choice).not.toBeNull();
+		expect(choice.type).toBe("proficiency");
+		expect(choice.count).toBe(1);
+		expect(choice.from).toContain("Perception");
+	});
+
+	test("parseFeatureSkillChoice should parse PB bonus choice from optionalfeature", () => {
+		const opt = {type: "optionalfeature", ref: "Expertise Training|TGTT", name: "Expertise Training", source: "TGTT"};
+		const choice = CharacterSheetClassUtils.parseFeatureSkillChoice(opt, [], {optionalFeatures: allOptFeatures});
+		expect(choice).not.toBeNull();
+		expect(choice.type).toBe("bonus");
+		expect(choice.count).toBe(1);
+		expect(choice.from).toContain("Athletics");
+	});
+
+	test("parseFeatureAutoEffects should still reject unknown types", () => {
+		const opt = {type: "unknown", ref: "Observer|TGTT", name: "Observer", source: "TGTT"};
+		const effects = CharacterSheetClassUtils.parseFeatureAutoEffects(opt, [], {optionalFeatures: allOptFeatures});
+		expect(effects).toEqual([]);
+	});
+
+	test("parseFeatureAutoEffects should accept resolvedData directly", () => {
+		const opt = {type: "optionalfeature", ref: "Observer|TGTT", name: "Observer", source: "TGTT"};
+		const effects = CharacterSheetClassUtils.parseFeatureAutoEffects(opt, [], {resolvedData: observerFeature});
+		expect(effects.find(e => e.type === "passive:perception")).toBeDefined();
+	});
+});

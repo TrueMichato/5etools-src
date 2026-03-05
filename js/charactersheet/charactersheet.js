@@ -53,6 +53,7 @@ class CharacterSheetPage {
 		this._skillsData = [];
 		this._conditionsData = [];
 		this._languagesData = [];
+		this._dialectParentMap = {};
 	}
 
 	async pInit () {
@@ -178,6 +179,9 @@ class CharacterSheetPage {
 		// Merge prerelease/homebrew data
 		this._mergeBrewData(prereleaseData);
 		this._mergeBrewData(brewData);
+
+		// Build dialect→parent language lookup (e.g., "Aquan" → Primordial)
+		this._buildDialectParentMap();
 
 		// Attach subclasses to their parent classes for easier access
 		this._classes.forEach(cls => {
@@ -398,6 +402,24 @@ class CharacterSheetPage {
 		// Languages
 		if (brewData.language?.length) {
 			this._languagesData = [...this._languagesData, ...MiscUtil.copyFast(brewData.language)];
+		}
+	}
+
+	/**
+	 * Build a map from dialect names to their parent language entries.
+	 * E.g., "aquan" → {name: "Primordial", source: "XPHB"} (or PHB if XPHB unavailable).
+	 */
+	_buildDialectParentMap () {
+		this._dialectParentMap = {};
+		for (const lang of this._languagesData) {
+			if (!lang.dialects?.length) continue;
+			for (const dialect of lang.dialects) {
+				const key = dialect.toLowerCase();
+				// Prefer XPHB parent, then keep first found
+				if (!this._dialectParentMap[key] || lang.source === Parser.SRC_XPHB) {
+					this._dialectParentMap[key] = {name: lang.name, source: lang.source};
+				}
+			}
 		}
 	}
 
@@ -2319,14 +2341,25 @@ class CharacterSheetPage {
 		if (profs.languages?.length) {
 			const langHtml = profs.languages.map(lang => {
 				try {
-					// Look up language in data to get correct source, preferring XPHB
-					const langData = this._languagesData?.find(l => 
-						l.name.toLowerCase() === lang.toLowerCase() && l.source === Parser.SRC_XPHB
-					) || this._languagesData?.find(l => 
-						l.name.toLowerCase() === lang.toLowerCase()
+					const langLower = lang.toLowerCase();
+
+					// Check if this is a dialect (e.g., Aquan → Primordial)
+					const dialectParent = this._dialectParentMap[langLower];
+					if (dialectParent) {
+						return this.getHoverLink(UrlUtil.PG_LANGUAGES, dialectParent.name, dialectParent.source);
+					}
+
+					// Look up language in data, preferring XPHB source
+					const langData = this._languagesData?.find(l =>
+						l.name.toLowerCase() === langLower && l.source === Parser.SRC_XPHB
+					) || this._languagesData?.find(l =>
+						l.name.toLowerCase() === langLower
 					);
-					const source = langData?.source || Parser.SRC_XPHB;
-					return this.getHoverLink(UrlUtil.PG_LANGUAGES, lang, source);
+
+					// If no data found, render as plain text to avoid broken hover links
+					if (!langData) return lang;
+
+					return this.getHoverLink(UrlUtil.PG_LANGUAGES, lang, langData.source);
 				} catch (e) {
 					return lang;
 				}
