@@ -5210,6 +5210,14 @@ class CharacterSheetState {
 		return baseProficiency;
 	}
 
+	/**
+	 * Get all skill proficiencies as a map.
+	 * @returns {Object.<string, number>} Map of skill name to proficiency level (0=none, 1=proficient, 2=expertise)
+	 */
+	getSkillProficiencies () {
+		return {...this._data.skillProficiencies};
+	}
+
 	// Scholar expertise methods (Wizard XPHB level 2 feature)
 	getScholarExpertise () {
 		return this._data.scholarExpertise;
@@ -23921,11 +23929,20 @@ class CharacterSheetState {
 	 */
 	addNamedModifier (modifier) {
 		const id = CryptUtil.uid();
+
+		// Handle "proficiency" string as value — convert to numeric 0 + proficiencyBonus flag
+		let modValue = modifier.value;
+		let hasProfBonus = modifier.proficiencyBonus;
+		if (modValue === "proficiency") {
+			modValue = 0;
+			hasProfBonus = true;
+		}
+
 		const newModifier = {
 			id,
 			name: modifier.name || "Custom Modifier",
 			type: modifier.type || "ac",
-			value: modifier.value || 0,
+			value: modValue || 0,
 			note: modifier.note || "",
 			enabled: modifier.enabled !== false,
 		};
@@ -23941,7 +23958,7 @@ class CharacterSheetState {
 		if (modifier.perClassLevel) newModifier.perClassLevel = modifier.perClassLevel;
 		if (modifier.multiplier) newModifier.multiplier = modifier.multiplier;
 		if (modifier.abilityMod) newModifier.abilityMod = modifier.abilityMod;
-		if (modifier.proficiencyBonus) newModifier.proficiencyBonus = true;
+		if (hasProfBonus) newModifier.proficiencyBonus = true;
 		if (modifier.halfProficiency) newModifier.halfProficiency = true;
 		if (modifier.bonusDie) newModifier.bonusDie = modifier.bonusDie;
 
@@ -25005,6 +25022,22 @@ class CharacterSheetState {
 			detectPatterns: ["reckless attack"],
 			requiresClass: "barbarian",
 			requiresClassLevel: 2,
+		},
+		steadyAim: {
+			id: "steadyAim",
+			name: "Steady Aim",
+			icon: "🎯",
+			description: "Advantage on next attack roll; speed is 0 until end of turn",
+			effects: [
+				{type: "advantage", target: "attack"},
+				{type: "speedZero"},
+			],
+			duration: "Until end of turn",
+			detectPatterns: ["steady aim"],
+			activationAction: "bonus",
+			requiresClass: "rogue",
+			requiresClassLevel: 3,
+			consumeOnAttack: true, // Deactivate advantage after next attack roll (speed stays 0)
 		},
 		// ===== TGTT/HOMEBREW ACTIVATABLE STATE TYPES =====
 		// These support homebrew toggle abilities from sources like Level Up A5E, Grim Hollow, TGTT
@@ -27502,6 +27535,11 @@ class CharacterSheetState {
 			existing.active = true;
 			existing.activatedAt = Date.now();
 			existing.activatedAtRound = this._data.inCombat ? this._data.combatRound : null;
+			// Clear any runtime-modified effects so the type defaults are restored
+			// (e.g. Steady Aim's advantage was consumed — re-activation should restore it)
+			if (!options.customEffects && stateType?.consumeOnAttack) {
+				delete existing.customEffects;
+			}
 			// Update name, description, and effects if provided (for combat stances with different features)
 			if (options.name) existing.name = options.name;
 			if (options.description) existing.description = options.description;
@@ -27560,6 +27598,18 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Update the active effects for a state instance (e.g. remove advantage but keep speedZero).
+	 * @param {string} stateTypeId - The state type ID
+	 * @param {Array} newEffects - The replacement effects array
+	 */
+	updateActiveStateEffects (stateTypeId, newEffects) {
+		const state = this._data.activeStates.find(s => s.stateTypeId === stateTypeId && s.active);
+		if (state) {
+			state.customEffects = newEffects;
+		}
+	}
+
+	/**
 	 * Remove an active state entirely
 	 * @param {string} stateId - The unique state instance ID
 	 */
@@ -27607,7 +27657,7 @@ class CharacterSheetState {
 		if (s === "instantaneous" || s === "instant") return 0;
 
 		// Turn-scoped durations
-		if (/\bthis turn\b/.test(s) || /\buntil the end of your turn\b/.test(s)) return 1;
+		if (/\bthis turn\b/.test(s) || /\buntil the end of your turn\b/.test(s) || /\buntil end of turn\b/.test(s)) return 1;
 		if (/\buntil (?:the )?start of (?:your )?next turn\b/.test(s)) return 1;
 		if (/\buntil (?:the )?end of (?:your )?next turn\b/.test(s)) return 1;
 
@@ -27661,6 +27711,12 @@ class CharacterSheetState {
 		this._data.combatRound = 0;
 
 		for (const state of this._data.activeStates) {
+			// Fully deactivate transient "consume on attack" states (e.g. Steady Aim)
+			const typeDef = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
+			if (state.active && typeDef?.consumeOnAttack) {
+				state.active = false;
+				delete state.customEffects;
+			}
 			state.roundsRemaining = null;
 			state.activatedAtRound = null;
 		}

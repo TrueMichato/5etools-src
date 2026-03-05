@@ -471,6 +471,36 @@ class CharacterSheetClassUtils {
 					if (entry.entries) searchEntries(entry.entries);
 					if (entry.items) searchEntries(entry.items);
 				}
+
+				// Check for features that reference another feature's options via {@classFeature ...}
+				// This handles higher-level Specialty features that reference the level 1 feature
+				if (typeof entry === "string") {
+					const refMatch = entry.match(/\{@classFeature\s+([^}]+)\}/);
+					if (refMatch && /another|additional|gain/i.test(entry)) {
+						const refParts = refMatch[1].split("|");
+						const refFeatureName = refParts[0];
+						const refClassName = refParts[1];
+						const refSource = refParts[2];
+						const refLevel = parseInt(refParts[3]) || 1;
+
+						const referencedFeature = CharacterSheetClassUtils.getClassFeatureData(
+							classFeatures, refFeatureName, refClassName, refSource, refLevel,
+						);
+						if (referencedFeature) {
+							const refResults = CharacterSheetClassUtils.findFeatureOptions(
+								referencedFeature, characterLevel, classFeatures,
+							);
+							for (const refResult of refResults) {
+								results.push({
+									count: 1,
+									options: refResult.options,
+									featureName: feature.name,
+									referencedFrom: refMatch[1],
+								});
+							}
+						}
+					}
+				}
 			}
 		};
 
@@ -538,6 +568,17 @@ class CharacterSheetClassUtils {
 	static getClassFeatureData (classFeatures, featureName, className, source, level) {
 		if (!classFeatures?.length) return null;
 
+		// First try exact source match
+		const exactMatch = classFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.level !== level) return false;
+			if (source && f.source !== source) return false;
+			return true;
+		});
+		if (exactMatch) return exactMatch;
+
+		// Fall back to flexible PHB/XPHB/SRD matching
 		return classFeatures.find(f => {
 			if (f.name !== featureName) return false;
 			if (f.className !== className) return false;
@@ -561,6 +602,45 @@ class CharacterSheetClassUtils {
 		const parts = featureRef.split("|");
 		const [name, className, source, level] = parts;
 		return CharacterSheetClassUtils.getClassFeatureData(classFeatures, name, className, source, parseInt(level) || 1);
+	}
+
+	/**
+	 * Look up full subclass feature data to get description/entries.
+	 * @param {Array} subclassFeatures - All loaded subclass features
+	 * @param {string} featureName - Name of the feature
+	 * @param {string} className - Parent class name
+	 * @param {string} subclassShortName - Subclass short name
+	 * @param {string} source - Feature source
+	 * @param {number} level - Feature level
+	 * @returns {Object|null}
+	 */
+	static getSubclassFeatureData (subclassFeatures, featureName, className, subclassShortName, source, level) {
+		if (!subclassFeatures?.length) return null;
+
+		// First try exact source match
+		const exactMatch = subclassFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.subclassShortName !== subclassShortName) return false;
+			if (f.level !== level) return false;
+			if (source && f.source !== source) return false;
+			return true;
+		});
+		if (exactMatch) return exactMatch;
+
+		// Fall back to flexible PHB/XPHB/SRD matching
+		return subclassFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.subclassShortName !== subclassShortName) return false;
+			if (f.level !== level) return false;
+			if (source && f.source && f.source !== source) {
+				const sourcesMatch = [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(source)
+					&& [Parser.SRC_PHB, Parser.SRC_XPHB, "SRD"].includes(f.source);
+				if (!sourcesMatch) return false;
+			}
+			return true;
+		}) || null;
 	}
 
 	/**
@@ -826,15 +906,32 @@ class CharacterSheetClassUtils {
 							const parts = feature.split("|");
 							const featureLevel = parseInt(parts[parts.length - 1]);
 							if (featureLevel === level) {
+								const featureName = parts[0];
+								const featureClassName = parts[1] || classData.name;
+								const featureClassSource = parts[2] || classData.source;
+								const featureSubclassShortName = parts[3] || subclass.shortName;
+								const featureSource = parts[4] || subclass.source || classData.source;
+
+								// Look up full feature data to get entries/description
+								const fullFeature = CharacterSheetClassUtils.getSubclassFeatureData(
+									subclassFeatures,
+									featureName,
+									featureClassName,
+									featureSubclassShortName,
+									featureSource,
+									featureLevel,
+								);
+
 								features.push({
-									name: parts[0],
-									className: parts[1] || classData.name,
-									classSource: parts[2] || classData.source,
+									name: featureName,
+									className: featureClassName,
+									classSource: featureClassSource,
 									subclassName: subclass.name,
-									subclassShortName: parts[3] || subclass.shortName,
-									subclassSource: parts[4] || subclass.source || classData.source,
-									source: parts[4] || subclass.source || classData.source,
+									subclassShortName: featureSubclassShortName,
+									subclassSource: featureSource,
+									source: featureSource,
 									level: featureLevel,
+									entries: fullFeature?.entries,
 									isSubclassFeature: true,
 								});
 							}
@@ -844,15 +941,32 @@ class CharacterSheetClassUtils {
 					const parts = levelFeatures.split("|");
 					const featureLevel = parseInt(parts[parts.length - 1]);
 					if (featureLevel === level) {
+						const featureName = parts[0];
+						const featureClassName = parts[1] || classData.name;
+						const featureClassSource = parts[2] || classData.source;
+						const featureSubclassShortName = parts[3] || subclass.shortName;
+						const featureSource = parts[4] || subclass.source || classData.source;
+
+						// Look up full feature data to get entries/description
+						const fullFeature = CharacterSheetClassUtils.getSubclassFeatureData(
+							subclassFeatures,
+							featureName,
+							featureClassName,
+							featureSubclassShortName,
+							featureSource,
+							featureLevel,
+						);
+
 						features.push({
-							name: parts[0],
-							className: parts[1] || classData.name,
-							classSource: parts[2] || classData.source,
+							name: featureName,
+							className: featureClassName,
+							classSource: featureClassSource,
 							subclassName: subclass.name,
-							subclassShortName: parts[3] || subclass.shortName,
-							subclassSource: parts[4] || subclass.source || classData.source,
-							source: parts[4] || subclass.source || classData.source,
+							subclassShortName: featureSubclassShortName,
+							subclassSource: featureSource,
+							source: featureSource,
 							level: featureLevel,
+							entries: fullFeature?.entries,
 							isSubclassFeature: true,
 						});
 					}
@@ -886,6 +1000,65 @@ class CharacterSheetClassUtils {
 				});
 			});
 		}
+
+		// Expand refSubclassFeature entries from wrapper features (e.g., "Thief" feature that references "Fast Hands")
+		// Many subclasses have a wrapper feature at the subclass level that contains references to actual sub-features
+		const expandedFeatures = [];
+		for (const feature of features) {
+			if (!feature.isSubclassFeature || !feature.entries) continue;
+
+			// Look for refSubclassFeature entries in the feature's entries
+			const searchEntries = (entries) => {
+				if (!Array.isArray(entries)) return;
+				for (const entry of entries) {
+					if (entry?.type === "refSubclassFeature" && entry.subclassFeature) {
+						// Parse "FeatureName|ClassName|ClassSource|SubclassShortName|SubclassSource|Level"
+						const parts = entry.subclassFeature.split("|");
+						const refFeatureName = parts[0];
+						const refClassName = parts[1] || classData.name;
+						const refClassSource = parts[2] || classData.source;
+						const refSubclassShortName = parts[3] || subclass?.shortName;
+						const refSubclassSource = parts[4] || subclass?.source || classData.source;
+						const refLevel = parseInt(parts[5]) || level;
+
+						// Only expand features at current level
+						if (refLevel !== level) continue;
+
+						// Look up the referenced subclass feature
+						const refFeature = CharacterSheetClassUtils.getSubclassFeatureData(
+							subclassFeatures,
+							refFeatureName,
+							refClassName,
+							refSubclassShortName,
+							refSubclassSource,
+							refLevel,
+						);
+
+						if (refFeature && !features.some(f => f.name === refFeatureName && f.level === refLevel)) {
+							expandedFeatures.push({
+								name: refFeatureName,
+								className: refClassName,
+								classSource: refClassSource,
+								subclassName: subclass?.name,
+								subclassShortName: refSubclassShortName,
+								subclassSource: refSubclassSource,
+								source: refFeature.source || refSubclassSource,
+								level: refLevel,
+								entries: refFeature.entries,
+								isSubclassFeature: true,
+							});
+						}
+					}
+					// Recurse into nested entries
+					if (entry?.entries) searchEntries(entry.entries);
+				}
+			};
+
+			searchEntries(feature.entries);
+		}
+
+		// Add expanded features
+		features.push(...expandedFeatures);
 
 		// Filter out placeholder "gain subclass feature" entries when actual subclass features exist
 		const actualSubclassFeatures = features.filter(f => f.isSubclassFeature);
@@ -1005,7 +1178,7 @@ class CharacterSheetClassUtils {
 	/**
 	 * Get language grants from features at a level.
 	 * @param {Array} features - Features gained at the level
-	 * @returns {Array} Array of {featureName, count}
+	 * @returns {Array} Array of {featureName, count, autoLanguages?}
 	 */
 	static getLanguageGrantsForLevel (features) {
 		const grants = [];
@@ -1016,6 +1189,7 @@ class CharacterSheetClassUtils {
 				grants.push({
 					featureName: feature.name,
 					count: langInfo.count,
+					autoLanguages: langInfo.autoLanguages,
 				});
 			}
 		}
@@ -1026,10 +1200,21 @@ class CharacterSheetClassUtils {
 	/**
 	 * Find language grant in a feature's entries.
 	 * @param {Object} feature
-	 * @returns {{count: number}|null}
+	 * @returns {{count: number, autoLanguages?: string[]}|null}
 	 */
 	static findLanguageGrantsInFeature (feature) {
+		// Special handling for Thieves' Cant - grants Thieves' Cant + 1 other language
+		// Check name BEFORE entries since features from string refs may lack entries
+		const nameLower = feature?.name?.toLowerCase() || "";
+		if (nameLower === "thieves' cant" || nameLower === "thieves cant") {
+			return {
+				count: 1,
+				autoLanguages: ["Thieves' Cant"],
+			};
+		}
+
 		if (!feature?.entries) return null;
+
 		return CharacterSheetClassUtils.findLanguageGrantsInEntries(feature.entries, feature.name);
 	}
 
@@ -1053,6 +1238,7 @@ class CharacterSheetClassUtils {
 			/speak,?\s*read,?\s*and\s*write\s+(one|two|three|four|\d+)\s+(?:additional\s+)?languages?/i,
 			/two\s+(?:additional\s+)?languages?\s+of\s+your\s+choice/i,
 			/one\s+(?:additional\s+)?language\s+of\s+your\s+choice/i,
+			/one\s+other\s+language\s+of\s+your\s+choice/i,
 			/\{@b Languages?\.\}\s*You\s+learn\s+(one|two|three|four|\d+)\s+languages?/i,
 		];
 
@@ -1071,6 +1257,7 @@ class CharacterSheetClassUtils {
 				if (count === 0 && entriesText.includes("two languages of your choice")) count = 2;
 				if (count === 0 && entriesText.includes("one additional language")) count = 1;
 				if (count === 0 && entriesText.includes("one language of your choice")) count = 1;
+				if (count === 0 && entriesText.includes("one other language of your choice")) count = 1;
 
 				if (count > 0) return {count};
 			}

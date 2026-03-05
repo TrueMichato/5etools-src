@@ -1,14 +1,15 @@
 Open bugs:
-
-[x] Sorcerer doesn't give choice of starting items, but it should. It seems there is some confusion on what type of the data to access.
-  - FIXED: Implemented full equipment type picker for `equipmentType` items in the builder. Added `_getItemsForEquipmentType()` with match functions for all 12 equipment types (simple/martial melee/ranged weapons, arcane/holy/druidic focuses, etc.), `_renderEquipmentTypePickers()` for dropdown UI, and `_addEquipmentItems()` resolution logic. Equipment type pickers now render for both radio-choice and fixed-row equipment, with XPHB-preferred deduplication.
-  [] new bug that stems from it - the items that pop up in the dropdown are also magical items and variants of base items, which is not the desired outcome. 
-[] Backgrounds that give proficiency in musical instrument do not let you choose which one, and don't add it to the character sheet. This should be fixed by allowing the user to select the instrument and adding it to the proficiencies.
-  - Fix Attempt that still didn't work, layers still don't get prompted to choose actual items: Added `anyMusicalInstrument` handling in `_renderBackgroundToolProficiencies` mirroring the existing `anyArtisansTool` pattern. Renders dropdown with `Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS`, stores selection with `isMusicalInstrument: true` flag, and excludes from fixed tool proficiency apply.
-[] Tasha race options are allowing ability score increase change, but not skill proficiency and language change. 
-[] when clicking multiclass in the quickbuild, the modal appears behind the quickbuild modal, making it impossible to select the class you want to multiclass into. This is a z-index issue that should be fixed by increasing the z-index of the multiclass modal.
-[] When choosing TGTT sorcerer, you get a subclass choice both at 3rd level and at 6th level, but only the 3rd level one should be there.
-[] When adding ASI in both level up and quick build, the racial bonus is not applied to the ability scores displayed. Also, the ability text intersects with the ability numbers, which is a UI bug. 
+[] Cunning action and sneak attack working, but need UX overhaul to be more useable by players,
+[] Specialties like Observer that add a +3 to passive skill don't add to the passive skill. Also, specialies that give proficiency or expertise choices don;t give that
+[] Races seem to sometimes add +1/+1 ASI when it is clearly wrong, needs to validatwe what is happening there.
+[] Languages have XPHB as their source even when not, this messes with hover.
+Uncaught (in promise) Error: Failed to load renderable content for: page="languages.html" source="XPHB" hash="aquan_xphb" preloadId="null" customHashId="undefined" isFluff="undefined"
+    at Renderer.hover._pHandleLinkMouseOver_doVerifyToRender (render.js:15533:9)
+    at Renderer.hover.pHandleLinkMouseOver (render.js:15448:9)
+_pHandleLinkMouseOver_doVerifyToRender @ render.js:15533
+pHandleLinkMouseOver @ render.js:15448
+await in pHandleLinkMouseOver
+onmouseover @ VM5996 charactersheet.html:1Understand this error
 
 Unverified bugs:
 

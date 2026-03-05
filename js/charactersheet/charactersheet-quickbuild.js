@@ -3814,6 +3814,11 @@ class CharacterSheetQuickBuild {
 			// 8. Apply Languages
 			if (analysis.languageGrants.length > 0) {
 				for (const grant of analysis.languageGrants) {
+					// First add any auto-languages (like Thieves' Cant)
+					if (grant.autoLanguages?.length > 0) {
+						grant.autoLanguages.forEach(lang => this._state.addLanguage(lang));
+					}
+					// Then add user-selected languages
 					const langKey = `${className}_${classLevel}_${grant.featureName}`;
 					const langs = this._selections.languages[langKey] || [];
 					langs.forEach(lang => this._state.addLanguage(lang));

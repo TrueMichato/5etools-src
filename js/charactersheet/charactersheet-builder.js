@@ -1322,7 +1322,14 @@ class CharacterSheetBuilder {
 			});
 		}
 
-		// Class feature languages (from user selection - like Deft Explorer)
+		// Class feature languages — auto-add granted languages (e.g. Thieves' Cant)
+		// then add user-selected language choices
+		const classLangGrants = this._getClassFeatureLanguageGrants(this._selectedClass);
+		if (classLangGrants?.autoLanguages?.length) {
+			classLangGrants.autoLanguages.forEach(lang => {
+				this._state.addLanguage(lang);
+			});
+		}
 		if (this._selectedClassFeatureLanguages?.length) {
 			this._selectedClassFeatureLanguages.forEach(lang => {
 				if (lang) {
@@ -1839,6 +1846,17 @@ class CharacterSheetBuilder {
 		}
 
 		// Class features can have different property combinations depending on source
+		// First try exact source match
+		const exactResult = classFeatures.find(f => {
+			if (f.name !== featureName) return false;
+			if (f.className !== className) return false;
+			if (f.level !== level) return false;
+			if (source && f.source !== source) return false;
+			return true;
+		});
+		if (exactResult) return exactResult;
+
+		// Fall back to flexible PHB/XPHB/SRD matching
 		const result = classFeatures.find(f => {
 			if (f.name !== featureName) return false;
 			if (f.className !== className) return false;
@@ -3990,8 +4008,12 @@ class CharacterSheetBuilder {
 
 		if (!featureData) return null;
 
-		// Search feature entries for language grants
-		return this._findLanguageGrantsInEntries(featureData.entries || [], featureName);
+		// Delegate to the shared utility (has name-based checks + all regex patterns)
+		const result = CharacterSheetClassUtils.findLanguageGrantsInFeature(featureData);
+		if (result) {
+			return {...result, featureName};
+		}
+		return null;
 	}
 
 	/**

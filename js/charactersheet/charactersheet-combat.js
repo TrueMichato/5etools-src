@@ -873,6 +873,38 @@ class CharacterSheetCombat {
 			hasAdvantage,
 			hasDisadvantage,
 		};
+
+		// Consume "next attack only" states (e.g. Steady Aim grants advantage on ONE attack)
+		this._consumeOnAttackStates();
+	}
+
+	/**
+	 * Deactivate active states flagged with consumeOnAttack (e.g. Steady Aim).
+	 * For Steady Aim: removes advantage after the next attack, but keeps speedZero
+	 * until end of turn by removing only the advantage effect rather than deactivating entirely.
+	 */
+	_consumeOnAttackStates () {
+		const activeStates = this._state.getActiveStates?.() || [];
+		for (const state of activeStates) {
+			if (!state.active) continue;
+			const typeDef = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
+			if (!typeDef?.consumeOnAttack) continue;
+
+			// Remove advantage effects but keep other effects (speedZero) active
+			// We do this by replacing the state's effects with only non-advantage effects
+			const remaining = (typeDef.effects || []).filter(e => e.type !== "advantage");
+			if (remaining.length > 0) {
+				// Keep the state active but without advantage
+				this._state.updateActiveStateEffects?.(state.stateTypeId, remaining);
+			} else {
+				this._state.deactivateState(state.stateTypeId);
+			}
+
+			// Re-render combat UI to reflect the change
+			this.renderCombatActions?.();
+			this.renderCombatStates?.();
+			this.renderCombatEffects?.();
+		}
 	}
 
 	/**
@@ -1649,8 +1681,18 @@ class CharacterSheetCombat {
 
 		// Filter for combat-relevant features that have action economy
 		const combatActions = features.filter(f => {
-			if (!f.description) return false;
-			const desc = f.description.toLowerCase();
+			// Get description - render entries as fallback if description missing
+			let desc = f.description;
+			if (!desc && f.entries) {
+				try {
+					desc = Renderer.get().render({entries: f.entries});
+				} catch (e) {
+					desc = "";
+				}
+			}
+			if (!desc) return false;
+			// Strip HTML tags so rendered {@variantrule Bonus Action|XPHB} etc. don't break regex matching
+			desc = desc.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 			const nameLower = f.name?.toLowerCase() || "";
 
 			// Skip combat methods (they have their own section)
@@ -1691,7 +1733,7 @@ class CharacterSheetCombat {
 
 			// Must have actual action economy to be considered a combat action
 			// More strict: require specific action phrasing, not just "you can use"
-			const hasActionEconomy = /\b(as a bonus action|bonus action to|as an action|use your action|take the \w+ action|as a reaction|use your reaction)\b/i.test(desc);
+			const hasActionEconomy = /\b(as a bonus action|bonus action to|as an action|use your action|take the \w+ action|take a bonus action|take a reaction|take an action|as a reaction|use your reaction)\b/i.test(desc);
 
 			// Check for combat-specific keywords in NAME (not description, too broad)
 			const combatKeywords = [
@@ -1699,7 +1741,8 @@ class CharacterSheetCombat {
 				"fury of the small", "savage attacks", "hellish rebuke", "healing hands",
 				"celestial revelation", "infernal legacy", "fey step", "misty step",
 				"stone's endurance", "lucky", "second wind", "action surge",
-				"fighting spirit", "cunning action", "patient defense", "step of the wind",
+				"fighting spirit", "cunning action", "uncanny dodge",
+				"patient defense", "step of the wind",
 				"flurry of blows", "stunning strike", "deflect missiles", "slow fall",
 				"wild shape", "channel divinity", "divine smite", "lay on hands",
 				"hex", "hexblade's curse",
@@ -1717,7 +1760,7 @@ class CharacterSheetCombat {
 			const hasLimitedUses = f.uses && f.uses.max > 0;
 
 			return (hasActionEconomy && (hasLimitedUses || hasCombatKeyword))
-				   || (hasCombatKeyword && hasLimitedUses);
+				   || (hasCombatKeyword && (hasLimitedUses || hasActionEconomy));
 		});
 
 		// Sort: features with uses first, then by feature type, then by name
@@ -2729,6 +2772,7 @@ class CharacterSheetCombat {
 		const resources = this._state.getResources();
 		if (!resources?.length) {
 			$container.html(`<div class="ve-muted ve-text-center py-2">No combat resources</div>`);
+			this._renderSneakAttackToggle($container);
 			return;
 		}
 
@@ -2756,6 +2800,7 @@ class CharacterSheetCombat {
 
 		if (!combatResources.length) {
 			$container.html(`<div class="ve-muted ve-text-center py-2">No combat resources</div>`);
+			this._renderSneakAttackToggle($container);
 			return;
 		}
 
@@ -3536,6 +3581,7 @@ class CharacterSheetCombat {
 			}
 			this.renderCombatStates();
 			this.renderCombatActions();
+			this.renderCombatEffects();
 			this._renderSneakAttackToggle?.();
 			this._page._saveCurrentCharacter?.();
 		});
