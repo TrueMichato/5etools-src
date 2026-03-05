@@ -12,6 +12,7 @@ class CharacterSheetCombat {
 		this._lastSneakAttackRoundUsed = null;
 		this._lastAttackContext = null;
 		this._sneakAttackHasAdjacentAlly = false;
+		this._selectedCunningStrikes = []; // Active CS option selections for current attack
 		this._turnActionUsage = {action: false, bonus: false, reaction: false};
 
 		this._init();
@@ -874,6 +875,20 @@ class CharacterSheetCombat {
 			hasDisadvantage,
 		};
 
+		// Auto-refresh SA section to show updated advantage status
+		this._renderSneakAttackToggle?.();
+
+		// Auto-enable SA when conditions are met after attack
+		const sneakAttackInfo = this._state.getFeatureCalculations?.()?.sneakAttack;
+		if (sneakAttackInfo && !this._sneakAttackEnabled && this._isSneakAttackAvailableThisTurn()) {
+			const triggerMet = (hasAdvantage && !hasDisadvantage) || this._sneakAttackHasAdjacentAlly;
+			if (triggerMet && this._isSneakAttackWeaponEligible(attack)) {
+				this._sneakAttackEnabled = true;
+				this._renderSneakAttackToggle?.();
+				JqueryUtil.doToast({type: "success", content: `Sneak Attack auto-enabled (${sneakAttackInfo.dice}). Disable before damage roll if unwanted.`});
+			}
+		}
+
 		// Consume "next attack only" states (e.g. Steady Aim grants advantage on ONE attack)
 		this._consumeOnAttackStates();
 	}
@@ -950,11 +965,33 @@ class CharacterSheetCombat {
 		// Check for Sneak Attack
 		let sneakAttackDamage = 0;
 		let sneakAttackDice = "";
+		let cunningStrikeEffects = [];
 		const sneakAttackInfo = this._state.getFeatureCalculations?.()?.sneakAttack;
 		if (this._canApplySneakAttack(attack, sneakAttackInfo)) {
-			const sneakRoll = this._parseDamage(sneakAttackInfo.dice, isCrit);
-			sneakAttackDamage = sneakRoll.total;
-			sneakAttackDice = sneakAttackInfo.dice;
+			// Subtract Cunning Strike dice cost from SA dice
+			const baseSneakDice = parseInt(sneakAttackInfo.dice) || 0;
+			const csDiceCost = this._selectedCunningStrikes.reduce((sum, cs) => sum + cs.cost, 0);
+			const effectiveDice = Math.max(0, baseSneakDice - csDiceCost);
+
+			if (effectiveDice > 0) {
+				const effectiveDiceStr = `${effectiveDice}d6`;
+				const sneakRoll = this._parseDamage(effectiveDiceStr, isCrit);
+				sneakAttackDamage = sneakRoll.total;
+				sneakAttackDice = effectiveDiceStr;
+			}
+
+			// Record CS effects for display
+			if (this._selectedCunningStrikes.length) {
+				const saveDC = 8 + this._state.getProficiencyBonus() + this._state.getAbilityMod("dex");
+				cunningStrikeEffects = this._selectedCunningStrikes.map(cs => ({
+					name: cs.name,
+					cost: cs.cost,
+					save: cs.save,
+					saveDC,
+					desc: cs.desc,
+				}));
+			}
+
 			this._markSneakAttackUsedThisTurn();
 		}
 
@@ -998,6 +1035,15 @@ class CharacterSheetCombat {
 		}
 		subtitle += ` ${attack.damageType}`;
 
+		// Append Cunning Strike effects to subtitle
+		if (cunningStrikeEffects.length) {
+			const csDesc = cunningStrikeEffects.map(cs => {
+				if (cs.save) return `${cs.name} (DC ${cs.saveDC} ${cs.save.toUpperCase()})`;
+				return cs.name;
+			}).join(", ");
+			subtitle += ` | Cunning Strike: ${csDesc}`;
+		}
+
 		// Show result
 		this._page.showDiceResult({
 			title: `${attack.name} Damage`,
@@ -1008,9 +1054,10 @@ class CharacterSheetCombat {
 		});
 
 		// Auto-disable sneak attack after use (once per turn)
-		if (sneakAttackDamage > 0) {
+		if (sneakAttackDamage > 0 || cunningStrikeEffects.length) {
 			this._sneakAttackEnabled = false;
 			this._sneakAttackHasAdjacentAlly = false;
+			this._resetCunningStrikeSelections();
 			this._renderSneakAttackToggle?.();
 		}
 	}
@@ -1043,12 +1090,12 @@ class CharacterSheetCombat {
 
 	_isSneakAttackContextDisadvantaged (attackId) {
 		if (!this._lastAttackContext || this._lastAttackContext.attackId !== attackId) return false;
-		return this._lastAttackContext.mode === "disadvantage";
+		return this._lastAttackContext.mode === "disadvantage" || this._lastAttackContext.hasDisadvantage;
 	}
 
 	_isSneakAttackContextAdvantaged (attackId) {
 		if (!this._lastAttackContext || this._lastAttackContext.attackId !== attackId) return false;
-		return this._lastAttackContext.mode === "advantage";
+		return this._lastAttackContext.mode === "advantage" || this._lastAttackContext.hasAdvantage;
 	}
 
 	_isSneakAttackTriggerSatisfied (attackId, {showWarnings = true} = {}) {
@@ -2860,15 +2907,50 @@ class CharacterSheetCombat {
 		const sa = calcs.sneakAttack;
 		const isSpentThisRound = !this._isSneakAttackAvailableThisTurn();
 		if (isSpentThisRound && this._sneakAttackEnabled) this._sneakAttackEnabled = false;
+
+		// Calculate total CS dice cost for display
+		const totalCSDiceCost = this._selectedCunningStrikes.reduce((sum, cs) => sum + cs.cost, 0);
+		const baseSneakDice = parseInt(sa.dice) || Math.ceil((this._state.getClassLevel?.("Rogue") || 1) / 2);
+		const effectiveSneakDice = Math.max(0, baseSneakDice - totalCSDiceCost);
+
 		const $section = $(`<div class="charsheet__sneak-attack-section mt-3" style="border-top: 1px solid var(--rgb-border-grey, #444); padding-top: 0.5rem;"></div>`);
 
-		// Sneak Attack toggle
+		// ===== HEADER: Dice count as visual anchor =====
+		const diceDisplay = totalCSDiceCost > 0
+			? `<span style="text-decoration: line-through; opacity: 0.5;">${baseSneakDice}d6</span> ${effectiveSneakDice}d6`
+			: `${baseSneakDice}d6`;
+		const avgDisplay = Math.floor(effectiveSneakDice * 3.5);
+
+		$section.append(`
+			<div class="ve-flex-v-center mb-1">
+				<strong class="mr-2" style="font-size: 1.05em;">Sneak Attack ${diceDisplay}</strong>
+				<span class="ve-small ve-muted">(avg ${avgDisplay})</span>
+			</div>
+		`);
+
+		// ===== TOGGLE: Clear toggle-switch style =====
+		const toggleState = isSpentThisRound ? "used" : this._sneakAttackEnabled ? "ready" : "off";
+		const toggleColors = {
+			ready: "ve-btn-success",
+			off: "ve-btn-default",
+			used: "ve-btn-danger",
+		};
+		const toggleLabels = {
+			ready: "READY",
+			off: "OFF",
+			used: "USED",
+		};
+		const toggleTitle = isSpentThisRound
+			? "Sneak Attack already used this round"
+			: this._sneakAttackEnabled
+				? "Click to disable Sneak Attack for next damage roll"
+				: "Click to enable Sneak Attack for next damage roll";
+
 		const $toggle = $(`
 			<div class="ve-flex-v-center mb-1">
-				<button class="ve-btn ve-btn-xs ${this._sneakAttackEnabled ? "ve-btn-success" : "ve-btn-default"} charsheet__sneak-attack-toggle mr-2" title="${isSpentThisRound ? "Sneak Attack already used this round" : `Toggle Sneak Attack (adds ${sa.dice} to next damage roll)`}" ${isSpentThisRound ? "disabled" : ""}>
-					<span class="glyphicon glyphicon-flash mr-1"></span>${isSpentThisRound ? "Sneak Attack USED" : this._sneakAttackEnabled ? "Sneak Attack ON" : "Sneak Attack OFF"}
+				<button class="ve-btn ve-btn-xs ${toggleColors[toggleState]} charsheet__sneak-attack-toggle mr-2" title="${toggleTitle}" ${isSpentThisRound ? "disabled" : ""}>
+					<span class="glyphicon glyphicon-flash mr-1"></span>${toggleLabels[toggleState]}
 				</button>
-				<span class="ve-small ve-muted">${sa.dice} (avg ${sa.avgDamage})</span>
 			</div>
 		`);
 
@@ -2878,68 +2960,122 @@ class CharacterSheetCombat {
 				return;
 			}
 			this._sneakAttackEnabled = !this._sneakAttackEnabled;
+			// Clear CS selections when disabling SA
+			if (!this._sneakAttackEnabled) this._selectedCunningStrikes = [];
 			this._renderSneakAttackToggle();
 		});
 
 		$section.append($toggle);
 
-		const $trigger = $(`
-			<div class="ve-flex-v-center mb-2">
-				<button class="ve-btn ve-btn-xxs ${this._sneakAttackHasAdjacentAlly ? "ve-btn-info" : "ve-btn-default"} charsheet__sneak-attack-ally-toggle mr-2" title="Use this when an ally is adjacent to the target">
-					${this._sneakAttackHasAdjacentAlly ? "Ally Adjacent: ON" : "Ally Adjacent: OFF"}
-				</button>
-				<span class="ve-small ve-muted">Trigger helper when no advantage is present</span>
-			</div>
-		`);
-		$trigger.find(".charsheet__sneak-attack-ally-toggle").on("click", () => {
+		// ===== CONDITION INDICATORS: Real-time SA eligibility =====
+		const ctx = this._lastAttackContext;
+		const hasAdv = ctx?.hasAdvantage && !ctx?.hasDisadvantage;
+		const hasDisadv = ctx?.hasDisadvantage && !ctx?.hasAdvantage;
+		const allyAdj = this._sneakAttackHasAdjacentAlly;
+
+		const $conditions = $(`<div class="ve-flex-v-center gap-1 mb-2 flex-wrap"></div>`);
+
+		// Advantage indicator
+		if (hasAdv) {
+			$conditions.append(`<span class="ve-badge ve-badge--success ve-small" title="Last attack had advantage" style="padding: 1px 6px; border-radius: 3px;">&#x2714; Advantage</span>`);
+		} else if (hasDisadv) {
+			$conditions.append(`<span class="ve-badge ve-badge--danger ve-small" title="Last attack had disadvantage — SA blocked" style="padding: 1px 6px; border-radius: 3px;">&#x2718; Disadvantage</span>`);
+		} else {
+			$conditions.append(`<span class="ve-badge ve-badge--default ve-small" title="No advantage from last attack" style="padding: 1px 6px; border-radius: 3px; opacity: 0.6;">&#x2014; No Advantage</span>`);
+		}
+
+		// Ally adjacent toggle (as inline pill)
+		const $allyPill = $(`<button class="ve-btn ve-btn-xxs ${allyAdj ? "ve-btn-info" : "ve-btn-default"} ve-small" title="Toggle: ally within 5ft of target" style="padding: 1px 6px; border-radius: 3px;">${allyAdj ? "&#x2714; Ally within 5ft" : "Ally within 5ft"}</button>`);
+		$allyPill.on("click", () => {
 			this._sneakAttackHasAdjacentAlly = !this._sneakAttackHasAdjacentAlly;
 			this._renderSneakAttackToggle();
 		});
-		$section.append($trigger);
+		$conditions.append($allyPill);
 
-		// Cunning Strike options (if available)
+		$section.append($conditions);
+
+		// ===== WARNING: SA conditions not met =====
+		if (this._sneakAttackEnabled && !isSpentThisRound) {
+			const triggerMet = hasAdv || allyAdj;
+			if (!triggerMet && !hasDisadv) {
+				$section.append(`<div class="ve-small ve-muted mb-1" style="color: var(--rgb-warning, #f0ad4e);"><span class="glyphicon glyphicon-warning-sign mr-1"></span>No advantage and no ally adjacent — Sneak Attack won't apply</div>`);
+			} else if (hasDisadv) {
+				$section.append(`<div class="ve-small ve-muted mb-1" style="color: var(--rgb-danger, #d9534f);"><span class="glyphicon glyphicon-remove mr-1"></span>Disadvantage blocks Sneak Attack</div>`);
+			}
+		}
+
+		// ===== CUNNING STRIKE: Mechanical integration =====
 		if (calcs.hasCunningStrike) {
-			const $cunningStrike = $(`<div class="ve-small mt-1"><strong>Cunning Strike</strong> <span class="ve-muted">(sacrifice Sneak Attack dice)</span></div>`);
+			const csOptions = this._getCunningStrikeOptions(calcs);
+			const saveDC = 8 + this._state.getProficiencyBonus() + this._state.getAbilityMod("dex");
 
-			const options = [];
-			// Base options (level 5)
-			options.push({name: "Poison", cost: 1, desc: "Target must succeed CON save or be poisoned"});
-			options.push({name: "Trip", cost: 1, desc: "Target must succeed DEX save or fall prone"});
-			options.push({name: "Withdraw", cost: 1, desc: "Disengage as part of this attack"});
+			const $cs = $(`<div class="ve-small mt-1"></div>`);
+			$cs.append(`<div class="ve-flex-v-center mb-1"><strong>Cunning Strike</strong> <span class="ve-muted ml-1">DC ${saveDC}</span></div>`);
 
-			// Improved options (level 11)
-			if (calcs.hasImprovedCunningStrike) {
-				options.push({name: "Daze", cost: 2, desc: "Target must succeed CON save or be dazed"});
-			}
+			const $optList = $(`<div class="ve-flex gap-1 flex-wrap"></div>`);
+			csOptions.forEach(opt => {
+				const isSelected = this._selectedCunningStrikes.some(s => s.name === opt.name);
+				const canAfford = opt.cost <= effectiveSneakDice + (isSelected ? opt.cost : 0);
+				const btnClass = isSelected ? "ve-btn-primary" : canAfford ? "ve-btn-default" : "ve-btn-default";
+				const $btn = $(`<button class="ve-btn ve-btn-xxs ${btnClass}" title="${opt.desc} (costs ${opt.cost}d6)" ${!canAfford && !isSelected ? "disabled" : ""} style="${!canAfford && !isSelected ? "opacity: 0.5;" : ""}">${opt.name} <span class="ve-muted">${opt.cost}d6</span></button>`);
 
-			// Devious Strikes (level 14)
-			if (calcs.hasDeviousStrikes) {
-				options.push({name: "Knock Out", cost: 6, desc: "Target must succeed CON save or fall unconscious"});
-				options.push({name: "Obscure", cost: 3, desc: "Target must succeed DEX save or be blinded"});
-			}
-
-			const sneakDice = parseInt(sa.dice) || Math.ceil((this._state.getClassLevel?.("Rogue") || 1) / 2);
-			const $optList = $(`<div class="ve-flex gap-1 flex-wrap mt-1"></div>`);
-			options.forEach(opt => {
-				const $btn = $(`<button class="ve-btn ve-btn-xs ve-btn-default" title="${opt.desc} (costs ${opt.cost}d6 from Sneak Attack)">${opt.name} (${opt.cost}d6)</button>`);
-				$btn.on("click", async () => {
-					if (opt.cost > sneakDice) {
-						JqueryUtil.doToast({type: "warning", content: `Not enough Sneak Attack dice (need ${opt.cost}d6, have ${sneakDice}d6)`});
-						return;
+				$btn.on("click", () => {
+					if (isSelected) {
+						this._selectedCunningStrikes = this._selectedCunningStrikes.filter(s => s.name !== opt.name);
+					} else {
+						if (opt.cost > effectiveSneakDice) {
+							JqueryUtil.doToast({type: "warning", content: `Not enough Sneak Attack dice (need ${opt.cost}d6, have ${effectiveSneakDice}d6)`});
+							return;
+						}
+						this._selectedCunningStrikes.push(opt);
 					}
-					const saveDC = 8 + this._state.getProficiencyBonus() + this._state.getAbilityMod("dex");
-					JqueryUtil.doToast({
-						type: "info",
-						content: `<strong>Cunning Strike: ${opt.name}</strong><br>${opt.desc}<br>Save DC: <strong>${saveDC}</strong><br>Reduced Sneak Attack: ${sneakDice - opt.cost}d6`,
-					});
+					this._renderSneakAttackToggle();
 				});
 				$optList.append($btn);
 			});
-			$cunningStrike.append($optList);
-			$section.append($cunningStrike);
+			$cs.append($optList);
+
+			// Show selected CS effects summary
+			if (this._selectedCunningStrikes.length) {
+				const summary = this._selectedCunningStrikes.map(s => `${s.name} (${s.cost}d6)`).join(", ");
+				$cs.append(`<div class="ve-muted mt-1" style="font-size: 0.85em;">Selected: ${summary} — ${totalCSDiceCost}d6 deducted from Sneak Attack</div>`);
+			}
+
+			$section.append($cs);
 		}
 
 		$container.append($section);
+	}
+
+	/**
+	 * Get available Cunning Strike options based on Rogue level
+	 */
+	_getCunningStrikeOptions (calcs) {
+		const options = [];
+		// Base options (level 5)
+		options.push({name: "Poison", cost: 1, save: "con", desc: "Target must succeed CON save or be poisoned"});
+		options.push({name: "Trip", cost: 1, save: "dex", desc: "Target must succeed DEX save or fall prone"});
+		options.push({name: "Withdraw", cost: 1, save: null, desc: "Disengage as part of this attack"});
+
+		// Improved options (level 11)
+		if (calcs.hasImprovedCunningStrike) {
+			options.push({name: "Daze", cost: 2, save: "con", desc: "Target must succeed CON save or be dazed"});
+		}
+
+		// Devious Strikes (level 14)
+		if (calcs.hasDeviousStrikes) {
+			options.push({name: "Knock Out", cost: 6, save: "con", desc: "Target must succeed CON save or fall unconscious"});
+			options.push({name: "Obscure", cost: 3, save: "dex", desc: "Target must succeed DEX save or be blinded"});
+		}
+
+		return options;
+	}
+
+	/**
+	 * Reset cunning strike selections (on SA use, round advance, combat end)
+	 */
+	_resetCunningStrikeSelections () {
+		this._selectedCunningStrikes = [];
 	}
 
 	/**
@@ -3585,6 +3721,7 @@ class CharacterSheetCombat {
 				this._sneakAttackHasAdjacentAlly = false;
 				this._lastAttackContext = null;
 				this._resetTurnActionUsage();
+				this._resetCunningStrikeSelections();
 				JqueryUtil.doToast({type: "info", content: "Combat ended."});
 			} else {
 				this._state.startCombat();
@@ -3593,6 +3730,7 @@ class CharacterSheetCombat {
 				this._sneakAttackHasAdjacentAlly = false;
 				this._lastAttackContext = null;
 				this._resetTurnActionUsage();
+				this._resetCunningStrikeSelections();
 				JqueryUtil.doToast({type: "success", content: "Combat started — Round 1!"});
 			}
 			this.renderCombatStates();
@@ -3608,6 +3746,7 @@ class CharacterSheetCombat {
 			this._resetTurnActionUsage();
 			this._sneakAttackHasAdjacentAlly = false;
 			this._lastAttackContext = null;
+			this._resetCunningStrikeSelections();
 
 			if (expired.length) {
 				JqueryUtil.doToast({type: "warning", content: `Round ${round} — expired: ${expired.join(", ")}`});

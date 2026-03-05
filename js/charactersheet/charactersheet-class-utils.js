@@ -649,10 +649,13 @@ class CharacterSheetClassUtils {
 	 * @param {Array} classFeatures - All loaded class features
 	 * @returns {{type: string, count: number, from: (string|string[])}|null}
 	 */
-	static parseFeatureSkillChoice (opt, classFeatures = []) {
-		if (opt?.type !== "classFeature" || !opt?.ref) return null;
+	static parseFeatureSkillChoice (opt, classFeatures = [], {optionalFeatures = [], resolvedData = null} = {}) {
+		if (!opt?.ref || (opt?.type !== "classFeature" && opt?.type !== "optionalfeature")) return null;
 
-		const fullOpt = CharacterSheetClassUtils.getClassFeatureDataFromRef(classFeatures, opt.ref);
+		const fullOpt = resolvedData
+			|| (opt.type === "optionalfeature"
+				? optionalFeatures.find(f => f.name === opt.name && f.source === opt.source) || optionalFeatures.find(f => f.name === opt.name)
+				: CharacterSheetClassUtils.getClassFeatureDataFromRef(classFeatures, opt.ref));
 		if (!fullOpt?.entries) return null;
 
 		const text = JSON.stringify(fullOpt.entries);
@@ -697,10 +700,13 @@ class CharacterSheetClassUtils {
 	 * @param {Array} classFeatures - All loaded class features
 	 * @returns {Array<{type: string, value: number|string, note: string}>}
 	 */
-	static parseFeatureAutoEffects (opt, classFeatures = []) {
-		if (opt?.type !== "classFeature" || !opt?.ref) return [];
+	static parseFeatureAutoEffects (opt, classFeatures = [], {optionalFeatures = [], resolvedData = null} = {}) {
+		if (!opt?.ref || (opt?.type !== "classFeature" && opt?.type !== "optionalfeature")) return [];
 
-		const fullOpt = CharacterSheetClassUtils.getClassFeatureDataFromRef(classFeatures, opt.ref);
+		const fullOpt = resolvedData
+			|| (opt.type === "optionalfeature"
+				? optionalFeatures.find(f => f.name === opt.name && f.source === opt.source) || optionalFeatures.find(f => f.name === opt.name)
+				: CharacterSheetClassUtils.getClassFeatureDataFromRef(classFeatures, opt.ref));
 		if (!fullOpt?.entries) return [];
 
 		const text = JSON.stringify(fullOpt.entries);
