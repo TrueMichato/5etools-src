@@ -934,6 +934,7 @@ class CharacterSheetLevelUp {
 				selectedFeatureOptions,
 				selectedExpertise,
 				selectedLanguages,
+				languageGrants,
 				selectedScholarSkill,
 				selectedSpellbookSpells,
 				selectedKnownSpells,
@@ -2748,9 +2749,11 @@ class CharacterSheetLevelUp {
 			const $checkboxes = $grantSection.find(".charsheet__levelup-expertise-checkboxes");
 
 			// Get eligible skills (proficient but not already expertise)
+			// Normalize case for comparison - existingExpertise may be title case
+			const existingExpertiseLower = existingExpertise.map(e => e.toLowerCase());
 			const eligibleSkills = Object.keys(skillProficiencies)
 				.filter(skill => skillProficiencies[skill])
-				.filter(skill => !existingExpertise.includes(skill))
+				.filter(skill => !existingExpertiseLower.includes(skill.toLowerCase()))
 				.map(skill => skill.toTitleCase());
 
 			// Optionally add thieves' tools
@@ -2943,7 +2946,7 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, selectedPreparedSpells, selectedPreparedCantrips, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, languageGrants, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, selectedPreparedSpells, selectedPreparedCantrips, newFeatures, hpMethod, classData}) {
 		const prevCombatTraditions = this._state.getCombatTraditions?.() || [];
 		const prevWeaponMasteries = this._state.getWeaponMasteries?.() || [];
 
@@ -3258,6 +3261,15 @@ class CharacterSheetLevelUp {
 					sourceClass: classEntry.name,
 				}));
 			});
+		}
+
+		// Apply auto-languages from features like Thieves' Cant (which grants both the language AND a choice)
+		if (languageGrants && languageGrants.length > 0) {
+			for (const grant of languageGrants) {
+				if (grant.autoLanguages?.length > 0) {
+					grant.autoLanguages.forEach(lang => this._state.addLanguage(lang));
+				}
+			}
 		}
 
 		// Apply selected languages from features like Deft Explorer Improvement

@@ -958,7 +958,8 @@ class CharacterSheetFeatures {
 					// Background features - show feature name but link to background
 					} else if (feature.featureType === "Background") {
 						const background = this._state.getBackground();
-						if (background) {
+						// Only create hover link for non-custom backgrounds
+						if (background && background.source !== "Custom") {
 							const bgHash = UrlUtil.encodeForHash([background.name, background.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
 							const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BACKGROUNDS, source: background.source || Parser.SRC_XPHB, hash: bgHash});
 							featureNameHtml = `<a href="${UrlUtil.PG_BACKGROUNDS}#${bgHash}" ${hoverAttrs}>${feature.name}</a>`;
@@ -1385,7 +1386,8 @@ class CharacterSheetFeatures {
 				// Background features - link to background page with hover
 				} else if (feature.featureType === "Background") {
 					const background = this._state.getBackground();
-					if (background) {
+					// Only create hover link for non-custom backgrounds
+					if (background && background.source !== "Custom") {
 						const bgHash = UrlUtil.encodeForHash([background.name, background.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
 						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BACKGROUNDS, source: background.source || Parser.SRC_XPHB, hash: bgHash});
 						featureNameHtml = `<a href="${UrlUtil.PG_BACKGROUNDS}#${bgHash}" ${hoverAttrs}>${feature.name}</a>`;

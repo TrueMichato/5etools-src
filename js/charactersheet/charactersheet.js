@@ -1672,11 +1672,16 @@ class CharacterSheetPage {
 		// Render background with hover link
 		const background = this._state.getBackground();
 		if (background?.name) {
-			try {
-				const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_BACKGROUNDS]({name: background.name, source: background.source});
-				$("#charsheet-disp-background").html(CharacterSheetPage.getHoverLink(UrlUtil.PG_BACKGROUNDS, background.name, background.source, hash));
-			} catch (e) {
-				$("#charsheet-disp-background").text(this._state.getBackgroundName() || "—");
+			// Don't create hover links for custom backgrounds (source="Custom")
+			if (background.source === "Custom") {
+				$("#charsheet-disp-background").text(background.name);
+			} else {
+				try {
+					const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_BACKGROUNDS]({name: background.name, source: background.source});
+					$("#charsheet-disp-background").html(CharacterSheetPage.getHoverLink(UrlUtil.PG_BACKGROUNDS, background.name, background.source, hash));
+				} catch (e) {
+					$("#charsheet-disp-background").text(this._state.getBackgroundName() || "—");
+				}
 			}
 		} else {
 			$("#charsheet-disp-background").text("—");
@@ -4999,10 +5004,10 @@ class CharacterSheetPage {
 					return `<a href="${UrlUtil.PG_RACES}#${hash}" ${hoverAttrs}>${feature.name}</a>`;
 				}
 			}
-			// Background features
+			// Background features - only create hover link for non-custom backgrounds
 			if (feature.featureType === "Background") {
 				const background = this._state.getBackground();
-				if (background) {
+				if (background && background.source !== "Custom") {
 					const hash = UrlUtil.encodeForHash([background.name, background.source || Parser.SRC_XPHB].join(HASH_LIST_SEP));
 					const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_BACKGROUNDS, source: background.source || Parser.SRC_XPHB, hash});
 					return `<a href="${UrlUtil.PG_BACKGROUNDS}#${hash}" ${hoverAttrs}>${feature.name}</a>`;
