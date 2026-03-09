@@ -3,6 +3,8 @@
  * Manages all character data and provides computed values
  */
 
+import {CharacterSheetClassUtils} from "./charactersheet-class-utils.js";
+
 /**
  * Utility to parse feature text and extract limited-use information
  * Works with both official and homebrew content
@@ -514,7 +516,9 @@ class SpellGrantParser {
 	static _parseSpellRef (spellRef, additionalProps = {}) {
 		if (!spellRef || typeof spellRef !== "string") return null;
 
-		const [name, source] = spellRef.split("|");
+		// Strip cantrip suffix (#c) if present - matches builder pattern
+		const cleanRef = spellRef.replace(/#c$/, "");
+		const [name, source] = cleanRef.split("|");
 		return {
 			name: name.toTitleCase(),
 			source: source?.toUpperCase() || Parser.SRC_PHB,
@@ -3124,7 +3128,7 @@ class CharacterSheetState {
 			subrace: null,
 			size: "medium", // "tiny", "small", "medium", "large", "huge", "gargantuan"
 			alignment: null, // "LG", "NG", "CG", "LN", "N", "CN", "LE", "NE", "CE", or null
-			classes: [], // [{name, source, level, subclass}]
+			classes: [], // [{name, source, level, subclass, subclassChoice}]
 			background: null,
 
 			// Level-by-level history for tracking and editing choices
@@ -3428,6 +3432,8 @@ class CharacterSheetState {
 			// Pending spell choices (from feats/features that grant spell selection)
 			// Each choice: {id, featureName, featureId, filter, innate, uses, recharge, ability}
 			pendingSpellChoices: [],
+			// TGTT passive metamagic tuning state
+			tunedMetamagics: [],
 
 			// Sheet settings/options
 			settings: {
@@ -3526,6 +3532,10 @@ class CharacterSheetState {
 		if (!Array.isArray(this._data.levelHistory)) {
 			this._data.levelHistory = [];
 		}
+		// Ensure tuned metamagics array exists
+		if (!Array.isArray(this._data.tunedMetamagics)) {
+			this._data.tunedMetamagics = [];
+		}
 
 		// Ensure stickyNotes array exists
 		if (!Array.isArray(this._data.stickyNotes)) {
@@ -3559,6 +3569,10 @@ class CharacterSheetState {
 
 		// Migrate spells: ensure concentration/ritual flags are set correctly
 		this._migrateSpells();
+		// Reapply history-backed optional features for saves which persisted history
+		// but did not fully reconstruct runtime feature state.
+		this._reapplyHistoryOptionalFeatures();
+		this._syncTunedMetamagicsToKnownOptions();
 
 		// Ensure unarmed strike exists for all characters
 		this.ensureUnarmedStrike();
@@ -4064,8 +4078,14 @@ class CharacterSheetState {
 			if (classData.subclass !== undefined) {
 				existing.subclass = classData.subclass;
 			}
+			if (classData.subclassChoice !== undefined) {
+				existing.subclassChoice = CharacterSheetClassUtils.normalizeDivineSoulAffinity(classData.subclassChoice);
+			}
 		} else {
-			this._data.classes.push({...classData});
+			this._data.classes.push({
+				...classData,
+				subclassChoice: CharacterSheetClassUtils.normalizeDivineSoulAffinity(classData.subclassChoice),
+			});
 		}
 		this._syncXpToCurrentLevelFloor();
 		this._recalculateMaxHp();
@@ -4129,9 +4149,54 @@ class CharacterSheetState {
 		const classEntry = this._data.classes.find(c => c.name === className);
 		if (classEntry) {
 			classEntry.subclass = subclass;
+			if (!CharacterSheetClassUtils.isDivineSoulSubclass(subclass)) {
+				classEntry.subclassChoice = null;
+			}
 			// Re-apply class feature effects for new subclass
 			this.applyClassFeatureEffects();
 		}
+	}
+
+	getSubclassChoice (className) {
+		const classEntry = this._data.classes.find(c => c.name === className);
+		return CharacterSheetClassUtils.normalizeDivineSoulAffinity(classEntry?.subclassChoice);
+	}
+
+	setSubclassChoice (className, subclassChoice) {
+		const classEntry = this._data.classes.find(c => c.name === className);
+		if (!classEntry) return false;
+		classEntry.subclassChoice = CharacterSheetClassUtils.normalizeDivineSoulAffinity(subclassChoice);
+		return true;
+	}
+
+	getDivineSoulKnownSpell (className = "Sorcerer") {
+		const classEntry = this._data.classes.find(c => c.name === className);
+		if (!classEntry) return null;
+		return CharacterSheetClassUtils.getDivineSoulKnownSpell(classEntry.subclass, classEntry.subclassChoice);
+	}
+
+	ensureDivineSoulKnownSpell (className = "Sorcerer") {
+		const classEntry = this._data.classes.find(c => c.name === className);
+		if (!classEntry || !CharacterSheetClassUtils.isDivineSoulSubclass(classEntry.subclass)) return false;
+
+		const knownSpell = CharacterSheetClassUtils.getDivineSoulKnownSpell(classEntry.subclass, classEntry.subclassChoice);
+		if (!knownSpell) return false;
+
+		const existingSpell = [
+			...(this._data.spellcasting?.spellsKnown || []),
+			...(this._data.spellcasting?.cantripsKnown || []),
+		].find(spell => spell.name?.toLowerCase() === knownSpell.name.toLowerCase() && (spell.source || Parser.SRC_PHB) === knownSpell.source);
+
+		if (existingSpell) return false;
+
+		this.addSpell({
+			...knownSpell,
+			className: classEntry.name,
+			classSource: classEntry.source,
+			isKnown: true,
+			sourceFeature: `${classEntry.subclass?.name || "Divine Soul"} Affinity`,
+		});
+		return true;
 	}
 
 	/**
@@ -5159,9 +5224,11 @@ class CharacterSheetState {
 		const perAbilityItemBonus = this._data.itemBonuses?.[abilityKey] || 0;
 		// Add bonus from active states (e.g., Bless spell, Paladin's Aura)
 		const stateBonus = this.getSaveBonusFromStates(ability);
+		// Combat stance save bonus (Thelemar homebrew)
+		const stanceBonus = this._getStanceSaveBonus(ability);
 		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
 		const exhaustionPenalty = this._getExhaustionD20Penalty();
-		return mod + prof + custom + itemBonus + perAbilityItemBonus + stateBonus - exhaustionPenalty;
+		return mod + prof + custom + itemBonus + perAbilityItemBonus + stateBonus + stanceBonus - exhaustionPenalty;
 	}
 
 	// Alias for test compatibility
@@ -5339,7 +5406,10 @@ class CharacterSheetState {
 		// Exhaustion d20 penalty (2024/Thelemar: -N per level)
 		const exhaustionPenalty = this._getExhaustionD20Penalty();
 
-		return mod + profBonus + custom + itemBonus + dynamicFeatureBonus + abilityCheckBonus + stateBonus - exhaustionPenalty;
+		// Combat stance skill bonus (Thelemar homebrew)
+		const stanceBonus = this._getStanceSkillBonus(skill);
+
+		return mod + profBonus + custom + itemBonus + dynamicFeatureBonus + abilityCheckBonus + stateBonus + stanceBonus - exhaustionPenalty;
 	}
 
 	/**
@@ -5368,6 +5438,26 @@ class CharacterSheetState {
 		}
 
 		return total;
+	}
+
+	/**
+	 * Get skill bonus from active combat stance (Thelemar homebrew)
+	 * @param {string} skill - The skill key
+	 * @returns {number} The stance bonus
+	 */
+	_getStanceSkillBonus (skill) {
+		const calculations = this.getFeatureCalculations();
+		return calculations.stanceSkillBonuses?.[skill] || 0;
+	}
+
+	/**
+	 * Get saving throw bonus from active combat stance (Thelemar homebrew)
+	 * @param {string} ability - The ability key (e.g., "dex", "str")
+	 * @returns {number} The stance bonus
+	 */
+	_getStanceSaveBonus (ability) {
+		const calculations = this.getFeatureCalculations();
+		return calculations.stanceSaveBonuses?.[ability] || 0;
 	}
 
 	/**
@@ -6458,14 +6548,15 @@ class CharacterSheetState {
 
 	/**
 	 * Get spellcasting info for a single class
-	 * @param {Object} cls - Class entry with name, level, subclass, _classData
+	 * @param {Object} cls - Class entry with name, level, subclass, and spell progression arrays
 	 * @returns {{type: string, max: number, cantripsKnown: number, spellsKnownMax?: number, preparedMax?: number, hasFullAccess?: boolean}|null}
 	 */
 	_getClassSpellcastingInfo (cls) {
 		const className = cls.name;
 		const level = cls.level || 1;
 		const levelIndex = Math.min(level, 20) - 1;
-		const classData = cls._classData;
+		// Progression arrays are now stored directly on class entry (preparedSpellsProgression, spellsKnownProgression, cantripProgression)
+		const classData = cls;
 		const source = cls.source || "PHB";
 		const is2024 = source === "XPHB" || source === "xphb" || source === "TGTT";
 
@@ -6992,7 +7083,14 @@ class CharacterSheetState {
 		const additionalSpells = subclassData.additionalSpells;
 		if (!additionalSpells?.length) return [];
 
-		for (const spellBlock of additionalSpells) {
+		const spellBlocks = CharacterSheetClassUtils.isDivineSoulSubclass(subclassData)
+			? (() => {
+				const chosenBlock = CharacterSheetClassUtils.getDivineSoulAffinityBlock(subclassData, cls.subclassChoice);
+				return chosenBlock ? [chosenBlock] : [];
+			})()
+			: additionalSpells;
+
+		for (const spellBlock of spellBlocks) {
 			// Process "prepared" entries (level-keyed, always prepared)
 			if (spellBlock.prepared) {
 				for (const [levelKey, spells] of Object.entries(spellBlock.prepared)) {
@@ -18844,6 +18942,83 @@ class CharacterSheetState {
 			id: f.id || CryptUtil.uid(),
 		}));
 	}
+	_reapplyHistoryOptionalFeatures () {
+		const history = [...(this._data.levelHistory || [])].sort((a, b) => a.level - b.level);
+		if (!history.length) return;
+
+		for (const entry of history) {
+			const choices = entry?.choices || {};
+			const replaySnapshots = choices.replayData?.optionalFeatures;
+			const fallbackSnapshots = choices.optionalFeatures;
+			const snapshots = Array.isArray(replaySnapshots) && replaySnapshots.length
+				? replaySnapshots
+				: Array.isArray(fallbackSnapshots)
+					? fallbackSnapshots
+					: [];
+
+			for (const snapshot of snapshots) {
+				if (!snapshot?.name) continue;
+
+				const optionalFeatureTypes = snapshot.optionalFeatureTypes
+					|| (typeof snapshot.type === "string" ? snapshot.type.split("_") : []);
+
+				this.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(snapshot, {
+					className: snapshot.className || entry.class?.name,
+					classSource: snapshot.classSource || entry.class?.source,
+					level: snapshot.level || entry.level,
+					featureType: "Optional Feature",
+					optionalFeatureTypes,
+					parentFeature: snapshot.parentFeature,
+					isSubclassFeature: snapshot.isSubclassFeature,
+					isFeatureOption: snapshot.isFeatureOption,
+					subclassName: snapshot.subclassName,
+					subclassShortName: snapshot.subclassShortName,
+					subclassSource: snapshot.subclassSource,
+				}));
+			}
+		}
+	}
+
+	getKnownMetamagicKeys () {
+		const features = this._data.features || [];
+		const knownKeys = new Set();
+
+		features.forEach(feature => {
+			if (feature.featureType !== "Optional Feature") return;
+			const optTypes = feature.optionalFeatureTypes || [];
+			if (!optTypes.includes("MM")) return;
+
+			const key = this._getMetamagicKeyByName(feature.name);
+			if (key) knownKeys.add(key);
+		});
+
+		return Array.from(knownKeys);
+	}
+
+	_getMetamagicKeyByName (name) {
+		if (!name) return null;
+		// Strip "(Active)" / "(Passive)" suffixes from feature names for matching
+		const targetName = name.replace(/\s*\((Active|Passive)\)$/i, "").toLowerCase().trim();
+		const match = Object.entries(CharacterSheetState.TGTT_METAMAGIC)
+			.find(([, meta]) => meta.name.toLowerCase() === targetName);
+		return match?.[0] || null;
+	}
+
+	_syncTunedMetamagicsToKnownOptions () {
+		if (!Array.isArray(this._data.tunedMetamagics)) {
+			this._data.tunedMetamagics = [];
+			return;
+		}
+
+		const knownMetamagics = new Set(this.getKnownMetamagicKeys());
+		if (!knownMetamagics.size) return;
+
+		this._data.tunedMetamagics = this._data.tunedMetamagics.filter(key => {
+			const metamagic = CharacterSheetState.TGTT_METAMAGIC[key];
+			if (!metamagic || metamagic.type !== "passive") return false;
+			return knownMetamagics.has(key);
+		});
+	}
 
 	addFeature (feature) {
 		// Deduplicate: don't add if feature with same name, source, and className/level combo exists
@@ -25944,6 +26119,9 @@ class CharacterSheetState {
 		];
 		if (excludedNames.includes(name)) return null;
 
+		// Metamagic optional features are managed via the metamagic dashboard, not active states
+		if (feature.optionalFeatureTypes?.includes("MM")) return null;
+
 		// ===== USE INTELLIGENT TOGGLE ANALYSIS =====
 		const toggleAnalysis = this.analyzeToggleability(text);
 
@@ -27804,6 +27982,7 @@ class CharacterSheetState {
 			if (state.isCondition) {
 				const stateEffects = state.customEffects || [];
 				for (const effect of stateEffects) {
+					if (!this._isActiveStateEffectConditionMet(effect)) continue;
 					effects.push({
 						...effect,
 						stateId: state.id,
@@ -27824,6 +28003,7 @@ class CharacterSheetState {
 			const stateEffects = state.customEffects || stateType?.effects || [];
 
 			for (const effect of stateEffects) {
+				if (!this._isActiveStateEffectConditionMet(effect)) continue;
 				effects.push({
 					...effect,
 					stateId: state.id,
@@ -27833,6 +28013,19 @@ class CharacterSheetState {
 			}
 		}
 		return effects;
+	}
+
+	_isActiveStateEffectConditionMet (effect) {
+		if (!effect?.conditional) return true;
+
+		const condition = String(effect.conditional).trim().toLowerCase();
+		if (!condition) return true;
+
+		if (condition.includes("while concentrating")) {
+			return this.isConcentrating();
+		}
+
+		return true;
 	}
 
 	/**
@@ -28431,6 +28624,9 @@ class CharacterSheetState {
 		const level = typeof spellNameOrObj === "string"
 			? spellLevel
 			: (spellNameOrObj?.level || spellNameOrObj?.spellLevel || 0);
+		const appliedMetamagic = typeof spellNameOrObj === "string"
+			? null
+			: (spellNameOrObj?.appliedMetamagic || spellNameOrObj?.metamagic || null);
 
 		// End any existing concentration
 		if (this._data.concentrating) {
@@ -28441,6 +28637,9 @@ class CharacterSheetState {
 			name: spellName, // Use 'name' for consistency with getConcentratingSpell()
 			spellName,
 			spellLevel: level,
+			...(appliedMetamagic ? {appliedMetamagic} : {}),
+			focusedRerollAvailable: appliedMetamagic?.key === "focused",
+			lingersOnBreak: appliedMetamagic?.key === "lingering",
 			startedAt: Date.now(),
 		};
 
@@ -28464,8 +28663,10 @@ class CharacterSheetState {
 	 */
 	breakConcentration () {
 		// Save the spell name BEFORE clearing, so we can match by name as fallback
-		const concSpellName = this._data.concentrating?.spellName;
-		const concCustomAbilityId = this._data.concentrating?.customAbilityId;
+		const concentration = this._data.concentrating;
+		const concSpellName = concentration?.spellName;
+		const concCustomAbilityId = concentration?.customAbilityId;
+		const shouldLingerSpellEffects = !!(concentration?.lingersOnBreak && this._data.inCombat);
 		this._data.concentrating = null;
 
 		// If a custom ability was concentrating, toggle it off
@@ -28478,7 +28679,9 @@ class CharacterSheetState {
 		}
 
 		// Dismiss concentration-linked companions (summons, etc.)
-		this.dismissConcentrationCompanions();
+		if (!shouldLingerSpellEffects) {
+			this.dismissConcentrationCompanions();
+		}
 
 		// Remove concentration active state (legacy)
 		const concState = this._data.activeStates.find(s => s.stateTypeId === "concentration");
@@ -28493,6 +28696,15 @@ class CharacterSheetState {
 			s.isSpellEffect && (s.concentration || s.name === concSpellName),
 		);
 		for (const state of concSpellStates) {
+			if (shouldLingerSpellEffects) {
+				state.concentration = false;
+				state.duration = "until end of next turn";
+				state.roundsRemaining = this._data.inCombat
+					? CharacterSheetState.parseDurationToRounds(state.duration)
+					: null;
+				continue;
+			}
+
 			// If the state granted conditions, also remove those conditions
 			if (state.grantsConditions?.length > 0) {
 				for (const condName of state.grantsConditions) {
@@ -28501,6 +28713,16 @@ class CharacterSheetState {
 			}
 			this.removeActiveState(state.id);
 		}
+	}
+
+	canUseFocusedConcentrationReroll () {
+		return !!this._data.concentrating?.focusedRerollAvailable;
+	}
+
+	useFocusedConcentrationReroll () {
+		if (!this._data.concentrating?.focusedRerollAvailable) return false;
+		this._data.concentrating.focusedRerollAvailable = false;
+		return true;
 	}
 
 	/**
@@ -29526,10 +29748,7 @@ class CharacterSheetState {
 		this.recoverResources("long");
 		this.recoverResources("dawn");
 
-		// Recover sorcery points (Sorcerer)
-		if (this._data.sorceryPoints && this._data.sorceryPoints.max > 0) {
-			this._data.sorceryPoints.current = this._data.sorceryPoints.max;
-		}
+
 
 		// Recover Mystic Arcanum (Warlock)
 		this.resetMysticArcanum();
@@ -29804,8 +30023,14 @@ class CharacterSheetState {
 	 * Get sorcery points (Sorcerer resource)
 	 * @returns {object} {current, max}
 	 */
+	_getSpResource () {
+		return this._data.resources.find(r => r.name === "Sorcery Points") || null;
+	}
+
 	getSorceryPoints () {
-		return this._data.sorceryPoints || {current: 0, max: 0};
+		const res = this._getSpResource();
+		if (res) return {current: res.current, max: res.max};
+		return {current: 0, max: 0};
 	}
 
 	/**
@@ -29813,11 +30038,25 @@ class CharacterSheetState {
 	 * @param {object} points - {current, max}
 	 */
 	setSorceryPoints (points) {
+		let res = this._getSpResource();
+		if (!res) {
+			let current, max;
+			if (typeof points === "number") {
+				current = points;
+				max = points;
+			} else {
+				current = points.current ?? 0;
+				max = points.max ?? 0;
+			}
+			this.addResource({name: "Sorcery Points", max, current, recharge: "long"});
+			return;
+		}
 		if (typeof points === "number") {
-			// Simple number means set both current and max
-			this._data.sorceryPoints = {current: points, max: points};
+			res.current = points;
+			res.max = points;
 		} else {
-			this._data.sorceryPoints = {...points};
+			if (points.current != null) res.current = points.current;
+			if (points.max != null) res.max = points.max;
 		}
 	}
 
@@ -29827,9 +30066,9 @@ class CharacterSheetState {
 	 * @returns {boolean} True if successful
 	 */
 	useSorceryPoint (amount = 1) {
-		if (!this._data.sorceryPoints) this._data.sorceryPoints = {current: 0, max: 0};
-		if (this._data.sorceryPoints.current < amount) return false;
-		this._data.sorceryPoints.current -= amount;
+		const res = this._getSpResource();
+		if (!res || res.current < amount) return false;
+		res.current -= amount;
 		return true;
 	}
 
@@ -29844,13 +30083,13 @@ class CharacterSheetState {
 		const amount = calc.sorcerousRestorationAmount || 0;
 		if (amount <= 0) return 0;
 
-		const sp = this.getSorceryPoints();
-		if (!sp.max) return 0;
+		const res = this._getSpResource();
+		if (!res || !res.max) return 0;
 
-		const recovered = Math.min(amount, sp.max - sp.current);
+		const recovered = Math.min(amount, res.max - res.current);
 		if (recovered <= 0) return 0;
 
-		this._data.sorceryPoints.current += recovered;
+		res.current += recovered;
 		return recovered;
 	}
 
@@ -29920,9 +30159,10 @@ class CharacterSheetState {
 		slots[slotLevel].current--;
 
 		// Gain SP equal to slot level (capped at max)
-		const sp = this.getSorceryPoints();
+		const res = this._getSpResource();
+		if (!res) return false;
 		const gained = this.getSlotToSpReturn(slotLevel);
-		this._data.sorceryPoints.current = Math.min(sp.max, sp.current + gained);
+		res.current = Math.min(res.max, res.current + gained);
 
 		return true;
 	}
@@ -29945,8 +30185,8 @@ class CharacterSheetState {
 		if (cost === null) return false;
 
 		// Check SP availability
-		const sp = this.getSorceryPoints();
-		if (sp.current < cost) return false;
+		const res = this._getSpResource();
+		if (!res || res.current < cost) return false;
 
 		// Ensure the slot level exists in data
 		if (!this._data.spellcasting.spellSlots[slotLevel]) {
@@ -29954,7 +30194,7 @@ class CharacterSheetState {
 		}
 
 		// Spend SP
-		this._data.sorceryPoints.current -= cost;
+		res.current -= cost;
 
 		// Create the slot (add 1 current, even above max — it's a temporary bonus slot)
 		this._data.spellcasting.spellSlots[slotLevel].current++;
@@ -30129,9 +30369,12 @@ class CharacterSheetState {
 		if (!this._data.tunedMetamagics) this._data.tunedMetamagics = [];
 		if (this._data.tunedMetamagics.includes(key)) return false; // Already tuned
 
-		// Check if we have enough effective SP to lock
-		const effectiveMax = this.getEffectiveSorceryPointMax();
-		if (effectiveMax < metamagic.cost) return false;
+		const res = this._getSpResource();
+		if (!res || res.max < metamagic.cost) return false;
+
+		// Reduce max and current by cost
+		res.max -= metamagic.cost;
+		res.current = Math.min(res.current, res.max);
 
 		this._data.tunedMetamagics.push(key);
 		return true;
@@ -30146,6 +30389,14 @@ class CharacterSheetState {
 		if (!this._data.tunedMetamagics) return false;
 		const idx = this._data.tunedMetamagics.indexOf(key);
 		if (idx === -1) return false;
+
+		const metamagic = CharacterSheetState.TGTT_METAMAGIC[key];
+		const res = this._getSpResource();
+		if (res && metamagic) {
+			// Restore max by cost (current stays the same)
+			res.max += metamagic.cost;
+		}
+
 		this._data.tunedMetamagics.splice(idx, 1);
 		return true;
 	}
@@ -30167,9 +30418,7 @@ class CharacterSheetState {
 	 * @returns {number} Effective max SP
 	 */
 	getEffectiveSorceryPointMax () {
-		const base = this.getSorceryPoints();
-		const locked = this.getLockedSorceryPoints();
-		return Math.max(0, base.max - locked);
+		return this.getSorceryPoints().max;
 	}
 
 	/**
@@ -30195,6 +30444,120 @@ class CharacterSheetState {
 		return Object.entries(CharacterSheetState.TGTT_METAMAGIC)
 			.filter(([_, meta]) => meta.type === "active")
 			.map(([key, meta]) => ({...meta, key}));
+	}
+
+	/**
+	 * Get all known active metamagics.
+	 * @returns {object[]} Array of active metamagic definitions the character knows
+	 */
+	getKnownActiveMetamagics () {
+		const knownKeys = new Set(this.getKnownMetamagicKeys());
+		return this.getActiveMetamagics()
+			.filter(meta => knownKeys.has(meta.key));
+	}
+
+	/**
+	 * Get the sorcery point cost for a metamagic at a given spell level.
+	 * @param {string} key - Metamagic key
+	 * @param {number} spellLevel - Effective spell level for the cast
+	 * @returns {number|null} Sorcery point cost, or null if invalid
+	 */
+	getMetamagicCost (key, spellLevel = 0) {
+		const meta = CharacterSheetState.TGTT_METAMAGIC[key];
+		if (!meta) return null;
+
+		const effectiveLevel = Math.max(1, spellLevel || 0);
+		if (typeof meta.cost === "number") return meta.cost;
+
+		switch (meta.cost) {
+			case "level": return effectiveLevel;
+			case "halfLevel": return Math.max(1, Math.ceil(effectiveLevel / 2));
+			default: return null;
+		}
+	}
+
+	/**
+	 * Get cast-time active metamagic options for a specific spell cast.
+	 * @param {object} opts
+	 * @param {object} [opts.spell] - Character spell object
+	 * @param {object} [opts.spellData] - Full spell data object
+	 * @param {number} [opts.slotLevel] - Effective slot level for the cast
+	 * @returns {object[]} Known active metamagics with cost and availability info
+	 */
+	getCastableActiveMetamagics ({spell = null, spellData = null, slotLevel = null} = {}) {
+		const currentSp = this.getSorceryPoints().current;
+		const effectiveLevel = slotLevel ?? spell?.level ?? 0;
+
+		return this.getKnownActiveMetamagics().map(meta => {
+			const cost = this.getMetamagicCost(meta.key, effectiveLevel);
+			const availability = this._getActiveMetamagicAvailability(meta.key, {spell, spellData, slotLevel: effectiveLevel});
+			const isAffordable = cost != null && currentSp >= cost;
+			const unavailableReason = availability.unavailableReason
+				|| (!isAffordable ? `Requires ${cost} sorcery point${cost === 1 ? "" : "s"} (${currentSp} available)` : null);
+
+			return {
+				...meta,
+				cost,
+				isAvailable: availability.isAvailable && isAffordable,
+				unavailableReason,
+			};
+		});
+	}
+
+	_getActiveMetamagicAvailability (key, {spellData = null, slotLevel = null} = {}) {
+		const meta = CharacterSheetState.TGTT_METAMAGIC[key];
+		if (!meta || meta.type !== "active") {
+			return {isAvailable: false, unavailableReason: "Not an active metamagic"};
+		}
+
+		const spellText = JSON.stringify([
+			spellData?.entries || [],
+			spellData?.entriesHigherLevel || [],
+		]).toLowerCase();
+		const hasSpellAttack = spellText.includes("spell attack");
+		const hasSavingThrow = !!spellData?.savingThrow?.length;
+		const isConcentrationSpell = !!spellData?.duration?.some?.(it => it?.concentration);
+		const isSelfRangeSpell = spellData?.range?.distance?.type === "self";
+		const isActionCast = !!spellData?.time?.some?.(it => it?.number === 1 && it?.unit === "action");
+
+		switch (key) {
+			case "aimed":
+			case "seeking":
+				return hasSpellAttack
+					? {isAvailable: true, unavailableReason: null}
+					: {isAvailable: false, unavailableReason: "Requires a spell attack roll"};
+
+			case "quickened":
+				return isActionCast
+					? {isAvailable: true, unavailableReason: null}
+					: {isAvailable: false, unavailableReason: "Requires a spell with a casting time of 1 action"};
+
+			case "heightened":
+			case "bouncing":
+				return hasSavingThrow
+					? {isAvailable: true, unavailableReason: null}
+					: {isAvailable: false, unavailableReason: "Requires a spell with a saving throw"};
+
+			case "focused":
+			case "lingering":
+				return isConcentrationSpell
+					? {isAvailable: true, unavailableReason: null}
+					: {isAvailable: false, unavailableReason: "Requires a concentration spell"};
+
+			case "bestowed":
+				return isSelfRangeSpell
+					? {isAvailable: true, unavailableReason: null}
+					: {isAvailable: false, unavailableReason: "Requires a spell with range: self"};
+
+			case "twinned":
+				if ((slotLevel ?? 0) < 0) {
+					return {isAvailable: false, unavailableReason: "Invalid spell level"};
+				}
+				return {isAvailable: true, unavailableReason: null};
+
+			default:
+				return {isAvailable: true, unavailableReason: null};
+		}
 	}
 
 	/**

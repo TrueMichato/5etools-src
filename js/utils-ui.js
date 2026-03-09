@@ -2943,6 +2943,7 @@ class InputUiUtil {
 		const {eleModalInner, doClose, pGetResolved, doAutoResize: doAutoResizeModal} = await InputUiUtil._pGetShowModal({
 			title: opts.title || "Select an Option",
 			isMinHeight0: true,
+			...(opts.zIndex != null ? {zIndex: opts.zIndex} : {}),
 		});
 
 		const btnOk = this._getBtnOk({opts, doClose});

@@ -46,7 +46,7 @@ class CharacterSheetBuilder {
 		this._customBackgroundData = null; // Stores custom background form data
 		this._selectedKnownSpells = []; // For known-caster spell choices at level 1
 		this._selectedKnownCantrips = []; // For known-caster cantrip choices at level 1
-		this._includeDivineSoulSpells = false; // For Divine Soul Sorcerer to include Cleric spells
+		this._divineSoulAffinity = null; // Stored Divine Soul affinity choice for spell access and bonus spell
 		this._quickBuildTargetLevel = 1; // Target level for Quick Build integration
 
 		this._init();
@@ -393,6 +393,10 @@ class CharacterSheetBuilder {
 			case 6: { // Spells
 				const knownInfo = this._getKnownCasterInfoForBuilder();
 				if (!knownInfo) return true; // Not a known-caster class — nothing to validate
+				if (knownInfo.className === "Sorcerer" && CharacterSheetClassUtils.isDivineSoulSubclass(this._selectedSubclass) && !CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity)) {
+					JqueryUtil.doToast({type: "warning", content: "Please choose a Divine Soul affinity before finishing spell selection."});
+					return false;
+				}
 				if (knownInfo.spellCount > 0 && this._selectedKnownSpells.length < knownInfo.spellCount) {
 					JqueryUtil.doToast({type: "warning", content: `Please select ${knownInfo.spellCount} spells (currently ${this._selectedKnownSpells.length}).`});
 					return false;
@@ -435,8 +439,13 @@ class CharacterSheetBuilder {
 						casterProgression: this._selectedSubclass.casterProgression,
 						spellcastingAbility: this._selectedSubclass.spellcastingAbility,
 					} : null,
+					subclassChoice: this._divineSoulAffinity,
 					casterProgression: casterProgressionBuilder,
 					spellcastingAbility: spellcastingAbilityBuilder,
+					// Spell progression arrays for 2024/TGTT classes
+					preparedSpellsProgression: this._selectedClass.preparedSpellsProgression,
+					spellsKnownProgression: this._selectedClass.spellsKnownProgression,
+					cantripProgression: this._selectedClass.cantripProgression,
 				});
 				this._applyClassFeatures();
 
@@ -470,6 +479,9 @@ class CharacterSheetBuilder {
 							shortName: this._selectedSubclass.shortName,
 							source: this._selectedSubclass.source,
 						};
+						if (CharacterSheetClassUtils.isDivineSoulSubclass(this._selectedSubclass) && this._divineSoulAffinity) {
+							level1History.choices.subclassChoice = CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity);
+						}
 					}
 
 					// Record optional features (invocations from Warlock, etc.)
@@ -1144,26 +1156,17 @@ class CharacterSheetBuilder {
 		this._selectedRacialSpells.forEach(spell => {
 			if (!spell?.name) return;
 
-			// Add the spell as a known cantrip or spell
 			if (spell.level === 0) {
-				this._state.addCantrip({
-					name: spell.name,
-					source: spell.source,
-					level: 0,
-					isPermanent: true,
+				this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(spell, {
 					sourceFeature: sourceName,
-					castingAbility: spellAbility,
-				});
+					sourceClass: null,
+				}));
 			} else {
-				this._state.addSpell({
-					name: spell.name,
-					source: spell.source,
-					level: spell.level || 1,
-					isPermanent: true,
+				this._state.addSpell(CharacterSheetClassUtils.buildSpellStateObject(spell, {
 					sourceFeature: sourceName,
-					castingAbility: spellAbility,
-					isKnown: true,
-				});
+					sourceClass: null,
+					prepared: true,
+				}));
 			}
 		});
 	}
@@ -1239,62 +1242,18 @@ class CharacterSheetBuilder {
 	 * Add a racial spell to the character's spell list
 	 */
 	_addRacialSpell (spellData, sourceName, isAlwaysPrepared) {
-		const spell = {
-			name: spellData.name,
-			source: spellData.source,
-			level: spellData.level,
-			school: spellData.school,
-			prepared: spellData.level === 0 || isAlwaysPrepared, // Cantrips always prepared
-			ritual: spellData.ritual || false,
-			concentration: spellData.concentration || false,
-			castingTime: this._getSpellCastingTime(spellData),
-			range: this._getSpellRange(spellData),
-			components: this._getSpellComponents(spellData),
-			duration: this._getSpellDuration(spellData),
-		};
-
-		this._state.addSpell(spell);
-	}
-
-	// Helper methods for spell data formatting
-	_getSpellCastingTime (spell) {
-		if (!spell.time?.length) return "";
-		const time = spell.time[0];
-		return `${time.number} ${time.unit}`;
-	}
-
-	_getSpellRange (spell) {
-		if (!spell.range) return "";
-		const range = spell.range;
-		if (range.type === "point") {
-			if (range.distance?.type === "self") return "Self";
-			if (range.distance?.type === "touch") return "Touch";
-			return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
+		if (spellData.level === 0) {
+			this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(spellData, {
+				sourceFeature: sourceName,
+				sourceClass: null,
+			}));
+		} else {
+			this._state.addSpell(CharacterSheetClassUtils.buildSpellStateObject(spellData, {
+				sourceFeature: sourceName,
+				sourceClass: null,
+				prepared: spellData.level === 0 || isAlwaysPrepared,
+			}));
 		}
-		return `${range.distance?.amount || ""} ${range.distance?.type || ""}`.trim();
-	}
-
-	_getSpellComponents (spell) {
-		if (!spell.components) return "";
-		const parts = [];
-		if (spell.components.v) parts.push("V");
-		if (spell.components.s) parts.push("S");
-		if (spell.components.m) {
-			const mText = typeof spell.components.m === "string" ? spell.components.m : spell.components.m?.text || "";
-			parts.push(mText ? `M (${mText})` : "M");
-		}
-		return parts.join(", ");
-	}
-
-	_getSpellDuration (spell) {
-		if (!spell.duration?.length) return "";
-		const dur = spell.duration[0];
-		if (dur.type === "instant") return "Instantaneous";
-		if (dur.type === "permanent") return "Until dispelled";
-		if (dur.concentration) {
-			return `Concentration, up to ${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
-		}
-		return `${dur.duration?.amount || ""} ${dur.duration?.type || ""}`.trim();
 	}
 
 	_applyClassFeatures () {
@@ -1607,6 +1566,29 @@ class CharacterSheetBuilder {
 	_applySelectedOptionalFeatures () {
 		if (!this._selectedOptionalFeatures) return;
 
+		// Build set of currently selected features (name|source)
+		const selectedKeys = new Set();
+		Object.values(this._selectedOptionalFeatures).flat().forEach(opt => {
+			selectedKeys.add(`${opt.name}|${opt.source}`);
+		});
+
+		// Remove optional features from state that are no longer selected
+		// Only remove level 1 optional features for this class (builder context)
+		const className = this._selectedClass?.name;
+		const existingOptFeatures = this._state.getFeatures().filter(f =>
+			f.featureType === "Optional Feature"
+			&& f.level === 1
+			&& f.className === className,
+		);
+
+		existingOptFeatures.forEach(f => {
+			const key = `${f.name}|${f.source}`;
+			if (!selectedKeys.has(key)) {
+				this._state.removeFeature(f.name, f.source);
+			}
+		});
+
+		// Add selected optional features
 		Object.entries(this._selectedOptionalFeatures).forEach(([featureKey, features]) => {
 			features.forEach(opt => {
 				this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(opt, {
@@ -1964,7 +1946,11 @@ class CharacterSheetBuilder {
 				{name: "__MONK_RESOURCE__", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
 			],
 			"Sorcerer": [
-				{name: "Sorcery Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "long"},
+				{name: "Sorcery Points", maxByLevel: lvl => {
+					const isTGTT = cls.source === "TGTT";
+					if (isTGTT) return lvl + 1;
+					return lvl >= 2 ? lvl : 0;
+				}, recharge: "long"},
 			],
 			"Paladin": [
 				// Lay on Hands pool = 5 * level, not parseable
@@ -2065,16 +2051,24 @@ class CharacterSheetBuilder {
 
 		// Check if Quick Build target level is set
 		if (this._quickBuildTargetLevel > 1 && this._page._quickBuild && this._selectedClass) {
+			const quickBuildLaunchData = {
+				classData: this._selectedClass,
+				targetLevel: this._quickBuildTargetLevel,
+				subclass: this._selectedSubclass || null,
+				subclassChoice: CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity),
+			};
+
 			// Switch to overview first so user sees the character
 			this._page.switchToTab("#charsheet-tab-overview");
 			JqueryUtil.doToast({type: "success", content: "Character created! Opening Quick Build wizard..."});
 
 			// Small delay to let the UI settle, then open Quick Build
 			setTimeout(() => {
-				this._page._quickBuild.showFromBuilder({
-					classData: this._selectedClass,
-					targetLevel: this._quickBuildTargetLevel,
-				});
+				void this._page._quickBuild.showFromBuilder(quickBuildLaunchData)
+					.catch(err => {
+						void err;
+						JqueryUtil.doToast({type: "warning", content: "Character created, but Quick Build could not be opened automatically."});
+					});
 			}, 500);
 		} else {
 			// Switch to overview tab
@@ -6598,8 +6592,25 @@ class CharacterSheetBuilder {
 		// Build skill proficiencies array
 		const skillProfs = data.skills.map(s => s.toLowerCase().replace(/\s+/g, " "));
 
-		// Build tool proficiencies
+		// Build tool proficiencies - detect choice-based tools vs fixed tools
 		const toolProfs = data.tools.filter(t => t);
+		const choiceToolMap = {
+			"musical instrument": "anyMusicalInstrument",
+			"artisan's tools": "anyArtisansTool",
+			"gaming set": "anyGamingSet",
+		};
+		const fixedTools = toolProfs.filter(t => !choiceToolMap[t.toLowerCase()]);
+		const choiceTools = toolProfs.filter(t => choiceToolMap[t.toLowerCase()]);
+
+		// Build toolProficiencies array with correct structure
+		const toolProficiencies = [];
+		if (fixedTools.length) {
+			toolProficiencies.push(Object.fromEntries(fixedTools.map(t => [t.toLowerCase(), true])));
+		}
+		choiceTools.forEach(t => {
+			const key = choiceToolMap[t.toLowerCase()];
+			toolProficiencies.push({[key]: 1});
+		});
 
 		// Build language proficiencies
 		const langProfs = data.languages.filter(l => l);
@@ -6609,7 +6620,7 @@ class CharacterSheetBuilder {
 			source: "Custom",
 			_isCustom: true,
 			skillProficiencies: skillProfs.length ? [{[skillProfs[0]]: true, [skillProfs[1]]: true}] : [],
-			toolProficiencies: toolProfs.length ? [Object.fromEntries(toolProfs.map(t => [t.toLowerCase(), true]))] : [],
+			toolProficiencies: toolProficiencies,
 			languageProficiencies: langProfs.length ? [Object.fromEntries(langProfs.map(l => [l.toLowerCase(), true]))] : [],
 			entries: [
 				data.feature ? {
@@ -7681,13 +7692,16 @@ class CharacterSheetBuilder {
 			cls.casterProgression || this._selectedSubclass?.casterProgression, 1,
 		);
 
-		// Determine additional class spell lists (e.g. Cleric for Divine Soul)
-		const additionalClassNames = (className === "Sorcerer" && this._includeDivineSoulSpells)
-			? ["Cleric"] : [];
+		const additionalClassNames = CharacterSheetClassUtils.getAdditionalSpellListClasses({
+			className,
+			subclass: this._selectedSubclass,
+			subclassChoice: this._divineSoulAffinity,
+		});
 
 		return {
 			className,
 			classSource: cls.source,
+			classLevel: 1,
 			spellCount: knownAtLevel1 || 0,
 			cantripCount: cantripsAtLevel1 || 0,
 			maxSpellLevel,
@@ -7716,27 +7730,32 @@ class CharacterSheetBuilder {
 
 		$content.append($container);
 
-		// Divine Soul toggle for Sorcerers
-		if (knownInfo.className === "Sorcerer") {
-			const $toggleSection = $(`
+		if (knownInfo.className === "Sorcerer" && CharacterSheetClassUtils.isDivineSoulSubclass(this._selectedSubclass)) {
+			const affinityOptions = CharacterSheetClassUtils.getDivineSoulAffinityOptions(this._selectedSubclass);
+			const selectedAffinity = CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity);
+			const $affinitySection = $(`
 				<div class="charsheet__builder-feat-opt-section mb-3" style="padding: 0.75rem; background: var(--cs-bg-secondary, #f8f9fa); border-radius: 4px;">
-					<label class="ve-flex-v-center gap-2 mb-0" style="cursor: pointer;">
-						<input type="checkbox" class="form-check-input" ${this._includeDivineSoulSpells ? "checked" : ""}>
-						<span class="ve-bold">Include Cleric Spells</span>
-						<span class="ve-muted ve-small">(Divine Soul Origin)</span>
+					<label class="ve-flex-col gap-2 mb-0">
+						<span class="ve-bold">Divine Soul Affinity</span>
+						<select class="form-control form-control-sm">
+							<option value="">Choose an affinity</option>
+							${affinityOptions.map(opt => `<option value="${opt.key}" ${selectedAffinity?.key === opt.key ? "selected" : ""}>${opt.name}</option>`).join("")}
+						</select>
+						<span class="ve-small ve-muted">This affinity grants your extra Divine Soul spell and unlocks Cleric spells while you pick Sorcerer spells.</span>
 					</label>
-					<p class="ve-small ve-muted mt-1 mb-0">Enable this if your Sorcerous Origin grants access to the Cleric spell list.</p>
 				</div>
 			`);
-			
-			const $checkbox = $toggleSection.find("input[type=checkbox]");
-			$checkbox.on("change", () => {
-				this._includeDivineSoulSpells = $checkbox.prop("checked");
-				// Re-render the spell picker with updated class list
+
+			$affinitySection.find("select").on("change", evt => {
+				this._divineSoulAffinity = affinityOptions.find(opt => opt.key === evt.target.value) || null;
+				this._state.setSubclassChoice(this._selectedClass?.name, this._divineSoulAffinity);
+				this._state.updateLevelChoice?.(1, {
+					subclassChoice: CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity),
+				});
 				this._renderSpellsStep($content.empty());
 			});
-			
-			$container.find("#builder-spell-picker").before($toggleSection);
+
+			$container.find("#builder-spell-picker").before($affinitySection);
 		}
 
 		const allSpells = this._page.getSpells() || [];
@@ -7745,7 +7764,7 @@ class CharacterSheetBuilder {
 		// Existing known spell IDs (empty for builder — first-time creation)
 		const knownSpellIds = new Set();
 
-		// Re-get knownInfo to reflect toggle state
+		// Re-get knownInfo to reflect the current affinity selection
 		const updatedKnownInfo = this._getKnownCasterInfoForBuilder();
 
 		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
@@ -7773,25 +7792,27 @@ class CharacterSheetBuilder {
 		const knownInfo = this._getKnownCasterInfoForBuilder();
 		if (!knownInfo) return;
 
+		this._state.setSubclassChoice(knownInfo.className, this._divineSoulAffinity);
+
 		// Add selected spells to character state
 		for (const spell of this._selectedKnownSpells) {
-			this._state.addSpell({
-				name: spell.name,
-				source: spell.source,
-				level: spell.level,
-				className: knownInfo.className,
-				classSource: knownInfo.classSource,
-				isKnown: true,
-			});
+			this._state.addSpell(CharacterSheetClassUtils.buildSpellStateObject(spell, {
+				sourceFeature: "Spells Known",
+				sourceClass: knownInfo.className,
+				prepared: true,
+			}));
 		}
 		for (const cantrip of this._selectedKnownCantrips) {
-			this._state.addSpell({
-				name: cantrip.name,
-				source: cantrip.source,
-				level: 0,
-				className: knownInfo.className,
-				classSource: knownInfo.classSource,
-				isKnown: true,
+			this._state.addCantrip(CharacterSheetClassUtils.buildCantripStateObject(cantrip, {
+				sourceFeature: "Cantrips Known",
+				sourceClass: knownInfo.className,
+			}));
+		}
+
+		if (knownInfo.className === "Sorcerer" && CharacterSheetClassUtils.isDivineSoulSubclass(this._selectedSubclass)) {
+			this._state.ensureDivineSoulKnownSpell(knownInfo.className);
+			this._state.updateLevelChoice?.(1, {
+				subclassChoice: CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity),
 			});
 		}
 	}

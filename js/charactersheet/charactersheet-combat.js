@@ -1708,6 +1708,7 @@ class CharacterSheetCombat {
 		this.renderCombatEffects();
 		this.renderCombatResources();
 		this.renderCombatActions();
+		this.renderCombatMetamagic();
 		this.renderCombatStates();
 
 		// Render combat stats
@@ -1744,6 +1745,9 @@ class CharacterSheetCombat {
 
 			// Skip combat methods (they have their own section)
 			if (f.optionalFeatureTypes?.some(ft => /^CTM:\d?[A-Z]{2}$/.test(ft))) return false;
+
+			// Skip metamagic features (managed via metamagic dashboard)
+			if (f.optionalFeatureTypes?.includes("MM")) return false;
 
 			// Exclude non-combat features explicitly
 			const excludePatterns = [
@@ -1795,7 +1799,6 @@ class CharacterSheetCombat {
 				"hex", "hexblade's curse",
 				"rage", "reckless attack",
 				"bardic inspiration",
-				"metamagic",
 				"arcane recovery",
 			];
 
@@ -3597,45 +3600,62 @@ class CharacterSheetCombat {
 			if (damageStr === null) return;
 
 			const damage = parseInt(damageStr) || 0;
-			const dc = Math.max(10, Math.floor(damage / 2));
-
-			// Roll CON save
-			const conMod = this._state.getAbilityMod?.("con") || 0;
-			const profBonus = this._state.getProficiencyBonus?.() || 0;
-
-			// Check if character has proficiency in CON saves
-			const saves = this._state.getSavingThrowProficiencies?.() || [];
-			const hasConProf = saves.includes("con") || saves.includes("constitution");
-
-			// Check for War Caster feat (advantage on concentration saves)
-			const features = this._state.getFeatures?.() || [];
-			const hasWarCaster = features.some(f =>
-				f.name?.toLowerCase().includes("war caster")
-				|| f.name?.toLowerCase().includes("warcaster"),
-			);
-
-			const totalBonus = conMod + (hasConProf ? profBonus : 0);
+			const concentrationCheck = this._state.makeConcentrationCheck?.(damage) || {
+				dc: Math.max(10, Math.floor(damage / 2)),
+				bonus: 0,
+				advantage: false,
+				sources: [],
+			};
+			const dc = concentrationCheck.dc;
+			const totalBonus = concentrationCheck.bonus;
+			const hasAdvantage = concentrationCheck.advantage;
 
 			// Roll the d20
 			const roll1 = this._page.rollDice(1, 20);
-			const roll2 = hasWarCaster ? this._page.rollDice(1, 20) : null;
-			const roll = hasWarCaster ? Math.max(roll1, roll2) : roll1;
+			const roll2 = hasAdvantage ? this._page.rollDice(1, 20) : null;
+			let finalRoll1 = roll1;
+			let finalRoll2 = roll2;
+			let roll = hasAdvantage ? Math.max(finalRoll1, finalRoll2) : finalRoll1;
 			const total = roll + totalBonus;
-			const success = total >= dc;
+			let success = total >= dc;
+			let rerollMessage = "";
+
+			if (!success && this._state.canUseFocusedConcentrationReroll?.()) {
+				this._state.useFocusedConcentrationReroll?.();
+				const rerolledDieLabel = hasAdvantage && finalRoll2 != null
+					? (finalRoll1 <= finalRoll2 ? "lower concentration die" : "higher concentration die")
+					: "concentration die";
+				const rerolledValue = this._page.rollDice(1, 20);
+
+				if (hasAdvantage && finalRoll2 != null) {
+					if (finalRoll1 <= finalRoll2) finalRoll1 = rerolledValue;
+					else finalRoll2 = rerolledValue;
+					roll = Math.max(finalRoll1, finalRoll2);
+				} else {
+					finalRoll1 = rerolledValue;
+					roll = finalRoll1;
+				}
+
+				success = (roll + totalBonus) >= dc;
+				rerollMessage = ` Focused Spell rerolled the ${rerolledDieLabel}.`;
+			}
 
 			// Build result message
 			let rollStr = `d20(${roll})`;
-			if (hasWarCaster) {
-				rollStr = `d20(${roll1}, ${roll2}) = ${roll} (War Caster advantage)`;
+			if (hasAdvantage) {
+				const sourceText = concentrationCheck.sources?.length
+					? ` (${concentrationCheck.sources.join(", ")})`
+					: "";
+				rollStr = `d20(${finalRoll1}, ${finalRoll2}) = ${roll}${sourceText}`;
 			}
 
 			const bonusStr = totalBonus >= 0 ? `+${totalBonus}` : `${totalBonus}`;
 			const resultEmoji = success ? "✅" : "❌";
-			const resultText = success ? "SUCCESS - Concentration maintained!" : "FAILED - Concentration broken!";
+			const resultText = success ? `SUCCESS - Concentration maintained!${rerollMessage}` : `FAILED - Concentration broken!${rerollMessage}`;
 
 			JqueryUtil.doToast({
 				type: success ? "success" : "danger",
-				content: `${resultEmoji} Concentration Save vs DC ${dc}: ${rollStr} ${bonusStr} = ${total}. ${resultText}`,
+				content: `${resultEmoji} Concentration Save vs DC ${dc}: ${rollStr} ${bonusStr} = ${roll + totalBonus}. ${resultText}`,
 			});
 
 			// If failed, break concentration
@@ -4785,6 +4805,159 @@ class CharacterSheetCombat {
 		const v = n % 100;
 		return s[(v - 20) % 10] || s[v] || s[0];
 	}
+	// #endregion
+
+	// #region Metamagic Dashboard
+
+	renderCombatMetamagic () {
+		CharacterSheetCombat.renderMetamagicDashboard(this._state, this._page, "#charsheet-combat-metamagic", "#charsheet-combat-metamagic-section", "#charsheet-combat-metamagic-sp");
+	}
+
+	static renderMetamagicDashboard (state, page, containerSel, sectionSel, spBadgeSel) {
+		const $container = $(containerSel);
+		const $section = $(sectionSel);
+		const $spBadge = $(spBadgeSel);
+		if (!$container.length) return;
+
+		const calc = state.getFeatureCalculations();
+		if (!calc.hasMetamagic) {
+			$section.hide();
+			return;
+		}
+
+		const knownKeys = new Set(state.getKnownMetamagicKeys?.() || []);
+		if (!knownKeys.size) {
+			$section.hide();
+			return;
+		}
+
+		$section.show();
+		$container.empty();
+
+		const sp = state.getSorceryPoints();
+
+		// Update SP badge
+		if ($spBadge.length) {
+			$spBadge.text(`${sp.current}/${sp.max}`);
+		}
+
+		const passiveMetamagics = (state.getPassiveMetamagics?.() || [])
+			.filter(meta => knownKeys.has(meta.key));
+		const activeMetamagics = (state.getActiveMetamagics?.() || [])
+			.filter(meta => knownKeys.has(meta.key));
+
+		const renderCost = (cost) => {
+			if (cost === "level") return "spell level SP";
+			if (cost === "halfLevel") return "½ level SP";
+			return `${cost} SP`;
+		};
+
+		// SP summary row
+		const $spRow = $(`
+			<div class="charsheet__mm-sp-summary">
+				<div class="charsheet__mm-sp-current">
+					<span class="charsheet__mm-sp-label">Available</span>
+					<span class="charsheet__mm-sp-value">${sp.current}</span>
+					<span class="charsheet__mm-sp-max">/ ${sp.max}</span>
+				</div>
+			</div>
+		`);
+		$container.append($spRow);
+
+		// Tuned passives section
+		const tunedPassives = passiveMetamagics.filter(m => m.tuned);
+		const untunedPassives = passiveMetamagics.filter(m => !m.tuned);
+
+		if (tunedPassives.length) {
+			const $tunedHeader = $(`<div class="charsheet__mm-group-label">Tuned Passives</div>`);
+			$container.append($tunedHeader);
+
+			for (const meta of tunedPassives) {
+				const $row = $(`
+					<div class="charsheet__mm-row charsheet__mm-row--tuned">
+						<span class="charsheet__mm-indicator charsheet__mm-indicator--active">●</span>
+						<div class="charsheet__mm-info">
+							<span class="charsheet__mm-name">${meta.name}</span>
+							<span class="charsheet__mm-cost">${renderCost(meta.cost)}</span>
+						</div>
+						<span class="charsheet__mm-desc">${meta.description}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-outline-danger charsheet__mm-tune-btn" data-metamagic-key="${meta.key}">Detune</button>
+					</div>
+				`);
+				$container.append($row);
+			}
+		}
+
+		// Available passives section
+		if (untunedPassives.length) {
+			const $untunedHeader = $(`<div class="charsheet__mm-group-label">Available Passives</div>`);
+			$container.append($untunedHeader);
+
+			for (const meta of untunedPassives) {
+				const canAfford = typeof meta.cost === "number" && sp.max >= meta.cost;
+				const $row = $(`
+					<div class="charsheet__mm-row charsheet__mm-row--available">
+						<span class="charsheet__mm-indicator">○</span>
+						<div class="charsheet__mm-info">
+							<span class="charsheet__mm-name">${meta.name}</span>
+							<span class="charsheet__mm-cost">${renderCost(meta.cost)}</span>
+						</div>
+						<span class="charsheet__mm-desc">${meta.description}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-outline-success charsheet__mm-tune-btn" data-metamagic-key="${meta.key}" ${!canAfford ? `disabled title="Not enough effective sorcery points"` : ""}>Tune</button>
+					</div>
+				`);
+				$container.append($row);
+			}
+		}
+
+		// Active metamagics section (info-only)
+		if (activeMetamagics.length) {
+			const $activeHeader = $(`<div class="charsheet__mm-group-label">Active <span class="ve-muted ve-small">(at cast time)</span></div>`);
+			$container.append($activeHeader);
+
+			for (const meta of activeMetamagics) {
+				const $row = $(`
+					<div class="charsheet__mm-row charsheet__mm-row--active-info">
+						<span class="charsheet__mm-indicator charsheet__mm-indicator--cast">◆</span>
+						<div class="charsheet__mm-info">
+							<span class="charsheet__mm-name">${meta.name}</span>
+							<span class="charsheet__mm-cost">${renderCost(meta.cost)}</span>
+						</div>
+						<span class="charsheet__mm-desc">${meta.description}</span>
+					</div>
+				`);
+				$container.append($row);
+			}
+		}
+
+		// Bind tune/detune buttons
+		$container.find(".charsheet__mm-tune-btn").each((_, btn) => {
+			$(btn).on("click", () => {
+				const key = $(btn).data("metamagic-key");
+				if (state.isMetamagicTuned?.(key)) {
+					state.detuneMetamagic(key);
+				} else {
+					if (!state.tuneMetamagic(key)) {
+						JqueryUtil.doToast({type: "warning", content: "Not enough sorcery points to tune this metamagic."});
+						return;
+					}
+				}
+				page.saveCharacter?.();
+				// Re-render all metamagic dashboards
+				CharacterSheetCombat.renderMetamagicDashboard(state, page, containerSel, sectionSel, spBadgeSel);
+				// Also refresh the other tab's dashboard
+				CharacterSheetCombat.renderMetamagicDashboard(
+					state, page,
+					containerSel === "#charsheet-combat-metamagic" ? "#charsheet-overview-metamagic" : "#charsheet-combat-metamagic",
+					containerSel === "#charsheet-combat-metamagic" ? "#charsheet-overview-metamagic-section" : "#charsheet-combat-metamagic-section",
+					containerSel === "#charsheet-combat-metamagic" ? "#charsheet-overview-metamagic-sp" : "#charsheet-combat-metamagic-sp",
+				);
+				// Refresh resources section so SP counter stays in sync
+				if (typeof page._renderResources === "function") page._renderResources();
+			});
+		});
+	}
+
 	// #endregion
 }
 

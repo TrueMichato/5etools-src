@@ -218,59 +218,35 @@ export class LevelUpPage {
 	 * Select a subclass by name (clicks the radio button container)
 	 */
 	async selectSubclass (subclassName: string, sourceAbbv?: string): Promise<void> {
-		// First ensure the subclass accordion is expanded
-		// Wait for radio buttons to appear within the wizard
-		await this.page.waitForTimeout(500);
+		await this.expandAccordion("subclass");
+		const wizard = this.page.locator(".charsheet__levelup-wizard");
+		const subclassAccordion = this.page.locator('[data-accordion-id="subclass"]');
+		await subclassAccordion.waitFor({state: "visible", timeout: 10000});
 
-		// Try to find and click the "Choose ... Subclass" accordion header to expand it
-		const chooseHeader = this.page.locator(".charsheet__levelup-wizard").getByText(/Choose.*Subclass/i).first();
-		if (await chooseHeader.count() > 0 && await chooseHeader.isVisible()) {
-			await chooseHeader.click();
-			await this.page.waitForTimeout(500);
+		const options = subclassAccordion.locator(".charsheet__levelup-option");
+		await options.first().waitFor({state: "visible", timeout: 10000});
+
+		const optionCount = await options.count();
+		for (let i = 0; i < optionCount; i++) {
+			const option = options.nth(i);
+			if (!(await option.isVisible())) continue;
+
+			const text = await option.textContent() || "";
+			if (!text.includes(subclassName)) continue;
+			if (sourceAbbv && !text.includes(sourceAbbv)) continue;
+
+			await option.scrollIntoViewIfNeeded();
+			await option.click({force: true});
+
+			const radio = option.locator("input[type='radio']").first();
+			await expect(radio).toBeChecked({timeout: 5000});
+
+			const summaryItem = wizard.locator(".charsheet__levelup-summary-item").filter({hasText: /Origin|Subclass/i}).first();
+			await expect(summaryItem).toContainText(subclassName, {timeout: 5000});
+			return;
 		}
 
-		// Wait for radio buttons to appear
-		const radios = this.page.locator(".charsheet__levelup-wizard input[type='radio']");
-		try {
-			await radios.first().waitFor({state: "visible", timeout: 5000});
-		} catch {
-			// Radio buttons might not appear — try clicking the accordion header again
-			const headers = this.page.locator(".charsheet__levelup-wizard").getByText("Subclass");
-			if (await headers.count() > 0) {
-				await headers.first().click();
-				await this.page.waitForTimeout(500);
-			}
-		}
-
-		// Now find and click the subclass radio
-		const allRadios = this.page.locator(".charsheet__levelup-wizard input[type='radio']");
-		const radioCount = await allRadios.count();
-
-		for (let i = radioCount - 1; i >= 0; i--) { // Iterate backwards to prefer PHB'24
-			const radio = allRadios.nth(i);
-			if (!(await radio.isVisible())) continue;
-
-			// Get the parent container text
-			const container = radio.locator("xpath=ancestor::*[position()=1]");
-			const text = await container.textContent() || "";
-			if (text.includes(subclassName)) {
-				if (sourceAbbv && !text.includes(sourceAbbv)) continue;
-				await radio.click({force: true});
-				await this.page.waitForTimeout(300);
-				return;
-			}
-		}
-
-		// Fallback: click text within wizard that matches subclass name
-		const nameLink = this.page.locator(`.charsheet__levelup-wizard a`).filter({hasText: subclassName});
-		if (await nameLink.count() > 0) {
-			const lastMatch = nameLink.last();
-			if (await lastMatch.isVisible()) {
-				// Click the parent container (which has the radio)
-				await lastMatch.locator("xpath=ancestor::*[.//input[@type='radio']][1]").click();
-				await this.page.waitForTimeout(300);
-			}
-		}
+		throw new Error(`Could not find subclass "${subclassName}"${sourceAbbv ? ` with source "${sourceAbbv}"` : ""}`);
 	}
 
 	// ========== KNOWN SPELLS SECTION ==========
@@ -279,10 +255,29 @@ export class LevelUpPage {
 	 * Add a spell to known spells
 	 */
 	async addKnownSpell (spellName: string): Promise<void> {
-		const spellItem = this.page.locator(".charsheet__levelup-spell-item").filter({hasText: spellName});
-		if (await spellItem.isVisible()) {
-			await spellItem.click();
+		const knownSpellsAccordion = this.page.locator('[data-accordion-id="knownspells"]');
+		const spellItem = knownSpellsAccordion.locator(".charsheet__modal-list-item").filter({hasText: spellName}).first();
+		await spellItem.waitFor({state: "visible", timeout: 10000});
+		await spellItem.locator(".spell-toggle").click();
+		await this.page.waitForTimeout(150);
+	}
+
+	async addFirstAvailableKnownSpells (count: number): Promise<void> {
+		const knownSpellsAccordion = this.page.locator('[data-accordion-id="knownspells"]');
+		for (let i = 0; i < count; i++) {
+			const addButton = knownSpellsAccordion.locator(".spell-toggle.ve-btn-primary").first();
+			await addButton.waitFor({state: "visible", timeout: 10000});
+			await addButton.click();
+			await this.page.waitForTimeout(150);
 		}
+	}
+
+	async selectOptionalFeature (featureName: string): Promise<void> {
+		const optFeaturesAccordion = this.page.locator('[data-accordion-id="optfeatures"]');
+		const label = optFeaturesAccordion.locator("label").filter({hasText: featureName}).first();
+		await label.waitFor({state: "visible", timeout: 10000});
+		await label.click();
+		await this.page.waitForTimeout(150);
 	}
 
 	// ========== COMPLETION ==========
@@ -372,6 +367,19 @@ export class LevelUpPage {
 			await primaryBtn.first().click();
 			await this.page.waitForTimeout(1000);
 		}
+	}
+
+	async expectDivineSoulAffinityModalVisible (): Promise<void> {
+		await expect(this.page.locator(".ui-modal__inner").filter({hasText: "Divine Soul Affinity"}).last()).toBeVisible();
+	}
+
+	async selectDivineSoulAffinity (affinityName: string): Promise<void> {
+		const modal = this.page.locator(".ui-modal__inner").filter({hasText: "Divine Soul Affinity"}).last();
+		await modal.waitFor({state: "visible", timeout: 10000});
+		const select = modal.locator("select").first();
+		await select.selectOption({label: affinityName});
+		await modal.getByRole("button", {name: "OK"}).click();
+		await modal.waitFor({state: "hidden", timeout: 10000});
 	}
 
 	/**

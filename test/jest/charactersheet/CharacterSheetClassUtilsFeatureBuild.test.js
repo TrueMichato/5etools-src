@@ -138,3 +138,74 @@ describe("CharacterSheetClassUtils optional feature parsing", () => {
 		expect(effects.find(e => e.type === "passive:perception")).toBeDefined();
 	});
 });
+
+describe("getFeatureOptionsForLevel deduplication", () => {
+	test("should return pure-optionalfeature groups from raw output", () => {
+		// Simulate a "Metamagic Options" class feature with refOptionalfeature entries
+		const features = [{
+			name: "Metamagic Options",
+			source: "XPHB",
+			className: "Sorcerer",
+			classSource: "XPHB",
+			level: 2,
+			entries: [{
+				type: "options",
+				count: 2,
+				entries: [
+					{type: "refOptionalfeature", optionalfeature: "Careful Spell|XPHB"},
+					{type: "refOptionalfeature", optionalfeature: "Distant Spell|XPHB"},
+					{type: "refOptionalfeature", optionalfeature: "Quickened Spell|XPHB"},
+				],
+			}],
+		}];
+
+		const raw = CharacterSheetClassUtils.getFeatureOptionsForLevel(features, 2, []);
+		expect(raw.length).toBe(1);
+		expect(raw[0].options.every(o => o.type === "optionalfeature")).toBe(true);
+	});
+
+	test("quickbuild-style filter removes pure-optionalfeature groups", () => {
+		const features = [{
+			name: "Metamagic Options",
+			source: "XPHB",
+			className: "Sorcerer",
+			classSource: "XPHB",
+			level: 2,
+			entries: [{
+				type: "options",
+				count: 2,
+				entries: [
+					{type: "refOptionalfeature", optionalfeature: "Careful Spell|XPHB"},
+					{type: "refOptionalfeature", optionalfeature: "Distant Spell|XPHB"},
+				],
+			}],
+		}];
+
+		const filtered = CharacterSheetClassUtils.getFeatureOptionsForLevel(features, 2, [])
+			.filter(optGroup => !optGroup.options.every(opt => opt.type === "optionalfeature"));
+		expect(filtered.length).toBe(0);
+	});
+
+	test("filter preserves groups with non-optionalfeature options (e.g. classFeature specialties)", () => {
+		const features = [{
+			name: "Specialty",
+			source: "TGTT",
+			className: "Fighter",
+			classSource: "TGTT",
+			level: 1,
+			entries: [{
+				type: "options",
+				count: 1,
+				entries: [
+					{type: "refClassFeature", classFeature: "Brawler|Fighter|TGTT|1"},
+					{type: "refClassFeature", classFeature: "Tactician|Fighter|TGTT|1"},
+				],
+			}],
+		}];
+
+		const filtered = CharacterSheetClassUtils.getFeatureOptionsForLevel(features, 1, [])
+			.filter(optGroup => !optGroup.options.every(opt => opt.type === "optionalfeature"));
+		expect(filtered.length).toBe(1);
+		expect(filtered[0].options.every(o => o.type === "classFeature")).toBe(true);
+	});
+});

@@ -27,6 +27,8 @@ export class BuilderWizardPage {
 	readonly classList: Locator;
 	readonly classPreview: Locator;
 	readonly subclassSelect: Locator;
+	readonly quickBuildLevelSlider: Locator;
+	readonly quickBuildLevelDisplay: Locator;
 
 	// Abilities step
 	readonly abilityMethodSelect: Locator;
@@ -65,6 +67,8 @@ export class BuilderWizardPage {
 		this.classList = page.locator("#builder-class-list");
 		this.classPreview = page.locator("#builder-class-preview");
 		this.subclassSelect = page.locator("#builder-subclass-select");
+		this.quickBuildLevelSlider = page.locator("#builder-quickbuild-level-slider");
+		this.quickBuildLevelDisplay = page.locator("#builder-quickbuild-level-display");
 
 		// Abilities step
 		this.abilityMethodSelect = page.locator('[data-testid="builder-ability-method"]');
@@ -224,6 +228,31 @@ export class BuilderWizardPage {
 	async selectSubclass (subclassName: string): Promise<void> {
 		await this.subclassSelect.selectOption({label: subclassName});
 		await this.page.waitForTimeout(100);
+	}
+
+	async setQuickBuildTargetLevel (level: number): Promise<void> {
+		await this.classPreview.waitFor({state: "visible", timeout: 10000});
+		await expect(this.classPreview).toContainText("Quick Build", {timeout: 10000});
+		await this.quickBuildLevelSlider.waitFor({state: "visible", timeout: 10000});
+		await this.quickBuildLevelSlider.evaluate((element, value) => {
+			const input = /** @type {HTMLInputElement} */ (element);
+			input.value = String(value);
+			input.dispatchEvent(new Event("input", {bubbles: true}));
+		}, level);
+		await expect(this.quickBuildLevelDisplay).toHaveText(String(level));
+	}
+
+	async expectDivineSoulAffinityModalVisible (): Promise<void> {
+		await expect(this.page.locator(".ui-modal__inner").filter({hasText: "Divine Soul Affinity"}).last()).toBeVisible();
+	}
+
+	async selectDivineSoulAffinity (affinityName: string): Promise<void> {
+		const modal = this.page.locator(".ui-modal__inner").filter({hasText: "Divine Soul Affinity"}).last();
+		await modal.waitFor({state: "visible", timeout: 10000});
+		const select = modal.locator("select").first();
+		await select.selectOption({label: affinityName});
+		await modal.getByRole("button", {name: "OK"}).click();
+		await modal.waitFor({state: "hidden", timeout: 10000});
 	}
 
 	/**
@@ -435,6 +464,50 @@ export class BuilderWizardPage {
 				}
 			});
 			await this.page.waitForTimeout(300);
+		}
+	}
+
+	async autoFillStartingSpells (opts?: {divineSoulAffinity?: string}): Promise<void> {
+		const heading = this.page.getByRole("heading", {name: "Starting Spells"});
+		if (!await heading.count() || !await heading.isVisible()) return;
+
+		const builderRoot = this.page.locator("#charsheet-builder");
+		if (opts?.divineSoulAffinity) {
+			const affinitySection = builderRoot.locator(".charsheet__builder-feat-opt-section").filter({hasText: "Divine Soul Affinity"}).first();
+			if (await affinitySection.count()) {
+				const affinitySelect = affinitySection.locator("select").first();
+				await affinitySelect.selectOption({label: opts.divineSoulAffinity});
+				await this.page.waitForTimeout(300);
+			}
+		}
+
+		const controls = builderRoot.locator("select");
+		if (await controls.count() < 1) return;
+
+		const levelFilter = controls.first();
+		const summaryText = (await builderRoot.locator("p").filter({hasText: /Choose .* spells/i}).first().textContent()) || "";
+		const cantripCount = parseInt(summaryText.match(/and\s+(\d+)\s+cantrips?/i)?.[1] || "0", 10);
+		const spellCount = parseInt(summaryText.match(/Choose\s+(\d+)\s+spells?/i)?.[1] || "0", 10);
+
+		const addVisibleSpells = async (count: number) => {
+			for (let added = 0; added < count; added++) {
+				const addButton = builderRoot.getByRole("button", {name: /add/i}).filter({hasText: /add/i}).first();
+				await addButton.waitFor({state: "visible", timeout: 10000});
+				await addButton.click();
+				await this.page.waitForTimeout(100);
+			}
+		};
+
+		if (cantripCount > 0) {
+			await levelFilter.selectOption({label: "Cantrips"});
+			await this.page.waitForTimeout(200);
+			await addVisibleSpells(cantripCount);
+		}
+
+		if (spellCount > 0) {
+			await levelFilter.selectOption({label: "Level 1"});
+			await this.page.waitForTimeout(200);
+			await addVisibleSpells(spellCount);
 		}
 	}
 

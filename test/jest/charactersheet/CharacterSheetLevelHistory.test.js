@@ -354,6 +354,63 @@ describe("CharacterSheetLevelHistory", () => {
 			expect(history[1].choices.replayData).toBeDefined();
 			expect(history[1].choices.replayData.featureChoices[0].parentFeature).toBe("Specialties");
 		});
+		it("should replay optional features from history when loading a save", () => {
+			const save = {
+				classes: [{name: "Sorcerer", source: "TGTT", level: 2}],
+				levelHistory: [{
+					level: 2,
+					class: {name: "Sorcerer", source: "TGTT"},
+					choices: {
+						optionalFeatures: [{name: "Careful Spell", source: "TGTT", type: "MM"}],
+						replayData: {
+							optionalFeatures: [{
+								name: "Careful Spell",
+								source: "TGTT",
+								type: "MM",
+								entries: ["When you cast a spell, chosen creatures automatically succeed on their saving throws."],
+							}],
+						},
+					},
+				}],
+				features: [],
+			};
+
+			state.loadFromJson(save);
+
+			const feature = state.getFeatures().find(f => f.name === "Careful Spell" && f.source === "TGTT");
+			expect(feature).toBeDefined();
+			expect(feature.featureType).toBe("Optional Feature");
+			expect(feature.optionalFeatureTypes).toContain("MM");
+			expect(state.getKnownMetamagicKeys()).toContain("careful");
+		});
+
+		it("should keep only known passive tuned metamagics when loading a save", () => {
+			const save = {
+				classes: [{name: "Sorcerer", source: "TGTT", level: 2}],
+				levelHistory: [{
+					level: 2,
+					class: {name: "Sorcerer", source: "TGTT"},
+					choices: {
+						optionalFeatures: [{name: "Warding Spell", source: "TGTT", type: "MM"}],
+						replayData: {
+							optionalFeatures: [{
+								name: "Warding Spell",
+								source: "TGTT",
+								type: "MM",
+								entries: ["When you cast a spell that requires concentration, you can spend 2 sorcery points to gain +1 to your AC while concentrating on the spell."],
+							}],
+						},
+					},
+				}],
+				features: [],
+				tunedMetamagics: ["warding", "quickened", "nonexistent"],
+			};
+
+			state.loadFromJson(save);
+
+			expect(state.getKnownMetamagicKeys()).toEqual(["warding"]);
+			expect(state.getTunedMetamagics()).toEqual(["warding"]);
+		});
 
 		it("should handle missing level history in old saves", () => {
 			const oldSave = {

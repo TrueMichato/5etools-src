@@ -38,7 +38,18 @@ describe("TGTT Divine Soul Sorcerer", () => {
 			source: "TGTT",
 			level,
 			subclass: level >= 3
-				? {name: "Divine Soul", shortName: "Divine Soul", source: "TGTT"}
+				? {
+					name: "Divine Soul",
+					shortName: "Divine Soul",
+					source: "TGTT",
+					additionalSpells: [
+						{name: "Good", known: {"1": ["cure wounds|PHB"]}},
+						{name: "Evil", known: {"1": ["inflict wounds|PHB"]}},
+						{name: "Law", known: {"1": ["bless|PHB"]}},
+						{name: "Chaos", known: {"1": ["bane|PHB"]}},
+						{name: "Neutrality", known: {"1": ["protection from evil and good|PHB"]}},
+					],
+				}
 				: undefined,
 		});
 		state.setAbilityBase("str", 8);
@@ -75,6 +86,24 @@ describe("TGTT Divine Soul Sorcerer", () => {
 			// Spell DC = 8 + prof(3) + CHA(4) = 15
 			expect(calcs.spellSaveDc).toBe(15);
 			expect(calcs.spellAttackBonus).toBe(7);
+		});
+
+		it("should persist and normalize a Divine Soul affinity choice", () => {
+			makeDivineSoul(3);
+			state.setSubclassChoice("Sorcerer", "Good");
+
+			expect(state.getSubclassChoice("Sorcerer")).toEqual({key: "good", name: "Good"});
+		});
+
+		it("should add the Divine Soul affinity spell once the choice is set", () => {
+			makeDivineSoul(3);
+			state.setSubclassChoice("Sorcerer", "Good");
+
+			expect(state.ensureDivineSoulKnownSpell("Sorcerer")).toBe(true);
+			expect(state.ensureDivineSoulKnownSpell("Sorcerer")).toBe(false);
+
+			const spells = state.getSpells();
+			expect(spells.some(sp => sp.name === "cure wounds" && sp.source === "PHB")).toBe(true);
 		});
 	});
 
@@ -412,6 +441,80 @@ describe("TGTT Divine Soul Sorcerer", () => {
 				expect(state.getLockedSorceryPoints()).toBe(5);
 			});
 		});
+
+		describe("Active Metamagic Cast Helpers", () => {
+			beforeEach(() => {
+				makeDivineSoul(10);
+				state.setSorceryPoints(11);
+				[
+					"Subtle Spell",
+					"Focused Spell",
+					"Aimed Spell",
+					"Heightened Spell",
+					"Bestowed Spell",
+					"Twinned Spell",
+					"Vampiric Spell",
+				].forEach(name => {
+					state.addFeature({
+						name,
+						source: "TGTT",
+						featureType: "Optional Feature",
+						optionalFeatureTypes: ["MM"],
+					});
+				});
+			});
+
+			it("should return only known active metamagics", () => {
+				const keys = state.getKnownActiveMetamagics().map(it => it.key).sort();
+				expect(keys).toEqual(["aimed", "bestowed", "focused", "heightened", "subtle", "twinned", "vampiric"]);
+			});
+
+			it("should calculate variable active metamagic costs from spell level", () => {
+				expect(state.getMetamagicCost("subtle", 3)).toBe(1);
+				expect(state.getMetamagicCost("twinned", 3)).toBe(3);
+				expect(state.getMetamagicCost("twinned", 0)).toBe(1);
+				expect(state.getMetamagicCost("vampiric", 5)).toBe(3);
+			});
+
+			it("should mark active metamagics unavailable when spell requirements are not met", () => {
+				const options = state.getCastableActiveMetamagics({
+					spell: {name: "Magic Missile", level: 1},
+					spellData: {
+						name: "Magic Missile",
+						range: {type: "point", distance: {type: "point", amount: 120}},
+						duration: [{type: "instant"}],
+						entries: ["Three glowing darts of magical force."],
+					},
+					slotLevel: 1,
+				});
+
+				expect(options.find(it => it.key === "focused").isAvailable).toBe(false);
+				expect(options.find(it => it.key === "aimed").unavailableReason).toBe("Requires a spell attack roll");
+				expect(options.find(it => it.key === "heightened").unavailableReason).toBe("Requires a spell with a saving throw");
+				expect(options.find(it => it.key === "bestowed").unavailableReason).toBe("Requires a spell with range: self");
+				expect(options.find(it => it.key === "subtle").isAvailable).toBe(true);
+			});
+
+			it("should mark active metamagics unavailable when sorcery points are insufficient", () => {
+				state.setSorceryPoints(1);
+				const options = state.getCastableActiveMetamagics({
+					spell: {name: "Hold Person", level: 2},
+					spellData: {
+						name: "Hold Person",
+						savingThrow: ["wisdom"],
+						range: {type: "point", distance: {type: "point", amount: 60}},
+						duration: [{type: "timed", duration: {type: "minute", amount: 1}, concentration: true}],
+						entries: ["Choose a humanoid that you can see within range. The target must succeed on a Wisdom saving throw or be paralyzed."],
+					},
+					slotLevel: 2,
+				});
+
+				expect(options.find(it => it.key === "subtle").isAvailable).toBe(true);
+				expect(options.find(it => it.key === "heightened").isAvailable).toBe(false);
+				expect(options.find(it => it.key === "heightened").unavailableReason).toBe("Requires 3 sorcery points (1 available)");
+				expect(options.find(it => it.key === "twinned").unavailableReason).toBe("Requires 2 sorcery points (1 available)");
+			});
+		});
 	});
 
 	// =========================================================================
@@ -525,7 +628,7 @@ describe("TGTT Divine Soul Sorcerer", () => {
 
 			it("should reject conversion with insufficient SP", () => {
 				// Set SP to 1 — L1 slot costs 2
-				state._data.sorceryPoints.current = 1;
+				state.setSorceryPoints({current: 1, max: 20});
 				const result = state.convertSorceryPointsToSlot(1);
 				expect(result).toBe(false);
 			});
@@ -539,7 +642,7 @@ describe("TGTT Divine Soul Sorcerer", () => {
 			});
 
 			it("should fail when insufficient SP", () => {
-				state._data.sorceryPoints.current = 1;
+				state.setSorceryPoints({current: 1, max: 8});
 				const result = state.useSorceryPoint(3);
 				expect(result).toBe(false);
 				expect(state.getSorceryPoints().current).toBe(1);

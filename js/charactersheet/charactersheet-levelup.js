@@ -111,6 +111,7 @@ class CharacterSheetLevelUp {
 		let asiChoices = {str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0};
 		let selectedFeat = null;
 		let selectedSubclass = null;
+		let selectedSubclassChoice = this._state.getSubclassChoice?.(classEntry.name) || null;
 		let hpMethod = "average";
 		let currentFeatures = newFeatures;
 		let selectedOptionalFeatures = {};
@@ -130,7 +131,10 @@ class CharacterSheetLevelUp {
 		const isBothAsiAndFeat = thelemar_asiFeat && newLevel === 4;
 		const isEpicBoonLevel = newLevel === 19 && (classEntry.source === "XPHB" || classEntry.source === "TGTT");
 		const optionalFeatureGains = CharacterSheetClassUtils.getOptionalFeatureGains(classData, classEntry.level, newLevel, this._state);
-		featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(currentFeatures, newLevel, this._page.getClassFeatures());
+		featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(currentFeatures, newLevel, this._page.getClassFeatures())
+			// Filter out option groups where ALL options are optional features — those are
+			// handled by optionalfeatureProgression in the Class Options step (e.g. Metamagic)
+			.filter(optGroup => !optGroup.options.every(opt => opt.type === "optionalfeature"));
 
 		// Scholar expertise (Wizard XPHB level 2)
 		const existingScholarExpertise = this._state.getScholarExpertise();
@@ -403,7 +407,8 @@ class CharacterSheetLevelUp {
 				currentFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, subclass, this._page.getClassFeatures(), this._page.getSubclassFeatures());
 
 				// Update dependent sections
-				featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(currentFeatures, newLevel, this._page.getClassFeatures());
+				featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(currentFeatures, newLevel, this._page.getClassFeatures())
+					.filter(optGroup => !optGroup.options.every(opt => opt.type === "optionalfeature"));
 				expertiseGrants = CharacterSheetClassUtils.getExpertiseGrantsForLevel(currentFeatures);
 				languageGrants = CharacterSheetClassUtils.getLanguageGrantsForLevel(currentFeatures);
 
@@ -667,8 +672,11 @@ class CharacterSheetLevelUp {
 				allSpells: knownAllSpells,
 				knownSpellIds: knownExistingIds,
 				getHoverLink: (...args) => CharacterSheetPage.getHoverLink(...args),
-				// Divine Soul sorcerers also get access to the Cleric spell list
-				additionalClassNames: (classEntry.name === "Sorcerer" && classEntry.subclass?.name === "Divine Soul") ? ["Cleric"] : [],
+				additionalClassNames: CharacterSheetClassUtils.getAdditionalSpellListClasses({
+					className: classEntry.name,
+					subclass: selectedSubclass || classEntry.subclass,
+					subclassChoice: selectedSubclassChoice,
+				}),
 				onSelect: (spells, cantrips) => {
 					selectedKnownSpells = spells;
 					selectedKnownCantrips = cantrips;
@@ -808,6 +816,26 @@ class CharacterSheetLevelUp {
 				return;
 			}
 
+			const divineSoulSubclass = selectedSubclass || classEntry.subclass;
+			if (classEntry.name === "Sorcerer" && CharacterSheetClassUtils.isDivineSoulSubclass(divineSoulSubclass) && !CharacterSheetClassUtils.normalizeDivineSoulAffinity(selectedSubclassChoice)) {
+				const affinityOptions = CharacterSheetClassUtils.getDivineSoulAffinityOptions(selectedSubclass);
+				if (!affinityOptions.length) {
+					JqueryUtil.doToast({type: "warning", content: "This Divine Soul subclass is missing its affinity options."});
+					return;
+				}
+
+				selectedSubclassChoice = await InputUiUtil.pGetUserEnum({
+					title: "Divine Soul Affinity",
+					values: affinityOptions,
+					fnDisplay: opt => opt.name,
+					isResolveItem: true,
+					zIndex: 10002,
+					htmlDescription: "<div>Choose the Divine Soul affinity that grants your extra spell and Cleric spell access.</div>",
+				});
+
+				if (!selectedSubclassChoice) return;
+			}
+
 			if (hasAsi) {
 				const totalAsi = Object.values(asiChoices).reduce((sum, v) => sum + v, 0);
 				if (isBothAsiAndFeat) {
@@ -929,6 +957,7 @@ class CharacterSheetLevelUp {
 				asiChoices,
 				selectedFeat,
 				selectedSubclass,
+				selectedSubclassChoice,
 				selectedOptionalFeatures,
 				selectedCombatTraditions,
 				selectedFeatureOptions,
@@ -2946,7 +2975,7 @@ class CharacterSheetLevelUp {
 		return $section;
 	}
 
-	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, languageGrants, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, selectedPreparedSpells, selectedPreparedCantrips, newFeatures, hpMethod, classData}) {
+	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedSubclassChoice, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, languageGrants, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, selectedPreparedSpells, selectedPreparedCantrips, newFeatures, hpMethod, classData}) {
 		const prevCombatTraditions = this._state.getCombatTraditions?.() || [];
 		const prevWeaponMasteries = this._state.getWeaponMasteries?.() || [];
 
@@ -2975,6 +3004,9 @@ class CharacterSheetLevelUp {
 					targetClass.casterProgression = selectedSubclass.casterProgression;
 					targetClass.spellcastingAbility = selectedSubclass.spellcastingAbility;
 				}
+			}
+			if (selectedSubclassChoice || CharacterSheetClassUtils.isDivineSoulSubclass(targetClass.subclass)) {
+				targetClass.subclassChoice = CharacterSheetClassUtils.normalizeDivineSoulAffinity(selectedSubclassChoice);
 			}
 		}
 		this._state.ensureXpMatchesLevel();
@@ -3242,6 +3274,11 @@ class CharacterSheetLevelUp {
 			});
 		}
 
+		if (classEntry.name === "Sorcerer") {
+			this._state.setSubclassChoice(classEntry.name, selectedSubclassChoice);
+			this._state.ensureDivineSoulKnownSpell(classEntry.name);
+		}
+
 		// Apply prepared-spell caster spell selections (XPHB Warlock, etc.)
 		if (selectedPreparedSpells && selectedPreparedSpells.length > 0) {
 			selectedPreparedSpells.forEach(spell => {
@@ -3385,6 +3422,9 @@ class CharacterSheetLevelUp {
 				shortName: selectedSubclass.shortName,
 				source: selectedSubclass.source,
 			};
+		}
+		if (selectedSubclassChoice) {
+			historyEntry.choices.subclassChoice = CharacterSheetClassUtils.normalizeDivineSoulAffinity(selectedSubclassChoice);
 		}
 
 		// Record optional features (invocations, metamagic, etc.)
@@ -3775,7 +3815,10 @@ class CharacterSheetLevelUp {
 		const optionalFeatureGains = CharacterSheetClassUtils.getOptionalFeatureGains(selectedClass, 0, 1, this._state);
 
 		// Get feature options (choices within features)
-		const featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(features, 1, this._page.getClassFeatures());
+		const featureOptionGroups = CharacterSheetClassUtils.getFeatureOptionsForLevel(features, 1, this._page.getClassFeatures())
+			// Filter out option groups where ALL options are optional features — those are
+			// handled by optionalfeatureProgression in the Class Options step
+			.filter(optGroup => !optGroup.options.every(opt => opt.type === "optionalfeature"));
 
 		// Get multiclass skill grant info
 		const multiclassSkillGrants = {
@@ -3949,6 +3992,10 @@ class CharacterSheetLevelUp {
 			subclass: null,
 			casterProgression: selectedClass.casterProgression || null,
 			spellcastingAbility: selectedClass.spellcastingAbility || null,
+			// Spell progression arrays for 2024/TGTT classes
+			preparedSpellsProgression: selectedClass.preparedSpellsProgression,
+			spellsKnownProgression: selectedClass.spellsKnownProgression,
+			cantripProgression: selectedClass.cantripProgression,
 		});
 
 		// Add first level features

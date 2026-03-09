@@ -891,6 +891,18 @@ describe("Character Sheet Toggle Abilities", () => {
 			expect(result).not.toBeNull();
 			expect(result.sorceryPointCost).toBe(2);
 		});
+
+		test("Warding Spell AC only applies while concentrating", () => {
+			charState.activateState("wardingSpell");
+
+			expect(charState.getBonusFromStates("ac")).toBe(0);
+
+			charState.setConcentrating({name: "Bless", source: "PHB"});
+			expect(charState.getBonusFromStates("ac")).toBe(1);
+
+			charState.breakConcentration();
+			expect(charState.getBonusFromStates("ac")).toBe(0);
+		});
 	});
 
 	// ===================================================================

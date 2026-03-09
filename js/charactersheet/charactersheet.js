@@ -1635,6 +1635,7 @@ class CharacterSheetPage {
 		this._renderConditions();
 		this._renderExhaustion();
 		this._renderResources();
+		this._renderOverviewMetamagic();
 		this._renderOverviewAbilities();
 		this._renderActiveStates();
 		this._renderAttacks();
@@ -4568,6 +4569,10 @@ class CharacterSheetPage {
 
 			$container.append($row);
 		});
+	}
+
+	_renderOverviewMetamagic () {
+		CharacterSheetCombat.renderMetamagicDashboard(this._state, this, "#charsheet-overview-metamagic", "#charsheet-overview-metamagic-section", "#charsheet-overview-metamagic-sp");
 	}
 
 	_renderOverviewAbilities () {

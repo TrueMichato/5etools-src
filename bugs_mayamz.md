@@ -1,27 +1,28 @@
 # Bugs Tracking
 This file is used to track known bugs in the 5etools character sheet code.
 
-### Lunaria test
-- [] +1 more class/species features is not interactable.
+### Lunaria (Ranger 6/Druid 3) test
+- [X] In the active features modal in the overview tab, the "+X more class/species features" is not interactable, should be openable on click to show the full list of features.
 - [] Spells known I believe are problematic in multiclass? says I have only 4.
-  - [] "Your class does not require spell selection at level 1". False.
+  - [X] "Your class does not require spell selection at level 1". False. Seems to be based on 2014 ranger, but TGTT ranger has spell selection at level 1.
   - [] Spell lists of TGTT classes is not quite there yet I believe.
-- [] Combat stances and Pan's features should somehow be functional.
+- [X] Combat stances don't add skill bonuses when activated.
 - [X] In managing combat methods - add works. Remove doesn't.
-  - [] It works in managing combat, but not in the build section. In quickbuild the problem is avoidable.
-- [] Custom background - option for which musical instrument. One of the tools is "Musical instrument"
-- [] Plantmender feat doesn't add the required cantrips etc.
+- [X] In managing combat methods  - remove works in managing combat, but not in the build section. In quickbuild the problem is avoidable.
+- [X] Custom background - option for which musical instrument. One of the tools is "Musical instrument". This works for regular backgrounds but not for custom ones. 
+- [X] Plantmender feat doesn't add the required cantrips etc.
 
 ### Rogue test
-- [] In the top top part - "+" deletes the current build and doesn't change the rolling options, duplicate saves adds a new character to the rolling options.
-- [] Background comes after choosing expertise.
+- [] In the top top part - "+" deletes the current build and doesn't change the rolling options, duplicate saves adds a new character to the rolling options. In general several players have reported saving issues, which is a major problem. I have not been able to reproduce this, but I have seen the "+" button delete the current build and reset the rolling options to the default ones. This is a major issue that needs to be fixed as soon as possible.
+- [] Build order needs to change - Background should be before class, since background can gve proficiency in skills that the class can then choose to double down on with expertise.
 - [] In add item, details are on click and not by hover. Which is inconvenient for browsing.
 - [] The specialties "Extra skill training" and "Extra expertise training" don't really let you choose a skill.
-- [] Boon of skill doesn't like quick build.
+- [] Boon of skill doesn't work correctly in quick build.
   - [] It also doesn't let you choose a new expertise. Only the +1 ability.
   - [] Also it doesn't seem to give you proficiency in all skills.
-- [] Quick build of specialties doesn't mark what you've chosen as known like from previous levels , but vanishes the chosen option.
-- [] Reliable talent Adds 10 to ABLMOD. Not just when rolling under 10.
+- [] Quick build of specialties doesn't mark what you've chosen as known like from previous levels, but vanishes the chosen option.
+- [] Reliable talent Adds 10 to ABLMOD, but it should set the minimum roll to 10. 
+
 #### Belly Dancer
 - [] "The Belly Dancer" as opposed to "Gambler", "Assassin" etc.
 - [] Doesn't grant expertise in performance.
@@ -31,9 +32,10 @@ This file is used to track known bugs in the 5etools character sheet code.
   - [] I always get advantage on athletics, even when I turn off both state and modifier.
   - [] "Snake charmer" modifier doesn't ignore advantage in sneak attacks.
 - [] Tantalizing shivers doesn't show as a bonus action even when all states/modifiers are on.
+
 #### Gambler
 - [] Mastery for cards dice? Coins has ricochet.
-- [] Spellcasting is not functional. I don't even get cantrips. Good luck.
+- [] Spellcasting is not functional. I don't even get cantrips. Needs extensive implementations since its so unique in mechanics.
 - [] "Gambler's folly" is a state. Not a mechanism
   - [] Negative initiative modifier because of gambler's folly.
 - [] No gambler weapons as weapons.
