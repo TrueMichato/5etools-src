@@ -31,6 +31,7 @@ class CharacterSheetQuickBuild {
 		// Collected choices
 		this._selections = {
 			subclasses: {}, // {className: subclassData}
+			subclassChoices: {}, // {className_source: {key, name}}
 			asi: {}, // {levelKey: {abilityChoices: {}, feat: null, isBoth: false}}
 			optionalFeatures: {}, // {levelKey: {featureTypeKey: [optionObj, ...]}}
 			featureOptions: {}, // {levelKey: {featureKey: [optionObj, ...]}}
@@ -90,8 +91,16 @@ class CharacterSheetQuickBuild {
 	 * @param {Object} opts
 	 * @param {Object} opts.classData - The selected class data
 	 * @param {number} opts.targetLevel - Target level to build to
+	 * @param {?Object} [opts.subclass] - Preselected subclass from Builder
+	 * @param {?Object|string} [opts.subclassChoice] - Preselected subclass choice from Builder
 	 */
-	async showFromBuilder ({classData, targetLevel}) {
+	async showFromBuilder ({classData, targetLevel, subclass = null, subclassChoice = null}) {
+		const classKey = `${classData.name}_${classData.source}`;
+		const existingClass = this._state.getClasses().find(c => c.name === classData.name && c.source === classData.source);
+		const normalizedSubclassChoice = CharacterSheetClassUtils.normalizeDivineSoulAffinity(subclassChoice)
+			|| CharacterSheetClassUtils.normalizeDivineSoulAffinity(existingClass?.subclassChoice);
+		const resolvedSubclass = subclass || existingClass?.subclass || null;
+
 		this._fromLevel = 1; // Builder creates at level 1
 		this._targetLevel = targetLevel;
 
@@ -101,10 +110,12 @@ class CharacterSheetQuickBuild {
 			classData: classData,
 			currentLevel: 1,
 			targetLevel: targetLevel,
-			subclass: null,
+			subclass: resolvedSubclass,
 		}];
 
 		this._resetSelections();
+		if (resolvedSubclass) this._selections.subclasses[classKey] = resolvedSubclass;
+		if (normalizedSubclassChoice) this._selections.subclassChoices[classKey] = normalizedSubclassChoice;
 		await this._showWizard();
 	}
 
@@ -120,6 +131,7 @@ class CharacterSheetQuickBuild {
 	_resetSelections () {
 		this._selections = {
 			subclasses: {},
+			subclassChoices: {},
 			asi: {},
 			optionalFeatures: {},
 			featureOptions: {},
@@ -605,20 +617,25 @@ class CharacterSheetQuickBuild {
 			knownCasterClassSource = a.classSource;
 		}
 		// Resolve subclass for the known caster to support features like Divine Soul
-		let knownCasterSubclassName = null;
+		let knownCasterSubclass = null;
+		let knownCasterSubclassChoice = null;
 		if (knownCasterClassName) {
-			const sub = this._getSubclassForClass(knownCasterClassName, knownCasterClassSource, 0);
-			knownCasterSubclassName = sub?.name || null;
+			const subclassKey = `${knownCasterClassName}_${knownCasterClassSource}`;
+			const sub = this._selections.subclasses[subclassKey] || this._getSubclassForClass(knownCasterClassName, knownCasterClassSource, 0);
+			knownCasterSubclass = sub || null;
+			knownCasterSubclassChoice = this._selections.subclassChoices[subclassKey] || null;
 			// Also check existing character state
-			if (!knownCasterSubclassName) {
+			if (!knownCasterSubclass) {
 				const existing = this._state.getClasses().find(c => c.name === knownCasterClassName && c.source === knownCasterClassSource);
-				knownCasterSubclassName = existing?.subclass?.name || null;
+				knownCasterSubclass = existing?.subclass || null;
+				knownCasterSubclassChoice = knownCasterSubclassChoice || existing?.subclassChoice || null;
 			}
 		}
 		const knownCasterInfo = totalKnownSpellsGain > 0 || totalKnownCantripsGain > 0 ? {
 			className: knownCasterClassName,
 			classSource: knownCasterClassSource,
-			subclassName: knownCasterSubclassName,
+			subclass: knownCasterSubclass,
+			subclassChoice: knownCasterSubclassChoice,
 			totalSpells: totalKnownSpellsGain,
 			totalCantrips: totalKnownCantripsGain,
 			maxSpellLevel: knownMaxSpellLevel,
@@ -1140,12 +1157,27 @@ class CharacterSheetQuickBuild {
 					// Add hoverable subclass link
 					const subclassLink = CharacterSheetPage.getSubclassHoverLink(sc);
 					$item.find(".subclass-name-link").html(subclassLink);
-					$item.on("click", () => {
+					$item.on("click", async () => {
+						let subclassChoice = null;
+						if (CharacterSheetClassUtils.isDivineSoulSubclass(sc)) {
+							const affinityOptions = CharacterSheetClassUtils.getDivineSoulAffinityOptions(sc);
+							subclassChoice = await InputUiUtil.pGetUserEnum({
+								title: "Divine Soul Affinity",
+								values: affinityOptions,
+								fnDisplay: opt => opt.name,
+								isResolveItem: true,
+								zIndex: 10002,
+								htmlDescription: "<div>Choose the Divine Soul affinity that grants your extra spell and Cleric spell access.</div>",
+							});
+							if (!subclassChoice) return;
+						}
+
 						$list.find(".charsheet__quickbuild-option").removeClass("selected");
 						$list.find("input[type=radio]").prop("checked", false);
 						$item.addClass("selected");
 						$item.find("input[type=radio]").prop("checked", true);
 						this._selections.subclasses[key] = sc;
+						this._selections.subclassChoices[key] = CharacterSheetClassUtils.normalizeDivineSoulAffinity(subclassChoice);
 					});
 					return $item;
 				};
@@ -3131,8 +3163,11 @@ class CharacterSheetQuickBuild {
 		const allSpells = this._page.getSpells() || [];
 		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
 
-		// Divine Soul sorcerers also get access to the Cleric spell list
-		const additionalClassNames = (className === "Sorcerer" && knownCasterInfo.subclassName === "Divine Soul") ? ["Cleric"] : [];
+		const additionalClassNames = CharacterSheetClassUtils.getAdditionalSpellListClasses({
+			className,
+			subclass: knownCasterInfo.subclass,
+			subclassChoice: knownCasterInfo.subclassChoice,
+		});
 
 		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
 			className,
@@ -3763,6 +3798,7 @@ class CharacterSheetQuickBuild {
 						targetClass.spellcastingAbility = selectedSubclass.spellcastingAbility;
 					}
 				}
+				targetClass.subclassChoice = this._selections.subclassChoices[`${className}_${classSource}`] || targetClass.subclassChoice || null;
 			} else if (classLevel === 1) {
 				// New multiclass — add to state
 				this._state.addClass({
@@ -3770,8 +3806,13 @@ class CharacterSheetQuickBuild {
 					source: classSource,
 					level: 1,
 					subclass: null,
+					subclassChoice: this._selections.subclassChoices[`${className}_${classSource}`] || null,
 					casterProgression: classData.casterProgression,
 					spellcastingAbility: classData.spellcastingAbility,
+					// Spell progression arrays for 2024/TGTT classes
+					preparedSpellsProgression: classData.preparedSpellsProgression,
+					spellsKnownProgression: classData.spellsKnownProgression,
+					cantripProgression: classData.cantripProgression,
 				});
 			}
 
@@ -3953,6 +3994,12 @@ class CharacterSheetQuickBuild {
 					sourceClass: knownClassName || "",
 				}));
 			});
+		}
+
+		const divineSoulClass = this._classAllocations.find(a => CharacterSheetClassUtils.isDivineSoulSubclass(this._selections.subclasses[`${a.className}_${a.classSource}`]));
+		if (divineSoulClass) {
+			this._state.setSubclassChoice(divineSoulClass.className, this._selections.subclassChoices[`${divineSoulClass.className}_${divineSoulClass.classSource}`]);
+			this._state.ensureDivineSoulKnownSpell(divineSoulClass.className);
 		}
 
 		// Apply prepared spells (XPHB Warlock, etc.)
@@ -4201,6 +4248,8 @@ class CharacterSheetQuickBuild {
 		const subclass = this._selections.subclasses[`${analysis.className}_${analysis.classSource}`];
 		if (analysis.needsSubclass && subclass) {
 			entry.choices.subclass = {name: subclass.name, shortName: subclass.shortName, source: subclass.source};
+			const subclassChoice = this._selections.subclassChoices[`${analysis.className}_${analysis.classSource}`];
+			if (subclassChoice) entry.choices.subclassChoice = CharacterSheetClassUtils.normalizeDivineSoulAffinity(subclassChoice);
 		}
 
 		// Optional features

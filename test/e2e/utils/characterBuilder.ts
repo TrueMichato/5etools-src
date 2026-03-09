@@ -15,9 +15,11 @@ export interface CharacterPreset {
 	background: string;
 	bgSource: string;
 	name: string;
+	quickBuildTargetLevel?: number;
 	skillCount?: number;
 	masteryCount?: number;
 	optFeatCount?: number;
+	divineSoulAffinity?: string;
 }
 
 /** Simple Fighter — minimal selections, fastest to create */
@@ -134,6 +136,7 @@ export const PRESET_TGTT_DIVINE_SOUL: CharacterPreset = {
 	bgSource: "PHB'24",
 	name: "Isra Divine Soul",
 	skillCount: 2,
+	divineSoulAffinity: "Good",
 };
 
 /** TGTT Hexblade Warlock */
@@ -169,6 +172,9 @@ export async function createCharacterViaWizard (
 
 	// Step 2: Class
 	await builder.selectClassExact(preset.className, preset.classSource);
+	if (preset.quickBuildTargetLevel != null) {
+		await builder.setQuickBuildTargetLevel(preset.quickBuildTargetLevel);
+	}
 	await page.waitForTimeout(500);
 	if (preset.skillCount) {
 		await builder.selectFirstAvailableSkills(preset.skillCount);
@@ -194,6 +200,10 @@ export async function createCharacterViaWizard (
 	// Step 5: Equipment — take gold (simplest)
 	await builder.selectEquipmentOption("gold");
 	await builder.clickNext();
+	await builder.autoFillStartingSpells({divineSoulAffinity: preset.divineSoulAffinity});
+	if (await page.getByRole("heading", {name: "Starting Spells"}).count()) {
+		await builder.clickNext();
+	}
 
 	// Step 6: Details
 	await builder.fillDetails({name: preset.name});

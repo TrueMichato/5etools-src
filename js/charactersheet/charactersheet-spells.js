@@ -14,6 +14,12 @@ class CharacterSheetSpells {
 		this._init();
 	}
 
+	_refreshSorceryPointUI () {
+		if (typeof this._page._renderResources === "function") this._page._renderResources();
+		if (typeof this._page._renderOverviewMetamagic === "function") this._page._renderOverviewMetamagic();
+		if (this._page._combat) this._page._combat.renderCombatMetamagic();
+	}
+
 	_init () {
 		this._initEventListeners();
 	}
@@ -1502,13 +1508,6 @@ class CharacterSheetSpells {
 		// Get full spell data for component/constraint checks
 		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
 
-		// Check for conditions that prevent spellcasting
-		const castingConstraint = this._checkCastingConstraints(spell, spellData);
-		if (castingConstraint) {
-			JqueryUtil.doToast({type: "warning", content: castingConstraint});
-			return;
-		}
-
 		// Check if spell requires concentration - use spellData (authoritative source)
 		// Do NOT use spell.concentration as it may have been set incorrectly by migrations
 		// that didn't account for different spell versions (e.g., PHB vs XPHB)
@@ -1529,12 +1528,33 @@ class CharacterSheetSpells {
 
 		// Cantrips don't use slots
 		if (spell.level === 0) {
-			this._showCastResult(spell);
+			const activeMetamagicChoice = await this._pChooseActiveMetamagic({spell, spellData, slotLevel: 0});
+			if (activeMetamagicChoice?.cancelled) return;
+			const castingConstraint = this._checkCastingConstraints(spell, spellData, activeMetamagicChoice?.metamagic || null);
+			if (castingConstraint) {
+				JqueryUtil.doToast({type: "warning", content: castingConstraint});
+				return;
+			}
+			if (activeMetamagicChoice?.metamagic && !this._state.useSorceryPoint(activeMetamagicChoice.metamagic.cost)) {
+				JqueryUtil.doToast({type: "warning", content: "Not enough sorcery points for that metamagic."});
+				return;
+			}
+			if (activeMetamagicChoice?.metamagic) this._refreshSorceryPointUI();
+
+			const castMeta = this._getNormalizedCastMeta({
+				spell,
+				spellData,
+				slotLevel: 0,
+				castMeta: activeMetamagicChoice?.metamagic ? {appliedMetamagic: activeMetamagicChoice.metamagic} : null,
+			});
+
+			await this._showCastResult(spell, 0, false, false, castMeta);
 			// Set concentration for concentration cantrips (rare but possible)
 			if (requiresConcentration) {
-				this._state.setConcentration?.(spell.name, 0);
+				this._state.setConcentration?.({name: spell.name, level: 0, appliedMetamagic: castMeta?.appliedMetamagic || null});
 				this._updateConcentrationUI();
 			}
+			this._page.saveCharacter();
 			return;
 		}
 
@@ -1563,10 +1583,30 @@ class CharacterSheetSpells {
 			}
 
 			if (castAsRitual) {
+				const activeMetamagicChoice = await this._pChooseActiveMetamagic({spell, spellData, slotLevel: spell.level});
+				if (activeMetamagicChoice?.cancelled) return;
+				const castingConstraint = this._checkCastingConstraints(spell, spellData, activeMetamagicChoice?.metamagic || null);
+				if (castingConstraint) {
+					JqueryUtil.doToast({type: "warning", content: castingConstraint});
+					return;
+				}
+				if (activeMetamagicChoice?.metamagic && !this._state.useSorceryPoint(activeMetamagicChoice.metamagic.cost)) {
+					JqueryUtil.doToast({type: "warning", content: "Not enough sorcery points for that metamagic."});
+					return;
+				}
+				if (activeMetamagicChoice?.metamagic) this._refreshSorceryPointUI();
+
+				const castMeta = this._getNormalizedCastMeta({
+					spell,
+					spellData,
+					slotLevel: spell.level,
+					castMeta: activeMetamagicChoice?.metamagic ? {appliedMetamagic: activeMetamagicChoice.metamagic} : null,
+				});
+
 				// Ritual cast: no slot consumed
-				this._showCastResult(spell, spell.level, false, true); // ritual = true
+				await this._showCastResult(spell, spell.level, false, true, castMeta); // ritual = true
 				if (requiresConcentration) {
-					this._state.setConcentration?.(spell.name, spell.level);
+					this._state.setConcentration?.({name: spell.name, level: spell.level, appliedMetamagic: castMeta?.appliedMetamagic || null});
 					this._updateConcentrationUI();
 				}
 				this._page.saveCharacter();
@@ -1615,6 +1655,26 @@ class CharacterSheetSpells {
 			if (!selectedSlot) return;
 		}
 
+		const activeMetamagicChoice = await this._pChooseActiveMetamagic({spell, spellData, slotLevel: selectedSlot.level});
+		if (activeMetamagicChoice?.cancelled) return;
+		const castingConstraint = this._checkCastingConstraints(spell, spellData, activeMetamagicChoice?.metamagic || null);
+		if (castingConstraint) {
+			JqueryUtil.doToast({type: "warning", content: castingConstraint});
+			return;
+		}
+		if (activeMetamagicChoice?.metamagic && !this._state.useSorceryPoint(activeMetamagicChoice.metamagic.cost)) {
+			JqueryUtil.doToast({type: "warning", content: "Not enough sorcery points for that metamagic."});
+			return;
+		}
+		if (activeMetamagicChoice?.metamagic) this._refreshSorceryPointUI();
+
+		const castMeta = this._getNormalizedCastMeta({
+			spell,
+			spellData,
+			slotLevel: selectedSlot.level,
+			castMeta: activeMetamagicChoice?.metamagic ? {appliedMetamagic: activeMetamagicChoice.metamagic} : null,
+		});
+
 		// Consume the selected slot
 		if (selectedSlot.isPact) {
 			this._state.setPactSlotsCurrent(pactSlots.current - 1);
@@ -1623,11 +1683,17 @@ class CharacterSheetSpells {
 			this._state.setSpellSlots(selectedSlot.level, this._state.getSpellSlotsMax(selectedSlot.level), current - 1);
 		}
 
-		this._showCastResult(spell, selectedSlot.level, selectedSlot.isPact);
+		await this._showCastResult(
+			spell,
+			selectedSlot.level,
+			selectedSlot.isPact,
+			false,
+			castMeta,
+		);
 
 		// Set concentration if spell requires it
 		if (requiresConcentration) {
-			this._state.setConcentration?.(spell.name, selectedSlot.level);
+			this._state.setConcentration?.({name: spell.name, level: selectedSlot.level, appliedMetamagic: castMeta?.appliedMetamagic || null});
 			this._updateConcentrationUI();
 		}
 
@@ -1668,7 +1734,7 @@ class CharacterSheetSpells {
 		}
 
 		// Cast as ritual — no slot consumed
-		this._showCastResult(spell, spell.level, false, true);
+		await this._showCastResult(spell, spell.level, false, true);
 
 		if (requiresConcentration) {
 			this._state.setConcentration?.(spell.name, spell.level);
@@ -1693,9 +1759,10 @@ class CharacterSheetSpells {
 	 * Check for conditions/effects that prevent spellcasting
 	 * @param {object} spell - The spell being cast (from character's spell list)
 	 * @param {object} spellData - Full spell data from the spells database
+	 * @param {object|null} appliedMetamagic - Active metamagic chosen for this cast
 	 * @returns {string|null} Error message if casting is prevented, null if allowed
 	 */
-	_checkCastingConstraints (spell, spellData) {
+	_checkCastingConstraints (spell, spellData, appliedMetamagic = null) {
 		// Check for conditions that completely prevent actions (thus spellcasting)
 		const incapacitatingConditions = ["Incapacitated", "Paralyzed", "Petrified", "Stunned", "Unconscious"];
 		for (const condition of incapacitatingConditions) {
@@ -1706,8 +1773,9 @@ class CharacterSheetSpells {
 
 		// Get spell components
 		const components = spellData?.components || spell.components || {};
-		const hasVerbal = components.v;
-		const hasSomatic = components.s;
+		const isSubtleSpell = appliedMetamagic?.key === "subtle";
+		const hasVerbal = !isSubtleSpell && components.v;
+		const hasSomatic = !isSubtleSpell && components.s;
 		const hasMaterial = components.m;
 
 		// Check if character is in a Silence effect (custom condition/active state)
@@ -1754,28 +1822,168 @@ class CharacterSheetSpells {
 		return null;
 	}
 
-	_showCastResult (spell, slotLevel = null, isPactSlot = false, isRitual = false) {
+	async _showCastResult (spell, slotLevel = null, isPactSlot = false, isRitual = false, castMeta = null) {
 		// Delegate to the enhanced spell effects handler
-		this._handleSpellEffects(spell, slotLevel, isPactSlot, isRitual);
+		await this._handleSpellEffects(spell, slotLevel, isPactSlot, isRitual, castMeta);
+	}
+
+	async _pChooseActiveMetamagic ({spell, spellData, slotLevel}) {
+		const metamagicOptions = this._state.getCastableActiveMetamagics?.({spell, spellData, slotLevel}) || [];
+		if (!metamagicOptions.length) return {cancelled: false, metamagic: null};
+
+		const availableOptions = metamagicOptions.filter(it => it.isAvailable);
+		if (!availableOptions.length) return {cancelled: false, metamagic: null};
+
+		const unavailableOptions = metamagicOptions.filter(it => !it.isAvailable);
+		const labels = ["Cast without metamagic", ...availableOptions.map(it => `${it.name} (${it.cost} SP)`)];
+		const unavailableHtml = unavailableOptions.length
+			? `<div class="mt-2 ve-small ve-muted"><strong>Unavailable:</strong><br>${unavailableOptions.map(it => `${it.name}: ${it.unavailableReason}`).join("<br>")}</div>`
+			: "";
+
+		const choice = await InputUiUtil.pGetUserEnum({
+			title: `Cast ${spell.name} — Metamagic`,
+			htmlDescription: `<div>Select an active metamagic for this cast. You currently have <strong>${this._state.getSorceryPoints().current}</strong> sorcery points.</div>${unavailableHtml}`,
+			values: labels,
+			fnDisplay: v => v,
+			isResolveItem: true,
+		});
+
+		if (choice == null) return {cancelled: true, metamagic: null};
+		if (choice === labels[0]) return {cancelled: false, metamagic: null};
+
+		const metamagic = availableOptions.find(it => `${it.name} (${it.cost} SP)` === choice) || null;
+		return {cancelled: false, metamagic};
+	}
+
+	async _pMaybeApplySeekingSpell ({spell, attackRoll = 0, attackTotal = 0, castMeta = null} = {}) {
+		if (castMeta?.appliedMetamagic?.key !== "seeking") return castMeta;
+
+		const shouldReroll = await InputUiUtil.pGetUserBoolean({
+			title: "Seeking Spell",
+			htmlDescription: `<div><strong>${spell?.name || "This spell"}</strong> rolled <strong>${attackTotal}</strong> to hit. If the spell attack missed, you can use Seeking Spell to reroll the d20 once.</div>`,
+			textYes: "Reroll Missed Attack",
+			textNo: "Keep Original Roll",
+		});
+
+		if (!shouldReroll) return castMeta;
+
+		const rerollResult = this._page.rollD20({isAttack: true});
+		const rerolledRoll = rerollResult?.roll ?? attackRoll;
+
+		return {
+			...(castMeta || {}),
+			attackMeta: {
+				...(castMeta?.attackMeta || {}),
+				seekingRerollUsed: true,
+				originalRoll: attackRoll,
+				rerolledRoll,
+			},
+		};
+	}
+
+	_getNormalizedCastMeta ({spell = null, spellData = null, slotLevel = null, castMeta = null} = {}) {
+		const normalized = {
+			...(castMeta || {}),
+			appliedMetamagic: castMeta?.appliedMetamagic || null,
+		};
+
+		if (!spellData || !normalized.appliedMetamagic) return normalized;
+
+		switch (normalized.appliedMetamagic.key) {
+			case "bestowed":
+				if (spellData.range?.distance?.type === "self") {
+					normalized.rangeMeta = {
+						originalLabel: normalized.rangeMeta?.originalLabel || this._getRange(spellData),
+						effectiveLabel: normalized.rangeMeta?.effectiveLabel || "Touch",
+						effectiveDistanceType: normalized.rangeMeta?.effectiveDistanceType || "touch",
+					};
+					normalized.targetingMeta = {
+						...(normalized.targetingMeta || {}),
+						selfOnly: false,
+						canTargetSelf: true,
+						canTargetAlly: true,
+					};
+				}
+				break;
+
+			case "heightened":
+				if (spellData.savingThrow?.length) {
+					normalized.saveMeta = {
+						...(normalized.saveMeta || {}),
+						firstTargetDisadvantage: true,
+					};
+				}
+				break;
+
+			default:
+				break;
+		}
+
+		return normalized;
+	}
+
+	_getCastMetamagicNotes ({spellData = null, castMeta = null} = {}) {
+		const appliedMetamagic = castMeta?.appliedMetamagic || null;
+		if (!appliedMetamagic) return [];
+
+		switch (appliedMetamagic.key) {
+			case "quickened":
+				return ["Quickened Spell cast this spell as a bonus action"];
+
+			case "subtle": {
+				const components = spellData?.components || {};
+				const removedParts = [];
+				if (components.v) removedParts.push("verbal");
+				if (components.s) removedParts.push("somatic");
+				if (!removedParts.length) return ["Subtle Spell applied"];
+				return [`Subtle Spell removed ${removedParts.join(" and ")} components`];
+			}
+
+			case "bestowed":
+				return [`Bestowed Spell changed range from ${castMeta?.rangeMeta?.originalLabel || "Self"} to ${castMeta?.rangeMeta?.effectiveLabel || "Touch"} for this cast`];
+
+			case "heightened":
+				return castMeta?.saveMeta?.firstTargetDisadvantage
+					? ["Heightened Spell gives the first target disadvantage on its initial save"]
+					: [];
+
+			case "seeking":
+				return castMeta?.attackMeta?.seekingRerollUsed
+					? [`Seeking Spell rerolled the missed spell attack from ${castMeta.attackMeta.originalRoll} to ${castMeta.attackMeta.rerolledRoll}`]
+					: [];
+
+			case "aimed":
+				return ["Aimed Spell added 1d6 to the spell attack roll"];
+
+			default:
+				return [];
+		}
 	}
 
 	/**
 	 * Enhanced spell effects handler with target selection and effect application
 	 */
-	async _handleSpellEffects (spell, slotLevel = null, isPactSlot = false, isRitual = false) {
+	async _handleSpellEffects (spell, slotLevel = null, isPactSlot = false, isRitual = false, castMeta = null) {
 		const upcast = slotLevel && slotLevel > spell.level ? ` (at level ${slotLevel})` : "";
 		const slotType = isPactSlot ? " [Pact Slot]" : (isRitual ? " [Ritual]" : "");
 
 		// Check for spell attack or save DC
 		const spellData = this._allSpells.find(s => s.name === spell.name && s.source === spell.source);
+		const normalizedCastMeta = this._getNormalizedCastMeta({spell, spellData, slotLevel, castMeta});
+		const appliedMetamagic = normalizedCastMeta.appliedMetamagic || null;
 		let attackInfo = "";
 		let damageInfo = "";
+		let damageResult = null;
 		let effectsApplied = [];
+		let metamagicNotes = [];
 		let deliveredViaFamiliar = false;
 
 		// Check for touch spell delivery via familiar
 		if (spellData) {
-			const isTouchSpell = spellData.range?.distance?.type === "touch";
+			metamagicNotes = this._getCastMetamagicNotes({spellData, castMeta: normalizedCastMeta});
+
+			const isTouchSpell = normalizedCastMeta.rangeMeta?.effectiveDistanceType === "touch"
+				|| spellData.range?.distance?.type === "touch";
 			if (isTouchSpell) {
 				const activeFamiliar = this._state.getCompanionsByType?.(CharacterSheetState.COMPANION_TYPES.FAMILIAR)
 					?.find(f => f.active !== false);
@@ -1807,21 +2015,48 @@ class CharacterSheetSpells {
 			// Check if spell attack
 			if (spellData.entries?.some(e => typeof e === "string" && e.toLowerCase().includes("spell attack"))) {
 				const attackBonus = spellcastingMod + profBonus;
+				const aimedBonus = appliedMetamagic?.key === "aimed"
+					? this._rollMetamagicAimedBonus()
+					: null;
 				// Spell attacks are attacks, so use isAttack: true (no Thelemar crit bonus)
 				const rollResult = this._page.rollD20({isAttack: true});
-				const roll = rollResult.roll;
-				attackInfo = `<br>Spell Attack: ${roll} + ${attackBonus} = <strong>${roll + attackBonus}</strong>`;
+				const initialRoll = rollResult.roll;
+				const totalAttackBonus = attackBonus + (aimedBonus?.total || 0);
+				const seekingCastMeta = await this._pMaybeApplySeekingSpell({
+					spell,
+					attackRoll: initialRoll,
+					attackTotal: initialRoll + totalAttackBonus,
+					castMeta: normalizedCastMeta,
+				});
+				if (seekingCastMeta !== normalizedCastMeta) {
+					normalizedCastMeta.attackMeta = seekingCastMeta.attackMeta;
+					metamagicNotes = this._getCastMetamagicNotes({spellData, castMeta: normalizedCastMeta});
+				}
+				const finalRoll = normalizedCastMeta.attackMeta?.seekingRerollUsed
+					? normalizedCastMeta.attackMeta.rerolledRoll
+					: initialRoll;
+				const aimedText = aimedBonus ? ` + ${aimedBonus.total} aimed` : "";
+				const seekingText = normalizedCastMeta.attackMeta?.seekingRerollUsed
+					? ` <span class="ve-muted">(rerolled from ${normalizedCastMeta.attackMeta.originalRoll})</span>`
+					: "";
+				attackInfo = `<br>Spell Attack: ${finalRoll} + ${attackBonus}${aimedText} = <strong>${finalRoll + totalAttackBonus}</strong>${seekingText}`;
 			}
 
 			// Check for save DC
 			if (spellData.savingThrow) {
 				const saveDC = 8 + spellcastingMod + profBonus - exhaustionDcPenalty;
-				attackInfo += `<br>Save DC: <strong>${saveDC}</strong> (${spellData.savingThrow.join("/")} save)`;
+				const saveNote = normalizedCastMeta.saveMeta?.firstTargetDisadvantage
+					? "; first target rolls at disadvantage"
+					: "";
+				attackInfo += `<br>Save DC: <strong>${saveDC}</strong> (${spellData.savingThrow.join("/")} save${saveNote})`;
 			}
 
 			// Parse spell effects to determine what the spell does
 			const effects = CharacterSheetState.parseSpellEffects(spellData);
-			const targetInfo = CharacterSheetState.getValidTargets(spellData);
+			const targetInfo = {
+				...CharacterSheetState.getValidTargets(spellData),
+				...(normalizedCastMeta.targetingMeta || {}),
+			};
 
 			// Determine if we should ask for a target
 			const needsTargetSelection = !targetInfo.selfOnly && (
@@ -1841,7 +2076,7 @@ class CharacterSheetSpells {
 				} else if (targetChoice === "other") {
 					// For others, just show the roll results - we can't track their HP
 					damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level)
-						|| this._rollSpellDamage(spellData, slotLevel, spell.level);
+						|| ((damageResult = this._rollSpellDamage(spellData, slotLevel, spell.level, appliedMetamagic))?.text || "");
 				}
 				// If cancelled, still show the basic cast info
 			} else if (targetInfo.selfOnly) {
@@ -1849,17 +2084,54 @@ class CharacterSheetSpells {
 				effectsApplied = await this._applySpellEffectsToSelf(spell, spellData, effects, slotLevel);
 			} else {
 				// Damage or other effects targeting enemies
-				damageInfo = this._rollSpellDamage(spellData, slotLevel, spell.level);
+				damageResult = this._rollSpellDamage(spellData, slotLevel, spell.level, appliedMetamagic);
+				damageInfo = damageResult?.text || "";
 
 				// Roll healing if spell heals but targets others by default (like Mass Cure Wounds)
 				if (!damageInfo) {
 					damageInfo = this._rollSpellHealing(spellData, slotLevel, spell.level);
 				}
 			}
+
+			// Apply tuned passive metamagic effects
+			const tunedPassiveNotes = this._getTunedPassiveNotes({spellData, damageResult});
+			metamagicNotes.push(...tunedPassiveNotes);
+
+			// Transmuted Spell: prompt to change damage type
+			if (damageResult?.damageType && this._state.isMetamagicTuned?.("transmuted")) {
+				const transmutedResult = await this._pMaybeApplyTransmutedDamage(damageResult);
+				if (transmutedResult) {
+					metamagicNotes.push(`Transmuted Spell changed ${transmutedResult.originalDamageType} → ${transmutedResult.damageType} damage`);
+					damageResult = transmutedResult;
+					damageInfo = transmutedResult.text;
+				}
+			}
+
+			// Empowered Spell: prompt to reroll damage dice
+			if (damageResult?.dice && this._state.isMetamagicTuned?.("empowered")) {
+				const empoweredResult = await this._pMaybeApplyEmpoweredReroll(damageResult);
+				if (empoweredResult) {
+					metamagicNotes.push(`Empowered Spell rerolled ${empoweredResult.rerolledCount} damage ${empoweredResult.rerolledCount === 1 ? "die" : "dice"} (${empoweredResult.originalTotal} → ${empoweredResult.total})`);
+					damageResult = empoweredResult;
+					damageInfo = empoweredResult.text;
+				}
+			}
+
+			if (appliedMetamagic?.key === "vampiric" && damageResult?.total > 0) {
+				const hp = this._state.getHp();
+				const healed = Math.max(0, Math.min(hp.max - hp.current, damageResult.total));
+				if (healed > 0) {
+					this._state.setHp(hp.current + healed, hp.max, hp.temp);
+					effectsApplied.push(`Vampiric Spell healed ${healed} HP`);
+				}
+			}
 		}
 
 		// Build the toast message
 		let toastContent = `Cast ${spell.name}${upcast}${slotType}`;
+		if (normalizedCastMeta.appliedMetamagic) {
+			toastContent += `<br><span class="ve-muted">Metamagic: ${normalizedCastMeta.appliedMetamagic.name} (-${normalizedCastMeta.appliedMetamagic.cost} SP)</span>`;
+		}
 
 		if (deliveredViaFamiliar) {
 			toastContent += `<br><span class="text-info">🐾 Delivered via familiar (used familiar's Reaction)</span>`;
@@ -1869,6 +2141,10 @@ class CharacterSheetSpells {
 
 		if (effectsApplied.length > 0) {
 			toastContent += `<br><span class="text-success">✓ Applied: ${effectsApplied.join(", ")}</span>`;
+		}
+
+		if (metamagicNotes.length > 0) {
+			toastContent += `<br><span class="text-info">${metamagicNotes.join("<br>")}</span>`;
 		}
 
 		JqueryUtil.doToast({
@@ -2884,10 +3160,10 @@ class CharacterSheetSpells {
 		return appliedEffects;
 	}
 
-	_rollSpellDamage (spellData, slotLevel, baseLevel) {
+	_rollSpellDamage (spellData, slotLevel, baseLevel, appliedMetamagic = null) {
 		// Check for cantrip scaling
 		if (spellData.scalingLevelDice) {
-			return this._rollCantripDamage(spellData);
+			return this._rollCantripDamage(spellData, appliedMetamagic);
 		}
 
 		// Look for damage dice in spell entries
@@ -2924,18 +3200,27 @@ class CharacterSheetSpells {
 
 		// Roll the damage
 		try {
-			const baseDamage = Renderer.dice.parseRandomise2(baseDice);
+			const isOvercharged = appliedMetamagic?.key === "overcharged";
+			const baseDamage = isOvercharged
+				? this._getMaximizedDiceTotal(baseDice)
+				: Renderer.dice.parseRandomise2(baseDice);
 			const spellDamageBonus = this._state.getItemBonus?.("spellDamage") || 0;
 			const total = baseDamage + spellDamageBonus;
 			const damageType = damageTypes[0] || "damage";
 			const bonusStr = spellDamageBonus ? ` + ${spellDamageBonus} item` : "";
-			return `<br>Damage: <strong>${total}</strong> ${damageType} (${baseDice}${bonusStr})`;
+			const metamagicLabel = isOvercharged ? " maximized" : "";
+			return {
+				text: `<br>Damage: <strong>${total}</strong> ${damageType} (${baseDice}${bonusStr}${metamagicLabel})`,
+				total,
+				dice: baseDice,
+				damageType,
+			};
 		} catch (e) {
-			return "";
+			return null;
 		}
 	}
 
-	_rollCantripDamage (spellData) {
+	_rollCantripDamage (spellData, appliedMetamagic = null) {
 		const characterLevel = this._state.getTotalLevel();
 		const scaling = Array.isArray(spellData.scalingLevelDice)
 			? spellData.scalingLevelDice[0]
@@ -2953,16 +3238,244 @@ class CharacterSheetSpells {
 		}
 
 		try {
-			const baseDamage = Renderer.dice.parseRandomise2(dice);
+			const isOvercharged = appliedMetamagic?.key === "overcharged";
+			const baseDamage = isOvercharged
+				? this._getMaximizedDiceTotal(dice)
+				: Renderer.dice.parseRandomise2(dice);
 			const spellDamageBonus = this._state.getItemBonus?.("spellDamage") || 0;
 			const total = baseDamage + spellDamageBonus;
 			const damageTypes = spellData.damageInflict || [];
 			const damageType = damageTypes[0] || "damage";
 			const bonusStr = spellDamageBonus ? ` + ${spellDamageBonus} item` : "";
-			return `<br>Damage: <strong>${total}</strong> ${damageType} (${dice}${bonusStr})`;
+			const metamagicLabel = isOvercharged ? " maximized" : "";
+			return {
+				text: `<br>Damage: <strong>${total}</strong> ${damageType} (${dice}${bonusStr}${metamagicLabel})`,
+				total,
+				dice,
+				damageType,
+			};
 		} catch (e) {
-			return "";
+			return null;
 		}
+	}
+
+	_getMaximizedDiceTotal (diceExpression) {
+		if (!diceExpression || typeof diceExpression !== "string") return 0;
+		const cleaned = diceExpression.replace(/\s+/g, "");
+		const match = cleaned.match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+		if (!match) return Renderer.dice.parseRandomise2(diceExpression);
+
+		const [, countRaw, sizeRaw, modifierRaw] = match;
+		const count = Number(countRaw);
+		const size = Number(sizeRaw);
+		const modifier = modifierRaw ? Number(modifierRaw) : 0;
+		return (count * size) + modifier;
+	}
+
+	_rollMetamagicAimedBonus () {
+		const total = Renderer.dice.parseRandomise2("1d6");
+		return {dice: "1d6", total};
+	}
+
+	/**
+	 * Prompt the user to change damage type via Transmuted Spell (tuned passive).
+	 * @param {object} damageResult - Damage result from _rollSpellDamage/_rollCantripDamage
+	 * @returns {object|null} Modified damage result with new type, or null if unchanged
+	 */
+	async _pMaybeApplyTransmutedDamage (damageResult) {
+		if (!damageResult?.damageType) return null;
+
+		const transmutableTypes = ["acid", "cold", "fire", "lightning", "poison", "thunder"];
+		const otherTypes = transmutableTypes.filter(t => t !== damageResult.damageType);
+		if (!otherTypes.length) return null;
+
+		const keepLabel = `Keep ${damageResult.damageType}`;
+		const values = [keepLabel, ...otherTypes.map(t => t.charAt(0).toUpperCase() + t.slice(1))];
+
+		const choice = await InputUiUtil.pGetUserEnum({
+			title: "Transmuted Spell",
+			htmlDescription: `<div>Transmuted Spell is tuned. Change <strong>${damageResult.damageType}</strong> damage to another type?</div>`,
+			values,
+			fnDisplay: v => v,
+			isResolveItem: true,
+		});
+
+		if (choice == null || choice === keepLabel) return null;
+
+		const newType = choice.toLowerCase();
+		return {
+			...damageResult,
+			damageType: newType,
+			text: damageResult.text.replace(damageResult.damageType, newType),
+			transmuted: true,
+			originalDamageType: damageResult.damageType,
+		};
+	}
+
+	/**
+	 * Prompt the user to reroll damage dice via Empowered Spell (tuned passive).
+	 * The sorcerer can reroll up to CHA modifier damage dice and must use the new rolls.
+	 * @param {object} damageResult - Damage result from _rollSpellDamage/_rollCantripDamage
+	 * @returns {object|null} Modified damage result with rerolled dice, or null if unchanged
+	 */
+	async _pMaybeApplyEmpoweredReroll (damageResult) {
+		if (!damageResult?.dice) return null;
+
+		const chaMod = Math.max(1, this._state.getAbilityMod("cha"));
+		const diceMatch = damageResult.dice.match(/^(\d+)d(\d+)$/);
+		if (!diceMatch) return null;
+
+		const numDice = Number(diceMatch[1]);
+		const diceSize = Number(diceMatch[2]);
+		const maxReroll = Math.min(chaMod, numDice);
+
+		const rerollCount = await InputUiUtil.pGetUserEnum({
+			title: "Empowered Spell",
+			htmlDescription: `<div>Empowered Spell is tuned. Reroll up to <strong>${maxReroll}</strong> damage ${maxReroll === 1 ? "die" : "dice"} (CHA mod).<br>Current damage: <strong>${damageResult.total}</strong> (${damageResult.dice}${damageResult.damageType ? ` ${damageResult.damageType}` : ""})</div>`,
+			values: ["Keep current", ...Array.from({length: maxReroll}, (_, i) => `Reroll ${i + 1} ${(i + 1) === 1 ? "die" : "dice"}`)],
+			fnDisplay: v => v,
+			isResolveItem: true,
+		});
+
+		if (rerollCount == null || rerollCount === "Keep current") return null;
+
+		const countToReroll = Number(rerollCount.match(/\d+/)[0]);
+		const keptCount = numDice - countToReroll;
+
+		// Calculate kept dice portion (proportional from original total)
+		const avgPerDie = damageResult.total / numDice;
+		const keptTotal = Math.round(avgPerDie * keptCount);
+
+		// Roll new dice
+		let rerolledTotal = 0;
+		for (let i = 0; i < countToReroll; i++) {
+			rerolledTotal += Renderer.dice.parseRandomise2(`1d${diceSize}`);
+		}
+
+		const newTotal = keptTotal + rerolledTotal;
+		const modifier = damageResult.text.match(/\+\s*(\d+)/)?.[1];
+		const totalWithMod = modifier ? newTotal + Number(modifier) : newTotal;
+		const originalTotal = damageResult.total;
+
+		return {
+			...damageResult,
+			total: totalWithMod,
+			originalTotal,
+			rerolledCount: countToReroll,
+			text: damageResult.text
+				.replace(/\d+(?=<\/strong>)/, String(totalWithMod))
+				.replace(/(\(.*?\))/, `(${damageResult.dice}, rerolled ${countToReroll})`),
+		};
+	}
+
+	/**
+	 * Generate informational notes for tuned passive metamagics that affect the current spell.
+	 * These are non-interactive — just annotations in the cast toast.
+	 * @param {object} opts
+	 * @param {object} opts.spellData - Full spell data from _allSpells
+	 * @param {object|null} opts.damageResult - Damage roll result if applicable
+	 * @returns {string[]} Array of note strings to append to metamagicNotes
+	 */
+	_getTunedPassiveNotes ({spellData, damageResult}) {
+		const notes = [];
+		if (!this._state.getTunedMetamagics?.()?.length) return notes;
+
+		const tuned = this._state.getTunedMetamagics();
+
+		// Careful Spell: chosen creatures auto-succeed on saves
+		if (tuned.includes("careful") && spellData?.savingThrow?.length) {
+			const chaMod = Math.max(1, this._state.getAbilityMod("cha"));
+			notes.push(`Careful Spell: up to ${chaMod} creature${chaMod > 1 ? "s" : ""} you choose auto-succeed on the ${spellData.savingThrow.join("/")} save`);
+		}
+
+		// Distant Spell: double range or make touch → 30ft
+		if (tuned.includes("distant") && spellData?.range) {
+			const rangeType = spellData.range?.distance?.type;
+			if (rangeType === "touch") {
+				notes.push("Distant Spell: range changed from Touch to 30 feet");
+			} else if (rangeType === "feet" && spellData.range?.distance?.amount) {
+				const doubled = spellData.range.distance.amount * 2;
+				notes.push(`Distant Spell: range doubled to ${doubled} feet`);
+			}
+		}
+
+		// Extended Spell: double duration (max 24h)
+		if (tuned.includes("extended") && spellData?.duration?.length) {
+			const dur = spellData.duration[0];
+			if (dur.duration?.amount && dur.duration?.type) {
+				const durationMinutes = this._getDurationInMinutes(dur);
+				const doubled = durationMinutes * 2;
+				const maxMinutes = 24 * 60;
+				const capped = Math.min(doubled, maxMinutes);
+				const displayDuration = this._formatDurationMinutes(capped);
+				notes.push(`Extended Spell: duration doubled to ${displayDuration}${capped === maxMinutes ? " (24h cap)" : ""}`);
+			}
+		}
+
+		// Resonant Spell: dispel/counterspell attempts have disadvantage
+		if (tuned.includes("resonant")) {
+			notes.push("Resonant Spell: dispel/counterspell attempts against this spell have disadvantage");
+		}
+
+		// Split Spell: split AoE between two points (10ft+ areas only)
+		if (tuned.includes("split")) {
+			const aoeSize = this._getSpellAreaSize(spellData);
+			if (aoeSize >= 10) {
+				notes.push(`Split Spell: AoE can be split between two points within range`);
+			}
+		}
+
+		// Supple Spell: adjust AoE by ± half (10ft+ areas only)
+		if (tuned.includes("supple")) {
+			const aoeSize = this._getSpellAreaSize(spellData);
+			if (aoeSize >= 10) {
+				const half = Math.floor(aoeSize / 2);
+				notes.push(`Supple Spell: AoE can be adjusted by ±${half} feet (${aoeSize - half}ft to ${aoeSize + half}ft)`);
+			}
+		}
+
+		return notes;
+	}
+
+	/**
+	 * Convert a duration object to minutes for comparison.
+	 */
+	_getDurationInMinutes (dur) {
+		const amount = dur.duration?.amount || 0;
+		switch (dur.duration?.type) {
+			case "round": return amount / 10; // ~6 seconds
+			case "minute": return amount;
+			case "hour": return amount * 60;
+			case "day": return amount * 60 * 24;
+			default: return amount;
+		}
+	}
+
+	/**
+	 * Format a duration in minutes back into a human-readable string.
+	 */
+	_formatDurationMinutes (minutes) {
+		if (minutes >= 60 * 24 && minutes % (60 * 24) === 0) return `${minutes / (60 * 24)} day${minutes / (60 * 24) > 1 ? "s" : ""}`;
+		if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60} hour${minutes / 60 > 1 ? "s" : ""}`;
+		return `${minutes} minute${minutes > 1 ? "s" : ""}`;
+	}
+
+	/**
+	 * Extract the AoE size of a spell in feet.
+	 * Checks range.type for area (cone, sphere, etc.) then falls back to parsing entries.
+	 * @param {object} spellData - Full spell data
+	 * @returns {number} AoE size in feet, or 0 if not an AoE spell
+	 */
+	_getSpellAreaSize (spellData) {
+		// Check structured range (e.g., {type: "cone", distance: {type: "feet", amount: 60}})
+		if (spellData?.range?.type && !["point", "special"].includes(spellData.range.type)) {
+			return spellData.range.distance?.amount || 0;
+		}
+
+		// Fall back to parsing entries for "N-foot radius/cube/cone/sphere/line" patterns
+		const entriesStr = JSON.stringify(spellData?.entries || []);
+		const aoeMatch = entriesStr.match(/(\d+)-foot[- ](?:radius|cube|cone|sphere|line|emanation|cylinder)/i);
+		return aoeMatch ? Number(aoeMatch[1]) : 0;
 	}
 
 	_rollSpellHealing (spellData, slotLevel, baseLevel) {

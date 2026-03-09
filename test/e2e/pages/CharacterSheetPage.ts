@@ -354,4 +354,18 @@ export class CharacterSheetPage {
 			level: parseInt(levelText || "0", 10),
 		};
 	}
+
+	async getSubclassChoice (className: string): Promise<{key: string; name: string} | null> {
+		return this.page.evaluate(clsName => {
+			return globalThis.charSheet?._state?.getSubclassChoice?.(clsName) || null;
+		}, className);
+	}
+
+	async getKnownSpellNames (): Promise<string[]> {
+		return this.page.evaluate(() => {
+			const state = globalThis.charSheet?._state;
+			if (!state?.getKnownSpells) return [];
+			return state.getKnownSpells().map(spell => spell.name);
+		});
+	}
 }

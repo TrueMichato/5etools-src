@@ -364,6 +364,26 @@ class CharacterSheetRespec {
 			});
 		}
 
+		// Optional features (metamagic, invocations, etc.) are editable
+		if (history.choices?.optionalFeatures?.length > 0) {
+			// Group by feature type for a cleaner edit UI
+			const byType = {};
+			for (const of of history.choices.optionalFeatures) {
+				const key = of.type || "other";
+				(byType[key] = byType[key] || []).push(of);
+			}
+			for (const [typeKey, features] of Object.entries(byType)) {
+				const label = CharacterSheetRespec._getOptionalFeatureTypeLabel(typeKey);
+				editable.push({
+					type: "optionalFeatures",
+					label,
+					current: features.map(f => f.name).join(", "),
+					featureTypeKey: typeKey,
+					count: features.length,
+				});
+			}
+		}
+
 		// Note: Skills and other level 1 choices are typically not editable
 		// as they would require extensive recalculation
 
@@ -446,6 +466,9 @@ class CharacterSheetRespec {
 				break;
 			case "weaponMasteries":
 				await this._editWeaponMasteries(level, history, closeParentModal);
+				break;
+			case "optionalFeatures":
+				await this._editOptionalFeatures(level, history, choice, closeParentModal);
 				break;
 			default:
 				JqueryUtil.doToast({type: "warning", content: "Editing this choice type is not yet implemented."});
@@ -655,6 +678,197 @@ class CharacterSheetRespec {
 			await this._page.saveCharacter();
 			JqueryUtil.doToast({type: "success", content: `Updated level ${level} weapon masteries.`});
 		});
+	}
+
+	/**
+	 * Edit optional feature choices (metamagic, invocations, etc.)
+	 * @param {number} level - The level
+	 * @param {object} history - The history entry
+	 * @param {object} choice - The editable choice descriptor with featureTypeKey and count
+	 * @param {Function} closeParentModal - Function to close parent modal
+	 */
+	async _editOptionalFeatures (level, history, choice, closeParentModal) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `Change ${choice.label}`,
+			isMinHeight0: true,
+			isWidth100: true,
+			isUncappedWidth: true,
+			cbClose: () => {},
+		});
+
+		const featureTypeKey = choice.featureTypeKey;
+		const requiredCount = choice.count;
+
+		// Get all available optional features of this type
+		const allOptFeaturesRaw = this._page.filterByAllowedSources(this._page.getOptionalFeatures() || []);
+		const classData = this._page.getClasses()?.find(c =>
+			c.name === history.class?.name && c.source === history.class?.source,
+		);
+		const allOptFeatures = CharacterSheetClassUtils.filterOptFeaturesByEdition(allOptFeaturesRaw, classData?.source || history.class?.source);
+
+		// Filter to matching feature type
+		const featureTypes = featureTypeKey.split("_");
+		const matchingOptions = allOptFeatures.filter(opt => {
+			return opt.featureType?.some(ft => featureTypes.some(progType => ft === progType || ft.startsWith(progType)));
+		});
+
+		// Current selections for this type
+		const currentSelections = (history.choices.optionalFeatures || [])
+			.filter(of => of.type === featureTypeKey);
+		const currentNames = new Set(currentSelections.map(s => s.name));
+
+		// Get all existing optional features from ALL levels (to filter already-known from other levels)
+		const existingFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
+		const existingFromOtherLevels = new Set();
+		const allHistory = this._state.getLevelHistory();
+		for (const entry of allHistory) {
+			if (entry.level === level) continue;
+			for (const of of (entry.choices?.optionalFeatures || [])) {
+				if (of.type === featureTypeKey) existingFromOtherLevels.add(of.name);
+			}
+		}
+
+		let selectedNames = new Set(currentNames);
+
+		$modalInner.append(`
+			<p class="ve-muted mb-2">Choose ${requiredCount} ${choice.label.toLowerCase()} for this level.</p>
+			<div class="ve-small ve-muted mb-2">Selected: <span id="respec-optfeat-count">${selectedNames.size}</span>/${requiredCount}</div>
+		`);
+
+		const $list = $(`<div style="max-height: 60vh; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>`);
+
+		matchingOptions
+			.sort((a, b) => a.name.localeCompare(b.name))
+			.forEach(opt => {
+				const isCurrentLevel = currentNames.has(opt.name);
+				const isOtherLevel = existingFromOtherLevels.has(opt.name);
+				const isSelected = selectedNames.has(opt.name);
+
+				const $item = $(`
+					<label style="display:flex; align-items:center; cursor:pointer; padding:6px 8px; border-bottom:1px solid var(--rgb-border-grey); ${isSelected ? "background: var(--rgb-bg-highlight);" : ""} ${isOtherLevel && !isCurrentLevel ? "opacity:0.5;" : ""}">
+						<input type="checkbox" ${isSelected ? "checked" : ""} ${isOtherLevel && !isCurrentLevel ? "disabled" : ""} style="margin-right:8px;">
+						<span>
+							<strong>${opt.name}</strong>
+							${opt.source ? `<span class="text-muted ve-small ml-1">[${Parser.sourceJsonToAbv(opt.source)}]</span>` : ""}
+							${isOtherLevel && !isCurrentLevel ? `<span class="text-muted ve-small ml-1">(known from another level)</span>` : ""}
+						</span>
+					</label>
+				`);
+
+				$item.find("input").on("change", (evt) => {
+					if (evt.target.checked) {
+						if (selectedNames.size < requiredCount) {
+							selectedNames.add(opt.name);
+							$item.css("background", "var(--rgb-bg-highlight)");
+						} else {
+							evt.target.checked = false;
+							JqueryUtil.doToast({type: "warning", content: `You can only choose ${requiredCount} ${choice.label.toLowerCase()}.`});
+						}
+					} else {
+						selectedNames.delete(opt.name);
+						$item.css("background", "");
+					}
+					$("#respec-optfeat-count").text(selectedNames.size);
+				});
+
+				$list.append($item);
+			});
+
+		$modalInner.append($list);
+
+		$$`<div class="ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default mr-2">Cancel</button>
+			<button class="ve-btn ve-btn-primary">Apply Changes</button>
+		</div>`.appendTo($modalInner)
+			.find("button")
+			.eq(0)
+			.on("click", () => doClose());
+
+		$modalInner.find(".ve-btn-primary").on("click", async () => {
+			if (selectedNames.size !== requiredCount) {
+				JqueryUtil.doToast({type: "warning", content: `Please select exactly ${requiredCount} ${choice.label.toLowerCase()}.`});
+				return;
+			}
+
+			// Build new optional feature entries
+			const newSelections = matchingOptions
+				.filter(opt => selectedNames.has(opt.name))
+				.map(opt => ({name: opt.name, source: opt.source, type: featureTypeKey}));
+
+			// Remove old features from state for this type at this level
+			for (const old of currentSelections) {
+				const stateFeature = existingFeatures.find(f =>
+					f.name === old.name && f.featureType === "Optional Feature"
+					&& (f.optionalFeatureTypes || []).some(ft => featureTypes.includes(ft)),
+				);
+				if (stateFeature) this._state.removeFeature(stateFeature.id);
+			}
+
+			// Add new features to state
+			for (const sel of newSelections) {
+				const fullOpt = matchingOptions.find(opt => opt.name === sel.name && opt.source === sel.source);
+				if (fullOpt) {
+					this._state.addFeature(CharacterSheetClassUtils.buildFeatureStateObject(fullOpt, {
+						className: history.class?.name,
+						classSource: history.class?.source,
+						level,
+						featureType: "Optional Feature",
+						optionalFeatureTypes: featureTypes,
+					}));
+				}
+			}
+
+			// Update history entry — replace optionalFeatures of this type, keep others
+			const otherTypeFeatures = (history.choices.optionalFeatures || []).filter(of => of.type !== featureTypeKey);
+			const updatedOptionalFeatures = [...otherTypeFeatures, ...newSelections];
+
+			// Also update replayData snapshots for this type
+			const newReplaySnapshots = newSelections.map(sel => {
+				const fullOpt = matchingOptions.find(opt => opt.name === sel.name && opt.source === sel.source);
+				return fullOpt
+					? CharacterSheetClassUtils.buildHistoryFeatureSnapshot(fullOpt, {type: featureTypeKey})
+					: sel;
+			});
+			const otherTypeReplay = (history.choices.replayData?.optionalFeatures || [])
+				.filter(snap => {
+					const snapType = snap.type || snap.optionalFeatureTypes?.join("_");
+					return snapType !== featureTypeKey;
+				});
+
+			this._state.updateLevelChoice(level, {
+				optionalFeatures: updatedOptionalFeatures,
+				replayData: {
+					...(history.choices.replayData || {}),
+					optionalFeatures: [...otherTypeReplay, ...newReplaySnapshots],
+				},
+			});
+
+			doClose();
+			closeParentModal();
+			this.render();
+			this._page.renderCharacter();
+			await this._page.saveCharacter();
+			JqueryUtil.doToast({type: "success", content: `Updated ${choice.label}.`});
+		});
+	}
+
+	/**
+	 * Get a human-readable label for an optional feature type code.
+	 * @param {string} typeKey - e.g. "MM", "EI", "PB"
+	 * @returns {string} Human-readable label
+	 */
+	static _getOptionalFeatureTypeLabel (typeKey) {
+		const typeNames = {
+			"EI": "Eldritch Invocations",
+			"MM": "Metamagic Options",
+			"MV:B": "Battle Master Maneuvers",
+			"AS": "Arcane Shot Options",
+			"ED": "Elemental Disciplines",
+			"PB": "Pact Boons",
+			"AI": "Artificer Infusions",
+			"RN": "Rune Knight Runes",
+		};
+		return typeNames[typeKey] || `Optional Features (${typeKey})`;
 	}
 
 	/**

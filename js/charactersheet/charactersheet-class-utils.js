@@ -224,6 +224,81 @@ class CharacterSheetClassUtils {
 		return spell.classes?.fromClassList?.some(c => c.name === className) || false;
 	}
 
+	static isDivineSoulSubclass (subclass) {
+		if (!subclass?.name && !subclass?.shortName) return false;
+		return [subclass.name, subclass.shortName]
+			.filter(Boolean)
+			.some(name => String(name).toLowerCase() === "divine soul");
+	}
+
+	static normalizeDivineSoulAffinity (choice) {
+		if (!choice) return null;
+
+		const rawName = typeof choice === "string"
+			? choice
+			: choice.name || choice.key;
+		if (!rawName) return null;
+
+		const name = String(rawName).trim();
+		if (!name) return null;
+
+		return {
+			key: name.toLowerCase(),
+			name,
+		};
+	}
+
+	static getDivineSoulAffinityOptions (subclass) {
+		if (!this.isDivineSoulSubclass(subclass)) return [];
+		return (subclass.additionalSpells || [])
+			.filter(block => block?.name)
+			.map(block => this.normalizeDivineSoulAffinity(block.name))
+			.filter(Boolean);
+	}
+
+	static getDivineSoulAffinityBlock (subclass, subclassChoice) {
+		if (!this.isDivineSoulSubclass(subclass)) return null;
+		const normalized = this.normalizeDivineSoulAffinity(subclassChoice);
+		if (!normalized) return null;
+
+		return (subclass.additionalSpells || []).find(block => {
+			const blockChoice = this.normalizeDivineSoulAffinity(block?.name);
+			return blockChoice?.key === normalized.key;
+		}) || null;
+	}
+
+	static getDivineSoulKnownSpell (subclass, subclassChoice) {
+		const block = this.getDivineSoulAffinityBlock(subclass, subclassChoice);
+		const spellRef = block?.known?.["1"]?.[0];
+		if (!spellRef) return null;
+
+		if (typeof spellRef === "string") {
+			const [name, source] = spellRef.split("|");
+			return {
+				name: name.trim(),
+				source: source || Parser.SRC_PHB,
+				level: 1,
+			};
+		}
+
+		if (spellRef?.name) {
+			return {
+				name: spellRef.name,
+				source: spellRef.source || Parser.SRC_PHB,
+				level: spellRef.level ?? 1,
+			};
+		}
+
+		return null;
+	}
+
+	static getAdditionalSpellListClasses ({className, subclass, subclassChoice} = {}) {
+		if (className === "Sorcerer" && this.isDivineSoulSubclass(subclass) && this.normalizeDivineSoulAffinity(subclassChoice)) {
+			return ["Cleric"];
+		}
+		return [];
+	}
+
 	/**
 	 * Get the maximum spell level a class can cast at a given level.
 	 * @param {string} className - Class name
@@ -1924,7 +1999,11 @@ class CharacterSheetClassUtils {
 				{name: "__MONK_RESOURCE__", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "short"},
 			],
 			"Sorcerer": [
-				{name: "Sorcery Points", maxByLevel: lvl => lvl >= 2 ? lvl : 0, recharge: "long"},
+				{name: "Sorcery Points", maxByLevel: lvl => {
+					const isTGTT = classEntry.source === "TGTT" || classData.source === "TGTT";
+					if (isTGTT) return lvl + 1;
+					return lvl >= 2 ? lvl : 0;
+				}, recharge: "long"},
 			],
 			"Paladin": [
 				{name: "Lay on Hands", maxByLevel: lvl => lvl * 5, recharge: "long"},

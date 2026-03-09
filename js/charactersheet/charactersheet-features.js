@@ -168,6 +168,12 @@ class CharacterSheetFeatures {
 			const resourceId = $pip.closest(".charsheet__resource").data("resource-id");
 			this._toggleResourcePip(resourceId, $pip);
 		});
+
+		// "+X more features" modal trigger
+		$(document).on("click", ".charsheet__feature-summary-more", (e) => {
+			const featureType = $(e.currentTarget).data("feature-type");
+			this._pShowMoreFeaturesModal(featureType);
+		});
 	}
 
 	_toggleFeatureExpansion (featureId) {
@@ -594,6 +600,64 @@ class CharacterSheetFeatures {
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
 	}
 
+	/**
+	 * Show modal with all features of a given type (Class or Species)
+	 * @param {string} featureType - "Class" or "Species"
+	 */
+	async _pShowMoreFeaturesModal (featureType) {
+		const allFeatures = this._state.getFeatures();
+
+		// Get features matching the type
+		let features;
+		let title;
+		if (featureType === "Class") {
+			features = allFeatures.filter(f => f.featureType === "Class");
+			title = "All Class Features";
+		} else if (featureType === "Species") {
+			features = allFeatures.filter(f => f.featureType === "Species" || f.featureType === "Subrace" || f.featureType === "Race");
+			title = "All Species Features";
+		} else {
+			return;
+		}
+
+		if (!features.length) {
+			JqueryUtil.doToast({type: "info", content: `No ${featureType.toLowerCase()} features found.`});
+			return;
+		}
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title,
+			isMinHeight0: true,
+			isWidth100: true,
+		});
+
+		// Render each feature
+		const $list = $(`<div class="ve-flex-col"></div>`);
+		features.forEach(feature => {
+			const usesStr = feature.uses
+				? `<span class="ve-muted ml-2">(${feature.uses.current}/${feature.uses.max} uses)</span>`
+				: "";
+
+			const $featureEntry = $(`
+				<div class="charsheet__modal-feature-entry py-1 bb-1">
+					<div class="ve-flex-v-center">
+						<strong>${feature.name}</strong>
+						${usesStr}
+						${feature.className ? `<span class="ve-muted ml-auto ve-small">${feature.className}${feature.level ? ` L${feature.level}` : ""}</span>` : ""}
+					</div>
+					${feature.description ? `<div class="ve-small mt-1">${feature.description}</div>` : ""}
+				</div>
+			`);
+			$list.append($featureEntry);
+		});
+
+		$modalInner.append($list);
+
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-default">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
 	_removeFeature (featureId) {
 		this._state.removeFeature(featureId);
 		this.render();
@@ -752,6 +816,8 @@ class CharacterSheetFeatures {
 
 		// Group and render optional features by type
 		if (optionalFeatures.length > 0) {
+			this._renderTgttMetamagicSummary($container, optionalFeatures);
+
 			// Group by optional feature types
 			const optFeatureGroups = {};
 			optionalFeatures.forEach(f => {
@@ -804,6 +870,104 @@ class CharacterSheetFeatures {
 				$container.append($groupContainer);
 			});
 		}
+	}
+
+	_renderTgttMetamagicSummary ($container, optionalFeatures) {
+		const metamagicFeatures = optionalFeatures.filter(feature =>
+			(feature.optionalFeatureTypes || []).includes("MM"),
+		);
+		if (!metamagicFeatures.length) return;
+
+		const knownKeys = new Set(this._state.getKnownMetamagicKeys?.() || []);
+		if (!knownKeys.size) return;
+
+		const passiveMetamagics = (this._state.getPassiveMetamagics?.() || [])
+			.filter(meta => knownKeys.has(meta.key));
+		const activeMetamagics = (this._state.getActiveMetamagics?.() || [])
+			.filter(meta => knownKeys.has(meta.key));
+		const lockedPoints = this._state.getLockedSorceryPoints?.() || 0;
+		const effectiveMax = this._state.getEffectiveSorceryPointMax?.() ?? 0;
+
+		const renderCost = (cost) => {
+			if (cost === "level") return "spell level";
+			if (cost === "halfLevel") return "half spell level";
+			return `${cost} SP`;
+		};
+
+		const renderList = (items, formatter) => {
+			if (!items.length) return `<div class="ve-muted ve-small">None selected yet.</div>`;
+			return `
+				<div class="ve-flex-col" style="gap: 6px;">
+					${items.map(formatter).join("")}
+				</div>
+			`;
+		};
+
+		const passiveHtml = renderList(passiveMetamagics, meta => {
+			const canAfford = !meta.tuned && typeof meta.cost === "number" && effectiveMax >= meta.cost;
+			const btnLabel = meta.tuned ? "Detune" : "Tune";
+			const btnClass = meta.tuned ? "btn-outline-danger" : "btn-outline-success";
+			const btnDisabled = !meta.tuned && !canAfford ? "disabled title=\"Not enough effective sorcery points\"" : "";
+			return `
+				<div class="ve-flex ve-flex-v-center ve-flex-wrap" style="gap: 6px;">
+					<span class="bold">${meta.name}</span>
+					<span class="ve-muted ve-small">Locks ${renderCost(meta.cost)}</span>
+					<button class="btn btn-xs ${btnClass} charsheet__metamagic-tune-btn" data-metamagic-key="${meta.key}" ${btnDisabled}>${btnLabel}</button>
+					${meta.tuned ? `<span class="badge badge-success" style="margin-left: 2px;">Tuned</span>` : ""}
+				</div>
+			`;
+		});
+
+		const activeHtml = renderList(activeMetamagics, meta => `
+			<div class="ve-flex ve-flex-v-center ve-flex-wrap" style="gap: 6px;">
+				<span class="bold">${meta.name}</span>
+				<span class="ve-muted ve-small">Cast-time cost: ${renderCost(meta.cost)}</span>
+			</div>
+		`);
+
+		const $summary = $(`
+			<div class="charsheet__feature-group mb-3">
+				<div class="charsheet__feature-group-header">
+					<span class="glyphicon glyphicon-flash"></span> TGTT Metamagic
+					<span class="badge badge-info">${metamagicFeatures.length}</span>
+				</div>
+				<div class="charsheet__feature-group-body">
+					<div class="ve-flex ve-flex-wrap mb-2" style="gap: 12px;">
+						<div><span class="bold">Locked Sorcery Points:</span> ${lockedPoints}</div>
+						<div><span class="bold">Known Passive:</span> ${passiveMetamagics.length}</div>
+						<div><span class="bold">Known Active:</span> ${activeMetamagics.length}</div>
+					</div>
+					<div class="mb-2">
+						<div class="bold mb-1">Passive Loadout</div>
+						${passiveHtml}
+					</div>
+					<div>
+						<div class="bold mb-1">Active Cast-Time Options</div>
+						${activeHtml}
+					</div>
+				</div>
+			</div>
+		`);
+
+		$summary.find(".charsheet__metamagic-tune-btn").each((_, btn) => {
+			$(btn).on("click", () => {
+				const key = $(btn).data("metamagic-key");
+				if (this._state.isMetamagicTuned?.(key)) {
+					this._state.detuneMetamagic(key);
+				} else {
+					if (!this._state.tuneMetamagic(key)) {
+						JqueryUtil.doToast({type: "warning", content: "Not enough sorcery points to tune this metamagic."});
+						return;
+					}
+				}
+				this._page.saveCharacter?.();
+				// Re-render this section
+				$summary.remove();
+				this._renderTgttMetamagicSummary($container, optionalFeatures);
+			});
+		});
+
+		$container.append($summary);
 	}
 
 	_renderRaceFeatures () {
@@ -1051,7 +1215,7 @@ class CharacterSheetFeatures {
 				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}${usesStr}</div>`);
 			});
 			if (byType.Class.length > 5) {
-				$container.append(`<div class="ve-muted ve-small">+${byType.Class.length - 5} more class features</div>`);
+				$container.append(`<div class="ve-muted ve-small charsheet__feature-summary-more" data-feature-type="Class">+${byType.Class.length - 5} more class features</div>`);
 			}
 		}
 
@@ -1064,7 +1228,7 @@ class CharacterSheetFeatures {
 				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
 			});
 			if (speciesFeatures.length > 3) {
-				$container.append(`<div class="ve-muted ve-small">+${speciesFeatures.length - 3} more species features</div>`);
+				$container.append(`<div class="ve-muted ve-small charsheet__feature-summary-more" data-feature-type="Species">+${speciesFeatures.length - 3} more species features</div>`);
 			}
 		}
 
