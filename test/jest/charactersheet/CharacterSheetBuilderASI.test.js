@@ -122,8 +122,8 @@ describe("CharacterSheetBuilder ability score bonus accumulation", () => {
 		});
 	});
 
-	describe("Step 4 (Background) clearing", () => {
-		test("re-applying step 4 does not double background ASI", () => {
+	describe("Step 2 (Background) clearing", () => {
+		test("re-applying step 2 does not double background ASI", () => {
 			const state = createMockState();
 			// Simulate racial bonuses already applied
 			state.setAbilityBonus("str", 2);
@@ -136,8 +136,8 @@ describe("CharacterSheetBuilder ability score bonus accumulation", () => {
 				abilityBonuses: {bg_0: "int", bg_0_weight: 2, bg_1: "wis", bg_1_weight: 1},
 			});
 
-			// Simulate step 4 applied (first time)
-			builder._currentStep = 4;
+			// Simulate step 2 applied (first time) — Background is now step 2
+			builder._currentStep = 2;
 			builder._applyCurrentStep();
 			// racial (str: 2, con: 2) + background (int: 2, wis: 1)
 			expect(state.bonuses.str).toBe(2);
@@ -145,7 +145,7 @@ describe("CharacterSheetBuilder ability score bonus accumulation", () => {
 			expect(state.bonuses.int).toBe(2);
 			expect(state.bonuses.wis).toBe(1);
 
-			// Re-apply step 4 (simulates going back to step 4 and forward again)
+			// Re-apply step 2 (simulates going back to step 2 and forward again)
 			builder._applyCurrentStep();
 			// Should be same as before, NOT doubled
 			expect(state.bonuses.str).toBe(2);
@@ -154,7 +154,7 @@ describe("CharacterSheetBuilder ability score bonus accumulation", () => {
 			expect(state.bonuses.wis).toBe(1); // NOT 2
 		});
 
-		test("re-applying step 4 preserves racial bonuses", () => {
+		test("re-applying step 2 preserves racial bonuses", () => {
 			const state = createMockState();
 			const builder = createBuilder({
 				state,
@@ -175,7 +175,7 @@ describe("CharacterSheetBuilder ability score bonus accumulation", () => {
 				abilityBonuses: {bg_0: "wis", bg_0_weight: 2, bg_1: "int", bg_1_weight: 1},
 			});
 
-			builder._currentStep = 4;
+			builder._currentStep = 2;
 			builder._applyCurrentStep();
 			// racial: cha +2, str +1, con +1. background: wis +2, int +1.
 			expect(state.bonuses.cha).toBe(2);
@@ -204,7 +204,7 @@ describe("CharacterSheetBuilder ability score bonus accumulation", () => {
 				abilityBonuses: {bg_0: "int", bg_0_weight: 2, bg_1: "wis", bg_1_weight: 1},
 			});
 
-			builder._currentStep = 4;
+			builder._currentStep = 2;
 			builder._applyCurrentStep();
 			expect(state.bonuses.str).toBe(0);
 			expect(state.bonuses.dex).toBe(0);

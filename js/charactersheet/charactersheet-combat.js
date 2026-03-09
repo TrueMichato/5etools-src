@@ -1793,6 +1793,7 @@ class CharacterSheetCombat {
 				"celestial revelation", "infernal legacy", "fey step", "misty step",
 				"stone's endurance", "lucky", "second wind", "action surge",
 				"fighting spirit", "cunning action", "uncanny dodge",
+				"tantalizing shivers", // Belly Dancer (TGTT Rogue)
 				"patient defense", "step of the wind",
 				"flurry of blows", "stunning strike", "deflect missiles", "slow fall",
 				"wild shape", "channel divinity", "divine smite", "lay on hands",

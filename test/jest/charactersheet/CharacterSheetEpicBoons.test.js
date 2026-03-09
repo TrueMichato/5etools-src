@@ -6,6 +6,7 @@
 
 import "./setup.js";
 import "../../../js/charactersheet/charactersheet-state.js";
+import "../../../js/charactersheet/charactersheet-class-utils.js";
 
 const CharacterSheetState = globalThis.CharacterSheetState;
 
@@ -149,6 +150,129 @@ describe("Epic Boons — Ability Score Max Override", () => {
 			state.setAbilityBase("int", 19);
 			state.applyASI("int", 2);
 			expect(state.getAbilityBase("int")).toBe(20);
+		});
+	});
+});
+
+// =============================================================================
+// Boon of Skill — Proficiency in All Skills + Expertise Choice
+// =============================================================================
+describe("Boon of Skill — Skill Proficiencies and Expertise", () => {
+	let state;
+
+	const ALL_SKILLS = [
+		"athletics", "acrobatics", "sleightofhand", "stealth",
+		"arcana", "history", "investigation", "nature", "religion",
+		"animalhandling", "insight", "medicine", "perception", "survival",
+		"deception", "intimidation", "performance", "persuasion",
+	];
+
+	const BOON_OF_SKILL_DATA = {
+		name: "Boon of Skill",
+		source: "XPHB",
+		category: "EB",
+		skillProficiencies: [{
+			athletics: true,
+			acrobatics: true,
+			sleightofhand: true,
+			stealth: true,
+			arcana: true,
+			history: true,
+			investigation: true,
+			nature: true,
+			religion: true,
+			animalhandling: true,
+			insight: true,
+			medicine: true,
+			perception: true,
+			survival: true,
+			deception: true,
+			intimidation: true,
+			performance: true,
+			persuasion: true,
+		}],
+		expertise: {anyProficientSkill: 1},
+		ability: [{choose: {from: ["str", "dex", "con", "int", "wis", "cha"]}, max: 30}],
+	};
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+	});
+
+	describe("Skill proficiencies from applyFeatBonuses", () => {
+		it("should apply all 18 skill proficiencies from Boon of Skill", () => {
+			// Verify no skills initially
+			expect(Object.keys(state.getSkillProficiencies())).toHaveLength(0);
+
+			// Apply Boon of Skill bonuses
+			globalThis.CharacterSheetClassUtils.applyFeatBonuses(state, BOON_OF_SKILL_DATA, {});
+
+			// Verify all 18 skills are now proficient
+			const proficiencies = Object.keys(state.getSkillProficiencies()).map(s => s.toLowerCase());
+			expect(proficiencies).toHaveLength(18);
+
+			ALL_SKILLS.forEach(skill => {
+				expect(proficiencies).toContain(skill);
+			});
+		});
+
+		it("should not duplicate skills if already proficient", () => {
+			// Add some skills first
+			state.addSkillProficiency("athletics");
+			state.addSkillProficiency("perception");
+			expect(Object.keys(state.getSkillProficiencies())).toHaveLength(2);
+
+			// Apply Boon of Skill
+			globalThis.CharacterSheetClassUtils.applyFeatBonuses(state, BOON_OF_SKILL_DATA, {});
+
+			// Still should have 18 skills (not 20)
+			const proficiencies = Object.keys(state.getSkillProficiencies()).map(s => s.toLowerCase());
+			expect(proficiencies).toHaveLength(18);
+		});
+	});
+
+	describe("Expertise choice includes fixed skills", () => {
+		it("should correctly extract fixed skill proficiencies from feat data", () => {
+			// This tests the pattern used in QuickBuild/LevelUp expertise dropdown
+			const fixedFeatSkills = BOON_OF_SKILL_DATA.skillProficiencies?.[0]
+				? Object.entries(BOON_OF_SKILL_DATA.skillProficiencies[0])
+					.filter(([, v]) => v === true)
+					.map(([s]) => s.toLowerCase())
+				: [];
+
+			expect(fixedFeatSkills).toHaveLength(18);
+			ALL_SKILLS.forEach(skill => {
+				expect(fixedFeatSkills).toContain(skill);
+			});
+		});
+
+		it("should apply chosen expertise from feat choices", () => {
+			// First apply skill proficiencies
+			globalThis.CharacterSheetClassUtils.applyFeatBonuses(state, BOON_OF_SKILL_DATA, {});
+
+			// Now apply expertise choice
+			globalThis.CharacterSheetClassUtils.applyFeatBonuses(state, BOON_OF_SKILL_DATA, {
+				expertise: ["perception"],
+			});
+
+			const expertise = state.getExpertise().map(s => s.toLowerCase());
+			expect(expertise).toContain("perception");
+		});
+	});
+
+	describe("Ability score bonus with max 30", () => {
+		it("should allow ability score to exceed 20 with Boon of Skill", () => {
+			state.setAbilityBase("dex", 20);
+
+			// Simulate applying +1 with max 30
+			globalThis.CharacterSheetClassUtils.applyFeatBonuses(state, {
+				...BOON_OF_SKILL_DATA,
+				_epicBoonAbilityChoice: {ability: "dex", amount: 1, max: 30},
+			}, {});
+
+			// Note: The ability bonus is applied through the ability array processing
+			// with _epicBoonAbilityChoice for chosen abilities
+			expect(state.getAbilityBase("dex")).toBe(21);
 		});
 	});
 });

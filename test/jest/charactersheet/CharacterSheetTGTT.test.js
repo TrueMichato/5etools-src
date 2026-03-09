@@ -5430,9 +5430,45 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					
 					const calcs = state.getFeatureCalculations();
 					expect(calcs.hasGamblerTools).toBe(true);
-					expect(calcs.gamblerCoinsWeapon).toEqual({ damage: "1d4", type: "piercing", range: "60/100" });
-					expect(calcs.gamblerDiceWeapon).toEqual({ damage: "1d6", type: "bludgeoning", range: "60/200" });
-					expect(calcs.gamblerCardsWeapon).toEqual({ damage: "1d8", type: "slashing", range: "30/60" });
+					
+					// Gambler weapons are now injected into inventory
+					const inventory = state.getInventory();
+					const gamblerWeapons = inventory.filter(i => i.item._isGamblerWeapon);
+					expect(gamblerWeapons).toHaveLength(3);
+					
+					const coins = gamblerWeapons.find(i => i.item.name === "Gambler's Coins");
+					expect(coins).toBeDefined();
+					expect(coins.item.dmg1).toBe("1d4");
+					expect(coins.item.dmgType).toBe("P");
+					expect(coins.item.range).toBe("60/100");
+					
+					const dice = gamblerWeapons.find(i => i.item.name === "Gambler's Dice");
+					expect(dice).toBeDefined();
+					expect(dice.item.dmg1).toBe("1d6");
+					expect(dice.item.dmgType).toBe("B");
+					expect(dice.item.range).toBe("60/200");
+					
+					const cards = gamblerWeapons.find(i => i.item.name === "Gambler's Cards");
+					expect(cards).toBeDefined();
+					expect(cards.item.dmg1).toBe("1d8");
+					expect(cards.item.dmgType).toBe("S");
+					expect(cards.item.range).toBe("30/60");
+				});
+				
+				it("should not duplicate Gambler weapons on multiple calculations", () => {
+					state.addClass({
+						name: "Rogue", source: "TGTT", level: 3,
+						subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+					});
+					
+					// Trigger multiple feature calculations (simulates multiple renders)
+					state.getFeatureCalculations();
+					state.getFeatureCalculations();
+					state.getFeatureCalculations();
+					
+					const inventory = state.getInventory();
+					const gamblerWeapons = inventory.filter(i => i.item._isGamblerWeapon);
+					expect(gamblerWeapons).toHaveLength(3); // Exactly 3, no duplicates
 				});
 				
 				it("should calculate unique rolling spellcasting modifier at level 3", () => {

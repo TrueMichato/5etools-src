@@ -606,7 +606,12 @@ class FeatureModifierParser {
 		if (!text) return [];
 
 		const modifiers = [];
-		const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+		// Strip table content first - tables often contain example outcomes (like d100 wild surge effects)
+		// that shouldn't be parsed as permanent modifiers
+		const plainText = text
+			.replace(/<table[^>]*>[\s\S]*?<\/table>/gi, " ")
+			.replace(/<[^>]*>/g, " ")
+			.replace(/\s+/g, " ");
 
 		// Debug: Log the plaintext for proficiency bonus features
 		if (/proficiency\s*bonus/i.test(plainText)) {
@@ -8002,10 +8007,8 @@ class CharacterSheetState {
 								// Gambler's Tools (level 3) - tool proficiencies and weapon options
 								if (level >= 3) {
 									calculations.hasGamblerTools = true;
-									// Cards, dice, coins as weapons
-									calculations.gamblerCoinsWeapon = { damage: "1d4", type: "piercing", range: "60/100" };
-									calculations.gamblerDiceWeapon = { damage: "1d6", type: "bludgeoning", range: "60/200" };
-									calculations.gamblerCardsWeapon = { damage: "1d8", type: "slashing", range: "30/60" };
+									// Inject Gambler weapons (cards, dice, coins) into inventory
+									this._injectGamblerWeapons();
 								}
 
 								// Gambler's Spellcasting (level 3) - UNIQUE: rolling modifier
@@ -14971,12 +14974,13 @@ class CharacterSheetState {
 
 		// Belly Dancer - Snake Charmer: AC bonus = CHA mod (while dancing/unarmored)
 		if (calculations.hasSnakeCharmer && calculations.danceAcBonus && !alreadyProcessed("Snake Charmer")) {
+			const isDancing = this.isStateActive("dancing");
 			effects.push({
 				type: "acBonus",
 				value: calculations.danceAcBonus,
 				source: "Snake Charmer",
 				conditional: "while dancing, not wearing armor",
-				enabled: false,
+				enabled: isDancing,
 			});
 		}
 
@@ -15458,17 +15462,19 @@ class CharacterSheetState {
 			}
 
 			case "skillMinimum": {
-				// Add as a modifier that tracks minimum roll
-				const skillTarget = effect.skill ? `skill:${effect.skill}:minimum` : "skill:all:minimum";
-				this._addClassFeatureModifier({
-					name: effect.source,
-					type: skillTarget,
-					value: effect.minimum,
-					note: `From ${effect.source}${effect.requiresProficiency ? " (proficient skills only)" : ""}`,
-					enabled: true,
+				// Roll floor effects (like Reliable Talent) should NOT add to skill modifiers.
+				// They only affect the d20 roll result, not the static modifier.
+				// The hasReliableTalent flag in getFeatureCalculations() tracks this.
+				// Store in rollFloors for potential future roll simulation.
+				if (!this._data.rollFloors) this._data.rollFloors = {};
+				if (!this._data.rollFloors.skill) this._data.rollFloors.skill = {};
+				const skillKey = effect.skill || "all";
+				this._data.rollFloors.skill[skillKey] = {
+					minimum: effect.minimum,
 					requiresProficiency: effect.requiresProficiency,
-				});
-				return `${effect.source}: minimum ${effect.minimum} on ${effect.skill || "proficient"} checks`;
+					source: effect.source,
+				};
+				return `${effect.source}: minimum ${effect.minimum} on d20 for ${effect.skill || "proficient"} checks`;
 			}
 
 			case "skillBonus": {
@@ -16538,6 +16544,24 @@ class CharacterSheetState {
 					this.setArmor({ac: item.ac, type: armorType, name: item.name});
 				}
 			}
+		}
+	}
+
+	/**
+	 * Injects Gambler class weapons into inventory if not already present.
+	 * Called when a character has Gambler level 3+.
+	 * Uses _isGamblerWeapon marker to detect existing weapons and prevent duplicates.
+	 */
+	_injectGamblerWeapons () {
+		// Check if any Gambler weapons already exist (by marker)
+		const hasGamblerWeapons = this._data.inventory.some(
+			invItem => invItem.item._isGamblerWeapon,
+		);
+		if (hasGamblerWeapons) return; // Already injected
+
+		// Inject all Gambler weapons
+		for (const weaponTemplate of CharacterSheetState.GAMBLER_WEAPONS) {
+			this.addItem({...weaponTemplate}, 1, false, false);
 		}
 	}
 
@@ -25053,6 +25077,61 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Gambler class unique weapons - injected when Gambler reaches level 3
+	 * These are custom weapons with special properties from TGTT
+	 */
+	static GAMBLER_WEAPONS = [
+		{
+			name: "Gambler's Coins",
+			source: "TGTT",
+			type: "M", // Melee weapon
+			weapon: true,
+			weaponCategory: "simple",
+			dmg1: "1d4",
+			dmgType: "P", // Piercing
+			property: ["F", "T"], // Finesse, Thrown
+			range: "60/100",
+			weight: 0.01,
+			value: 0,
+			entries: [
+				"Can ricochet to ignore half cover on ranged attacks."
+			],
+			_isCustom: true,
+			_isGamblerWeapon: true,
+		},
+		{
+			name: "Gambler's Dice",
+			source: "TGTT",
+			type: "M",
+			weapon: true,
+			weaponCategory: "simple",
+			dmg1: "1d6",
+			dmgType: "B", // Bludgeoning
+			property: ["F", "T"], // Finesse, Thrown
+			range: "60/200",
+			weight: 0.02,
+			value: 10, // 1 sp = 10 cp per set
+			_isCustom: true,
+			_isGamblerWeapon: true,
+		},
+		{
+			name: "Gambler's Cards",
+			source: "TGTT",
+			type: "M",
+			weapon: true,
+			weaponCategory: "simple",
+			dmg1: "1d8",
+			dmgType: "S", // Slashing
+			property: ["F", "L", "T"], // Finesse, Light, Thrown
+			range: "30/60",
+			weight: 0.1,
+			value: 50, // 5 sp = 50 cp per deck
+			_isCustom: true,
+			_isGamblerWeapon: true,
+		},
+	];
+
+	/**
 	 * State type definitions with their effects
 	 * Each state defines what effects it provides when active
 	 */
@@ -25153,6 +25232,22 @@ class CharacterSheetState {
 			detectPatterns: ["bladesong", "invoke.*bladesong"],
 			activationAction: "bonus",
 			exclusiveWith: ["rage"], // Cannot bladesong and rage simultaneously
+		},
+		dancing: {
+			id: "dancing",
+			name: "Dancing",
+			icon: "💃",
+			description: "Performing a traditional dance that grants combat benefits",
+			effects: [
+				{type: "bonus", target: "ac", abilityMod: "cha"}, // +CHA to AC (Snake Charmer)
+				{type: "advantage", target: "skill:athletics"},
+			],
+			duration: "1 minute",
+			endConditions: ["Incapacitated", "Wearing armor"],
+			resourceName: "Dance of the Country",
+			detectPatterns: ["dance of the country", "traditional dance"],
+			activationAction: "bonus",
+			requiresSubclass: "The Belly Dancer",
 		},
 		combatStance: {
 			id: "combatStance",
@@ -26255,6 +26350,10 @@ class CharacterSheetState {
 			{pattern: /(?:enter|start|activate|begin) (?:a |your )?rage/i, stateTypeId: "rage"},
 			{pattern: /invoke.*bladesong/i, stateTypeId: "bladesong"},
 			{pattern: /start (?:your |a )?bladesong/i, stateTypeId: "bladesong"},
+
+			// Belly Dancer dancing patterns (TGTT)
+			{pattern: /dance of the country/i, stateTypeId: "dancing"},
+			{pattern: /perform (?:a |an? )?traditional dance/i, stateTypeId: "dancing"},
 
 			// Combat stance patterns (Level Up A5E, TGTT, Grim Hollow, etc.)
 			{pattern: /this stance lasts until/i, stateTypeId: "combatStance"},

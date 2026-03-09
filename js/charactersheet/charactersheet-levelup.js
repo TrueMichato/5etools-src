@@ -576,6 +576,11 @@ class CharacterSheetLevelUp {
 
 				for (const grant of expertiseGrants) {
 					const selected = selectedExpertise[grant.featureName] || [];
+					// Fixed skills are always complete
+					if (grant.fixedSkills?.length > 0) {
+						allSkills.push(...grant.fixedSkills.map(s => s.toTitleCase()));
+						continue;
+					}
 					if (selected.length < grant.count) allComplete = false;
 					allSkills.push(...selected);
 				}
@@ -583,6 +588,9 @@ class CharacterSheetLevelUp {
 				summaryItems.expertise.setStatus(allComplete, allSkills.join(", ") || "Select skills");
 				accordions.expertise.setComplete(allComplete, allSkills.join(", "));
 			};
+
+			// Run initial status update for any pre-populated fixed skills
+			updateExpertiseStatus();
 
 			$main.append(createAccordion("expertise", "⭐", "Expertise", $expertiseContent, {required: true}));
 		}
@@ -897,6 +905,9 @@ class CharacterSheetLevelUp {
 			}
 
 			for (const grant of expertiseGrants) {
+				// Skip validation for fixed expertise (auto-populated)
+				if (grant.fixedSkills?.length > 0) continue;
+
 				const selected = selectedExpertise[grant.featureName] || [];
 				if (selected.length < grant.count) {
 					JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} skill(s) for expertise.`});
@@ -1816,16 +1827,23 @@ class CharacterSheetLevelUp {
 			const $expertiseGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
 
 			// Get proficient skills that don't already have expertise
-			const existingProf = this._state.getSkillProficiencies?.() || [];
+			const existingProf = Object.keys(this._state.getSkillProficiencies?.() || {});
 			const existingExpertise = new Set((this._state.getExpertise?.() || []).map(e => e.toLowerCase()));
 			const availableForExpertise = existingProf.filter(s => !existingExpertise.has(s.toLowerCase()));
 			
 			// Also include skills being added by this feat
 			const newFeatSkills = feat._featChoices.skills || [];
+			// Include fixed skill proficiencies from the feat itself (e.g., Boon of Skill grants all 18 skills)
+			// feat.skillProficiencies is an array of objects like [{athletics: true, acrobatics: true, ...}]
+			const fixedFeatSkills = (feat.skillProficiencies || []).flatMap(sp =>
+				Object.entries(sp)
+					.filter(([k, v]) => v === true && k !== "choose" && k !== "any")
+					.map(([s]) => s.toLowerCase()),
+			);
 
 			const renderExpertise = () => {
 				$expertiseGrid.empty();
-				[...availableForExpertise, ...newFeatSkills].forEach(skill => {
+				[...availableForExpertise, ...newFeatSkills, ...fixedFeatSkills].forEach(skill => {
 					const isSelected = feat._featChoices.expertise.includes(skill);
 					const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
 
@@ -2742,7 +2760,7 @@ class CharacterSheetLevelUp {
 
 	/**
 	 * Render expertise selection UI for level up
-	 * @param {Array} expertiseGrants - Array of {featureName, count, allowTools, toolName} objects
+	 * @param {Array} expertiseGrants - Array of {featureName, count, allowTools, toolName, fixedSkills} objects
 	 * @param {Function} onSelect - Callback(featureKey, selectedSkills)
 	 * @returns {jQuery} The section element
 	 */
@@ -2764,6 +2782,24 @@ class CharacterSheetLevelUp {
 
 		expertiseGrants.forEach(grant => {
 			const featureKey = grant.featureName;
+
+			// Handle fixed expertise (e.g., "expertise in the Performance skill")
+			if (grant.fixedSkills?.length > 0) {
+				const $grantSection = $(`
+					<div class="charsheet__levelup-expertise-grant mb-3">
+						<p><strong>${grant.featureName}:</strong> Grants expertise in specific skills:</p>
+						<div class="charsheet__levelup-expertise-checkboxes">
+							${grant.fixedSkills.map(s => `<span class="badge badge-info mr-1">${s.toTitleCase()}</span>`).join("")}
+						</div>
+						<div class="ve-small ve-muted mt-1"><span class="glyphicon glyphicon-ok"></span> Auto-applied</div>
+					</div>
+				`);
+				$container.append($grantSection);
+				// Immediately report selection
+				onSelect(featureKey, [...grant.fixedSkills]);
+				return;
+			}
+
 			const selectedForGrant = [];
 
 			const $grantSection = $(`
