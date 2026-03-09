@@ -281,7 +281,7 @@ calculations.combatMethods = {
 
 ## Metamagic System
 
-The TGTT Sorcerer metamagic is fully implemented with correct progression and costs.
+The TGTT Sorcerer metamagic supports the full progression and cost model, plus cast-time selection for active metamagics. Runtime automation now covers `Quickened Spell`, `Subtle Spell`, `Bestowed Spell`, `Heightened Spell`, `Seeking Spell`, `Focused Spell`, `Lingering Spell`, `Aimed Spell`, `Overcharged Spell`, and `Vampiric Spell`; `Twinned Spell` and `Bouncing Spell` still need deeper effect automation.
 
 ### ✅ Progression
 
@@ -294,7 +294,7 @@ The TGTT Sorcerer metamagic is fully implemented with correct progression and co
 | 13 | 6 | |
 | 17 | 7 | |
 
-### ✅ Costs & Descriptions (11 Metamagic Options)
+### ✅ Costs & Descriptions
 
 | Metamagic | Cost | Effect |
 |-----------|------|--------|
@@ -308,7 +308,24 @@ The TGTT Sorcerer metamagic is fully implemented with correct progression and co
 | Subtle Spell | 1 | No V/S components |
 | Transmuted Spell | 1 | Change damage type |
 | Twinned Spell | Varies | Target two creatures |
-| Multiple Spell | Varies | Cast again before end of next turn |
+| Aimed Spell | 2 | Add 1d6 to a spell attack roll |
+| Bestowed Spell | Varies | Change self-range spell to touch |
+| Bouncing Spell | 3 | Bounce on successful save |
+| Focused Spell | Varies | Reroll one concentration save die |
+| Lingering Spell | Varies | Concentration effects linger briefly after breaking |
+| Overcharged Spell | 4 | Maximize spell damage dice |
+| Resonant Spell | 2 | Passive: counter/dispel attempts have disadvantage |
+| Split Spell | 1 | Passive: split qualifying AoEs between two points |
+| Supple Spell | 2 | Passive: resize qualifying AoEs |
+| Vampiric Spell | Half spell level | Heal equal to spell damage dealt |
+| Warding Spell | 2 | Passive: +1 AC while concentrating |
+
+### Current Automation Status
+
+- Passive metamagic tuning, sorcery-point locking, and history replay are supported.
+- Active metamagic cast-time selection, legality checks, and SP spending are supported.
+- Automated active effects currently supported: `Quickened Spell`, `Subtle Spell`, `Bestowed Spell`, `Heightened Spell`, `Seeking Spell`, `Focused Spell`, `Lingering Spell`, `Aimed Spell`, `Overcharged Spell`, `Vampiric Spell`.
+- Remaining active effects still pending deeper runtime automation: `Twinned Spell`, `Bouncing Spell`.
 
 ---
 

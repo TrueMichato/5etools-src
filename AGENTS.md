@@ -1,6 +1,6 @@
 # 5etools Agent Context
 
-IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for any 5etools data, schema, or rendering tasks. The reference docs below are version-matched to this codebase and supersede training data.
+IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for any 5etools data, schema, rendering, or **character sheet** tasks. The reference docs below are version-matched to this codebase and supersede training data.
 
 ## Project Overview
 
@@ -115,3 +115,60 @@ Before writing code or editing data, read the relevant reference file(s):
 |Using `_versions` for inline variants, parameterized `_abstract`/`_implementations`|[versions-system.md](.agents/skills/5etools-data/references/versions-system.md)|
 |Race/species data: subraces, `additionalSpells`, resistances, lineage, traitTags|[races-species.md](.agents/skills/5etools-data/references/races-species.md)|
 |Using Renderer, Parser, or DataUtil JS classes in code|[js-utilities.md](.agents/skills/5etools-data/references/js-utilities.md)|
+
+## Character Sheet System — Quick Reference
+
+The character sheet (`charactersheet.html`) is a full D&D 5e character manager **under active development**. Some subsystems are mature, others are in flux. Always read before editing.
+
+### Architecture (Compressed)
+
+18 modules in `js/charactersheet/` | MVC pattern, no reactive framework — all renders manual via jQuery
+Central state: `CharacterSheetState` (~23,400 lines) in `charactersheet-state.js` — single source of truth
+65+ test files in `test/jest/charactersheet/` | 4,175+ tests | TGTT/Thelemar homebrew: 737 tests
+Modules assign to `globalThis` | Tests use ES `import` then `globalThis.ClassName`
+
+**Module map** (file → role, lines):
+`charactersheet.js`(6.5K)=controller/orchestrator | `charactersheet-state.js`(23.4K)=state/model | `charactersheet-builder.js`(6.5K)=creation wizard | `charactersheet-levelup.js`(4K)=single level-up | `charactersheet-quickbuild.js`(3K)=multi-level build | `charactersheet-combat.js`(3.9K)=attacks/conditions/death saves | `charactersheet-spells.js`(3.3K)=spell slots/casting | `charactersheet-inventory.js`(2.3K)=items/equipment | `charactersheet-features.js`(1.6K)=feature display | `charactersheet-rest.js`(630)=short/long rest | `charactersheet-class-utils.js`(1.8K)=static helpers | `charactersheet-spell-picker.js`(1.2K)=reusable spell UI | `charactersheet-customabilities.js`(800)=homebrew abilities | `charactersheet-npc-exporter.js`(1.5K)=NPC statblock export | `charactersheet-export.js`(320)=import/export | `charactersheet-respec.js`(600)=level history | `charactersheet-layout.js`(800)=drag-drop layout | `charactersheet-notes.js`(500)=sticky notes
+
+### Critical Facts
+
+- **Ability scores ≠ bonuses**: Base in `_data.abilities.str` (default 10), racial/item bonuses in `_data.abilityBonuses.str`. Total = base + bonus. Use `getAbilityScore()` / `getAbilityMod()`, never read `_data.abilities` for total.
+- **Spell slots keyed by level**: `_data.spellcasting.spellSlots[1].current`, not by spell name.
+- **Edition detection**: `source === "XPHB"` or `edition === "one"` for 2024. PHB vs XPHB features differ (e.g., Blade Ward is concentration in XPHB only).
+- **No reactive UI**: After `state.setX()`, module must call `render()` manually. Forgetting = stale UI bug.
+- **Feature calculations**: `getFeatureCalculations()` returns flat object: `has{Feature}` (bool), `{feature}Damage|Dc|Uses|Bonus|Range|Count|Die`.
+- **Active states**: 24 toggle types (Rage, Bladesong, etc.) in `ACTIVE_STATE_TYPES`. Mutual exclusivity: Rage ↔ Bladesong. Rage breaks concentration.
+- **Test import pattern**: `import "...charactersheet-state.js"; const X = globalThis.CharacterSheetState;` — import deps BEFORE the module under test or get `ReferenceError`.
+- **Anti-pattern**: `expect(state.getTotalLevel()).toBe(3)` tests nothing. Use `getFeatureCalculations()`.
+- **Save migrations**: `loadFromJson()` runs `_migrateFeatures()`, `_migrateModifiers()`, `_migrateSpells()`. New fields need backward-compatible defaults.
+- **TGTT everywhere**: Thelemar homebrew (combat traditions, dreamwalker, custom subclasses) gated by settings flags — don't break.
+
+### Active WIP — Check Before Modifying
+
+- **LevelUp→ClassUtils refactor**: Helpers extracting from `charactersheet-levelup.js` → `charactersheet-class-utils.js`. See `LEVELUP_REFACTOR_MAP.md`.
+- **XPHB 2024 parity**: Species, backgrounds, some feats still incomplete. See `docs/charactersheet/10-known-limitations.md`.
+- **State modularization**: Planned split of 23.4K-line state file into focused modules (not started).
+- **Respec partial**: ASI/feat/subclass/feature-choices editable; skills/expertise/spells not (too complex).
+
+### Running Tests
+
+```
+NODE_OPTIONS='--experimental-vm-modules' npx jest CharacterSheet{Name} --no-coverage --forceExit
+```
+
+### Detailed Reference Docs — Read Before Editing Character Sheet Code
+
+Root: `.agents/skills/charactersheet-development/references/`
+
+|When to read|File|
+|---|---|
+|Module roles, data flow, event patterns, jQuery, CSS, init order|[architecture.md](.agents/skills/charactersheet-development/references/architecture.md)|
+|Adding class/subclass features, `getFeatureCalculations()` patterns|[feature-calculations.md](.agents/skills/charactersheet-development/references/feature-calculations.md)|
+|Writing tests, setup.js mocks, import patterns, anti-patterns|[testing-guide.md](.agents/skills/charactersheet-development/references/testing-guide.md)|
+|WIP status, refactors, XPHB gaps, known bugs, Builder vs LevelUp vs QuickBuild|[development-status.md](.agents/skills/charactersheet-development/references/development-status.md)|
+|Active states, combat, NPC export, rest, spell/item data shapes|[subsystem-details.md](.agents/skills/charactersheet-development/references/subsystem-details.md)|
+|Toggle abilities effect types, supported states|[docs/charactersheet/08-toggle-abilities.md](docs/charactersheet/08-toggle-abilities.md)|
+|Full known limitations matrix|[docs/charactersheet/10-known-limitations.md](docs/charactersheet/10-known-limitations.md)|
+|Future roadmap and planned improvements|[docs/charactersheet/11-future-roadmap.md](docs/charactersheet/11-future-roadmap.md)|
+|Contributing guide and coding standards|[docs/charactersheet/12-contributing-guide.md](docs/charactersheet/12-contributing-guide.md)|
+|TGTT Thelemar homebrew system|[docs/charactersheet/13-tgtt-thelemar-homebrew.md](docs/charactersheet/13-tgtt-thelemar-homebrew.md)|
