@@ -84,7 +84,7 @@ The following edge cases may need additional work:
 | Class | Note |
 |-------|------|
 | **Monk** | Some XPHB 2024-specific subclasses may need verification |
-| **Sorcerer** | Metamagic interaction tracking not fully tested |
+| **Sorcerer** | Advanced metamagic effects are still partial; cast-time selection and costs are supported, and runtime support now covers `quickened`, `subtle`, `bestowed`, `heightened`, `seeking`, `focused`, `lingering`, `aimed`, `overcharged`, and `vampiric` |
 | **Warlock** | Pact Boon interactions with invocations not tracked |
 
 ### Anti-Pattern in Tests (Mostly Resolved)
