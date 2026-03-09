@@ -1391,7 +1391,7 @@ class CharacterSheetQuickBuild {
 
 				// Show feat selection (always for isBoth, conditional otherwise)
 				if (isBoth || sel.mode === "feat") {
-					const $featSelect = this._renderFeatSelector(levelKey, sel, isEpicBoon);
+					const $featSelect = this._renderFeatSelector(levelKey, sel, isEpicBoon, runningScores);
 					$asiContent.append($featSelect);
 				}
 			};
@@ -1464,7 +1464,7 @@ class CharacterSheetQuickBuild {
 		return $container;
 	}
 
-	_renderFeatSelector (levelKey, sel, isEpicBoon) {
+	_renderFeatSelector (levelKey, sel, isEpicBoon, runningScores = null) {
 		const $container = $(`<div class="charsheet__quickbuild-feat-select mb-2"></div>`);
 		$container.append(`<label class="ve-bold ve-small">${isEpicBoon ? "Epic Boon" : "Feat"} Selection</label>`);
 
@@ -1697,7 +1697,8 @@ class CharacterSheetQuickBuild {
 
 				choices.ability.from.forEach(abl => {
 					const isSelected = sel.featChoices.ability === abl;
-					const currentScore = this._state.getAbilityBase(abl);
+					// Use running scores (includes racial + pending ASIs) if available, else fall back to full ability score
+					const currentScore = runningScores ? runningScores[abl] : this._state.getAbilityScore(abl);
 
 					const $btn = $(`
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
@@ -1813,10 +1814,17 @@ class CharacterSheetQuickBuild {
 				const $expGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
 
 				// Get skills that can have expertise (already proficient, or being added by this feat)
-				const proficientSkills = this._state.getSkillProficiencies?.() || [];
+				const proficientSkills = Object.keys(this._state.getSkillProficiencies?.() || {});
 				const skillsBeingAdded = sel.featChoices.skills || [];
+				// Include fixed skill proficiencies from the feat itself (e.g., Boon of Skill grants all 18 skills)
+				// feat.skillProficiencies is an array of objects like [{athletics: true, acrobatics: true, ...}]
+				const fixedFeatSkills = (sel.feat?.skillProficiencies || []).flatMap(sp =>
+					Object.entries(sp)
+						.filter(([k, v]) => v === true && k !== "choose" && k !== "any")
+						.map(([s]) => s.toLowerCase()),
+				);
 				const existingExpertise = new Set((this._state.getExpertise?.() || []).map(s => s.toLowerCase()));
-				const availableForExpertise = [...new Set([...proficientSkills, ...skillsBeingAdded])].map(s => s.toLowerCase());
+				const availableForExpertise = [...new Set([...proficientSkills, ...skillsBeingAdded, ...fixedFeatSkills])].map(s => s.toLowerCase());
 
 				if (availableForExpertise.length === 0) {
 					$expSection.append(`<div class="ve-small ve-muted mt-1">No proficient skills available for expertise. Add skill proficiencies first.</div>`);
@@ -2753,6 +2761,18 @@ class CharacterSheetQuickBuild {
 			return names;
 		};
 
+		// Get which level selected a given option in this pool (returns {classLevel, className} or null)
+		const getPoolSelectionLevel = (poolKey, optName, excludeLevelKey) => {
+			for (const sec of (poolMap[poolKey] || [])) {
+				if (sec.levelKey === excludeLevelKey) continue;
+				const selections = this._selections.featureOptions[sec.levelKey] || [];
+				if (selections.some(s => s.name === optName)) {
+					return {classLevel: sec.analysis.classLevel, className: sec.analysis.className};
+				}
+			}
+			return null;
+		};
+
 		// Check if a feature option is repeatable (can be taken multiple times)
 		const isRepeatableOpt = (opt) => {
 			if (opt.type !== "classFeature" || !opt.ref) return false;
@@ -2778,24 +2798,29 @@ class CharacterSheetQuickBuild {
 			const usedNames = getPoolSelectedNames(poolKey, levelKey);
 
 			(optGroup.options || []).forEach(opt => {
-				// Hide options already picked in another section of the same pool
-				// unless the feature is explicitly repeatable
 				const isRepeatable = isRepeatableOpt(opt);
-				if (usedNames.has(opt.name) && !isRepeatable) return;
+				
+				// Check if this option was chosen at another level in the same pool
+				const chosenElsewhere = !isRepeatable && usedNames.has(opt.name)
+					? getPoolSelectionLevel(poolKey, opt.name, levelKey)
+					: null;
 
 				const isSelected = selectedList.some(s => s.name === opt.name);
 				const isAlreadyKnown = existingFeatureNames.has(opt.name?.toLowerCase());
 
-				// Build badges for known/repeatable
-				const knownBadge = isAlreadyKnown
-					? `<span class="badge badge-success ml-1" title="Already selected">✓ Known</span>`
-					: "";
+				// Build badges for known/chosen elsewhere/repeatable
+				let statusBadge = "";
+				if (chosenElsewhere) {
+					statusBadge = `<span class="badge badge-warning ml-1" title="Chosen at ${chosenElsewhere.className} level ${chosenElsewhere.classLevel}">✓ Level ${chosenElsewhere.classLevel}</span>`;
+				} else if (isAlreadyKnown) {
+					statusBadge = `<span class="badge badge-success ml-1" title="Already selected">✓ Known</span>`;
+				}
 				const repeatableBadge = isRepeatable
 					? `<span class="badge badge-info ml-1" title="Can be taken multiple times">↺ Repeatable</span>`
 					: "";
 
-				// Disable non-repeatable known options
-				const isDisabled = isAlreadyKnown && !isRepeatable;
+				// Disable non-repeatable options that are known or chosen elsewhere
+				const isDisabled = (isAlreadyKnown || chosenElsewhere) && !isRepeatable;
 				const itemStyle = isDisabled ? "opacity: 0.5; cursor: not-allowed;" : "cursor: pointer;";
 
 				const $item = $(`
@@ -2803,7 +2828,7 @@ class CharacterSheetQuickBuild {
 						<div class="ve-flex-v-center">
 							<input type="${optGroup.count === 1 ? "radio" : "checkbox"}" name="qb-featopt-${levelKey}" ${isSelected ? "checked" : ""}${isDisabled ? " disabled" : ""}>
 							<span class="qb-feat-opt-name ml-2"></span>
-							${knownBadge}${repeatableBadge}
+							${statusBadge}${repeatableBadge}
 							${opt.source ? `<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 						</div>
 					</div>
@@ -2955,6 +2980,26 @@ class CharacterSheetQuickBuild {
 						this._selections.expertise[levelKey] = [];
 					}
 
+					// Handle fixed expertise (e.g., "expertise in the Performance skill")
+					if (grant.fixedSkills?.length > 0) {
+						// Auto-populate selection with fixed skills
+						this._selections.expertise[levelKey] = [...grant.fixedSkills];
+
+						const $section = $(`
+							<div class="charsheet__quickbuild-section mb-3">
+								<h5>${analysis.className} Level ${analysis.classLevel} — ${grant.featureName} Expertise
+									<span class="badge badge-success">Auto</span>
+								</h5>
+								<p class="ve-small ve-muted">This feature grants expertise in specific skills:</p>
+								<div class="ve-small" style="padding: 4px 8px;">
+									${grant.fixedSkills.map(s => `<span class="badge badge-info mr-1">${s.toTitleCase()}</span>`).join("")}
+								</div>
+							</div>
+						`);
+						$step.append($section);
+						return;
+					}
+
 					const $section = $(`
 						<div class="charsheet__quickbuild-section mb-3">
 							<h5>${analysis.className} Level ${analysis.classLevel} — ${grant.featureName} Expertise
@@ -3061,6 +3106,9 @@ class CharacterSheetQuickBuild {
 
 		for (const analysis of expertiseLevels) {
 			for (const grant of analysis.expertiseGrants) {
+				// Skip validation for fixed expertise (auto-populated)
+				if (grant.fixedSkills?.length > 0) continue;
+
 				const levelKey = `${analysis.className}_${analysis.classLevel}_${grant.featureName}`;
 				const selected = this._selections.expertise[levelKey] || [];
 				const needed = grant.count || 2;

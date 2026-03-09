@@ -221,7 +221,7 @@ class CharacterSheetInventory {
 		// Intro text
 		$modalInner.append(`
 			<p class="ve-small ve-muted mb-3">
-				Browse and add items to your inventory. Click an item to view details, or click <strong>+ Add</strong> to add it directly.
+				Browse and add items to your inventory. Hover over item names for details, or click <strong>+ Add</strong> to add directly.
 			</p>
 		`);
 
@@ -611,11 +611,14 @@ class CharacterSheetInventory {
 					};
 					const rarityColor = rarityColors[(item.rarity || "").toLowerCase()] || "";
 
+					// Create hoverable link for item name
+					const itemHoverLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_ITEMS, item.name, item.source);
+
 					const $item = $(`
 						<div class="charsheet__modal-list-item">
 							<div class="charsheet__modal-list-item-icon">${this._getItemTypeEmoji(item)}</div>
 							<div class="charsheet__modal-list-item-content">
-								<div class="charsheet__modal-list-item-title">${item.name}${tagsStr}</div>
+								<div class="charsheet__modal-list-item-title">${itemHoverLink}${tagsStr}</div>
 								<div class="charsheet__modal-list-item-subtitle">
 									${rarity ? `<span style="color: ${rarityColor}; font-weight: 500;">${rarity}</span> • ` : ""}${item.value ? `${this._formatValue(item.value)} • ` : ""}${Parser.sourceJsonToAbv(item.source)}
 								</div>
@@ -630,8 +633,12 @@ class CharacterSheetInventory {
 						JqueryUtil.doToast({type: "success", content: `Added ${item.name} to your inventory!`});
 					});
 
-					// Click row to show info
-					$item.on("click", () => this._showItemInfoFromData(item));
+					// Click row as fallback for accessibility (keyboard/mobile users)
+					$item.on("click", (e) => {
+						// Don't trigger if user clicked the hover link itself
+						if ($(e.target).closest("a").length) return;
+						this._showItemInfoFromData(item);
+					});
 
 					$section.append($item);
 				});

@@ -132,6 +132,51 @@ class CharacterSheetPage {
 
 		// Apply background theme (will use default if no character loaded)
 		this._applyBackgroundTheme(this._state.getBackgroundTheme());
+
+		// Add page unload protection - save current character before leaving
+		window.addEventListener("beforeunload", () => {
+			if (this._currentCharacterId) {
+				// Use synchronous localStorage for reliability on page unload
+				try {
+					const characters = JSON.parse(localStorage.getItem("charsheet-characters") || "[]");
+					const charData = this._state.toJson();
+					charData.id = this._currentCharacterId;
+
+					const existingIndex = characters.findIndex(c => c.id === this._currentCharacterId);
+					if (existingIndex >= 0) {
+						characters[existingIndex] = charData;
+					} else {
+						characters.push(charData);
+					}
+
+					localStorage.setItem("charsheet-characters", JSON.stringify(characters));
+				} catch (err) {
+					console.error("Emergency save on unload failed:", err);
+				}
+			}
+		});
+
+		// Also add pagehide as fallback (more reliable on mobile)
+		window.addEventListener("pagehide", () => {
+			if (this._currentCharacterId) {
+				try {
+					const characters = JSON.parse(localStorage.getItem("charsheet-characters") || "[]");
+					const charData = this._state.toJson();
+					charData.id = this._currentCharacterId;
+
+					const existingIndex = characters.findIndex(c => c.id === this._currentCharacterId);
+					if (existingIndex >= 0) {
+						characters[existingIndex] = charData;
+					} else {
+						characters.push(charData);
+					}
+
+					localStorage.setItem("charsheet-characters", JSON.stringify(characters));
+				} catch (err) {
+					console.error("Emergency save on pagehide failed:", err);
+				}
+			}
+		});
 	}
 
 	async _pLoadData () {
@@ -713,6 +758,12 @@ class CharacterSheetPage {
 
 	async _onCharacterSelect () {
 		const charId = this._$selCharacter.val();
+
+		// Save current character before switching to prevent data loss
+		if (this._currentCharacterId) {
+			await this._saveCurrentCharacter();
+		}
+
 		if (charId) {
 			await this._pLoadCharacter(charId);
 		} else {
@@ -760,6 +811,11 @@ class CharacterSheetPage {
 	}
 
 	async _onNewCharacter () {
+		// Save current character before creating new to prevent data loss
+		if (this._currentCharacterId) {
+			await this._saveCurrentCharacter();
+		}
+
 		this._createNewCharacter();
 		this._$selCharacter.val("");
 
@@ -772,6 +828,9 @@ class CharacterSheetPage {
 
 	async _onDuplicateCharacter () {
 		if (!this._currentCharacterId) return;
+
+		// Save current character first to preserve any unsaved changes
+		await this._saveCurrentCharacter();
 
 		const newId = CryptUtil.uid();
 		const charData = this._state.toJson();

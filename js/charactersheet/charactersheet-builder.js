@@ -299,7 +299,14 @@ class CharacterSheetBuilder {
 				}
 				return true;
 
-			case 2: // Class
+			case 2: // Background
+				if (!this._selectedBackground) {
+					JqueryUtil.doToast({type: "warning", content: "Please select a background."});
+					return false;
+				}
+				return true;
+
+			case 3: // Class
 				if (!this._selectedClass) {
 					JqueryUtil.doToast({type: "warning", content: "Please select a class."});
 					return false;
@@ -358,7 +365,7 @@ class CharacterSheetBuilder {
 				}
 				return true;
 
-			case 3: // Abilities
+			case 4: // Abilities
 				if (this._abilityMethod === "pointbuy" && this._pointBuyRemaining !== 0) {
 					JqueryUtil.doToast({type: "warning", content: "Please spend all ability score points."});
 					return false;
@@ -380,13 +387,6 @@ class CharacterSheetBuilder {
 						JqueryUtil.doToast({type: "warning", content: "Please assign all ability score bonuses using Tasha's Custom Origin rules."});
 						return false;
 					}
-				}
-				return true;
-
-			case 4: // Background
-				if (!this._selectedBackground) {
-					JqueryUtil.doToast({type: "warning", content: "Please select a background."});
-					return false;
 				}
 				return true;
 
@@ -423,7 +423,17 @@ class CharacterSheetBuilder {
 				this._applyRacialTraits();
 				break;
 
-			case 2: // Class
+			case 2: // Background
+				this._state.setBackground(this._selectedBackground);
+				// Clear all ability bonuses and re-apply racial before background
+				// to prevent accumulation when re-visiting step 2 without passing
+				// through step 1 (e.g., going from step 3 back to step 2)
+				Parser.ABIL_ABVS.forEach(abl => this._state.setAbilityBonus(abl, 0));
+				this._applyRacialAbilityBonuses();
+				this._applyBackgroundFeatures();
+				break;
+
+			case 3: // Class
 				// Determine caster progression - check subclass first (for Eldritch Knight, etc.)
 				const casterProgressionBuilder = this._selectedSubclass?.casterProgression || this._selectedClass.casterProgression || null;
 				const spellcastingAbilityBuilder = this._selectedSubclass?.spellcastingAbility || this._selectedClass.spellcastingAbility || null;
@@ -546,7 +556,7 @@ class CharacterSheetBuilder {
 				}
 				break;
 
-			case 3: // Abilities
+			case 4: // Abilities
 				Parser.ABIL_ABVS.forEach(abl => {
 					const score = this._abilityScores[abl];
 					if (score != null) {
@@ -558,16 +568,6 @@ class CharacterSheetBuilder {
 				});
 				// Re-apply racial ability bonuses with current Tasha state
 				this._applyRacialAbilityBonuses();
-				break;
-
-			case 4: // Background
-				this._state.setBackground(this._selectedBackground);
-				// Clear all ability bonuses and re-apply racial before background
-				// to prevent accumulation when re-visiting step 4 without passing
-				// through step 3 (e.g., going from step 5 back to step 4)
-				Parser.ABIL_ABVS.forEach(abl => this._state.setAbilityBonus(abl, 0));
-				this._applyRacialAbilityBonuses();
-				this._applyBackgroundFeatures();
 				break;
 
 			case 5: // Equipment
@@ -2086,13 +2086,13 @@ class CharacterSheetBuilder {
 				this._renderRaceStep($content);
 				break;
 			case 2:
-				this._renderClassStep($content);
+				this._renderBackgroundStep($content);
 				break;
 			case 3:
-				this._renderAbilitiesStep($content);
+				this._renderClassStep($content);
 				break;
 			case 4:
-				this._renderBackgroundStep($content);
+				this._renderAbilitiesStep($content);
 				break;
 			case 5:
 				this._renderEquipmentStep($content);
@@ -4027,18 +4027,38 @@ class CharacterSheetBuilder {
 
 		const $checkboxes = $section.find(".charsheet__builder-expertise-checkboxes");
 
-		// Get available skills - must be skills the player selected for proficiency
-		const availableSkills = [...this._selectedSkills];
+		// Get available skills - must be skills the player is proficient in
+		// This includes class skills being selected AND background/racial skills already applied to state
+		const availableSkills = new Set([...this._selectedSkills]);
+
+		// Add skills from state (background, racial proficiencies applied in earlier steps)
+		const stateSkills = this._state.getSkillProficiencies();
+		if (stateSkills) {
+			Object.entries(stateSkills).forEach(([skill, level]) => {
+				if (level >= 1) {
+					// Convert skill key back to display name
+					const skillName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
+					availableSkills.add(skillName);
+				}
+			});
+		}
+
+		// Also add racial skills that were selected
+		if (this._selectedRacialSkills?.length) {
+			this._selectedRacialSkills.forEach(skill => availableSkills.add(skill));
+		}
 
 		// Optionally add thieves' tools for Rogue
 		if (allowTools && toolName) {
-			availableSkills.push(toolName);
+			availableSkills.add(toolName);
 		}
 
-		if (availableSkills.length === 0) {
+		const sortedSkills = [...availableSkills].sort();
+
+		if (sortedSkills.length === 0) {
 			$checkboxes.append(`<p class="ve-muted">Select your skill proficiencies first.</p>`);
 		} else {
-			availableSkills.forEach(skill => {
+			sortedSkills.forEach(skill => {
 				const isSelected = this._selectedExpertise.includes(skill);
 				const $label = $(`
 					<label class="charsheet__builder-skill-checkbox mr-3 mb-1">
@@ -5180,7 +5200,19 @@ class CharacterSheetBuilder {
 	 * @returns {Object|null} - { type: "proficiency"|"expertise"|"bonus", count: number, from: "any_proficient"|string[] }
 	 */
 	_parseFeatureSkillChoice (opt) {
-		return CharacterSheetClassUtils.parseFeatureSkillChoice(opt, this._page.getClassFeatures());
+		// Resolve feature data first to ensure we have entries
+		let resolvedData = null;
+		if (opt.type === "classFeature" && opt.ref) {
+			resolvedData = this._getClassFeatureDataFromRef(opt.ref);
+		} else if (opt.type === "optionalfeature") {
+			const allOptFeatures = this._page.getOptionalFeatures?.() || [];
+			resolvedData = allOptFeatures.find(f => f.name === opt.name && f.source === opt.source)
+				|| allOptFeatures.find(f => f.name === opt.name);
+		}
+		return CharacterSheetClassUtils.parseFeatureSkillChoice(opt, this._page.getClassFeatures(), {
+			optionalFeatures: this._page.getOptionalFeatures?.() || [],
+			resolvedData,
+		});
 	}
 
 	/**
@@ -5190,7 +5222,19 @@ class CharacterSheetBuilder {
 	 * @returns {Array} Array of effect objects: [{type, value, note}]
 	 */
 	_parseFeatureAutoEffects (opt) {
-		return CharacterSheetClassUtils.parseFeatureAutoEffects(opt, this._page.getClassFeatures());
+		// Resolve feature data first to ensure we have entries
+		let resolvedData = null;
+		if (opt.type === "classFeature" && opt.ref) {
+			resolvedData = this._getClassFeatureDataFromRef(opt.ref);
+		} else if (opt.type === "optionalfeature") {
+			const allOptFeatures = this._page.getOptionalFeatures?.() || [];
+			resolvedData = allOptFeatures.find(f => f.name === opt.name && f.source === opt.source)
+				|| allOptFeatures.find(f => f.name === opt.name);
+		}
+		return CharacterSheetClassUtils.parseFeatureAutoEffects(opt, this._page.getClassFeatures(), {
+			optionalFeatures: this._page.getOptionalFeatures?.() || [],
+			resolvedData,
+		});
 	}
 
 	/**

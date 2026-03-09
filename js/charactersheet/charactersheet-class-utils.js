@@ -1228,10 +1228,37 @@ class CharacterSheetClassUtils {
 	/**
 	 * Parse expertise entries to determine count and tool allowance.
 	 * @param {Array} entries
-	 * @returns {{count: number, allowTools: boolean, toolName: string}}
+	 * @returns {{count: number, allowTools: boolean, toolName: string, fixedSkills: string[]}}
 	 */
 	static parseExpertiseEntries (entries) {
 		const entriesText = entries.map(e => typeof e === "string" ? e : JSON.stringify(e)).join(" ").toLowerCase();
+
+		// Check for fixed/named skill expertise (e.g., "expertise in the Performance skill")
+		const skillNames = Object.keys(Parser.SKILL_TO_ATB_ABV || {}).map(s => s.toLowerCase());
+		const fixedSkills = [];
+		
+		// Pattern: "expertise in [the] {skill} [skill]" or "gain expertise in {skill}"
+		const fixedSkillPattern = /(?:gain\s+)?expertise\s+in\s+(?:the\s+)?(\w+(?:\s+\w+)?)\s*(?:skill)?/gi;
+		let match;
+		while ((match = fixedSkillPattern.exec(entriesText)) !== null) {
+			const potentialSkill = match[1].toLowerCase().replace(/\s+/g, "");
+			// Check if it's a valid skill name
+			const normalizedSkillNames = skillNames.map(s => s.replace(/\s+/g, ""));
+			if (normalizedSkillNames.includes(potentialSkill)) {
+				fixedSkills.push(potentialSkill);
+			}
+		}
+
+		// If we found fixed skills, return them with count matching
+		if (fixedSkills.length > 0) {
+			const allowTools = entriesText.includes("thieves' tools") && !entriesText.includes("variantrule");
+			return {
+				count: fixedSkills.length,
+				allowTools,
+				toolName: allowTools ? "Thieves' Tools" : null,
+				fixedSkills,
+			};
+		}
 
 		let count = 1;
 
@@ -1253,6 +1280,7 @@ class CharacterSheetClassUtils {
 			count,
 			allowTools,
 			toolName: allowTools ? "Thieves' Tools" : null,
+			fixedSkills: [],
 		};
 	}
 
