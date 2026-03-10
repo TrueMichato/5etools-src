@@ -485,6 +485,19 @@ class CharacterSheetQuickBuild {
 		return 0;
 	}
 
+	/**
+	 * Get the ability score bonus amount from a feat with a choosable ability.
+	 * @param {Object} feat - The feat object
+	 * @returns {number} The ability increase amount (usually 1), or 0 if no choosable ability
+	 */
+	_getFeatAbilityAmount (feat) {
+		if (!feat?.ability) return 0;
+		for (const ab of feat.ability) {
+			if (ab.choose) return ab.choose.amount || 1;
+		}
+		return 0;
+	}
+
 	// ==========================================
 	// Wizard Step Generation
 	// ==========================================
@@ -1323,9 +1336,20 @@ class CharacterSheetQuickBuild {
 			for (let i = 0; i < upToIdx; i++) {
 				const prevKey = `${asiLevels[i].className}_${asiLevels[i].classLevel}`;
 				const prevSel = this._selections.asi[prevKey];
-				if (prevSel && (prevSel.mode === "asi" || prevSel.isBoth)) {
+				if (!prevSel) continue;
+
+				// Include ASI ability choices
+				if (prevSel.mode === "asi" || prevSel.isBoth) {
 					for (const [abl, inc] of Object.entries(prevSel.abilityChoices || {})) {
 						scores[abl] = (scores[abl] || 0) + inc;
+					}
+				}
+
+				// Include feat ability choices (e.g., +1 from choosing STR in Athlete feat)
+				if ((prevSel.mode === "feat" || prevSel.isBoth) && prevSel.feat && prevSel.featChoices?.ability) {
+					const amount = this._getFeatAbilityAmount(prevSel.feat);
+					if (amount > 0) {
+						scores[prevSel.featChoices.ability] = (scores[prevSel.featChoices.ability] || 0) + amount;
 					}
 				}
 			}

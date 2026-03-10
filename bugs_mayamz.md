@@ -24,7 +24,7 @@ This file is used to track known bugs in the 5etools character sheet code.
   - [x] Also it doesn't seem to give you proficiency in all skills. **VERIFIED:** Skills were always being applied correctly via `applyFeatBonuses()` — the issue was that users couldn't verify due to blocked expertise selection.
 - [x] Quick build of specialties doesn't mark what you've chosen as known like from previous levels, but vanishes the chosen option. **FIXED:** Changed from silently hiding options to marking them with "✓ Level X" badge (warning color). Options chosen at other levels now show disabled with opacity and level indicator instead of vanishing.
 - [X] Reliable talent Adds 10 to ABLMOD, but it should set the minimum roll to 10. 
-- [x] feats that add ability score increases don't take into account previous increases from race, other feats, or ASIs, especially in the same quickbuild instance but not only. **FIXED:** Changed feat ability display from `getAbilityBase()` (raw 10) to use `runningScores` which includes racial bonuses + pending ASI choices from earlier levels in the same QuickBuild session.
+- [x] feats that add ability score increases don't take into account previous increases from race, other feats, or ASIs, especially in the same quickbuild instance but not only. **FIXED (v2):** Enhanced `computeRunningScores()` in QuickBuild to include feat ability choices (via new `_getFeatAbilityAmount()` helper). Running scores now accumulate both ASI choices AND feat ability bonuses from prior levels, so the UI displays correct totals.
 
 #### Belly Dancer
 - [] "The Belly Dancer" as opposed to "Gambler", "Assassin" etc. Data bug, ignore.
