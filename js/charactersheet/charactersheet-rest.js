@@ -504,6 +504,18 @@ class CharacterSheetRest {
 				// Reset death saves
 				this._state.setDeathSaves({successes: 0, failures: 0});
 
+				// Reset Gambler prepared spell roll (TGTT Rogue subclass)
+				const calcs = this._state.getFeatureCalculations();
+				if (calcs.hasGamblerSpellcasting) {
+					// Reset the rolled prepared count - requires new roll after rest
+					this._state.resetGamblerPreparedRoll(false); // Keep current prepared spells as options
+				}
+
+				// Reset Gambler daily resources (Extra Luck, Master of Fortune uses)
+				if (calcs.hasGamblerFolly) {
+					this._state.resetGamblerDailyResources();
+				}
+
 				// Save changes
 				this._page.saveCharacter();
 				this._page.renderCharacter();
@@ -513,6 +525,7 @@ class CharacterSheetRest {
 				let message = "🌙 Long rest complete! All resources restored.";
 				if (conditionsToRemove.size > 0) message += ` Removed ${conditionsToRemove.size} condition(s).`;
 				if ($cbBreakConcentration?.is(":checked")) message += ` Broke concentration.`;
+				if (calcs.hasGamblerSpellcasting) message += ` 🎲 Roll for new Gambler spells in Spells tab.`;
 
 				JqueryUtil.doToast({
 					type: "success",

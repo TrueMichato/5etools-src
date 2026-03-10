@@ -189,6 +189,23 @@ class CharacterSheetSpells {
 				renderFn,
 			);
 		});
+
+		// Gambler's Folly - manual d100 roll button in toast
+		$(document).on("click", ".btn-gambler-table-roll", (e) => {
+			const $btn = $(e.currentTarget);
+			$btn.prop("disabled", true);
+			const tableResult = this._state.rollGamblingTable();
+			if (tableResult) {
+				const $result = $(`<span class="text-info"><br>🎰 <b>d100:</b> ${tableResult.roll}<br>${tableResult.effect}</span>`);
+				$btn.after($result);
+				$btn.remove();
+			}
+		});
+
+		// Open Gambling Table modal (can be triggered from features panel or spell UI)
+		$(document).on("click", ".btn-open-gambling-table", () => {
+			this._openGamblingTableModal();
+		});
 	}
 
 	_toggleSlot (level, $pip) {
@@ -2147,6 +2164,12 @@ class CharacterSheetSpells {
 			toastContent += `<br><span class="text-info">${metamagicNotes.join("<br>")}</span>`;
 		}
 
+		// Gambler's Folly - automatic bet roll on spell cast (TGTT Gambler subclass)
+		const gamblerFollyResult = await this._handleGamblerFolly(spell, slotLevel);
+		if (gamblerFollyResult) {
+			toastContent += gamblerFollyResult;
+		}
+
 		JqueryUtil.doToast({
 			type: "success",
 			content: $(`<div>${toastContent}</div>`),
@@ -2161,6 +2184,160 @@ class CharacterSheetSpells {
 
 		// Check for special spell triggers (Find Familiar, etc.)
 		await this._handleSpecialSpellTriggers(spell);
+	}
+
+	/**
+	 * Handle Gambler's Folly automatic bet on spell cast (TGTT Gambler subclass)
+	 * @param {object} spell - The spell being cast
+	 * @param {number} slotLevel - The slot level used
+	 * @returns {string|null} - HTML string to append to toast, or null if not applicable
+	 */
+	async _handleGamblerFolly (spell, slotLevel) {
+		const calcs = this._state.getFeatureCalculations?.();
+		if (!calcs?.hasGamblerFolly) return null;
+
+		// Only trigger on leveled spells (cantrips don't trigger)
+		if (!spell.level || spell.level === 0) return null;
+
+		const result = this._state.rollGamblerBet(slotLevel);
+		if (!result) return null;
+
+		let html = `<br><hr class="hr-1"><span class="text-warning">🎲 <b>Gambler's Folly:</b></span>`;
+		html += `<br>Bet Roll: <b>${result.roll}</b> on d${result.die}`;
+
+		if (result.won) {
+			html += ` — <span class="text-success"><b>Won!</b> ✓</span>`;
+		} else {
+			html += ` — <span class="text-danger"><b>Lost!</b> Roll d100 on Gambling Table</span>`;
+
+			// Check if auto-roll is enabled
+			const autoRoll = this._state.getGamblerAutoRollTable?.();
+			if (autoRoll) {
+				const tableResult = this._state.rollGamblingTable();
+				if (tableResult) {
+					html += `<br><span class="text-info">🎰 <b>d100:</b> ${tableResult.roll}</span>`;
+					html += `<br>${tableResult.effect}`;
+				}
+			} else {
+				// Show button to roll manually
+				html += `<br><button class="btn btn-xs btn-warning mt-1 btn-gambler-table-roll">🎰 Roll d100</button>`;
+			}
+		}
+
+		return html;
+	}
+
+	/**
+	 * Open the Gambling Table modal for manual d100 rolls or reference
+	 * Used by Gambler's Folly, Extra Luck, Master of Fortune (TGTT)
+	 */
+	async _openGamblingTableModal () {
+		const table = CharacterSheetState.GAMBLER_GAMBLING_TABLE;
+		if (!table || !table.length) return;
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "🎰 Gambling Table",
+			isMinHeight0: true,
+			isWidth100: true,
+		});
+
+		// Roll button and result display
+		const $rollSection = $(`
+			<div class="flex-v-center mb-3" style="gap: 12px;">
+				<button class="btn btn-primary btn-gambler-modal-roll">🎲 Roll d100</button>
+				<div class="gambler-roll-result" style="font-size: 1.1em;"></div>
+			</div>
+		`).appendTo($modalInner);
+
+		const $resultDisplay = $rollSection.find(".gambler-roll-result");
+
+		// Check for Master of Fortune (roll twice, choose result)
+		const calcs = this._state.getFeatureCalculations?.();
+		const hasMasterOfFortune = calcs?.hasMasterOfFortune;
+
+		$rollSection.find(".btn-gambler-modal-roll").on("click", () => {
+			const result = this._state.rollGamblingTable();
+			if (result) {
+				let resultHtml = `<b>d100:</b> ${result.roll}`;
+				if (hasMasterOfFortune && result.secondRoll) {
+					resultHtml += ` / ${result.secondRoll}`;
+					resultHtml += `<br><span class="text-info">Master of Fortune: Choose which result to use</span>`;
+				}
+				resultHtml += `<br><span class="text-warning">${result.effect}</span>`;
+				$resultDisplay.html(resultHtml);
+
+				// Highlight the result row in the table
+				$tableBody.find("tr").removeClass("table-warning");
+				$tableBody.find(`tr[data-roll="${result.roll}"]`).addClass("table-warning");
+			}
+		});
+
+		// Last roll display
+		const lastRoll = this._state.getGamblerLastTableRoll?.();
+		if (lastRoll) {
+			$resultDisplay.html(`<span class="text-muted">Last roll: ${lastRoll.roll} — ${lastRoll.effect}</span>`);
+		}
+
+		// Search filter
+		const $searchRow = $(`
+			<div class="mb-2">
+				<input type="text" class="form-control form-control-sm" placeholder="Filter table..." style="max-width: 300px;">
+			</div>
+		`).appendTo($modalInner);
+
+		const $searchInput = $searchRow.find("input");
+
+		// Table
+		const $tableContainer = $(`
+			<div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px;">
+				<table class="table table-striped table-hover table-sm mb-0" style="font-size: 0.85em;">
+					<thead style="position: sticky; top: 0; background: var(--rgb-bg); z-index: 1;">
+						<tr>
+							<th style="width: 60px;">d100</th>
+							<th>Effect</th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+			</div>
+		`).appendTo($modalInner);
+
+		const $tableBody = $tableContainer.find("tbody");
+
+		// Render all 100 rows
+		const renderTable = (filter = "") => {
+			$tableBody.empty();
+			const filterLower = filter.toLowerCase();
+			table.forEach((effect, idx) => {
+				const roll = idx + 1;
+				if (filter && !effect.toLowerCase().includes(filterLower) && !String(roll).includes(filter)) {
+					return;
+				}
+				const $row = $(`<tr data-roll="${roll}"><td class="text-center"><b>${roll}</b></td><td>${effect}</td></tr>`);
+				$tableBody.append($row);
+			});
+		};
+
+		renderTable();
+
+		$searchInput.on("input", (e) => {
+			renderTable(e.target.value);
+		});
+
+		// Auto-roll setting toggle
+		const autoRollEnabled = this._state.getGamblerAutoRollTable?.();
+		const $settingRow = $(`
+			<div class="mt-3 text-muted" style="font-size: 0.85em;">
+				<label class="flex-v-center" style="gap: 6px; cursor: pointer;">
+					<input type="checkbox" ${autoRollEnabled ? "checked" : ""}>
+					<span>Auto-roll d100 when bet is lost</span>
+				</label>
+			</div>
+		`).appendTo($modalInner);
+
+		$settingRow.find("input").on("change", (e) => {
+			this._state.setGamblerAutoRollTable?.(e.target.checked);
+		});
 	}
 
 	/**
@@ -4262,6 +4439,10 @@ class CharacterSheetSpells {
 			"Artificer": "int",
 		};
 
+		// Check if character has Gambler spellcasting (TGTT Rogue subclass)
+		const calcs = this._state.getFeatureCalculations();
+		const hasGamblerSpellcasting = calcs.hasGamblerSpellcasting;
+
 		let ability = null;
 		for (const cls of classes) {
 			if (spellcastingAbilityMap[cls.name]) {
@@ -4300,12 +4481,91 @@ class CharacterSheetSpells {
 			"cha": "Charisma",
 		}[ability] || ability.toUpperCase();
 
-		$("#charsheet-spell-ability").text(abilityFull);
-		$("#charsheet-spell-dc").text(saveDC);
-		$("#charsheet-spell-attack").text(`+${attackBonus}`);
+		// Gambler spellcasting: show formula with roll buttons instead of static values
+		if (hasGamblerSpellcasting) {
+			$("#charsheet-spell-ability").text("Gambler (Cha)");
+			
+			// Build formula strings with item/exhaustion bonuses
+			const dcBase = 8 + prof;
+			const dcBonusStr = spellDcBonus > 0 ? ` + ${spellDcBonus}` : (spellDcBonus < 0 ? ` - ${Math.abs(spellDcBonus)}` : "");
+			const dcPenaltyStr = exhaustionDcPenalty > 0 ? ` - ${exhaustionDcPenalty}` : "";
+			const gamblerDcFormula = `${dcBase} + ${calcs.gamblerModifierDice}${dcBonusStr}${dcPenaltyStr}`;
+			
+			const attackBonusStr = spellAttackBonus > 0 ? ` + ${spellAttackBonus}` : (spellAttackBonus < 0 ? ` - ${Math.abs(spellAttackBonus)}` : "");
+			const gamblerAttackFormula = `+${prof} + ${calcs.gamblerModifierDice}${attackBonusStr}`;
+
+			// Create clickable DC display with roll button
+			const $dcElement = $("#charsheet-spell-dc");
+			$dcElement.html(`
+				<span class="charsheet__gambler-formula" title="Roll ${calcs.gamblerModifierDice} per cast">
+					${gamblerDcFormula}
+					<button class="charsheet__gambler-roll-btn btn btn-xs btn-default ml-1" type="button" title="Roll DC">
+						🎲
+					</button>
+				</span>
+			`);
+			$dcElement.find(".charsheet__gambler-roll-btn").on("click", (evt) => {
+				evt.stopPropagation();
+				this._rollGamblerModifier("DC", dcBase + spellDcBonus - exhaustionDcPenalty, calcs.gamblerModifierDice);
+			});
+
+			// Create clickable attack display with roll button
+			const $attackElement = $("#charsheet-spell-attack");
+			$attackElement.html(`
+				<span class="charsheet__gambler-formula" title="Roll ${calcs.gamblerModifierDice} per cast">
+					${gamblerAttackFormula}
+					<button class="charsheet__gambler-roll-btn btn btn-xs btn-default ml-1" type="button" title="Roll Attack">
+						🎲
+					</button>
+				</span>
+			`);
+			$attackElement.find(".charsheet__gambler-roll-btn").on("click", (evt) => {
+				evt.stopPropagation();
+				this._rollGamblerModifier("Attack", prof + spellAttackBonus, calcs.gamblerModifierDice);
+			});
+		} else {
+			$("#charsheet-spell-ability").text(abilityFull);
+			$("#charsheet-spell-dc").text(saveDC);
+			$("#charsheet-spell-attack").text(`+${attackBonus}`);
+		}
 
 		// Display spell tracking using the new enhanced UI
 		this._renderSpellTrackingUI();
+	}
+
+	/**
+	 * Roll Gambler modifier dice and display result in toast
+	 * @param {string} type - "DC" or "Attack"
+	 * @param {number} baseValue - Base value (DC base or attack bonus)
+	 * @param {string} diceStr - Dice string like "1d6" or "2d4"
+	 */
+	_rollGamblerModifier (type, baseValue, diceStr) {
+		const match = diceStr.match(/(\d+)d(\d+)/);
+		if (!match) return;
+
+		const count = parseInt(match[1]);
+		const sides = parseInt(match[2]);
+
+		// Roll each die
+		const rolls = [];
+		for (let i = 0; i < count; i++) {
+			rolls.push(Math.floor(Math.random() * sides) + 1);
+		}
+		const rollTotal = rolls.reduce((sum, r) => sum + r, 0);
+		const total = baseValue + rollTotal;
+
+		// Build display text
+		const rollsDisplay = rolls.join(" + ");
+		const message = type === "DC"
+			? `🎲 Spell Save DC: ${baseValue} + (${rollsDisplay}) = <strong>${total}</strong>`
+			: `🎲 Spell Attack: +${baseValue} + (${rollsDisplay}) = <strong>+${total}</strong>`;
+
+		// Show as toast notification
+		JqueryUtil.doToast({
+			content: message,
+			type: "info",
+			autoHideTime: 5000,
+		});
 	}
 
 	/**
@@ -4320,6 +4580,14 @@ class CharacterSheetSpells {
 		$("#charsheet-prepared-caster-info-2014").hide();
 		$("#charsheet-prepared-caster-info-2024").hide();
 		$("#charsheet-cantrips-info").hide();
+		$("#charsheet-gambler-caster-info").hide();
+
+		// Check for Gambler spellcasting (TGTT Rogue subclass)
+		const calcs = this._state.getFeatureCalculations();
+		if (calcs.hasGamblerSpellcasting) {
+			this._renderGamblerSpellTrackingUI(calcs);
+			return;
+		}
 
 		if (!spellcastingInfo) {
 			$trackingContainer.hide();
@@ -4442,6 +4710,344 @@ class CharacterSheetSpells {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Render Gambler-specific spell tracking UI with rolled prepared count.
+	 * Gambler prepares spells by rolling 2d4 (3d6 at L13) each day.
+	 * @param {object} calcs - Feature calculations from state
+	 */
+	_renderGamblerSpellTrackingUI (calcs) {
+		const $trackingContainer = $("#charsheet-spell-tracking").show();
+		
+		// Get or create Gambler-specific tracking box
+		let $gamblerInfo = $("#charsheet-gambler-caster-info");
+		if (!$gamblerInfo.length) {
+			// Create the Gambler tracking box dynamically if not in HTML
+			$gamblerInfo = $(`
+				<div id="charsheet-gambler-caster-info" class="charsheet__spell-tracking-box charsheet__spell-tracking-box--gambler">
+					<div class="charsheet__spell-tracking-header">
+						<span class="charsheet__spell-tracking-icon">🎲</span>
+						<span class="charsheet__spell-tracking-title">Gambler Spells</span>
+						<span class="charsheet__spell-tracking-badge" title="Gambler (TGTT) - Roll for prepared spells each day">TGTT</span>
+					</div>
+					<div class="charsheet__spell-tracking-body">
+						<div class="charsheet__spell-tracking-count charsheet__gambler-prepared-display">
+							<span id="charsheet-gambler-prepared-current">0</span>
+							<span class="charsheet__spell-tracking-separator">/</span>
+							<span id="charsheet-gambler-prepared-max">—</span>
+						</div>
+						<div class="charsheet__spell-tracking-hint" id="charsheet-gambler-hint">Roll for spells after long rest</div>
+						<button id="charsheet-gambler-roll-prepared-btn" class="btn btn-sm btn-primary mt-2" style="display: none;">
+							🎲 Roll ${calcs.gamblerSpellsPreparedDice}
+						</button>
+					</div>
+				</div>
+			`).appendTo($trackingContainer);
+		}
+
+		$gamblerInfo.show();
+
+		// Get Gambler prepared spell state
+		const currentPrepared = this._state.getGamblerCurrentPreparedCount();
+		const rolledMax = this._state.getGamblerPreparedCount();
+		const rollDetails = this._state.getGamblerPreparedRollDetails();
+
+		// Update current count
+		$("#charsheet-gambler-prepared-current").text(currentPrepared);
+
+		// Update max display and hint based on rolled state
+		const $maxDisplay = $("#charsheet-gambler-prepared-max");
+		const $hint = $("#charsheet-gambler-hint");
+		const $rollBtn = $("#charsheet-gambler-roll-prepared-btn");
+
+		if (rolledMax !== null) {
+			// Already rolled - show the rolled value
+			$maxDisplay.text(rolledMax);
+			if (rollDetails) {
+				$hint.html(`Rolled <strong>${rollDetails.dice}</strong>: (${rollDetails.rolls.join(" + ")}) = ${rollDetails.total}`);
+			} else {
+				$hint.text(`Rolled ${rolledMax} for today`);
+			}
+			$rollBtn.hide();
+
+			// Show "Manage Prepared" button
+			let $manageBtn = $("#charsheet-gambler-manage-prepared-btn");
+			if (!$manageBtn.length) {
+				$manageBtn = $(`<button id="charsheet-gambler-manage-prepared-btn" class="btn btn-sm btn-outline-primary mt-2">📜 Manage Prepared Spells</button>`)
+					.insertAfter($rollBtn);
+			}
+			$manageBtn
+				.show()
+				.off("click")
+				.on("click", () => this._openGamblerSpellPicker(calcs, rolledMax));
+
+			// Check for over-limit
+			const $count = $gamblerInfo.find(".charsheet__spell-tracking-count");
+			if (currentPrepared > rolledMax) {
+				$count.addClass("charsheet__spell-tracking-count--over");
+				$gamblerInfo.addClass("charsheet__spell-tracking-box--over");
+			} else {
+				$count.removeClass("charsheet__spell-tracking-count--over");
+				$gamblerInfo.removeClass("charsheet__spell-tracking-box--over");
+			}
+		} else {
+			// Not rolled yet - show dice formula and roll button
+			$maxDisplay.html(`<span class="ve-muted">${calcs.gamblerSpellsPreparedDice}</span>`);
+			$hint.text("Roll for prepared spells after long rest");
+			$rollBtn
+				.text(`🎲 Roll ${calcs.gamblerSpellsPreparedDice}`)
+				.show()
+				.off("click")
+				.on("click", () => this._onGamblerRollPrepared(calcs));
+			
+			// Hide manage button if present
+			$("#charsheet-gambler-manage-prepared-btn").hide();
+		}
+
+		// Also show cantrips for Gambler
+		const allCantrips = this._state.getCantripsKnown();
+		const gamblerCantrips = allCantrips.filter(c => c.sourceClass === "Gambler" || c.sourceSubclass === "Gambler");
+		if (calcs.gamblerCantripsKnown > 0) {
+			const $cantripsInfo = $("#charsheet-cantrips-info").show();
+			$("#charsheet-cantrips-current").text(gamblerCantrips.length);
+			$("#charsheet-cantrips-max").text(calcs.gamblerCantripsKnown);
+		}
+	}
+
+	/**
+	 * Handle click on Gambler "Roll Prepared Spells" button
+	 * @param {object} calcs - Feature calculations
+	 */
+	_onGamblerRollPrepared (calcs) {
+		const rollDetails = this._state.rollGamblerPreparedSpells();
+		if (!rollDetails) return;
+
+		// Show toast with roll result
+		JqueryUtil.doToast({
+			content: `🎲 Gambler Prepared Spells: Rolled ${rollDetails.dice} = (${rollDetails.rolls.join(" + ")}) = <strong>${rollDetails.total}</strong> spells`,
+			type: "success",
+			autoHideTime: 5000,
+		});
+
+		// Re-render the tracking UI to reflect the new state
+		this._renderGamblerSpellTrackingUI(calcs);
+
+		// Open spell picker immediately after rolling
+		const rolledMax = this._state.getGamblerPreparedCount();
+		if (rolledMax > 0) {
+			this._openGamblerSpellPicker(calcs, rolledMax);
+		}
+	}
+
+	/**
+	 * Open a spell picker for Gambler to select prepared spells.
+	 * Filters to Warlock spell list only and enforces rolled maximum.
+	 * @param {object} calcs - Feature calculations
+	 * @param {number} maxPrepared - Maximum number of spells to prepare (rolled value)
+	 */
+	async _openGamblerSpellPicker (calcs, maxPrepared) {
+		// Get Gambler's max spell level based on 1/3 caster progression
+		const gamblerLevel = this._state.getClasses().find(c => c.subclass?.name === "Gambler")?.level || 3;
+		const thirdCasterLevel = Math.floor(gamblerLevel / 3);
+		const maxSpellLevel = thirdCasterLevel >= 10 ? 4 : (thirdCasterLevel >= 7 ? 3 : (thirdCasterLevel >= 4 ? 2 : 1));
+
+		// Get currently prepared Gambler spells
+		const currentPrepared = this._state.getSpells()
+			.filter(s => (s.sourceClass === "Gambler" || s.sourceSubclass === "Gambler") && s.prepared && s.level > 0)
+			.map(s => ({name: s.name, source: s.source}));
+
+		// Filter spells to Warlock list
+		const allSpells = this._allSpells || await this._pLoadAllSpells();
+		const warlockSpells = allSpells.filter(spell => {
+			// Must be on Warlock spell list
+			const fromClassList = Renderer.spell.getCombinedClasses(spell, "fromClassList");
+			const isWarlockSpell = fromClassList?.some(c => c.name === "Warlock");
+			if (!isWarlockSpell) return false;
+
+			// Must be within Gambler's spell level limit
+			if (spell.level < 1 || spell.level > maxSpellLevel) return false;
+
+			return true;
+		});
+
+		// Build modal content
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: `Gambler: Select Prepared Spells (${maxPrepared} max)`,
+			isWidth100: true,
+			isHeight100: true,
+			isUncappedHeight: true,
+			cbClose: () => {
+				// Re-render tracking UI when modal closes
+				this._renderGamblerSpellTrackingUI(calcs);
+			},
+		});
+
+		// Track selected spells
+		let selectedSpells = [...currentPrepared];
+
+		// Progress header
+		const $header = $(`
+			<div class="charsheet__spell-picker-header mb-3">
+				<div class="charsheet__spell-picker-counter">
+					<span class="charsheet__spell-picker-counter-icon">🎲</span>
+					<span class="charsheet__spell-picker-counter-label">Gambler Spells:</span>
+					<span class="charsheet__spell-picker-counter-value spell-counter-value">
+						<span class="spell-count-current">${selectedSpells.length}</span>/<span class="spell-count-max">${maxPrepared}</span>
+					</span>
+				</div>
+				<div class="ve-muted ve-small ml-auto">Warlock spell list only • Max level ${maxSpellLevel}</div>
+			</div>
+		`).appendTo($modalInner);
+
+		const updateHeader = () => {
+			$header.find(".spell-count-current").text(selectedSpells.length);
+			const $value = $header.find(".spell-counter-value");
+			$value.removeClass("charsheet__spell-picker-counter-value--complete charsheet__spell-picker-counter-value--over");
+			if (selectedSpells.length === maxPrepared) {
+				$value.addClass("charsheet__spell-picker-counter-value--complete");
+			} else if (selectedSpells.length > maxPrepared) {
+				$value.addClass("charsheet__spell-picker-counter-value--over");
+			}
+		};
+
+		// Filter controls
+		const $filterRow = $(`<div class="ve-flex ve-flex-wrap gap-2 mb-3"></div>`).appendTo($modalInner);
+
+		// Level filter
+		const $levelFilter = $(`
+			<select class="form-control form-control-sm" style="width: auto;">
+				<option value="">All Levels</option>
+				${Array.from({length: maxSpellLevel}, (_, i) => `<option value="${i + 1}">Level ${i + 1}</option>`).join("")}
+			</select>
+		`).appendTo($filterRow);
+
+		// Search filter
+		const $searchInput = $(`<input type="text" class="form-control form-control-sm" placeholder="Search spells..." style="flex: 1; min-width: 150px;">`).appendTo($filterRow);
+
+		// Spell list container
+		const $spellList = $(`<div class="charsheet__spell-picker-list" style="max-height: 400px; overflow-y: auto;"></div>`).appendTo($modalInner);
+
+		// Render spell list
+		const renderSpells = () => {
+			$spellList.empty();
+			const levelFilter = $levelFilter.val() ? parseInt($levelFilter.val()) : null;
+			const searchFilter = $searchInput.val().toLowerCase().trim();
+
+			const filteredSpells = warlockSpells.filter(spell => {
+				if (levelFilter && spell.level !== levelFilter) return false;
+				if (searchFilter && !spell.name.toLowerCase().includes(searchFilter)) return false;
+				return true;
+			}).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+
+			if (!filteredSpells.length) {
+				$spellList.append(`<p class="ve-muted text-center py-3">No spells match your filters</p>`);
+				return;
+			}
+
+			// Group by level
+			const byLevel = {};
+			filteredSpells.forEach(spell => {
+				if (!byLevel[spell.level]) byLevel[spell.level] = [];
+				byLevel[spell.level].push(spell);
+			});
+
+			Object.keys(byLevel).sort((a, b) => a - b).forEach(level => {
+				$spellList.append(`<h6 class="charsheet__spell-group-header--small mt-2 mb-1">Level ${level}</h6>`);
+
+				byLevel[level].forEach(spell => {
+					const isSelected = selectedSpells.some(s => s.name === spell.name && s.source === spell.source);
+					const canSelect = selectedSpells.length < maxPrepared || isSelected;
+
+					const $row = $(`
+						<div class="charsheet__spell-picker-row ${isSelected ? "charsheet__spell-picker-row--selected" : ""} ${!canSelect ? "charsheet__spell-picker-row--disabled" : ""}">
+							<div class="charsheet__spell-picker-checkbox">
+								<input type="checkbox" ${isSelected ? "checked" : ""} ${!canSelect ? "disabled" : ""}>
+							</div>
+							<div class="charsheet__spell-picker-info">
+								<span class="charsheet__spell-picker-name">${spell.name}</span>
+								<span class="charsheet__spell-picker-meta ve-muted ve-small">${Parser.spSchoolAbvToFull(spell.school)} • ${spell.source}</span>
+							</div>
+						</div>
+					`).appendTo($spellList);
+
+					$row.find("input").on("change", function () {
+						const isNowSelected = $(this).prop("checked");
+						if (isNowSelected) {
+							if (selectedSpells.length >= maxPrepared) {
+								$(this).prop("checked", false);
+								JqueryUtil.doToast({
+									content: `Cannot prepare more than ${maxPrepared} spells (rolled limit)`,
+									type: "warning",
+								});
+								return;
+							}
+							selectedSpells.push({name: spell.name, source: spell.source});
+							$row.addClass("charsheet__spell-picker-row--selected");
+						} else {
+							selectedSpells = selectedSpells.filter(s => !(s.name === spell.name && s.source === spell.source));
+							$row.removeClass("charsheet__spell-picker-row--selected");
+						}
+						updateHeader();
+						renderSpells(); // Re-render to update disabled states
+					});
+
+					$row.on("click", (evt) => {
+						if ($(evt.target).is("input")) return;
+						const $checkbox = $row.find("input");
+						if (!$checkbox.prop("disabled")) {
+							$checkbox.prop("checked", !$checkbox.prop("checked")).trigger("change");
+						}
+					});
+				});
+			});
+		};
+
+		$levelFilter.on("change", renderSpells);
+		$searchInput.on("input", renderSpells);
+		renderSpells();
+
+		// Confirm button
+		const $btnConfirm = $(`<button class="btn btn-primary mt-3">Confirm Selection</button>`).appendTo($modalInner);
+		$btnConfirm.on("click", () => {
+			// Clear old Gambler prepared spells
+			this._state.getSpells()
+				.filter(s => (s.sourceClass === "Gambler" || s.sourceSubclass === "Gambler") && s.level > 0)
+				.forEach(s => {
+					this._state.setSpellPrepared(s.name, s.source, false);
+				});
+
+			// Set new selections as prepared
+			selectedSpells.forEach(s => {
+				// Find if spell already exists in known list
+				const existing = this._state.getSpells().find(sp => sp.name === s.name && sp.source === s.source);
+				if (existing) {
+					this._state.setSpellPrepared(s.name, s.source, true);
+				} else {
+					// Add spell to known list with Gambler source
+					const spellData = warlockSpells.find(sp => sp.name === s.name && sp.source === s.source);
+					if (spellData) {
+						this._state.addSpell({
+							name: spellData.name,
+							source: spellData.source,
+							level: spellData.level,
+							school: spellData.school,
+							prepared: true,
+							sourceClass: "Gambler",
+							sourceSubclass: "Gambler",
+						});
+					}
+				}
+			});
+
+			JqueryUtil.doToast({
+				content: `Prepared ${selectedSpells.length} Gambler spell${selectedSpells.length !== 1 ? "s" : ""}`,
+				type: "success",
+			});
+
+			doClose();
+			this._renderSpellList();
+		});
 	}
 	// #endregion
 

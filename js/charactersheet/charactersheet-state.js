@@ -3281,6 +3281,15 @@ class CharacterSheetState {
 				spellsKnown: [], // [{name, source, prepared: bool}]
 				cantripsKnown: [],
 				innateSpells: [], // [{name, source, uses: {current, max}, atWill: bool, sourceFeature}]
+				// Gambler (TGTT) unique spellcasting - rolled prepared count
+				gamblerPreparedRolled: null, // Current day's prepared spell count (null = needs roll)
+				gamblerPreparedRollDetails: null, // {dice: "2d4", rolls: [3, 2], total: 5}
+				// Gambler's Folly tracking
+				gamblerAutoRollTable: false, // User preference: auto-roll d100 on bet loss
+				gamblerLastBet: null, // {spellLevel, diceType, roll, won, timestamp}
+				gamblerLastTableRoll: null, // {roll, effect, timestamp}
+				gamblerExtraLuckUsed: 0, // Uses of Extra Luck (L9) today
+				gamblerMasterFortuneUsed: 0, // Uses of Master of Fortune nat-1-to-20 (L17) today
 			},
 
 			// Inventory
@@ -7037,9 +7046,20 @@ class CharacterSheetState {
 	/**
 	 * Get the maximum number of prepared spells for a class
 	 * @param {string} className - The class name
-	 * @returns {number} Maximum prepared spells
+	 * @returns {number|string} Maximum prepared spells, or dice formula string for Gambler if not rolled
 	 */
 	getMaxPreparedSpells (className) {
+		// Special case: Gambler uses rolled value, not fixed formula
+		if (className === "Gambler") {
+			const rolled = this.getGamblerPreparedCount();
+			if (rolled !== null) {
+				return rolled;
+			}
+			// Not rolled yet - return the dice formula for display
+			const calcs = this.getFeatureCalculations();
+			return calcs.gamblerSpellsPreparedDice || "2d4";
+		}
+
 		const cls = this._data.classes.find(c => c.name === className);
 		if (!cls) return 0;
 
@@ -7547,6 +7567,301 @@ class CharacterSheetState {
 		}
 		if (spell) spell.prepared = prepared;
 	}
+
+	// #region Gambler Spellcasting Management
+	/**
+	 * Roll for Gambler's daily prepared spell count.
+	 * Gambler prepares 2d4 spells (3d6 at level 13+) after each long rest.
+	 * @returns {{dice: string, rolls: number[], total: number}} Roll details
+	 */
+	rollGamblerPreparedSpells () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasGamblerSpellcasting) {
+			return null;
+		}
+
+		const diceStr = calcs.gamblerSpellsPreparedDice; // "2d4" or "3d6"
+		const match = diceStr.match(/(\d+)d(\d+)/);
+		if (!match) return null;
+
+		const count = parseInt(match[1]);
+		const sides = parseInt(match[2]);
+
+		// Roll each die individually for display
+		const rolls = [];
+		for (let i = 0; i < count; i++) {
+			rolls.push(Math.floor(Math.random() * sides) + 1);
+		}
+		const total = rolls.reduce((sum, r) => sum + r, 0);
+
+		const rollDetails = {dice: diceStr, rolls, total};
+		this._data.spellcasting.gamblerPreparedRolled = total;
+		this._data.spellcasting.gamblerPreparedRollDetails = rollDetails;
+
+		return rollDetails;
+	}
+
+	/**
+	 * Get the current Gambler prepared spell count (if rolled).
+	 * @returns {number|null} Rolled count, or null if not yet rolled
+	 */
+	getGamblerPreparedCount () {
+		return this._data.spellcasting.gamblerPreparedRolled;
+	}
+
+	/**
+	 * Get the Gambler prepared roll details (dice, individual rolls, total).
+	 * @returns {{dice: string, rolls: number[], total: number}|null}
+	 */
+	getGamblerPreparedRollDetails () {
+		return this._data.spellcasting.gamblerPreparedRollDetails;
+	}
+
+	/**
+	 * Reset Gambler's daily prepared spell roll (called on long rest).
+	 * Also clears prepared status from Gambler spells.
+	 * @param {boolean} [clearPrepared=true] - Whether to clear prepared spells
+	 */
+	resetGamblerPreparedRoll (clearPrepared = true) {
+		this._data.spellcasting.gamblerPreparedRolled = null;
+		this._data.spellcasting.gamblerPreparedRollDetails = null;
+
+		if (clearPrepared) {
+			// Clear prepared status from Gambler spells (not cantrips)
+			this._data.spellcasting.spellsKnown
+				.filter(s => s.sourceClass === "Gambler" || s.sourceSubclass === "Gambler")
+				.forEach(s => { s.prepared = false; });
+		}
+	}
+
+	/**
+	 * Set a specific Gambler prepared roll value (for testing or importing).
+	 * @param {number} count - The prepared spell count
+	 * @param {{dice: string, rolls: number[], total: number}} [details] - Optional roll details
+	 */
+	setGamblerPreparedCount (count, details = null) {
+		this._data.spellcasting.gamblerPreparedRolled = count;
+		this._data.spellcasting.gamblerPreparedRollDetails = details;
+	}
+
+	/**
+	 * Get the number of currently prepared Gambler spells.
+	 * @returns {number}
+	 */
+	getGamblerCurrentPreparedCount () {
+		return this._data.spellcasting.spellsKnown
+			.filter(s => (s.sourceClass === "Gambler" || s.sourceSubclass === "Gambler") && s.prepared && s.level > 0)
+			.length;
+	}
+
+	// ==========================================
+	// Gambler's Folly - Bet & Gambling Table
+	// ==========================================
+
+	/**
+	 * Roll a Gambler bet for spell casting.
+	 * @param {number} spellLevel - The level of the spell being cast
+	 * @returns {{diceType: string, die: number, roll: number, won: boolean, odds: string, slotLevel: number}|null}
+	 */
+	rollGamblerBet (spellLevel) {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasGamblerFolly) return null;
+
+		let diceType, die, losesOn, odds;
+
+		if (spellLevel <= 2) {
+			// 3/4 odds: d4, lose on 4
+			diceType = "d4";
+			die = 4;
+			losesOn = [4];
+			odds = "3/4";
+		} else if (spellLevel === 3) {
+			// 2/3 odds: d6, lose on 5-6
+			diceType = "d6";
+			die = 6;
+			losesOn = [5, 6];
+			odds = "2/3";
+		} else {
+			// 1/2 odds: coin flip (d2), lose on 2
+			diceType = "d2";
+			die = 2;
+			losesOn = [2];
+			odds = "1/2";
+		}
+
+		const roll = Math.floor(Math.random() * die) + 1;
+		const won = !losesOn.includes(roll);
+
+		const result = {
+			slotLevel: spellLevel,
+			diceType,
+			die,
+			roll,
+			won,
+			odds,
+			timestamp: Date.now(),
+		};
+
+		this._data.spellcasting.gamblerLastBet = result;
+		return result;
+	}
+
+	/**
+	 * Get the last Gambler bet result.
+	 * @returns {{slotLevel: number, diceType: string, die: number, roll: number, won: boolean, odds: string, timestamp: number}|null}
+	 */
+	getGamblerLastBet () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasGamblerFolly) return null;
+		return this._data.spellcasting.gamblerLastBet || null;
+	}
+
+	/**
+	 * Get the odds for a given slot level.
+	 * @param {number} [slotLevel=1] - The spell slot level
+	 * @returns {{winChance: number, lossChance: number, die: number}|null}
+	 */
+	getGamblerBetOdds (slotLevel = 1) {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasGamblerFolly) return null;
+
+		if (slotLevel <= 2) return {winChance: 0.75, lossChance: 0.25, die: 4};
+		if (slotLevel === 3) return {winChance: 2 / 3, lossChance: 1 / 3, die: 6};
+		return {winChance: 0.5, lossChance: 0.5, die: 2};
+	}
+
+	/**
+	 * Roll on the Gambler's Gambling Table (d100).
+	 * @returns {{roll: number, effect: string, secondRoll?: number, secondEffect?: string}|null}
+	 */
+	rollGamblingTable () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasGamblerFolly) return null;
+
+		const roll = Math.floor(Math.random() * 100) + 1;
+		const effect = CharacterSheetState.GAMBLER_GAMBLING_TABLE[roll - 1] || "Unknown effect";
+
+		// Master of Fortune: roll twice on table
+		let secondRoll, secondEffect;
+		if (calcs.hasMasterOfFortune) {
+			secondRoll = Math.floor(Math.random() * 100) + 1;
+			secondEffect = CharacterSheetState.GAMBLER_GAMBLING_TABLE[secondRoll - 1] || "Unknown effect";
+		}
+
+		const result = {
+			roll,
+			effect,
+			...(secondRoll && {secondRoll, secondEffect}),
+			timestamp: Date.now(),
+		};
+		this._data.spellcasting.gamblerLastTableRoll = result;
+		return result;
+	}
+
+	/**
+	 * Get the last Gambling Table roll result.
+	 * @returns {{roll: number, effect: string, timestamp: number}|null}
+	 */
+	getGamblerLastTableRoll () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasGamblerFolly) return null;
+		return this._data.spellcasting.gamblerLastTableRoll || null;
+	}
+
+	/**
+	 * Get user preference for auto-rolling on the Gambling Table.
+	 * @returns {boolean}
+	 */
+	getGamblerAutoRollTable () {
+		return this._data.spellcasting.gamblerAutoRollTable ?? false;
+	}
+
+	/**
+	 * Set user preference for auto-rolling on the Gambling Table.
+	 * @param {boolean} value
+	 */
+	setGamblerAutoRollTable (value) {
+		this._data.spellcasting.gamblerAutoRollTable = !!value;
+	}
+
+	/**
+	 * Use Extra Luck (L9 feature) - grants advantage, triggers d100 roll.
+	 * @returns {boolean} True if successful, false if no uses remaining
+	 */
+	useExtraLuck () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasExtraLuck) return false;
+
+		const maxUses = calcs.extraLuckUses || this.getProficiencyBonus();
+		const used = this._data.spellcasting.gamblerExtraLuckUsed || 0;
+
+		if (used >= maxUses) return false;
+
+		this._data.spellcasting.gamblerExtraLuckUsed = used + 1;
+
+		// Trigger d100 roll on the Gambling Table
+		this.rollGamblingTable();
+
+		return true;
+	}
+
+	/**
+	 * Get Extra Luck uses remaining.
+	 * @returns {{remaining: number, max: number}|null}
+	 */
+	getExtraLuckUses () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasExtraLuck) return null;
+
+		const max = calcs.extraLuckUses || this.getProficiencyBonus();
+		const used = this._data.spellcasting.gamblerExtraLuckUsed || 0;
+		return {remaining: max - used, max};
+	}
+
+	/**
+	 * Use Master of Fortune (L17 feature) - treat nat 1 as nat 20, triggers d100.
+	 * @returns {boolean} True if successful, false if no uses remaining
+	 */
+	useMasterOfFortune () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasMasterOfFortune) return false;
+
+		const maxUses = calcs.masterOfFortuneUses || this.getProficiencyBonus();
+		const used = this._data.spellcasting.gamblerMasterFortuneUsed || 0;
+
+		if (used >= maxUses) return false;
+
+		this._data.spellcasting.gamblerMasterFortuneUsed = used + 1;
+
+		// Trigger d100 roll on the Gambling Table
+		this.rollGamblingTable();
+
+		return true;
+	}
+
+	/**
+	 * Get Master of Fortune uses remaining.
+	 * @returns {{remaining: number, max: number}|null}
+	 */
+	getMasterOfFortuneUses () {
+		const calcs = this.getFeatureCalculations();
+		if (!calcs.hasMasterOfFortune) return null;
+
+		const max = calcs.masterOfFortuneUses || this.getProficiencyBonus();
+		const used = this._data.spellcasting.gamblerMasterFortuneUsed || 0;
+		return {remaining: max - used, max};
+	}
+
+	/**
+	 * Reset Gambler daily resources (called on long rest).
+	 */
+	resetGamblerDailyResources () {
+		this._data.spellcasting.gamblerExtraLuckUsed = 0;
+		this._data.spellcasting.gamblerMasterFortuneUsed = 0;
+		this._data.spellcasting.gamblerLastBet = null;
+		this._data.spellcasting.gamblerLastTableRoll = null;
+	}
+	// #endregion
 	// #endregion
 
 	// #region Feature DCs and Dice
@@ -25129,6 +25444,113 @@ class CharacterSheetState {
 			_isCustom: true,
 			_isGamblerWeapon: true,
 		},
+	];
+
+	/**
+	 * Gambler's Gambling Table - 100 effects from TGTT
+	 * Indexed 0-99, roll d100 and subtract 1 to access
+	 */
+	static GAMBLER_GAMBLING_TABLE = [
+		"Wall of force appears 10 ft in front of the gambler",
+		"Gambler smells like a skunk for spell duration, gaining disadvantage on Charisma (Persuasion) checks",
+		"Gambler shoots forth eight nonpoisonous snakes from fingertips. Snakes do not attack and disappear after an hour.",
+		"Gambler's clothes itch for the next hour (-2 to initiative, move down the initiative order if in the middle of combat)",
+		"Gambler glows as per a Light cantrip",
+		"Spell effect has 60 ft radius centered on gambler",
+		"Next sentence spoken by gambler thunders, and can be heard up to 600 feet away",
+		"Gambler's hair grows one foot in length",
+		"Gambler falls prone",
+		"Gambler's face is blackened by small explosion, making them blinded for 1 round",
+		"Gambler develops allergy to magical items. Cannot control sneezing until all magical items are removed. Allergy lasts 1d6 minutes, sneezing prevents speaking or casting spells, and gives disadvantage on attack rolls.",
+		"Gambler's head enlarges for 1d4 rounds, as per Enlarge/Reduce spell. Only the head is affected.",
+		"Gambler reduces (as per Enlarge/Reduce spell) for 10 minutes",
+		"Gambler rolls a Wisdom Saving Throw. On failure, falls madly in love with target until Remove Curse is cast",
+		"Spell cannot be dismissed at will by gambler for the next hour.",
+		"Gambler is subjected to Polymorph spell, with a randomly chosen animal as target",
+		"Colorful bubbles come out of gambler's mouth instead of words. Words are released when bubbles pop.",
+		"Tongues spell targets all within 60 feet of gambler, but with reversed effect (making affected targets unable to understand any language for the duration)",
+		"Wall of Fire encircles gambler",
+		"Gambler's feet enlarge for 1d3 minutes, reducing movement speed by half and giving -4 to initiative rolls",
+		"Gambler suffers same spell effect as target",
+		"Gambler levitates 20ft for 1d4 minutes",
+		"Cause Fear with 60ft radius centered on gambler. All within radius except the gambler must make a saving throw.",
+		"Gambler speaks in a squeaky voice for 1d6 days",
+		"Gambler gains X-ray vision of 60ft for 1d6 rounds",
+		"Gambler rolls a Constitution Saving Throw. On failure, the gambler ages 10 years",
+		"Silence, 15' radius centers on gambler",
+		"10ft × 10ft pit appears immediately in front of gambler, 5ft deep per level of the gambler",
+		"Reverse Gravity spell affecting only the gambler for 1 round",
+		"Colored streamers pour from gambler's fingertips",
+		"Spell effect rebounds on gambler",
+		"Gambler becomes invisible for 1 hour (as Invisibility spell)",
+		"Gambler casts Color Spray without using a spell slot",
+		"Stream of butterflies pours from gambler's mouth",
+		"Gambler leaves monster-shaped footprints instead of their own until Dispel Magic is cast",
+		"3d10 gems shoot from gambler's fingertips. Each gem is worth 1d6 × 10 gp.",
+		"Music fills the air for 10 minutes",
+		"Create Food and Water is cast",
+		"All normal fires within 60ft of gambler are extinguished",
+		"One magical item within 30ft of gambler (randomly chosen) is permanently drained of magic",
+		"One normal item within 30ft of gambler (randomly chosen) becomes permanently magical (roll randomly on magic item tables)",
+		"All magical weapons bonuses within 30ft of gambler are increased by +2 for 1 turn",
+		"Smoke trickles from the ears of all creatures within 60' of gambler for 1 turn",
+		"Dancing Lights is cast on the target",
+		"All creatures within 30ft of gambler begin to hiccup (cannot cast spells requiring verbal component, -1 to hit) for 5 rounds",
+		"All doors, secret doors, portcullises, etc. (including those locked or barred) within 60ft of gambler swing open",
+		"Gambler and target exchange places (only after spell is cast)",
+		"Spell affects random target within 60ft of the gambler",
+		"Spell fails but spell slot is not consumed",
+		"Conjure Woodland Beings is cast",
+		"Sudden change in weather (temperature rise, snow, rain, etc.) lasting 1d6 hours",
+		"Deafening bang affects everyone within 60 ft. All those who can hear must roll a Constitution Saving Throw or be stunned for 1d3 rounds.",
+		"Gambler and target exchange voices until Remove Curse is cast",
+		"Gate opens to randomly chosen outer plane; 50% chance for extra-planar creature to appear.",
+		"Spell functions but shrieks like a shrieker for the duration (minimum 1 round)",
+		"Spell effectiveness (range, duration, area of effect, damage, etc.) decreases by half",
+		"Spell switches with another spell from the same level",
+		"Spell becomes a Living Spell, uncontrolled by the gambler.",
+		"All weapons within 60 ft of gambler glow for 10 minutes",
+		"Spell functions; any applicable saving throw is not allowed",
+		"Spell appears to fail when cast, but occurs 1d4 rounds later",
+		"All magical items within 60 ft of gambler glow for 2d8 days",
+		"Gambler and target both make a Wisdom Saving Throw. If they both fail, they switch bodies for 2d10 rounds",
+		"Target's feet enlarge for 1d3 minutes, reducing movement speed by half and giving -4 to initiative rolls",
+		"Target becomes invisible as per the Invisibility spell",
+		"Lightning Bolt spell shoots toward target",
+		"Target enlarged as per the Enlarge/Reduce spell",
+		"Darkness centered on target",
+		"Plant Growth centered on target",
+		"1,000 lbs. of non-living matter within 10 feet of target vanishes",
+		"Fireball centered on target",
+		"Flesh to Stone is cast on the target",
+		"Heal spell on everyone in 10ft radius centered on gambler",
+		"Target becomes dazed for 2d4 rounds",
+		"Wall of Fire encircles target",
+		"Target levitates 20' for 1d3 minutes",
+		"Target is blinded for 5 rounds",
+		"Target is charmed as per Charm Monster",
+		"Calm Emotions is cast on the target",
+		"Slow spell centered on target",
+		"Disenchanter summoned for 1 minute in front of target",
+		"Spell cast becomes Polymorph",
+		"Small, black raincloud forms over target and starts raining for 10 rounds.",
+		"Gambler changes sex",
+		"Heavy object (boulder, anvil, etc.) appears over target and falls for 2d20 points of damage",
+		"Target begins sneezing for 1d6 rounds. Sneezing prevents speaking or casting spells, and gives disadvantage on attack rolls.",
+		"Stinking Cloud centered on target",
+		"Spell effect has 60' radius centered on target (all within radius suffer the effect)",
+		"Target's clothes itch for 1d10 rounds (-2 to initiative, move down the initiative order if in the middle of combat)",
+		"Target rolls Wisdom Saving Throw, on failure falls madly in love with gambler until Dispel Magic is cast.",
+		"Target rolls Constitution Saving Throw, on failure race randomly changes until canceled by Dispel Magic",
+		"Target turns ethereal for 2d4 rounds",
+		"Target hastened for 5 rounds",
+		"All cloth on target crumbles to dust",
+		"Target sprouts leaves (no damage caused, can be pruned without harm)",
+		"Target sprouts new useless appendage (wings, arm, ear, etc.) which remains until Dispel Magic is cast",
+		"Target changes color (canceled by Dispel Magic)",
+		"Spell has a minimum duration of 1 minute (i.e., a Fireball creates a ball of flame that remains for 1 turn, a Lightning Bolt bounces and continues for 1 turn, etc.)",
+		"Nothing happens",
+		"Spell effectiveness (range, duration, area of effect, damage, etc.) is doubled",
 	];
 
 	/**

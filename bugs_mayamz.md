@@ -38,8 +38,8 @@ This file is used to track known bugs in the 5etools character sheet code.
 
 #### Gambler
 - [] Mastery for cards dice? Coins has ricochet. Data, ignore for now.
-- [] Spellcasting is not functional. I don't even get cantrips. Needs extensive implementations since its so unique in mechanics - need to implement the number of prepared spells being 2d4 after long rest, the spellcasting bonus being rolled, etc. 
-- [] "Gambler's folly" is a state, but needs to be a constant effect (similar to wild magic), that takes into account the way the ability works. 
+- [X] Spellcasting is not functional. I don't even get cantrips. Needs extensive implementations since its so unique in mechanics - need to implement the number of prepared spells being 2d4 after long rest, the spellcasting bonus being rolled, etc. 
+- [X] "Gambler's folly" is a state, but needs to be a constant effect (similar to wild magic), that takes into account the way the ability works. 
   - [x] Negative initiative modifier because of gambler's folly, which shouldn't happen. It has nothing to do with this. FIXED: FeatureModifierParser now strips table content before parsing - the "-2 initiative" was from Gambling Table d100 outcomes, not a permanent effect. 
 - [x] No gambler weapons as weapons. Need to inject them as custom weapons with the correct properties and scaling. FIXED: Added GAMBLER_WEAPONS constant and _injectGamblerWeapons() method. Gambler's Coins (1d4 piercing), Dice (1d6 bludgeoning), and Cards (1d8 slashing) are auto-injected to inventory when Gambler reaches L3. All have Finesse/Thrown, Cards also Light. Deduplication by _isGamblerWeapon marker. 
 
