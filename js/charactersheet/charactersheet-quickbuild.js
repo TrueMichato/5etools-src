@@ -639,6 +639,11 @@ class CharacterSheetQuickBuild {
 			totalSpells: totalKnownSpellsGain,
 			totalCantrips: totalKnownCantripsGain,
 			maxSpellLevel: knownMaxSpellLevel,
+			levelBreakdown: knownCasterLevels.map(a => ({
+				level: a.classLevel,
+				spellsGain: a.knownSpellsGainAtLevel,
+				cantripsGain: a.knownCantripsGainAtLevel,
+			})),
 		} : null;
 
 		// Aggregate prepared-spell gains across all levels (XPHB Warlock, etc.)
@@ -3200,7 +3205,13 @@ class CharacterSheetQuickBuild {
 	 * Uses the shared CharacterSheetSpellPicker component.
 	 */
 	_renderKnownSpellPicker ($step, knownCasterInfo) {
-		const {className, classSource, totalSpells, totalCantrips, maxSpellLevel} = knownCasterInfo;
+		const {className, classSource, totalSpells, totalCantrips, maxSpellLevel, levelBreakdown} = knownCasterInfo;
+
+		// Render per-level breakdown if there are multiple levels with spell gains
+		if (levelBreakdown && levelBreakdown.length > 1) {
+			const $breakdown = this._renderLevelBreakdownPanel(levelBreakdown, className);
+			$step.append($breakdown);
+		}
 
 		// Get already-known spells to mark them
 		const knownSpells = this._state.getSpells?.() || [];
@@ -3236,6 +3247,60 @@ class CharacterSheetQuickBuild {
 		});
 
 		$step.append($section);
+	}
+
+	/**
+	 * Render a collapsible panel showing per-level spell gain breakdown.
+	 * Helps users understand where their spell budget comes from in multi-level builds.
+	 */
+	_renderLevelBreakdownPanel (levelBreakdown, className) {
+		const totalSpells = levelBreakdown.reduce((sum, l) => sum + l.spellsGain, 0);
+		const totalCantrips = levelBreakdown.reduce((sum, l) => sum + l.cantripsGain, 0);
+
+		const parts = [];
+		if (totalSpells > 0) parts.push(`${totalSpells} spell${totalSpells !== 1 ? "s" : ""}`);
+		if (totalCantrips > 0) parts.push(`${totalCantrips} cantrip${totalCantrips !== 1 ? "s" : ""}`);
+
+		const $panel = $(`
+			<div class="charsheet__qb-level-breakdown mb-3">
+				<div class="charsheet__qb-level-breakdown-header">
+					<span class="charsheet__qb-level-breakdown-toggle">
+						<span class="charsheet__qb-level-breakdown-chevron">▶</span>
+						<span class="charsheet__qb-level-breakdown-title">Level-by-Level Breakdown</span>
+					</span>
+					<span class="charsheet__qb-level-breakdown-summary">${parts.join(" + ")} total</span>
+				</div>
+				<div class="charsheet__qb-level-breakdown-body" style="display: none;"></div>
+			</div>
+		`);
+
+		const $toggle = $panel.find(".charsheet__qb-level-breakdown-toggle");
+		const $body = $panel.find(".charsheet__qb-level-breakdown-body");
+		const $chevron = $panel.find(".charsheet__qb-level-breakdown-chevron");
+
+		$toggle.on("click", () => {
+			const isExpanded = $body.is(":visible");
+			$body.slideToggle(150);
+			$chevron.toggleClass("charsheet__qb-level-breakdown-chevron--expanded", !isExpanded);
+		});
+
+		// Render breakdown items
+		levelBreakdown.forEach(({level, spellsGain, cantripsGain}) => {
+			const gains = [];
+			if (spellsGain > 0) gains.push(`+${spellsGain} spell${spellsGain !== 1 ? "s" : ""}`);
+			if (cantripsGain > 0) gains.push(`+${cantripsGain} cantrip${cantripsGain !== 1 ? "s" : ""}`);
+
+			if (gains.length > 0) {
+				$body.append(`
+					<div class="charsheet__qb-level-breakdown-item">
+						<span class="charsheet__qb-level-breakdown-level">${className} Level ${level}</span>
+						<span class="charsheet__qb-level-breakdown-gains">${gains.join(", ")}</span>
+					</div>
+				`);
+			}
+		});
+
+		return $panel;
 	}
 
 	/**

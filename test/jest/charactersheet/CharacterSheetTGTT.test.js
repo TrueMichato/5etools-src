@@ -5570,6 +5570,241 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 					expect(hasCards).toBe(true);
 					expect(hasDice).toBe(true);
 				});
+
+				// ==========================================
+				// Gambler Spellcasting State Tests
+				// ==========================================
+				
+				describe("rollGamblerPreparedSpells", () => {
+					it("should roll 2d4 for prepared spells at level 3", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						const result = state.rollGamblerPreparedSpells();
+						
+						// Returns object with dice, rolls[], total
+						expect(result).not.toBeNull();
+						expect(result.dice).toBe("2d4");
+						expect(result.rolls.length).toBe(2);
+						// 2d4 range: 2-8
+						expect(result.total).toBeGreaterThanOrEqual(2);
+						expect(result.total).toBeLessThanOrEqual(8);
+					});
+					
+					it("should roll 3d6 for prepared spells at level 13+", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 13,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						const result = state.rollGamblerPreparedSpells();
+						
+						// Returns object with dice, rolls[], total
+						expect(result).not.toBeNull();
+						expect(result.dice).toBe("3d6");
+						expect(result.rolls.length).toBe(3);
+						// 3d6 range: 3-18
+						expect(result.total).toBeGreaterThanOrEqual(3);
+						expect(result.total).toBeLessThanOrEqual(18);
+					});
+					
+					it("should store rolled total in state", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						const result = state.rollGamblerPreparedSpells();
+						const stored = state.getGamblerPreparedCount();
+						
+						// getGamblerPreparedCount returns just the total number
+						expect(stored).toBe(result.total);
+					});
+					
+					it("should store roll details for display", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						state.rollGamblerPreparedSpells();
+						const details = state.getGamblerPreparedRollDetails();
+						
+						expect(details).not.toBeNull();
+						expect(details.dice).toBe("2d4");
+						expect(Array.isArray(details.rolls)).toBe(true);
+						expect(details.rolls.length).toBe(2); // 2 dice
+						expect(typeof details.total).toBe("number");
+					});
+					
+					it("should return null if character has no Gambler spellcasting", () => {
+						state.addClass({name: "Fighter", source: "PHB", level: 5});
+						
+						const result = state.rollGamblerPreparedSpells();
+						
+						expect(result).toBeNull();
+					});
+				});
+				
+				describe("getMaxPreparedSpells for Gambler", () => {
+					it("should return dice formula before rolling", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						const max = state.getMaxPreparedSpells("Gambler");
+						
+						expect(max).toBe("2d4");
+					});
+					
+					it("should return rolled total after rolling", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						const rollResult = state.rollGamblerPreparedSpells();
+						const max = state.getMaxPreparedSpells("Gambler");
+						
+						// getMaxPreparedSpells returns the total number
+						expect(max).toBe(rollResult.total);
+					});
+					
+					it("should return 3d6 formula at level 13+ before rolling", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 13,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						const max = state.getMaxPreparedSpells("Gambler");
+						
+						expect(max).toBe("3d6");
+					});
+				});
+				
+				describe("resetGamblerPreparedRoll", () => {
+					it("should clear rolled prepared count on long rest", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						state.rollGamblerPreparedSpells();
+						expect(state.getGamblerPreparedCount()).not.toBeNull();
+						
+						state.resetGamblerPreparedRoll();
+						
+						expect(state.getGamblerPreparedCount()).toBeNull();
+					});
+					
+					it("should clear prepared spells by default (clearPrepared=true)", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						// Add a Gambler spell (pass true as second arg to set prepared)
+						state.addSpell({
+							name: "Hex", source: "PHB", level: 1,
+							sourceClass: "Gambler",
+						}, true);
+						
+						expect(state.getGamblerCurrentPreparedCount()).toBe(1);
+						
+						state.resetGamblerPreparedRoll(); // default clearPrepared = true
+						
+						expect(state.getGamblerCurrentPreparedCount()).toBe(0);
+					});
+					
+					it("should preserve prepared spells when clearPrepared=false", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						// Add a Gambler spell (pass true as second arg to set prepared)
+						state.addSpell({
+							name: "Hex", source: "PHB", level: 1,
+							sourceClass: "Gambler",
+						}, true);
+						
+						expect(state.getGamblerCurrentPreparedCount()).toBe(1);
+						
+						state.resetGamblerPreparedRoll(false); // clearPrepared = false
+						
+						// Spells should still be prepared
+						expect(state.getGamblerCurrentPreparedCount()).toBe(1);
+						// But the rolled count should be cleared
+						expect(state.getGamblerPreparedCount()).toBeNull();
+					});
+				});
+				
+				describe("getGamblerCurrentPreparedCount", () => {
+					it("should count only prepared Gambler spells", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						// Add Gambler spells (both prepared and not)
+						state.addSpell({
+							name: "Hex", source: "PHB", level: 1,
+							sourceClass: "Gambler",
+						}, true); // prepared
+						state.addSpell({
+							name: "Armor of Agathys", source: "PHB", level: 1,
+							sourceClass: "Gambler",
+						}, false); // not prepared
+						state.addSpell({
+							name: "Hellish Rebuke", source: "PHB", level: 1,
+							sourceClass: "Gambler",
+						}, true); // prepared
+						
+						// Add non-Gambler spell (should not count)
+						state.addSpell({
+							name: "Magic Missile", source: "PHB", level: 1,
+							sourceClass: "Wizard",
+						}, true); // prepared but not Gambler
+						
+						expect(state.getGamblerCurrentPreparedCount()).toBe(2);
+					});
+					
+					it("should not count cantrips (level 0)", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						// Note: addSpell routes level 0 to addCantrip, which is separate storage
+						state.addSpell({
+							name: "Eldritch Blast", source: "PHB", level: 0,
+							sourceClass: "Gambler",
+						}, true);
+						state.addSpell({
+							name: "Hex", source: "PHB", level: 1,
+							sourceClass: "Gambler",
+						}, true);
+						
+						// Only the level 1 spell should count
+						expect(state.getGamblerCurrentPreparedCount()).toBe(1);
+					});
+				});
+				
+				describe("setGamblerPreparedCount", () => {
+					it("should manually set prepared count", () => {
+						state.addClass({
+							name: "Rogue", source: "TGTT", level: 3,
+							subclass: {name: "Gambler", shortName: "Gambler", source: "TGTT"}
+						});
+						
+						state.setGamblerPreparedCount(5);
+						
+						expect(state.getGamblerPreparedCount()).toBe(5);
+					});
+				});
 			});
 			
 			describe("Trickster", () => {

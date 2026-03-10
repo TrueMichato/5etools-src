@@ -5,6 +5,184 @@
  */
 class CharacterSheetSpellPicker {
 	// ==========================================
+	// Progress Header & Summary Panel Helpers
+	// ==========================================
+
+	/**
+	 * Create a sticky progress header showing spell/cantrip counts with color coding.
+	 * @private
+	 */
+	static _renderProgressHeader ({spellCount, cantripCount, selectedSpells, selectedCantrips, isWizard = false}) {
+		const $header = $(`<div class="charsheet__spell-picker-header"></div>`);
+
+		const $spellCounter = spellCount > 0 ? $(`
+			<div class="charsheet__spell-picker-counter">
+				<span class="charsheet__spell-picker-counter-icon">${isWizard ? "📖" : "📜"}</span>
+				<span class="charsheet__spell-picker-counter-label">${isWizard ? "Spellbook" : "Spells"}:</span>
+				<span class="charsheet__spell-picker-counter-value spell-counter-value">
+					<span class="spell-count-current">${selectedSpells?.length || 0}</span>/<span class="spell-count-max">${spellCount}</span>
+				</span>
+			</div>
+		`) : null;
+
+		const $cantripCounter = cantripCount > 0 ? $(`
+			<div class="charsheet__spell-picker-counter">
+				<span class="charsheet__spell-picker-counter-icon">⭐</span>
+				<span class="charsheet__spell-picker-counter-label">Cantrips:</span>
+				<span class="charsheet__spell-picker-counter-value cantrip-counter-value">
+					<span class="cantrip-count-current">${selectedCantrips?.length || 0}</span>/<span class="cantrip-count-max">${cantripCount}</span>
+				</span>
+			</div>
+		`) : null;
+
+		if ($spellCounter) $header.append($spellCounter);
+		if ($cantripCounter) $header.append($cantripCounter);
+
+		return $header;
+	}
+
+	/**
+	 * Update progress header color states based on current counts.
+	 * @private
+	 */
+	static _updateProgressHeader ({$header, spellCount, cantripCount, selectedSpells, selectedCantrips}) {
+		// Update spell counter
+		if (spellCount > 0) {
+			const $spellValue = $header.find(".spell-counter-value");
+			$header.find(".spell-count-current").text(selectedSpells.length);
+			$spellValue.removeClass("charsheet__spell-picker-counter-value--complete charsheet__spell-picker-counter-value--over");
+			if (selectedSpells.length === spellCount) {
+				$spellValue.addClass("charsheet__spell-picker-counter-value--complete");
+			} else if (selectedSpells.length > spellCount) {
+				$spellValue.addClass("charsheet__spell-picker-counter-value--over");
+			}
+		}
+
+		// Update cantrip counter
+		if (cantripCount > 0) {
+			const $cantripValue = $header.find(".cantrip-counter-value");
+			$header.find(".cantrip-count-current").text(selectedCantrips.length);
+			$cantripValue.removeClass("charsheet__spell-picker-counter-value--complete charsheet__spell-picker-counter-value--over");
+			if (selectedCantrips.length === cantripCount) {
+				$cantripValue.addClass("charsheet__spell-picker-counter-value--complete");
+			} else if (selectedCantrips.length > cantripCount) {
+				$cantripValue.addClass("charsheet__spell-picker-counter-value--over");
+			}
+		}
+	}
+
+	/**
+	 * Create a collapsible summary panel showing selected spells as dismissible chips.
+	 * @private
+	 */
+	static _renderSummaryPanel ({selectedSpells, selectedCantrips, spellCount, cantripCount, onRemove}) {
+		const hasCantrips = cantripCount > 0;
+		const hasSpells = spellCount > 0;
+		const totalSelected = (selectedSpells?.length || 0) + (selectedCantrips?.length || 0);
+
+		const $panel = $(`
+			<div class="charsheet__spell-picker-summary">
+				<div class="charsheet__spell-picker-summary-header">
+					<span class="charsheet__spell-picker-summary-toggle">
+						<span class="charsheet__spell-picker-summary-chevron">▶</span>
+						<span class="charsheet__spell-picker-summary-title">Selected Spells</span>
+						<span class="charsheet__spell-picker-summary-badge">${totalSelected}</span>
+					</span>
+				</div>
+				<div class="charsheet__spell-picker-summary-body" style="display: none;">
+					<div class="charsheet__spell-picker-chips"></div>
+				</div>
+			</div>
+		`);
+
+		const $toggle = $panel.find(".charsheet__spell-picker-summary-toggle");
+		const $body = $panel.find(".charsheet__spell-picker-summary-body");
+		const $chevron = $panel.find(".charsheet__spell-picker-summary-chevron");
+
+		$toggle.on("click", () => {
+			const isExpanded = $body.is(":visible");
+			$body.slideToggle(150);
+			$chevron.toggleClass("charsheet__spell-picker-summary-chevron--expanded", !isExpanded);
+		});
+
+		return $panel;
+	}
+
+	/**
+	 * Update the summary panel with current selections.
+	 * @private
+	 */
+	static _updateSummaryPanel ({$panel, selectedSpells, selectedCantrips, spellCount, cantripCount, onRemove}) {
+		const $chips = $panel.find(".charsheet__spell-picker-chips");
+		const $badge = $panel.find(".charsheet__spell-picker-summary-badge");
+		const totalSelected = (selectedSpells?.length || 0) + (selectedCantrips?.length || 0);
+
+		$badge.text(totalSelected);
+		$chips.empty();
+
+		if (totalSelected === 0) {
+			$chips.append(`<span class="charsheet__spell-picker-chips-empty">No spells selected yet</span>`);
+			return;
+		}
+
+		// Render cantrip chips
+		if (selectedCantrips?.length > 0) {
+			const $cantripGroup = $(`<div class="charsheet__spell-picker-chip-group"></div>`);
+			$cantripGroup.append(`<span class="charsheet__spell-picker-chip-group-label">Cantrips:</span>`);
+			const $cantripChips = $(`<div class="charsheet__spell-picker-chip-list"></div>`);
+
+			selectedCantrips.forEach(spell => {
+				const $chip = $(`
+					<span class="charsheet__spell-picker-chip charsheet__spell-picker-chip--cantrip">
+						<span class="charsheet__spell-picker-chip-name">${spell.name}</span>
+						<button class="charsheet__spell-picker-chip-remove" title="Remove ${spell.name}">×</button>
+					</span>
+				`);
+				$chip.find(".charsheet__spell-picker-chip-remove").on("click", (e) => {
+					e.stopPropagation();
+					onRemove(spell, true);
+				});
+				$cantripChips.append($chip);
+			});
+
+			$cantripGroup.append($cantripChips);
+			$chips.append($cantripGroup);
+		}
+
+		// Render spell chips grouped by level
+		if (selectedSpells?.length > 0) {
+			const byLevel = {};
+			selectedSpells.forEach(spell => {
+				if (!byLevel[spell.level]) byLevel[spell.level] = [];
+				byLevel[spell.level].push(spell);
+			});
+
+			Object.keys(byLevel).sort((a, b) => Number(a) - Number(b)).forEach(level => {
+				const $group = $(`<div class="charsheet__spell-picker-chip-group"></div>`);
+				$group.append(`<span class="charsheet__spell-picker-chip-group-label">Level ${level}:</span>`);
+				const $chipList = $(`<div class="charsheet__spell-picker-chip-list"></div>`);
+
+				byLevel[level].forEach(spell => {
+					const $chip = $(`
+						<span class="charsheet__spell-picker-chip">
+							<span class="charsheet__spell-picker-chip-name">${spell.name}</span>
+							<button class="charsheet__spell-picker-chip-remove" title="Remove ${spell.name}">×</button>
+						</span>
+					`);
+					$chip.find(".charsheet__spell-picker-chip-remove").on("click", (e) => {
+						e.stopPropagation();
+						onRemove(spell, false);
+					});
+					$chipList.append($chip);
+				});
+
+				$group.append($chipList);
+				$chips.append($group);
+			});
+		}
+	}
+
+	// ==========================================
 	// Public Render Methods
 	// ==========================================
 
@@ -48,22 +226,51 @@ class CharacterSheetSpellPicker {
 		if (cantripCount > 0) parts.push(`${cantripCount} cantrip${cantripCount !== 1 ? "s" : ""}`);
 
 		const $section = $(`
-			<div class="charsheet__levelup-section">
+			<div class="charsheet__levelup-section charsheet__spell-picker-container">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-fire"></span> Spells Known
 				</h5>
 				<p class="ve-small">Choose ${parts.join(" and ")} for your ${className}:</p>
+				<div class="charsheet__spell-picker-progress-area"></div>
 				<div class="charsheet__levelup-known-spell-selections"></div>
-				<div class="ve-small ve-muted mt-1">
-					${spellCount > 0 ? `Spells: <span class="spell-count">0</span>/${spellCount}` : ""}
-					${cantripCount > 0 ? `${spellCount > 0 ? " · " : ""}Cantrips: <span class="cantrip-count">0</span>/${cantripCount}` : ""}
-				</div>
 			</div>
 		`);
 
+		const $progressArea = $section.find(".charsheet__spell-picker-progress-area");
 		const $container = $section.find(".charsheet__levelup-known-spell-selections");
 		const selectedSpells = [...preSelectedSpells];
 		const selectedCantrips = [...preSelectedCantrips];
+
+		// Render progress header
+		const $progressHeader = CharacterSheetSpellPicker._renderProgressHeader({
+			spellCount,
+			cantripCount,
+			selectedSpells,
+			selectedCantrips,
+		});
+		$progressArea.append($progressHeader);
+
+		// Handler for removing spells from summary panel
+		const handleRemove = (spell, isCantrip) => {
+			const targetArr = isCantrip ? selectedCantrips : selectedSpells;
+			const spellId = `${spell.name}|${spell.source}`;
+			const idx = targetArr.findIndex(s => `${s.name}|${s.source}` === spellId);
+			if (idx >= 0) {
+				targetArr.splice(idx, 1);
+				fireCallback();
+				renderSpellList();
+			}
+		};
+
+		// Render summary panel
+		const $summaryPanel = CharacterSheetSpellPicker._renderSummaryPanel({
+			selectedSpells,
+			selectedCantrips,
+			spellCount,
+			cantripCount,
+			onRemove: handleRemove,
+		});
+		$progressArea.append($summaryPanel);
 
 		// Filter to class spells using Renderer API with fallback
 		const classSpells = allSpells.filter(spell => {
@@ -120,8 +327,23 @@ class CharacterSheetSpellPicker {
 		$container.append($spellList);
 
 		const fireCallback = () => {
-			$section.find(".spell-count").text(selectedSpells.length);
-			$section.find(".cantrip-count").text(selectedCantrips.length);
+			// Update progress header
+			CharacterSheetSpellPicker._updateProgressHeader({
+				$header: $progressHeader,
+				spellCount,
+				cantripCount,
+				selectedSpells,
+				selectedCantrips,
+			});
+			// Update summary panel
+			CharacterSheetSpellPicker._updateSummaryPanel({
+				$panel: $summaryPanel,
+				selectedSpells,
+				selectedCantrips,
+				spellCount,
+				cantripCount,
+				onRemove: handleRemove,
+			});
 			onSelect([...selectedSpells], [...selectedCantrips]);
 		};
 
@@ -186,10 +408,23 @@ class CharacterSheetSpellPicker {
 		$ritualFilter.find("input").on("change", renderSpellList);
 		$concFilter.find("input").on("change", renderSpellList);
 
-		// Initialize counters if pre-selections exist
+		// Initialize header and summary if pre-selections exist
 		if (selectedSpells.length || selectedCantrips.length) {
-			$section.find(".spell-count").text(selectedSpells.length);
-			$section.find(".cantrip-count").text(selectedCantrips.length);
+			CharacterSheetSpellPicker._updateProgressHeader({
+				$header: $progressHeader,
+				spellCount,
+				cantripCount,
+				selectedSpells,
+				selectedCantrips,
+			});
+			CharacterSheetSpellPicker._updateSummaryPanel({
+				$panel: $summaryPanel,
+				selectedSpells,
+				selectedCantrips,
+				spellCount,
+				cantripCount,
+				onRemove: handleRemove,
+			});
 		}
 
 		renderSpellList();
@@ -222,18 +457,50 @@ class CharacterSheetSpellPicker {
 		} = opts;
 
 		const $section = $(`
-			<div class="charsheet__levelup-section">
+			<div class="charsheet__levelup-section charsheet__spell-picker-container">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-book"></span> Spellbook
 				</h5>
 				<p class="ve-small">Choose ${spellCount} wizard spells (up to level ${maxSpellLevel}) to add to your spellbook:</p>
+				<div class="charsheet__spell-picker-progress-area"></div>
 				<div class="charsheet__levelup-spellbook-selections"></div>
-				<div class="ve-small ve-muted mt-1">Selected: <span class="spell-count">0</span>/${spellCount}</div>
 			</div>
 		`);
 
+		const $progressArea = $section.find(".charsheet__spell-picker-progress-area");
 		const $container = $section.find(".charsheet__levelup-spellbook-selections");
 		const selectedSpells = [...preSelectedSpells];
+
+		// Render progress header (wizard version)
+		const $progressHeader = CharacterSheetSpellPicker._renderProgressHeader({
+			spellCount,
+			cantripCount: 0,
+			selectedSpells,
+			selectedCantrips: [],
+			isWizard: true,
+		});
+		$progressArea.append($progressHeader);
+
+		// Handler for removing spells from summary panel
+		const handleRemove = (spell) => {
+			const spellId = `${spell.name}|${spell.source}`;
+			const idx = selectedSpells.findIndex(s => `${s.name}|${s.source}` === spellId);
+			if (idx >= 0) {
+				selectedSpells.splice(idx, 1);
+				fireCallback();
+				renderSpellList();
+			}
+		};
+
+		// Render summary panel
+		const $summaryPanel = CharacterSheetSpellPicker._renderSummaryPanel({
+			selectedSpells,
+			selectedCantrips: [],
+			spellCount,
+			cantripCount: 0,
+			onRemove: handleRemove,
+		});
+		$progressArea.append($summaryPanel);
 
 		// Filter to wizard spells up to max level
 		const wizardSpells = allSpells.filter(spell => {
@@ -285,6 +552,27 @@ class CharacterSheetSpellPicker {
 		const $spellList = $(`<div class="charsheet__modal-list" style="max-height: 350px; overflow-y: auto;"></div>`);
 		$container.append($spellList);
 
+		const fireCallback = () => {
+			// Update progress header
+			CharacterSheetSpellPicker._updateProgressHeader({
+				$header: $progressHeader,
+				spellCount,
+				cantripCount: 0,
+				selectedSpells,
+				selectedCantrips: [],
+			});
+			// Update summary panel
+			CharacterSheetSpellPicker._updateSummaryPanel({
+				$panel: $summaryPanel,
+				selectedSpells,
+				selectedCantrips: [],
+				spellCount,
+				cantripCount: 0,
+				onRemove: handleRemove,
+			});
+			onSelect([...selectedSpells]);
+		};
+
 		const renderSpellList = () => {
 			$spellList.empty();
 
@@ -330,8 +618,7 @@ class CharacterSheetSpellPicker {
 						return;
 					}
 
-					$section.find(".spell-count").text(selectedSpells.length);
-					onSelect([...selectedSpells]);
+					fireCallback();
 					renderSpellList();
 				},
 			});
@@ -343,8 +630,23 @@ class CharacterSheetSpellPicker {
 		$ritualFilter.find("input").on("change", renderSpellList);
 		$concFilter.find("input").on("change", renderSpellList);
 
+		// Initialize header and summary if pre-selections exist
 		if (selectedSpells.length) {
-			$section.find(".spell-count").text(selectedSpells.length);
+			CharacterSheetSpellPicker._updateProgressHeader({
+				$header: $progressHeader,
+				spellCount,
+				cantripCount: 0,
+				selectedSpells,
+				selectedCantrips: [],
+			});
+			CharacterSheetSpellPicker._updateSummaryPanel({
+				$panel: $summaryPanel,
+				selectedSpells,
+				selectedCantrips: [],
+				spellCount,
+				cantripCount: 0,
+				onRemove: handleRemove,
+			});
 		}
 
 		renderSpellList();
