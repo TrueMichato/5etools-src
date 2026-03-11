@@ -1697,6 +1697,7 @@ class CharacterSheetPage {
 		this._renderOverviewMetamagic();
 		this._renderOverviewAbilities();
 		this._renderActiveStates();
+		this._renderOverviewActions();
 		this._renderAttacks();
 		this._renderQuickSpells();
 		this._renderAbilitiesDetailed();
@@ -4814,6 +4815,88 @@ class CharacterSheetPage {
 		});
 
 		$("body").append($modal);
+	}
+
+	/**
+	 * Render the Actions section in the overview tab.
+	 * Shows features classified as "combat" or "reaction" by FEATURE_CLASSIFICATION_OVERRIDES,
+	 * plus any other features that pass the combat action heuristics filter.
+	 * Each row shows name, action type badge, and a "Use" button.
+	 * Clicking the row opens the combat action detail modal.
+	 */
+	_renderOverviewActions () {
+		const $container = $("#charsheet-overview-actions");
+		const $section = $("#charsheet-overview-actions-section");
+		if (!$container.length) return;
+
+		// Get combat-classified features from the combat module if available
+		let combatFeatures = [];
+		if (this._combat?.getCombatClassifiedFeatures) {
+			combatFeatures = this._combat.getCombatClassifiedFeatures();
+		} else {
+			// Fallback: derive from overrides directly
+			const features = this._state.getFeatures();
+			const overrides = CharacterSheetState?.FEATURE_CLASSIFICATION_OVERRIDES || {};
+			combatFeatures = features.filter(f => {
+				const nameLower = f.name?.toLowerCase() || "";
+				const cls = overrides[nameLower];
+				return cls === "combat" || cls === "reaction";
+			});
+		}
+
+		if (!combatFeatures.length) {
+			$section.hide();
+			return;
+		}
+
+		$section.show();
+		$container.empty();
+
+		for (const feature of combatFeatures) {
+			const actionType = this._combat?._getFeatureActionType?.(feature) || "action";
+			let actionIcon = "⚔️";
+			let actionLabel = "Action";
+			if (actionType === "bonus") { actionIcon = "⚡"; actionLabel = "Bonus"; }
+			else if (actionType === "reaction") { actionIcon = "🔄"; actionLabel = "Reaction"; }
+			else if (actionType === "free") { actionIcon = "✨"; actionLabel = "Free"; }
+
+			// Resource cost display
+			const desc = feature.description?.toLowerCase() || "";
+			let costHtml = "";
+			const kiMatch = desc.match(/(\d+)\s*ki\s*point/);
+			const focusMatch = desc.match(/(\d+)\s*focus\s*point/);
+			const exertionMatch = desc.match(/(\d+)\s*exertion/);
+			if (kiMatch) costHtml = `<span class="ve-small ve-muted mr-1">${kiMatch[1]} Ki</span>`;
+			else if (focusMatch) costHtml = `<span class="ve-small ve-muted mr-1">${focusMatch[1]} Focus</span>`;
+			else if (exertionMatch) costHtml = `<span class="ve-small ve-muted mr-1">${exertionMatch[1]} Exertion</span>`;
+
+			// Uses display
+			let usesHtml = "";
+			if (feature.uses && feature.uses.max > 0) {
+				const rechargeIcon = feature.uses.recharge === "short" ? "☀️" : "🌙";
+				usesHtml = `<span class="ve-small ve-muted mr-1">${feature.uses.current}/${feature.uses.max} ${rechargeIcon}</span>`;
+			}
+
+			const $row = $(`
+				<div class="charsheet__action-row ve-flex-v-center py-1 px-2 mb-1 rounded"
+					style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b)); cursor: pointer;">
+					<span class="mr-2" title="${actionLabel}">${actionIcon}</span>
+					<span class="charsheet__action-name flex-grow-1" style="min-width: 0;">${feature.name}</span>
+					<div class="ve-flex-v-center ml-auto">
+						<span class="badge badge-outline-secondary ve-small mr-1">${actionLabel}</span>
+						${costHtml}${usesHtml}
+					</div>
+				</div>
+			`);
+
+			$row.on("click", () => {
+				if (this._combat?._showCombatActionModal) {
+					this._combat._showCombatActionModal(feature);
+				}
+			});
+
+			$container.append($row);
+		}
 	}
 
 	_renderActiveStates () {

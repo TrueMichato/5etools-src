@@ -16,7 +16,7 @@ After a comprehensive audit of all class tests in `test/jest/charactersheet/`, I
 | Class | Tests | Implementation Quality |
 |-------|-------|----------------------|
 | Barbarian | 214 | ✅ Excellent - tests rage damage, brutal critical dice, AC formula |
-| Monk | 176 | ✅ Excellent - tests martial arts die, ki points, ki DC, unarmored movement |
+| Monk | 225+ | ✅ Excellent - tests martial arts die, ki points, ki DC, unarmored movement, Implements of Mercy proficiencies |
 | Fighter | 186 | ✅ Good - tests superiority dice, second wind healing, action surge |
 | Rogue | 177 | ✅ Good - tests sneak attack dice, expertise |
 | Wizard | 92 | ✅ Good - tests spell DC, prepared spells, arcane recovery |

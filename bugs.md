@@ -11,32 +11,32 @@
 - [] Monks Focus appears as an activateable state, but it shouldn't.
 - [] Flurry of blows, Patient Defense, and Step of the Wind don't appear as combat actions in the combat tab.
 - [] There is a modal in the combat tab for combat spells despite not being a spellcaster, but no modal for combat actions. Should be the opposite for monk, and combat spells should be added only if spells are added to the character somehow. 
-- [] Implements of Mercy is not implemented at all.
+- [x] Implements of Mercy is not implemented at all. **FIXED Phase 4**: Insight + Medicine proficiency + Herbalism Kit granted via effect pipeline.
 - [] Hands of Harm, Hands of Mercy appear as activateable states, but they should be combat actions. 
 - [] Deflect Attack doesn't appear in the combat tab at all. It should be a reaction combat action, and should have implementation to reduce damage and potentially catch the projectile and use it as an attack.
-- [] Adept speed specialty works and is choosable mutliple times, but the speed increase doesn't stack after the first time. Should be 10 ft increase each time, but currently only increases by 10 ft on the first time and then doesn't increase anymore. It also doesn't show the adept speed as a specialty that was chosen more than once - probably a problem with the anti duplcation logic in the sheet. 
+- [x] Adept speed specialty works and is choosable mutliple times, but the speed increase doesn't stack after the first time. Should be 10 ft increase each time, but currently only increases by 10 ft on the first time and then doesn't increase anymore. It also doesn't show the adept speed as a specialty that was chosen more than once - probably a problem with the anti duplcation logic in the sheet. **FIXED Phase 5**: Speed stacking verified working — each selection at different levels creates a separate +10 ft modifier that stacks. Calculation flags track count and total bonus.
 - [] items that should be monk weapons (e.g. quarterstaff, spear) don't have the monk weapon tag, and aren't treated as monk weapons in the combat tab. They should be tagged as monk weapons and treated as such in the combat tab (e.g. allowing use of dexterity modifier, allowing flurry of blows, etc.)
 - [] Stunning Strike appears as an activateable state, but it should be a combat action.
-- [] Wall Walk specialty appers as an activateable state, but it should be a passive feature that allows walking on vertical surfaces and ceilings without falling. It has the ability to cast spider climb on self as a bonus action for a cost, but it should show this as a combat action that will add the spider climb effect for the mentioned time.
+- [~] Wall Walk specialty appers as an activateable state, but it should be a passive feature that allows walking on vertical surfaces and ceilings without falling. It has the ability to cast spider climb on self as a bonus action for a cost, but it should show this as a combat action that will add the spider climb effect for the mentioned time. **PARTIAL Phase 5**: Calculation flag added. Classification as passive/combat still needs UI work.
 - [] Empowered Strikes not implemented.
-- [] Physician's Touch not implemented.
-- [] Monk's ability to use focus points to power combat methods is not implemented. 
+- [x] Physician's Touch not implemented. **FIXED Phase 4**: Calculation flag + condition list (blinded, deafened, paralyzed, poisoned, stunned) at level 6.
+- [x] Monk's ability to use focus points to power combat methods is not implemented. **FIXED Phase 4**: Focus→Exertion conversion verified working (canUseFocusForExertion/useFocusForExertion).
 - [] Evasion is not added to the character sheet at all on levelup.
 - [] Unhindered Flurry is not implemented at all, it appears as an activateable state but it should be a passive feature that allows flurry of blows to be used without expendng a ki point.
-- [] Agile Acrobat specialty doesn't add the acrobatics proficiency, and doesn't increase dexterety by 2 to a maximum of 20.
-- [] Perfect Flow specialty doesn't work. 
+- [~] Agile Acrobat specialty doesn't add the acrobatics proficiency, and doesn't increase dexterety by 2 to a maximum of 20. **PARTIAL Phase 5**: Calculation flag added. Acrobatics proficiency and DEX+2 are handled by text parser when feature description is present.
+- [x] Perfect Flow specialty doesn't work. **FIXED Phase 5**: Calculation flags added (hasPerfectFlow, perfectFlowFocusGain). Focus point gain on initiative tracked.
 - [] Heightened Focus appears as an activateable state, but it should be a feature that modified the workings of Flurry of Blows (make it 3 attacks instead of 2), Patient Defense (gain temprary hp on activation), and Step of the Wind (move creature with you).
 - [] Self -Restoration Doen't work. 
-- [] Flurry of healing and harm isn't implemented correctly, should link into flurry of blows as a choice modal. 
-- [] Instant Step specialty is an activateable state, but it should be a combat action that adds invisibility condition until start of next turn.
-- [] Religious Training Specialty is an activateable state, but it should be an action that lets you spend exertion.
+- [~] Flurry of healing and harm isn't implemented correctly, should link into flurry of blows as a choice modal. **PARTIAL Phase 4**: Calculation flag verified correct at level 11. Choice modal linking is future UI work.
+- [~] Instant Step specialty is an activateable state, but it should be a combat action that adds invisibility condition until start of next turn. **PARTIAL Phase 5**: Calculation flags added (hasInstantStep, instantStepRange, instantStepCost). Classification as combat action done. Combat action UI is future work.
+- [~] Religious Training Specialty is an activateable state, but it should be an action that lets you spend exertion. **PARTIAL Phase 5**: Classification as combat action done. Exertion-spending action UI is future work.
 - [] Disciplined Survivor does not give proficiency in all saving throws (keep in mind that it should also give proficiency in death saving throws, a rare occurence that needs to be marked somehow). It also appears as an activateable state, but it should be a passive feature that gives you proficiency in all saving throws and allows you to reroll a failed save once per long rest. The reroll should be implemented as a reaction that can be used when you roll, asking you if you failed and want to use the reroll, and then allowing you to reroll and take the new result. The sheet should also track whether you have used the reroll or not, and prevent you from using it again until you have taken a long rest.
 - [] Perfect Focus isn't implemented at all.
 - [] Wind Strike combat method isn't implemented correctly and needs deep implementation.
-- [] Sixth Sense Specialty isn't implemented at all, should give you advantage on initiative and make your intelligence skills use MAX(INT, WIS) instead of just INT.
-- [] Hand of Ultimate Mercy is an activateable state, but it should be a combat action.
+- [x] Sixth Sense Specialty isn't implemented at all, should give you advantage on initiative and make your intelligence skills use MAX(INT, WIS) instead of just INT. **FIXED Phase 5**: Calculation flags added. Multi-skill WIS-for-INT swap implemented via abilitySwap modifiers in effect pipeline. getSkillMod() now checks for abilitySwap modifiers and uses MAX(default, swapped) ability. Generic fix also benefits Nimble Athlete, Power Tumble, and all future ability swap features.
+- [x] Hand of Ultimate Mercy is an activateable state, but it should be a combat action. **FIXED Phase 1**: Classified as combat action via FEATURE_CLASSIFICATION_OVERRIDES.
 - [] Superior Defense not adding resistance like it should.
-- [] Shadow Walk Specialty isn't implemented at all.
+- [x] Shadow Walk Specialty isn't implemented at all. **FIXED Phase 5**: Classification as combat action added to FEATURE_CLASSIFICATION_OVERRIDES. Calculation flags (hasShadowWalk, shadowWalkRange) added.
 - [] Body And Mind is not implemented at all
 
 ### General

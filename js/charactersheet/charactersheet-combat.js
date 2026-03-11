@@ -1573,9 +1573,20 @@ class CharacterSheetCombat {
 
 	renderCombatSpells () {
 		const $container = $("#charsheet-combat-spells");
+		const $section = $("#charsheet-combat-spells-section");
 		if (!$container.length) return;
 
 		$container.empty();
+
+		// Get spells - cantrips and prepared attack spells
+		const spells = this._state.getSpells();
+
+		// Hide the entire section if character has no spells at all
+		if (!spells.length) {
+			if ($section.length) $section.hide();
+			return;
+		}
+		if ($section.length) $section.show();
 
 		// Get spell attack and save DC
 		const spellAttack = this._state.getSpellAttackBonus?.() || 0;
@@ -1583,13 +1594,6 @@ class CharacterSheetCombat {
 
 		$("#charsheet-combat-spell-attack").text(`+${spellAttack}`);
 		$("#charsheet-combat-spell-dc").text(spellDC);
-
-		// Get spells - cantrips and prepared attack spells
-		const spells = this._state.getSpells();
-		if (!spells.length) {
-			$container.append(`<p class="ve-muted text-center">No spells. Add spells from the Spells tab.</p>`);
-			return;
-		}
 
 		// Filter to combat-relevant spells: cantrips + prepared leveled spells
 		const combatSpells = spells.filter(spell => {
@@ -1729,6 +1733,13 @@ class CharacterSheetCombat {
 
 		// Filter for combat-relevant features that have action economy
 		const combatActions = features.filter(f => {
+			const nameLower = f.name?.toLowerCase() || "";
+
+			// Features explicitly classified as combat actions or reactions via overrides
+			// are always included regardless of other heuristics
+			const classificationOverride = CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES?.[nameLower];
+			if (classificationOverride === "combat" || classificationOverride === "reaction") return true;
+
 			// Get description - render entries as fallback if description missing
 			let desc = f.description;
 			if (!desc && f.entries) {
@@ -1741,7 +1752,6 @@ class CharacterSheetCombat {
 			if (!desc) return false;
 			// Strip HTML tags so rendered {@variantrule Bonus Action|XPHB} etc. don't break regex matching
 			desc = desc.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-			const nameLower = f.name?.toLowerCase() || "";
 
 			// Skip combat methods (they have their own section)
 			if (f.optionalFeatureTypes?.some(ft => /^CTM:\d?[A-Z]{2}$/.test(ft))) return false;
@@ -1795,7 +1805,8 @@ class CharacterSheetCombat {
 				"fighting spirit", "cunning action", "uncanny dodge",
 				"tantalizing shivers", // Belly Dancer (TGTT Rogue)
 				"patient defense", "step of the wind",
-				"flurry of blows", "stunning strike", "deflect missiles", "slow fall",
+				"flurry of blows", "stunning strike", "deflect missiles", "deflect attacks", "slow fall",
+				"hand of healing", "hand of harm", "hand of ultimate mercy",
 				"wild shape", "channel divinity", "divine smite", "lay on hands",
 				"hex", "hexblade's curse",
 				"rage", "reckless attack",
@@ -2129,9 +2140,8 @@ class CharacterSheetCombat {
 		const tooltipDesc = this._cleanDescriptionForTooltip(feature.description);
 
 		const $action = $(`
-			<div class="charsheet__combat-action-item ${hasHoverLink ? "" : "charsheet__combat-action-clickable"}" 
-				data-action-id="${featureId}" 
-				${!hasHoverLink ? `title="${tooltipDesc}"` : ""}>
+			<div class="charsheet__combat-action-item charsheet__combat-action-clickable" 
+				data-action-id="${featureId}">
 				<div class="charsheet__combat-action-header">
 					<span class="charsheet__combat-action-icon" title="${actionType}">${actionIcon}</span>
 					<span class="charsheet__combat-action-name">${nameHtml}</span>
@@ -2145,8 +2155,15 @@ class CharacterSheetCombat {
 			</div>
 		`);
 
+		// Click on card opens the detail modal
+		$action.on("click", (e) => {
+			if ($(e.target).hasClass("charsheet__combat-action-use")) return;
+			this._showCombatActionModal(feature);
+		});
+
 		// Add click handler for use button
-		$action.find(".charsheet__combat-action-use").on("click", () => {
+		$action.find(".charsheet__combat-action-use").on("click", (e) => {
+			e.stopPropagation();
 			this._useCombatAction(feature);
 		});
 
@@ -2171,7 +2188,7 @@ class CharacterSheetCombat {
 	}
 
 	/**
-	 * Use a combat action (spend a use if applicable)
+	 * Use a combat action (spend a use if applicable, deduct ki/focus/exertion)
 	 */
 	_useCombatAction (feature) {
 		const actionType = this._getFeatureActionType(feature);
@@ -2184,6 +2201,33 @@ class CharacterSheetCombat {
 		if (feature.uses && feature.uses.current <= 0) {
 			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${feature.name}!`});
 			return;
+		}
+
+		// Check and deduct ki/focus cost from description
+		const kiCost = this._parseResourceCost(feature, "ki");
+		const focusCost = this._parseResourceCost(feature, "focus");
+		const exertionCost = this._parseResourceCost(feature, "exertion");
+		const resourceCost = kiCost || focusCost || exertionCost;
+
+		if (resourceCost > 0) {
+			if (kiCost > 0 || focusCost > 0) {
+				const amount = kiCost || focusCost;
+				if (!this._state.useKiPoint(amount)) {
+					const pointName = this._state.getKiPointsCurrent?.() !== undefined ? "ki" : "focus";
+					JqueryUtil.doToast({type: "warning", content: `Not enough ${pointName} points for ${feature.name}!`});
+					return;
+				}
+			} else if (exertionCost > 0) {
+				if (this._state.canUseFocusForExertion?.()) {
+					if (!this._state.useFocusForExertion(exertionCost)) {
+						JqueryUtil.doToast({type: "warning", content: `Not enough focus/exertion for ${feature.name}!`});
+						return;
+					}
+				} else {
+					JqueryUtil.doToast({type: "warning", content: `No exertion resource available for ${feature.name}!`});
+					return;
+				}
+			}
 		}
 
 		// Spend a use if this feature has uses
@@ -2204,14 +2248,137 @@ class CharacterSheetCombat {
 		this.renderCombatActions();
 		this.renderCombatResources();
 		this._page._renderFeatures?.();
+		this._page._renderResources?.();
 		this._page._saveCurrentCharacter?.();
 
 		// Toast notification
 		const remaining = feature.uses?.current;
 		const remainingText = feature.uses ? ` (${remaining}/${feature.uses.max} remaining)` : "";
+		const costText = resourceCost > 0
+			? ` (${resourceCost} ${kiCost ? "ki" : focusCost ? "focus" : "exertion"} spent)`
+			: "";
 		JqueryUtil.doToast({
 			type: "success",
-			content: `Used ${feature.name}!${remainingText}`,
+			content: `Used ${feature.name}!${remainingText}${costText}`,
+		});
+	}
+
+	/**
+	 * Parse a resource cost (ki/focus/exertion) from a feature's description.
+	 * @param {object} feature - Feature object
+	 * @param {"ki"|"focus"|"exertion"} resourceType - Resource type to parse
+	 * @returns {number} Cost amount, or 0 if not found
+	 */
+	_parseResourceCost (feature, resourceType) {
+		const desc = feature?.description?.toLowerCase() || "";
+		const patterns = {
+			ki: /(\d+)\s*ki\s*point/i,
+			focus: /(\d+)\s*focus\s*point/i,
+			exertion: /(\d+)\s*exertion\s*point/i,
+		};
+		const match = desc.match(patterns[resourceType]);
+		return match ? parseInt(match[1]) : 0;
+	}
+
+	/**
+	 * Show a detail modal for a combat action feature.
+	 * Shows full description, action type, resource cost, and a Use button.
+	 */
+	async _showCombatActionModal (feature) {
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: feature.name,
+			isMinHeight0: true,
+			zIndex: 10002,
+		});
+
+		// Action type
+		const actionType = this._getFeatureActionType(feature);
+		let actionLabel = "Action";
+		let actionIcon = "⚔️";
+		if (actionType === "bonus") { actionLabel = "Bonus Action"; actionIcon = "⚡"; }
+		else if (actionType === "reaction") { actionLabel = "Reaction"; actionIcon = "🔄"; }
+		else if (actionType === "free") { actionLabel = "Free"; actionIcon = "✨"; }
+
+		// Feature type badge
+		const featureTypeBadge = feature.featureType
+			? `<span class="badge badge-${this._getFeatureTypeBadgeClass(feature.featureType)} ml-2">${feature.featureType}</span>`
+			: "";
+
+		$modalInner.append(`
+			<div class="ve-flex-v-center mb-2">
+				<span class="mr-1">${actionIcon}</span>
+				<span class="badge badge-outline-secondary">${actionLabel}</span>
+				${featureTypeBadge}
+			</div>
+		`);
+
+		// Resource cost line
+		const kiCost = this._parseResourceCost(feature, "ki");
+		const focusCost = this._parseResourceCost(feature, "focus");
+		const exertionCost = this._parseResourceCost(feature, "exertion");
+		const costParts = [];
+		if (kiCost) costParts.push(`${kiCost} Ki Point${kiCost > 1 ? "s" : ""}`);
+		if (focusCost) costParts.push(`${focusCost} Focus Point${focusCost > 1 ? "s" : ""}`);
+		if (exertionCost) costParts.push(`${exertionCost} Exertion`);
+
+		if (costParts.length) {
+			const kiCurrent = this._state.getKiPointsCurrent?.() ?? 0;
+			const kiMax = this._state.getKiPoints?.() ?? 0;
+			$modalInner.append(`
+				<div class="mb-2 ve-muted ve-small">
+					<strong>Cost:</strong> ${costParts.join(", ")}
+					${(kiCost || focusCost) && kiMax > 0 ? ` <span class="ml-1">(${kiCurrent}/${kiMax} remaining)</span>` : ""}
+				</div>
+			`);
+		}
+
+		// Uses line
+		if (feature.uses && feature.uses.max > 0) {
+			const rechargeIcon = feature.uses.recharge === "short" ? "☀️" : "🌙";
+			$modalInner.append(`
+				<div class="mb-2 ve-muted ve-small">
+					<strong>Uses:</strong> ${feature.uses.current}/${feature.uses.max}
+					<span title="${feature.uses.recharge} rest">${rechargeIcon}</span>
+				</div>
+			`);
+		}
+
+		// Description
+		if (feature.description) {
+			$modalInner.append(`<div class="rd__b mb-3">${Renderer.get().render(feature.description)}</div>`);
+		} else if (feature.entries) {
+			try {
+				$modalInner.append(`<div class="rd__b mb-3">${Renderer.get().render({type: "entries", entries: feature.entries})}</div>`);
+			} catch { /* fall through */ }
+		}
+
+		// Use + Close buttons
+		const canUse = this._isActionTypeAvailable(actionType)
+			&& (!feature.uses || feature.uses.current > 0);
+
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-primary mr-2 charsheet__action-modal-use" ${!canUse ? "disabled" : ""}>Use</button>
+			<button class="ve-btn ve-btn-default charsheet__action-modal-close">Close</button>
+		</div>`.appendTo($modalInner)
+			.find(".charsheet__action-modal-use").on("click", () => {
+				this._useCombatAction(feature);
+				doClose(false);
+			}).end()
+			.find(".charsheet__action-modal-close").on("click", () => doClose(false));
+	}
+
+	/**
+	 * Get combat-classified features from FEATURE_CLASSIFICATION_OVERRIDES.
+	 * Returns features whose classification is "combat" or "reaction".
+	 * Used by both the combat tab and overview tab.
+	 */
+	getCombatClassifiedFeatures () {
+		const features = this._state.getFeatures();
+		const overrides = CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES || {};
+		return features.filter(f => {
+			const nameLower = f.name?.toLowerCase() || "";
+			const cls = overrides[nameLower];
+			return cls === "combat" || cls === "reaction";
 		});
 	}
 
