@@ -135,3 +135,229 @@ describe("CharacterSheetCombat action economy gating", () => {
 		expect(callArgs[5]).toBe(activationInfo);
 	});
 });
+
+// ===================================================================
+// Phase 2: Combat Action UI System Tests
+// ===================================================================
+describe("CharacterSheetCombat — Combat Action Modal & Resource Deduction", () => {
+	let combat;
+	let inCombat;
+	let toasts;
+	let featureList;
+	let kiPoints;
+	let kiUsed;
+
+	beforeEach(() => {
+		inCombat = true;
+		toasts = [];
+		featureList = [];
+		kiPoints = {current: 5, max: 5};
+		kiUsed = 0;
+
+		globalThis.JqueryUtil = {
+			doToast: (payload) => toasts.push(payload),
+		};
+
+		const mockState = {
+			isInCombat: () => inCombat,
+			getFeatures: () => featureList,
+			getKiPointsCurrent: () => kiPoints.current,
+			getKiPoints: () => kiPoints.max,
+			useKiPoint: (amount = 1) => {
+				if (kiPoints.current < amount) return false;
+				kiPoints.current -= amount;
+				kiUsed += amount;
+				return true;
+			},
+			canUseFocusForExertion: () => true,
+			useFocusForExertion: (amount) => {
+				if (kiPoints.current < amount) return false;
+				kiPoints.current -= amount;
+				kiUsed += amount;
+				return true;
+			},
+		};
+
+		combat = Object.create(CharacterSheetCombat.prototype);
+		combat._state = mockState;
+		combat._page = {
+			_renderFeatures: () => {},
+			_renderResources: () => {},
+			_renderOverviewAbilities: () => {},
+			_customAbilities: {render: () => {}},
+			_saveCurrentCharacter: () => {},
+		};
+		combat.renderCombatActions = () => {};
+		combat.renderCombatResources = () => {};
+		combat._resetTurnActionUsage();
+	});
+
+	// --- _parseResourceCost ---
+
+	describe("_parseResourceCost", () => {
+		it("should parse ki point cost from description", () => {
+			const feature = {description: "You can spend 1 ki point to attempt a stunning strike."};
+			expect(combat._parseResourceCost(feature, "ki")).toBe(1);
+		});
+
+		it("should parse multi-ki cost", () => {
+			const feature = {description: "You can spend 5 ki points to resurrect a creature."};
+			expect(combat._parseResourceCost(feature, "ki")).toBe(5);
+		});
+
+		it("should parse focus point cost", () => {
+			const feature = {description: "Spend 2 focus points to enhance your strike."};
+			expect(combat._parseResourceCost(feature, "focus")).toBe(2);
+		});
+
+		it("should parse exertion cost", () => {
+			const feature = {description: "Spend 1 exertion point to make a weapon attack."};
+			expect(combat._parseResourceCost(feature, "exertion")).toBe(1);
+		});
+
+		it("should return 0 when no cost found", () => {
+			const feature = {description: "You gain proficiency in all saving throws."};
+			expect(combat._parseResourceCost(feature, "ki")).toBe(0);
+			expect(combat._parseResourceCost(feature, "focus")).toBe(0);
+			expect(combat._parseResourceCost(feature, "exertion")).toBe(0);
+		});
+
+		it("should return 0 for empty description", () => {
+			expect(combat._parseResourceCost({}, "ki")).toBe(0);
+			expect(combat._parseResourceCost({description: ""}, "ki")).toBe(0);
+		});
+	});
+
+	// --- _useCombatAction with ki deduction ---
+
+	describe("_useCombatAction with ki deduction", () => {
+		it("should deduct ki points when using Stunning Strike", () => {
+			const feature = {
+				name: "Stunning Strike",
+				source: "XPHB",
+				description: "When you hit, you can spend 1 ki point to attempt a stunning strike.",
+			};
+			featureList.push(feature);
+
+			combat._useCombatAction(feature);
+
+			expect(kiUsed).toBe(1);
+			expect(kiPoints.current).toBe(4);
+			expect(toasts.some(t => t.type === "success" && t.content.includes("ki"))).toBe(true);
+		});
+
+		it("should block use when not enough ki points", () => {
+			kiPoints.current = 0;
+			const feature = {
+				name: "Stunning Strike",
+				source: "XPHB",
+				description: "When you hit, you can spend 1 ki point to attempt a stunning strike.",
+			};
+
+			combat._useCombatAction(feature);
+
+			expect(kiUsed).toBe(0);
+			expect(toasts.some(t => t.type === "warning" && t.content.includes("Not enough"))).toBe(true);
+		});
+
+		it("should deduct exertion via focus for monks", () => {
+			const feature = {
+				name: "Instant Strike",
+				source: "TGTT",
+				description: "As a bonus action, spend 1 exertion point to make a melee weapon attack.",
+			};
+			featureList.push(feature);
+
+			combat._useCombatAction(feature);
+
+			expect(kiUsed).toBe(1);
+			expect(toasts.some(t => t.type === "success")).toBe(true);
+		});
+
+		it("should still consume action economy when deducting resources", () => {
+			const feature = {
+				name: "Stunning Strike",
+				source: "XPHB",
+				description: "When you hit, you can spend 1 ki point.",
+			};
+			featureList.push(feature);
+
+			combat._useCombatAction(feature);
+			expect(combat._turnActionUsage.action).toBe(true);
+		});
+
+		it("should not deduct resources when feature has no resource cost", () => {
+			const feature = {
+				name: "Cunning Action",
+				source: "PHB",
+				description: "You can take a bonus action to Dash, Disengage, or Hide.",
+			};
+			featureList.push(feature);
+
+			combat._useCombatAction(feature);
+
+			expect(kiUsed).toBe(0);
+			expect(kiPoints.current).toBe(5);
+			expect(toasts.some(t => t.type === "success")).toBe(true);
+		});
+
+		it("should decrement feature uses AND deduct ki if both apply", () => {
+			const feature = {
+				name: "Hand of Healing",
+				source: "XPHB",
+				description: "As a bonus action, spend 1 ki point to touch a creature and restore hit points.",
+				uses: {current: 3, max: 3, recharge: "long"},
+			};
+			featureList.push(feature);
+
+			combat._useCombatAction(feature);
+
+			expect(kiUsed).toBe(1);
+			expect(feature.uses.current).toBe(2);
+			expect(toasts.some(t => t.type === "success")).toBe(true);
+		});
+	});
+
+	// --- getCombatClassifiedFeatures ---
+
+	describe("getCombatClassifiedFeatures", () => {
+		beforeEach(() => {
+			// Need CharacterSheetState for FEATURE_CLASSIFICATION_OVERRIDES
+			globalThis.CharacterSheetState = globalThis.CharacterSheetState || {};
+			globalThis.CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES = {
+				"stunning strike": "combat",
+				"deflect attacks": "reaction",
+				"monk's focus": "passive",
+				"hand of healing": "combat",
+			};
+		});
+
+		it("should return features classified as combat or reaction", () => {
+			featureList.push(
+				{name: "Stunning Strike", description: "When you hit..."},
+				{name: "Deflect Attacks", description: "As a reaction..."},
+				{name: "Monk's Focus", description: "You gain benefits..."},
+				{name: "Rage", description: "As a bonus action..."},
+			);
+
+			const result = combat.getCombatClassifiedFeatures();
+			const names = result.map(f => f.name);
+
+			expect(names).toContain("Stunning Strike");
+			expect(names).toContain("Deflect Attacks");
+			expect(names).not.toContain("Monk's Focus"); // passive
+			expect(names).not.toContain("Rage"); // not in overrides
+		});
+
+		it("should return empty when no features match overrides", () => {
+			featureList.push(
+				{name: "Rage", description: "As a bonus action..."},
+			);
+			expect(combat.getCombatClassifiedFeatures()).toEqual([]);
+		});
+
+		it("should return empty when character has no features", () => {
+			expect(combat.getCombatClassifiedFeatures()).toEqual([]);
+		});
+	});
+});

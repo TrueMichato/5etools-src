@@ -11113,4 +11113,376 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			});
 		});
 	});
+
+	// =========================================================================
+	// PHASE 5: MONK SPECIALTY SYSTEM
+	// Verifies specialty calculation flags, Adept Speed stacking,
+	// Sixth Sense multi-skill WIS-for-INT swap, Shadow Walk classification,
+	// and other specialty-specific mechanics.
+	// =========================================================================
+	describe("Phase 5 - Monk Specialty System", () => {
+
+		// ----- Adept Speed Stacking -----
+		describe("Adept Speed Stacking", () => {
+			beforeEach(() => {
+				state.addClass({name: "Monk", source: "TGTT", level: 11});
+				state.setSpeed("walk", 30);
+			});
+
+			it("should stack Adept Speed when chosen at different levels", () => {
+				// First selection at level 2
+				state.addFeature({
+					name: "Adept Speed",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 2,
+					description: "Your speed increases by 10 feet.",
+				});
+				// Second selection at level 5
+				state.addFeature({
+					name: "Adept Speed",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 5,
+					description: "Your speed increases by 10 feet.",
+				});
+				state.applyClassFeatureEffects();
+
+				// Both features should exist
+				const features = state.getFeatures().filter(f => f.name === "Adept Speed");
+				expect(features.length).toBe(2);
+
+				// Two separate speed:walk modifiers should exist
+				const speedMods = state.getNamedModifiers().filter(m =>
+					m.type === "speed:walk" && m.name === "Adept Speed",
+				);
+				expect(speedMods.length).toBe(2);
+
+				// Walk speed: base 30 + Unarmored Movement 20 (lvl 11) + 10 + 10 = 70
+				const walkSpeed = state.getWalkSpeed();
+				expect(walkSpeed).toBe(70);
+			});
+
+			it("should set correct calculation flags for multiple Adept Speed selections", () => {
+				state.addFeature({
+					name: "Adept Speed",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 2,
+					description: "Your speed increases by 10 feet.",
+				});
+				state.addFeature({
+					name: "Adept Speed",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 5,
+					description: "Your speed increases by 10 feet.",
+				});
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAdeptSpeed).toBe(true);
+				expect(calcs.adeptSpeedCount).toBe(2);
+				expect(calcs.adeptSpeedBonus).toBe(20);
+			});
+
+			it("should not add duplicate Adept Speed at the same level", () => {
+				state.addFeature({
+					name: "Adept Speed",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 2,
+					description: "Your speed increases by 10 feet.",
+				});
+				// Same level — should be deduplicated
+				state.addFeature({
+					name: "Adept Speed",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 2,
+					description: "Your speed increases by 10 feet.",
+				});
+				state.applyClassFeatureEffects();
+
+				const features = state.getFeatures().filter(f => f.name === "Adept Speed");
+				expect(features.length).toBe(1);
+			});
+		});
+
+		// ----- Sixth Sense Multi-Skill Swap -----
+		describe("Sixth Sense - WIS for INT Skills", () => {
+			beforeEach(() => {
+				state.addClass({name: "Monk", source: "TGTT", level: 11});
+			});
+
+			it("should create abilitySwap modifiers for all INT skills", () => {
+				state.addFeature({
+					name: "Sixth Sense",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 11,
+					description: "You gain blindsight out to 30 feet. You have advantage on initiative rolls.",
+				});
+				state.applyClassFeatureEffects();
+
+				const modifiers = state.getNamedModifiers();
+				const intSkills = ["arcana", "history", "investigation", "nature", "religion"];
+				for (const skill of intSkills) {
+					const swap = modifiers.find(m =>
+						m.type === `abilitySwap:${skill}` && m.newAbility === "wis" && m.oldAbility === "int",
+					);
+					expect(swap).toBeDefined();
+				}
+			});
+
+			it("should use WIS for INT skills when WIS is higher", () => {
+				state.setAbilityBase("int", 10); // +0
+				state.setAbilityBase("wis", 18); // +4
+
+				state.addFeature({
+					name: "Sixth Sense",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 11,
+					description: "You gain blindsight out to 30 feet. You have advantage on initiative rolls.",
+				});
+				state.applyClassFeatureEffects();
+
+				// Arcana is normally INT-based (+0), but with Sixth Sense should use WIS (+4)
+				const arcanaMod = state.getSkillMod("arcana");
+				const historyMod = state.getSkillMod("history");
+				const investigationMod = state.getSkillMod("investigation");
+
+				// Each should use WIS mod (+4) instead of INT mod (+0)
+				expect(arcanaMod).toBeGreaterThanOrEqual(4);
+				expect(historyMod).toBeGreaterThanOrEqual(4);
+				expect(investigationMod).toBeGreaterThanOrEqual(4);
+			});
+
+			it("should keep INT when INT is higher than WIS", () => {
+				state.setAbilityBase("int", 18); // +4
+				state.setAbilityBase("wis", 10); // +0
+
+				state.addFeature({
+					name: "Sixth Sense",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 11,
+					description: "You gain blindsight out to 30 feet. You have advantage on initiative rolls.",
+				});
+				state.applyClassFeatureEffects();
+
+				// Arcana should still use INT (+4) since it's higher
+				const arcanaMod = state.getSkillMod("arcana");
+				expect(arcanaMod).toBeGreaterThanOrEqual(4);
+			});
+
+			it("should not affect non-INT skills", () => {
+				state.setAbilityBase("int", 10);
+				state.setAbilityBase("wis", 18);
+				state.setAbilityBase("dex", 10);
+				state.setAbilityBase("cha", 10);
+
+				state.addFeature({
+					name: "Sixth Sense",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 11,
+					description: "You gain blindsight out to 30 feet. You have advantage on initiative rolls.",
+				});
+				state.applyClassFeatureEffects();
+
+				// Stealth (DEX) should NOT be affected — still uses DEX (+0)
+				const stealthMod = state.getSkillMod("stealth");
+				expect(stealthMod).toBeLessThan(4);
+
+				// Persuasion (CHA) should NOT be affected
+				const persuasionMod = state.getSkillMod("persuasion");
+				expect(persuasionMod).toBeLessThan(4);
+			});
+
+			it("should set calculation flags", () => {
+				state.addFeature({
+					name: "Sixth Sense",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 11,
+					description: "You gain blindsight out to 30 feet.",
+				});
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasSixthSense).toBe(true);
+				expect(calcs.sixthSenseSkills).toEqual(
+					expect.arrayContaining(["arcana", "history", "investigation", "nature", "religion"]),
+				);
+			});
+		});
+
+		// ----- Shadow Walk Classification -----
+		describe("Shadow Walk Classification", () => {
+			it("should classify Shadow Walk as combat, not activatable", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 11});
+
+				state.addFeature({
+					name: "Shadow Walk",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 11,
+					description: "As a bonus action, you can teleport up to 60 feet to a space you can see that is in dim light or darkness.",
+				});
+				state.applyClassFeatureEffects();
+
+				// Shadow Walk should NOT appear as an activatable state
+				const activeStates = state.getActiveStates ? state.getActiveStates() : [];
+				const hasShadowWalkState = activeStates.some(s =>
+					s.name?.toLowerCase() === "shadow walk",
+				);
+				expect(hasShadowWalkState).toBe(false);
+			});
+
+			it("should set calculation flags", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 11});
+
+				state.addFeature({
+					name: "Shadow Walk",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 11,
+					description: "As a bonus action, you can teleport up to 60 feet.",
+				});
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasShadowWalk).toBe(true);
+				expect(calcs.shadowWalkRange).toBe(60);
+			});
+		});
+
+		// ----- Other Specialty Calculation Flags -----
+		describe("Specialty Calculation Flags", () => {
+			beforeEach(() => {
+				state.addClass({name: "Monk", source: "TGTT", level: 11});
+			});
+
+			it("should set Perfect Flow calculation flags", () => {
+				state.addFeature({
+					name: "Perfect Flow",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 5,
+					description: "When you roll initiative, you gain 1 Focus Point.",
+				});
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasPerfectFlow).toBe(true);
+				expect(calcs.perfectFlowFocusGain).toBe(1);
+			});
+
+			it("should set Instant Step calculation flags", () => {
+				state.addFeature({
+					name: "Instant Step",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 9,
+					description: "As an action, you can spend 4 exertion to teleport up to 500 feet.",
+				});
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasInstantStep).toBe(true);
+				expect(calcs.instantStepRange).toBe(500);
+				expect(calcs.instantStepCost).toBe(4);
+			});
+
+			it("should set Wall Walk calculation flags", () => {
+				state.addFeature({
+					name: "Wall Walk",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 5,
+					description: "You can move along vertical surfaces and ceilings without falling.",
+				});
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasWallWalk).toBe(true);
+			});
+
+			it("should set Agile Acrobat calculation flags", () => {
+				state.addFeature({
+					name: "Agile Acrobat",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 5,
+					description: "You gain proficiency in the Acrobatics skill. Your Dexterity score increases by 2, to a maximum of 20.",
+				});
+				state.applyClassFeatureEffects();
+
+				const calcs = state.getFeatureCalculations();
+				expect(calcs.hasAgileAcrobat).toBe(true);
+			});
+		});
+
+		// ----- Text-Parsed Ability Swaps (Generic Pipeline) -----
+		describe("Ability Swap - Generic Pipeline", () => {
+			it("should apply Nimble Athlete DEX-for-STR swap to Athletics", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 10); // +0
+				state.setAbilityBase("dex", 18); // +4
+
+				state.addFeature({
+					name: "Nimble Athlete",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 2,
+					description: "You can use your Dexterity modifier instead of your Strength modifier for Athletics checks.",
+				});
+				state.applyClassFeatureEffects();
+
+				// Athletics normally uses STR (+0), but Nimble Athlete allows DEX (+4)
+				const athleticsMod = state.getSkillMod("athletics");
+				expect(athleticsMod).toBeGreaterThanOrEqual(4);
+			});
+
+			it("should apply Power Tumble STR-for-DEX swap to Acrobatics", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 5});
+				state.setAbilityBase("dex", 10); // +0
+				state.setAbilityBase("str", 18); // +4
+
+				state.addFeature({
+					name: "Power Tumble",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					className: "Monk",
+					level: 2,
+					description: "You can use your Strength modifier instead of your Dexterity modifier for Acrobatics checks.",
+				});
+				state.applyClassFeatureEffects();
+
+				// Acrobatics normally uses DEX (+0), but Power Tumble allows STR (+4)
+				const acrobaticsMod = state.getSkillMod("acrobatics");
+				expect(acrobaticsMod).toBeGreaterThanOrEqual(4);
+			});
+		});
+	});
 });

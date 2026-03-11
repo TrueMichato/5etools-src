@@ -5378,6 +5378,27 @@ class CharacterSheetState {
 			ability = customSkill?.ability || null;
 		}
 
+		// Check for ability swap modifiers (e.g., "use WIS instead of INT for Arcana")
+		// Uses MAX of default ability mod and swapped ability mod
+		if (ability) {
+			const swapMods = this._data.namedModifiers.filter(m =>
+				m.enabled && m.type === `abilitySwap:${normalizedSkill}` && m.newAbility,
+			);
+			if (swapMods.length) {
+				const defaultMod = this.getAbilityMod(ability);
+				let bestAbility = ability;
+				let bestMod = defaultMod;
+				for (const swap of swapMods) {
+					const swapMod = this.getAbilityMod(swap.newAbility);
+					if (swapMod > bestMod) {
+						bestMod = swapMod;
+						bestAbility = swap.newAbility;
+					}
+				}
+				ability = bestAbility;
+			}
+		}
+
 		return this.getSkillModWithAbility(normalizedSkill, ability);
 	}
 
@@ -8440,16 +8461,17 @@ class CharacterSheetState {
 						calculations.weaponMasteryCount = 2;
 					}
 
-					// Ki/Focus points = monk level
-					const kiPoints = level;
-					calculations.kiPoints = kiPoints;
-					calculations.focusPoints = kiPoints; // XPHB name
-
-					// Ki/Focus Save DC: 8 + prof + WIS + item bonuses
+					// Ki/Focus Save DC base value (always computed for subclass references)
 					const kiItemBonus = this._data.itemBonuses?.kiSaveDc || 0;
 					const kiDc = 8 + profBonus + this.getAbilityMod("wis") + kiItemBonus - exhaustionPenalty;
-					calculations.kiSaveDc = kiDc;
-					calculations.focusSaveDc = kiDc; // 2024 PHB name
+
+					// Ki/Focus points = monk level (available at level 2+)
+					if (level >= 2) {
+						calculations.kiPoints = level;
+						calculations.focusPoints = level; // XPHB name
+						calculations.kiSaveDc = kiDc;
+						calculations.focusSaveDc = kiDc; // 2024 PHB name
+					}
 
 					// Martial Arts die progression
 					// PHB: d4 at 1, d6 at 5, d8 at 11, d10 at 17
@@ -8820,6 +8842,9 @@ class CharacterSheetState {
 						const subSource = cls.subclass?.source || source;
 						const isMercy2024 = subSource === "XPHB";
 
+						// Implements of Mercy (level 3) - Insight, Medicine, Herbalism Kit proficiency
+						calculations.hasImplementsOfMercy = true;
+
 						// Hand of Healing (level 3) - heal with ki
 						calculations.hasHandOfHealing = true;
 						calculations.handOfHealingAmount = `${martialArtsDice}+${this.getAbilityMod("wis")}`;
@@ -8831,6 +8856,7 @@ class CharacterSheetState {
 						// Physician's Touch (level 6) - cure conditions with Hand of Healing
 						if (level >= 6) {
 							calculations.hasPhysiciansTouch = true;
+							calculations.physiciansTouchConditions = ["blinded", "deafened", "paralyzed", "poisoned", "stunned"];
 						}
 
 						// Flurry of Healing and Harm (level 11) - use Hands during Flurry
@@ -9003,6 +9029,63 @@ class CharacterSheetState {
 							// Tiger: martial arts die becomes 2d6, force damage
 							calculations.tigerMartialArtsDie = "2d6";
 							calculations.tigerDamageType = "force";
+						}
+					}
+
+					// =========================================================
+					// TGTT MONK SPECIALTIES (selected via optional features)
+					// Text-parsed effects (speed, proficiency, senses, ability swap)
+					// are handled generically by FeatureModifierParser at addFeature time.
+					// These flags track specialty-specific mechanics beyond text parsing.
+					// =========================================================
+					if (is2024) {
+						const monkFeatures = this._data.features?.filter(f =>
+							f.className === "Monk" && f.source === "TGTT",
+						) || [];
+
+						// Count Adept Speed selections (stackable: +10 ft each)
+						const adeptSpeedCount = monkFeatures.filter(f =>
+							f.name === "Adept Speed",
+						).length;
+						if (adeptSpeedCount > 0) {
+							calculations.hasAdeptSpeed = true;
+							calculations.adeptSpeedCount = adeptSpeedCount;
+							calculations.adeptSpeedBonus = adeptSpeedCount * 10;
+						}
+
+						// Perfect Flow: gain 1 Focus Point when rolling initiative
+						if (monkFeatures.some(f => f.name === "Perfect Flow")) {
+							calculations.hasPerfectFlow = true;
+							calculations.perfectFlowFocusGain = 1;
+						}
+
+						// Sixth Sense: advantage on initiative + WIS for INT skill checks
+						if (monkFeatures.some(f => f.name === "Sixth Sense")) {
+							calculations.hasSixthSense = true;
+							calculations.sixthSenseSkills = ["arcana", "history", "investigation", "nature", "religion"];
+						}
+
+						// Instant Step: teleport 500 ft as action (4 exertion)
+						if (monkFeatures.some(f => f.name === "Instant Step")) {
+							calculations.hasInstantStep = true;
+							calculations.instantStepRange = 500;
+							calculations.instantStepCost = 4;
+						}
+
+						// Shadow Walk: bonus action teleport 60 ft in dim light/darkness
+						if (monkFeatures.some(f => f.name === "Shadow Walk")) {
+							calculations.hasShadowWalk = true;
+							calculations.shadowWalkRange = 60;
+						}
+
+						// Wall Walk: move on vertical surfaces + spider climb for 1 exertion
+						if (monkFeatures.some(f => f.name === "Wall Walk")) {
+							calculations.hasWallWalk = true;
+						}
+
+						// Agile Acrobat: Acrobatics proficiency + DEX +2 (max 20)
+						if (monkFeatures.some(f => f.name === "Agile Acrobat")) {
+							calculations.hasAgileAcrobat = true;
 						}
 					}
 
@@ -15246,6 +15329,13 @@ class CharacterSheetState {
 
 		// ===== TGTT MONK SUBCLASSES =====
 
+		// Way of Mercy - Implements of Mercy: Insight + Medicine proficiency + Herbalism Kit
+		if (calculations.hasImplementsOfMercy && !alreadyProcessed("Implements of Mercy")) {
+			effects.push({ type: "skillProficiency", skill: "insight", level: 1, source: "Implements of Mercy" });
+			effects.push({ type: "skillProficiency", skill: "medicine", level: 1, source: "Implements of Mercy" });
+			effects.push({ type: "toolProficiency", tool: "Herbalism Kit", source: "Implements of Mercy" });
+		}
+
 		// Way of The Shackled - Hidden Arts: Acrobatics + Performance proficiency
 		if (calculations.hasHiddenArts && !alreadyProcessed("Hidden Arts")) {
 			effects.push({ type: "skillProficiency", skill: "acrobatics", level: 1, source: "Hidden Arts" });
@@ -15282,6 +15372,24 @@ class CharacterSheetState {
 				source: "Crane Parry",
 				conditional: "reaction, costs 1 ki",
 				enabled: false,
+			});
+		}
+
+		// ===== TGTT MONK SPECIALTIES =====
+
+		// Sixth Sense: use WIS for INT-based skill checks (multi-skill swap)
+		// The text parser handles single ability-swap patterns, but Sixth Sense applies
+		// to ALL Intelligence skills (Arcana, History, Investigation, Nature, Religion)
+		if (calculations.hasSixthSense && !alreadyProcessed("Sixth Sense")) {
+			(calculations.sixthSenseSkills || []).forEach(skill => {
+				effects.push({
+					type: "modifier",
+					modType: `abilitySwap:${skill}`,
+					value: 0,
+					source: "Sixth Sense",
+					newAbility: "wis",
+					oldAbility: "int",
+				});
 			});
 		}
 
@@ -15921,6 +16029,8 @@ class CharacterSheetState {
 					sizeIncrease: effect.sizeIncrease,
 					multiplier: effect.multiplier,
 					perLevel: effect.perLevel,
+					newAbility: effect.newAbility,
+					oldAbility: effect.oldAbility,
 				});
 				return `${effect.source}: ${effect.modType}${effect.conditional ? ` (${effect.conditional})` : ""}`;
 			}
@@ -18707,7 +18817,9 @@ class CharacterSheetState {
 		const hasHeavy = props.some(p => p === "H" || p.startsWith("H|"));
 		const hasTwoHanded = props.some(p => p === "2H" || p.startsWith("2H|"));
 		const hasSpecial = props.some(p => p === "S" || p.startsWith("S|"));
-		const isSimpleMelee = item.weaponCategory === "simple" && (item.type === "M" || item.type === "S" || item.type === "MW" || item.type === "SW");
+		// Strip source suffix from type (e.g. "M|XPHB" → "M")
+		const itemType = (item.type || "").split("|")[0];
+		const isSimpleMelee = item.weaponCategory === "simple" && (itemType === "M" || itemType === "MW");
 		const isShortsword = (item.name || "").toLowerCase() === "shortsword";
 		return (isShortsword || isSimpleMelee) && !(hasHeavy || hasTwoHanded || hasSpecial);
 	}
@@ -19901,6 +20013,8 @@ class CharacterSheetState {
 			if (mod.removeDisadvantage) modifierData.removeDisadvantage = true;
 			if (mod.proficiencyBonus) modifierData.proficiencyBonus = true;
 			if (mod.ignore) modifierData.ignore = true;
+			if (mod.newAbility) modifierData.newAbility = mod.newAbility;
+			if (mod.oldAbility) modifierData.oldAbility = mod.oldAbility;
 			if (mod.conditional) modifierData.conditional = mod.conditional;
 
 			this.addNamedModifier(modifierData);
@@ -24501,6 +24615,10 @@ class CharacterSheetState {
 		if (modifier.noneOnSave) newModifier.noneOnSave = true;
 		if (modifier.ignore) newModifier.ignore = true;
 
+		// Ability swap (e.g., "use WIS instead of INT for Arcana checks")
+		if (modifier.newAbility) newModifier.newAbility = modifier.newAbility;
+		if (modifier.oldAbility) newModifier.oldAbility = modifier.oldAbility;
+
 		this._data.namedModifiers.push(newModifier);
 		this._recalculateCustomModifiers();
 		return id;
@@ -26572,6 +26690,64 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Overrides for feature classification when the pattern-based detection misclassifies features.
+	 * Keyed by lowercase feature name. Values:
+	 *   - "passive"  → not activatable; skip entirely
+	 *   - "combat"   → combat action (shown in combat tab, not active states)
+	 *   - "reaction"  → reaction (shown in combat tab as reaction, not active states)
+	 *
+	 * Only add entries here when the generic detection pipeline gets it wrong.
+	 * Prefer fixing detection patterns or adding to excludedNames for broad categories.
+	 */
+	static FEATURE_CLASSIFICATION_OVERRIDES = {
+		// === Passive features wrongly detected as activatable states ===
+		"monk's focus": "passive",
+		"heightened focus": "passive",
+		"unhindered flurry": "passive",
+		"disciplined survivor": "passive",
+		"empowered strikes": "passive",
+		"ki-empowered strikes": "passive",
+		"self-restoration": "passive",
+		"perfect focus": "passive",
+		"body and mind": "passive",
+		"superior defense": "passive",
+		"evasion": "passive",
+		"acrobatic movement": "passive",
+		// Monk specialties that are passive enhancements
+		"adept speed": "passive",
+		"wall walk": "passive",
+		"agile acrobat": "passive",
+		"perfect flow": "passive",
+		"sixth sense": "passive",
+		"marathon runner": "passive",
+		"nimble athlete": "passive",
+		"power tumble": "passive",
+		"wilderness training": "passive",
+		"hurricane walk": "passive",
+		"gale walk": "passive",
+		"warrior's awareness": "passive",
+		"water walk": "passive",
+		"focus speech": "passive",
+
+		// === Combat actions wrongly detected as activatable toggle states ===
+		"hand of healing": "combat",
+		"hand of harm": "combat",
+		"hand of ultimate mercy": "combat",
+		"stunning strike": "combat",
+		"instant step": "combat",
+		"shadow walk": "combat",
+		"religious training": "combat",
+		"instant strike": "combat",
+		"flurry of blows": "combat",
+		"step of the wind": "combat",
+		"slow fall": "combat",
+
+		// === Reactions wrongly detected as activatable toggle states ===
+		"deflect attacks": "reaction",
+		"deflect missiles": "reaction",
+	};
+
+	/**
 	 * Detect activatable features from a feature's description
 	 * Uses intelligent text analysis to determine if an ability is toggle-able
 	 * @param {object} feature - The feature object with name and description
@@ -26614,6 +26790,47 @@ class CharacterSheetState {
 				interactionMode,
 				isToggle: interactionMode === "toggle",
 				isInstant: interactionMode === "limited" || interactionMode === "trigger" || interactionMode === "instant",
+			};
+		}
+
+		// ===== CLASSIFICATION OVERRIDES =====
+		// Check if this feature has an explicit classification override that prevents
+		// the pattern-based detection from misclassifying it.
+		const classificationOverride = this.FEATURE_CLASSIFICATION_OVERRIDES[name];
+		if (classificationOverride) {
+			if (classificationOverride === "passive") {
+				// Passive features should never appear as activatable states
+				return null;
+			}
+
+			// "combat" and "reaction" overrides: parse description for resource costs and effects,
+			// then return with the correct interactionMode so getActivatableFeatures() can route them.
+			const parsedEffects = this.parseEffectsFromDescription(rawText);
+
+			// Extract resource costs even for overridden features
+			const kiMatch = text.match(/(?:spend|use|costs?|expend)?\s*\(?(\d+)\s*(?:ki|focus)\s*(?:points?)?\)?/i);
+			const exertionMatch = text.match(/(?:spend|expend|use|costs?)?\s*\(?(\d+)\s*exertion\s*(?:points?)?\)?/i);
+
+			let activationAction = "special";
+			if (/as a bonus action|bonus action[,:]|use (?:a |your )?bonus action/i.test(text)) {
+				activationAction = "bonus";
+			} else if (/as an action(?!\s*surge)|use (?:a |your )?action(?! surge)/i.test(text)) {
+				activationAction = "action";
+			} else if (/as a reaction|use (?:a |your )?reaction/i.test(text)) {
+				activationAction = "reaction";
+			}
+
+			return {
+				stateTypeId: "custom",
+				isCustom: true,
+				matchedBy: "classificationOverride",
+				interactionMode: classificationOverride, // "combat" or "reaction"
+				activationAction: classificationOverride === "reaction" ? "reaction" : activationAction,
+				effects: parsedEffects,
+				kiCost: kiMatch ? parseInt(kiMatch[1]) : null,
+				exertionCost: exertionMatch ? parseInt(exertionMatch[1]) : null,
+				isToggle: false,
+				isInstant: true,
 			};
 		}
 
@@ -27888,6 +28105,8 @@ class CharacterSheetState {
 			const activationInfo = CharacterSheetState.detectActivatableFeature(feature);
 			if (!activationInfo) continue;
 			if (activationInfo.interactionMode === "passive") continue;
+			// Combat actions and reactions are routed to the combat tab, not active states
+			if (activationInfo.interactionMode === "combat" || activationInfo.interactionMode === "reaction") continue;
 
 			// Find associated resource if any
 			let resource = null;

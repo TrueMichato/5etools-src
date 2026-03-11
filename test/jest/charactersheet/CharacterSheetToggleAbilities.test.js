@@ -1222,4 +1222,178 @@ describe("Character Sheet Toggle Abilities", () => {
 			expect(loadedStates[0].activatedAt).toBe(activatedAt);
 		});
 	});
+
+	// ===================================================================
+	// FEATURE_CLASSIFICATION_OVERRIDES Tests
+	// ===================================================================
+	describe("FEATURE_CLASSIFICATION_OVERRIDES", () => {
+		test("should have overrides map defined", () => {
+			expect(CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES).toBeDefined();
+			expect(typeof CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES).toBe("object");
+		});
+
+		// --- Passive overrides: features that should NOT appear as activatable ---
+
+		describe("passive overrides — features that must not appear as activatable", () => {
+			const passiveFeatures = [
+				{name: "Monk's Focus", description: "You gain the following benefits while you are unarmed or wielding only Monk weapons."},
+				{name: "Heightened Focus", description: "Your Flurry of Blows, Patient Defense, and Step of the Wind gain improved effects."},
+				{name: "Unhindered Flurry", description: "You can use Flurry of Blows without expending a focus point."},
+				{name: "Disciplined Survivor", description: "You are proficient in all saving throws. You can spend 1 focus point to reroll a failed save."},
+				{name: "Empowered Strikes", description: "Your unarmed strikes count as magical for the purpose of overcoming resistance and immunity."},
+				{name: "Ki-Empowered Strikes", description: "Your unarmed strikes count as magical for the purpose of overcoming resistance."},
+				{name: "Self-Restoration", description: "You can end one effect on yourself causing charmed or frightened condition."},
+				{name: "Perfect Focus", description: "When you roll initiative and have no focus points remaining, you regain 4 focus points."},
+				{name: "Body and Mind", description: "Your Dexterity and Wisdom scores increase by 4, to a maximum of 25."},
+				{name: "Superior Defense", description: "You gain resistance to one damage type of your choice."},
+				{name: "Evasion", description: "When you are subjected to an effect that allows a Dexterity saving throw for half damage, you take no damage on success."},
+				{name: "Acrobatic Movement", description: "You can move along vertical surfaces and across liquids without falling."},
+				// Monk specialties
+				{name: "Adept Speed", description: "Your speed increases by 10 feet."},
+				{name: "Wall Walk", description: "You can move along vertical surfaces and across ceilings without falling."},
+				{name: "Agile Acrobat", description: "You gain proficiency in Acrobatics and your Dexterity increases by 2 to a maximum of 20."},
+				{name: "Perfect Flow", description: "Your movement doesn't provoke opportunity attacks."},
+				{name: "Sixth Sense", description: "You have advantage on initiative rolls. Your Intelligence skills can use Wisdom instead."},
+				{name: "Marathon Runner", description: "Your long-distance travel speed increases."},
+				{name: "Nimble Athlete", description: "You gain proficiency in Athletics."},
+				{name: "Focus Speech", description: "You can communicate telepathically."},
+			];
+
+			test.each(passiveFeatures)("$name should return null (passive override)", ({name, description}) => {
+				const result = CharacterSheetState.detectActivatableFeature({name, description});
+				expect(result).toBeNull();
+			});
+		});
+
+		// --- Combat overrides: features that should be classified as combat actions ---
+
+		describe("combat overrides — features classified as combat actions", () => {
+			const combatFeatures = [
+				{name: "Hand of Healing", description: "As a bonus action, you can spend 1 ki point to touch a creature and restore hit points."},
+				{name: "Hand of Harm", description: "When you hit a creature with an unarmed strike, you can spend 1 ki point to deal extra necrotic damage."},
+				{name: "Hand of Ultimate Mercy", description: "As an action, you can spend 5 ki points to touch a dead creature and return it to life."},
+				{name: "Stunning Strike", description: "When you hit a creature with an unarmed strike, you can spend 1 ki point to attempt a stunning strike."},
+				{name: "Instant Step", description: "As a bonus action, you can spend 1 ki point to become invisible until the start of your next turn."},
+				{name: "Religious Training", description: "As an action, you can spend exertion to perform a religious rite."},
+				{name: "Instant Strike", description: "As a bonus action, you can spend 1 exertion point to make a melee weapon attack."},
+				{name: "Flurry of Blows", description: "You can spend 1 ki point to make two unarmed strikes as a bonus action."},
+				{name: "Step of the Wind", description: "You can spend 1 ki point to take the Disengage or Dash action as a bonus action."},
+				{name: "Slow Fall", description: "As a reaction when you fall, you can reduce falling damage by 5 times your monk level."},
+			];
+
+			test.each(combatFeatures)("$name should return interactionMode 'combat'", ({name, description}) => {
+				const result = CharacterSheetState.detectActivatableFeature({name, description});
+				expect(result).not.toBeNull();
+				expect(result.interactionMode).toBe("combat");
+				expect(result.matchedBy).toBe("classificationOverride");
+				expect(result.isToggle).toBe(false);
+			});
+		});
+
+		// --- Reaction overrides: features classified as reactions ---
+
+		describe("reaction overrides — features classified as reactions", () => {
+			const reactionFeatures = [
+				{name: "Deflect Attacks", description: "As a reaction when you are hit by a ranged attack, you can reduce the damage by 1d10 + DEX + monk level."},
+				{name: "Deflect Missiles", description: "As a reaction when you are hit by a ranged weapon attack, you can reduce the damage."},
+			];
+
+			test.each(reactionFeatures)("$name should return interactionMode 'reaction'", ({name, description}) => {
+				const result = CharacterSheetState.detectActivatableFeature({name, description});
+				expect(result).not.toBeNull();
+				expect(result.interactionMode).toBe("reaction");
+				expect(result.matchedBy).toBe("classificationOverride");
+				expect(result.activationAction).toBe("reaction");
+				expect(result.isToggle).toBe(false);
+			});
+		});
+
+		// --- Resource cost parsing in overridden features ---
+
+		test("combat override should still parse ki cost from description", () => {
+			const result = CharacterSheetState.detectActivatableFeature({
+				name: "Stunning Strike",
+				description: "When you hit, you can spend 1 ki point to attempt a stunning strike.",
+			});
+			expect(result).not.toBeNull();
+			expect(result.kiCost).toBe(1);
+		});
+
+		test("combat override should still parse exertion cost from description", () => {
+			const result = CharacterSheetState.detectActivatableFeature({
+				name: "Instant Strike",
+				description: "As a bonus action, you can spend 1 exertion point to make a melee weapon attack.",
+			});
+			expect(result).not.toBeNull();
+			expect(result.exertionCost).toBe(1);
+		});
+
+		test("combat override should detect activation action type", () => {
+			const healing = CharacterSheetState.detectActivatableFeature({
+				name: "Hand of Healing",
+				description: "As a bonus action, you can spend 1 ki point to heal.",
+			});
+			expect(healing.activationAction).toBe("bonus");
+
+			const mercy = CharacterSheetState.detectActivatableFeature({
+				name: "Hand of Ultimate Mercy",
+				description: "As an action, you can spend 5 ki points to resurrect a creature.",
+			});
+			expect(mercy.activationAction).toBe("action");
+		});
+
+		// --- Data-driven features should NOT be overridden ---
+
+		test("data-driven activatable should take precedence over classification override", () => {
+			const feature = {
+				name: "Stunning Strike",
+				description: "When you hit, you can spend 1 ki point.",
+				activatable: {
+					stateTypeId: "custom",
+					interactionMode: "toggle",
+					activationAction: "special",
+				},
+			};
+			const result = CharacterSheetState.detectActivatableFeature(feature);
+			expect(result).not.toBeNull();
+			expect(result.matchedBy).toBe("data");
+			// Data-driven takes precedence, so it's NOT matched by classificationOverride
+			expect(result.interactionMode).toBe("toggle");
+		});
+
+		// --- getActivatableFeatures should filter out combat/reaction overrides ---
+
+		test("getActivatableFeatures should exclude combat-classified features", () => {
+			charState.addClass({name: "Monk", source: "XPHB", level: 5});
+			// Manually add features that would be classified as combat/reaction
+			charState._data.features = [
+				{id: "f1", name: "Stunning Strike", description: "When you hit, you can spend 1 ki point to attempt a stunning strike."},
+				{id: "f2", name: "Deflect Attacks", description: "As a reaction when you are hit by a ranged attack, you can reduce the damage."},
+				{id: "f3", name: "Rage", description: "You can enter a rage as a bonus action."},
+			];
+
+			const activatables = charState.getActivatableFeatures();
+			const names = activatables.map(a => a.feature.name);
+
+			// Stunning Strike and Deflect Attacks should NOT appear in activatable features
+			expect(names).not.toContain("Stunning Strike");
+			expect(names).not.toContain("Deflect Attacks");
+		});
+
+		test("getActivatableFeatures should exclude passive-classified features", () => {
+			charState.addClass({name: "Monk", source: "XPHB", level: 10});
+			charState._data.features = [
+				{id: "f1", name: "Monk's Focus", description: "You gain benefits while unarmed or wielding only Monk weapons."},
+				{id: "f2", name: "Heightened Focus", description: "Your Flurry of Blows gains improved effects."},
+				{id: "f3", name: "Evasion", description: "When subjected to DEX save for half damage, take none on success."},
+			];
+
+			const activatables = charState.getActivatableFeatures();
+			const names = activatables.map(a => a.feature.name);
+
+			expect(names).not.toContain("Monk's Focus");
+			expect(names).not.toContain("Heightened Focus");
+			expect(names).not.toContain("Evasion");
+		});
+	});
 });

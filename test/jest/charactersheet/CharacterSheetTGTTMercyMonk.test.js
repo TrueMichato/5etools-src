@@ -416,6 +416,152 @@ describe("TGTT Way of Mercy Monk", () => {
 	});
 
 	// =========================================================================
+	// IMPLEMENTS OF MERCY — Proficiency Grants (Phase 4)
+	// =========================================================================
+	describe("Implements of Mercy (Level 3 proficiency grants)", () => {
+		it("should set hasImplementsOfMercy flag at level 3", () => {
+			makeMercyMonk(3);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.hasImplementsOfMercy).toBe(true);
+		});
+
+		it("should grant Insight proficiency via effects", () => {
+			makeMercyMonk(3);
+			state.applyClassFeatureEffects();
+			expect(state.isProficientInSkill("insight")).toBe(true);
+		});
+
+		it("should grant Medicine proficiency via effects", () => {
+			makeMercyMonk(3);
+			state.applyClassFeatureEffects();
+			expect(state.isProficientInSkill("medicine")).toBe(true);
+		});
+
+		it("should grant Herbalism Kit proficiency via effects", () => {
+			makeMercyMonk(3);
+			state.applyClassFeatureEffects();
+			const toolProfs = state.getToolProficiencies();
+			expect(toolProfs.some(t => t.toLowerCase().includes("herbalism"))).toBe(true);
+		});
+
+		it("should not double-add proficiencies on repeated applyClassFeatureEffects", () => {
+			makeMercyMonk(3);
+			state.applyClassFeatureEffects();
+			state.applyClassFeatureEffects();
+			const toolProfs = state.getToolProficiencies();
+			const herbCount = toolProfs.filter(t => t.toLowerCase().includes("herbalism")).length;
+			expect(herbCount).toBe(1);
+		});
+
+		it("should not override existing higher proficiency level", () => {
+			makeMercyMonk(3);
+			// Set expertise in insight before applying effects
+			state.setSkillProficiency("insight", 2);
+			state.applyClassFeatureEffects();
+			expect(state.getSkillProficiency("insight")).toBe(2);
+		});
+
+		it("should persist proficiencies at higher levels", () => {
+			makeMercyMonk(17);
+			state.applyClassFeatureEffects();
+			expect(state.isProficientInSkill("insight")).toBe(true);
+			expect(state.isProficientInSkill("medicine")).toBe(true);
+			const toolProfs = state.getToolProficiencies();
+			expect(toolProfs.some(t => t.toLowerCase().includes("herbalism"))).toBe(true);
+		});
+	});
+
+	// =========================================================================
+	// PHYSICIAN'S TOUCH — Condition Cure Details (Phase 4)
+	// =========================================================================
+	describe("Physician's Touch Conditions (Level 6)", () => {
+		it("should set physiciansTouchConditions at level 6", () => {
+			makeMercyMonk(6);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.hasPhysiciansTouch).toBe(true);
+			expect(calcs.physiciansTouchConditions).toEqual(
+				expect.arrayContaining(["blinded", "deafened", "paralyzed", "poisoned", "stunned"]),
+			);
+		});
+
+		it("should have exactly 5 conditions", () => {
+			makeMercyMonk(6);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.physiciansTouchConditions).toHaveLength(5);
+		});
+
+		it("should not have physiciansTouchConditions before level 6", () => {
+			makeMercyMonk(5);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.hasPhysiciansTouch).toBeUndefined();
+			expect(calcs.physiciansTouchConditions).toBeUndefined();
+		});
+
+		it("should retain conditions at level 17", () => {
+			makeMercyMonk(17);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.hasPhysiciansTouch).toBe(true);
+			expect(calcs.physiciansTouchConditions).toHaveLength(5);
+		});
+	});
+
+	// =========================================================================
+	// FLURRY OF HEALING AND HARM — Flag Verification (Phase 4)
+	// =========================================================================
+	describe("Flurry of Healing and Harm Flag", () => {
+		it("should not grant Flurry of Healing and Harm before level 11", () => {
+			makeMercyMonk(10);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.hasFlurryOfHealingAndHarm).toBeUndefined();
+		});
+
+		it("should grant Flurry of Healing and Harm at level 11", () => {
+			makeMercyMonk(11);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.hasFlurryOfHealingAndHarm).toBe(true);
+		});
+
+		it("should retain Flurry of Healing and Harm at level 20", () => {
+			makeMercyMonk(20);
+			const calcs = state.getFeatureCalculations();
+			expect(calcs.hasFlurryOfHealingAndHarm).toBe(true);
+		});
+	});
+
+	// =========================================================================
+	// FOCUS→EXERTION CONVERSION (Phase 4 — Verification)
+	// =========================================================================
+	describe("Focus→Exertion Conversion", () => {
+		it("should allow Focus→Exertion for Monk", () => {
+			makeMercyMonk(5);
+			state.addCombatTradition("SK");
+			state.ensureExertionInitialized();
+			state.setKiPoints(5);
+			state.setKiPointsCurrent(5);
+			expect(state.canUseFocusForExertion()).toBe(true);
+		});
+
+		it("should deduct ki when converting Focus→Exertion", () => {
+			makeMercyMonk(5);
+			state.addCombatTradition("SK");
+			state.ensureExertionInitialized();
+			state.setKiPoints(5);
+			state.setKiPointsCurrent(5);
+			state.useFocusForExertion(2);
+			expect(state.getKiPointsCurrent()).toBe(3);
+		});
+
+		it("should fail conversion if no ki points remain", () => {
+			makeMercyMonk(5);
+			state.addCombatTradition("SK");
+			state.ensureExertionInitialized();
+			state.setKiPoints(5);
+			state.setKiPointsCurrent(0);
+			expect(state.useFocusForExertion(1)).toBe(false);
+		});
+	});
+
+	// =========================================================================
 	// COMBAT METHOD DEGREE PROGRESSION (Monk schedule)
 	// =========================================================================
 	describe("Combat Method Degree Progression", () => {

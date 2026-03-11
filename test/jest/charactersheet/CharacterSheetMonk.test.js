@@ -1580,7 +1580,8 @@ describe("Monk Core Class Features (XPHB 2024)", () => {
 			expect(calculations.focusPoints).toBe(5);
 		});
 
-		it("should have focus save DC", () => {
+		it("should have focus save DC at level 2+", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 2});
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.focusSaveDc).toBeDefined();
 		});
@@ -2090,5 +2091,309 @@ describe("Monk Proficiency Bonus Progression", () => {
 		const state = new CharacterSheetState();
 		state.addClass({name: "Monk", source: "PHB", level: 17});
 		expect(state.getProficiencyBonus()).toBe(6);
+	});
+});
+
+// ==========================================================================
+// PHASE 3: MONK CORE FEATURE IMPLEMENTATIONS
+// ==========================================================================
+describe("Phase 3 — Monk Core Feature Fixes", () => {
+	let state;
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+		state.setRace({name: "Human", source: "PHB"});
+		state.setAbilityBase("dex", 16); // +3
+		state.setAbilityBase("wis", 16); // +3
+	});
+
+	// -------------------------------------------------------------------------
+	// Fix 1: Ki/Focus DC Level Gate (must be level 2+)
+	// -------------------------------------------------------------------------
+	describe("Ki/Focus DC Level Gate", () => {
+		it("should NOT have ki points at level 1 (PHB)", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 1});
+			const calc = state.getFeatureCalculations();
+			expect(calc.kiPoints).toBeUndefined();
+		});
+
+		it("should NOT have ki save DC at level 1 (PHB)", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 1});
+			const calc = state.getFeatureCalculations();
+			expect(calc.kiSaveDc).toBeUndefined();
+		});
+
+		it("should NOT have focus points at level 1 (XPHB)", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 1});
+			const calc = state.getFeatureCalculations();
+			expect(calc.focusPoints).toBeUndefined();
+		});
+
+		it("should NOT have focus save DC at level 1 (XPHB)", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 1});
+			const calc = state.getFeatureCalculations();
+			expect(calc.focusSaveDc).toBeUndefined();
+		});
+
+		it("should have ki points at level 2 (PHB)", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 2});
+			const calc = state.getFeatureCalculations();
+			expect(calc.kiPoints).toBe(2);
+		});
+
+		it("should have ki save DC at level 2 (PHB)", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 2});
+			const calc = state.getFeatureCalculations();
+			// 8 + 2 (prof) + 3 (WIS) = 13
+			expect(calc.kiSaveDc).toBe(13);
+		});
+
+		it("should have focus points at level 2 (XPHB)", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 2});
+			const calc = state.getFeatureCalculations();
+			expect(calc.focusPoints).toBe(2);
+		});
+
+		it("should have focus save DC at level 2 (XPHB)", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 2});
+			const calc = state.getFeatureCalculations();
+			// 8 + 2 (prof) + 3 (WIS) = 13
+			expect(calc.focusSaveDc).toBe(13);
+		});
+
+		it("should NOT have focus points for TGTT monk at level 1", () => {
+			state.addClass({name: "Monk", source: "TGTT", level: 1});
+			const calc = state.getFeatureCalculations();
+			expect(calc.focusPoints).toBeUndefined();
+			expect(calc.focusSaveDc).toBeUndefined();
+		});
+
+		it("should have focus points for TGTT monk at level 2", () => {
+			state.addClass({name: "Monk", source: "TGTT", level: 2});
+			const calc = state.getFeatureCalculations();
+			expect(calc.focusPoints).toBe(2);
+			expect(calc.focusSaveDc).toBeDefined();
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// Fix 2: Feature Classification Overrides (FoB, SotW, Slow Fall)
+	// -------------------------------------------------------------------------
+	describe("Feature Classification — Combat Actions", () => {
+		test("Flurry of Blows should be classified as combat", () => {
+			const result = CharacterSheetState.detectActivatableFeature({
+				name: "Flurry of Blows",
+				description: "You can spend 1 ki point to make two unarmed strikes as a bonus action.",
+			});
+			expect(result).not.toBeNull();
+			expect(result.interactionMode).toBe("combat");
+			expect(result.matchedBy).toBe("classificationOverride");
+			expect(result.isToggle).toBe(false);
+		});
+
+		test("Flurry of Blows should parse ki cost from description", () => {
+			const result = CharacterSheetState.detectActivatableFeature({
+				name: "Flurry of Blows",
+				description: "You can spend 1 ki point to make two unarmed strikes as a bonus action.",
+			});
+			expect(result.kiCost).toBe(1);
+			expect(result.activationAction).toBe("bonus");
+		});
+
+		test("Step of the Wind should be classified as combat", () => {
+			const result = CharacterSheetState.detectActivatableFeature({
+				name: "Step of the Wind",
+				description: "You can spend 1 ki point to take the Disengage or Dash action as a bonus action.",
+			});
+			expect(result).not.toBeNull();
+			expect(result.interactionMode).toBe("combat");
+			expect(result.matchedBy).toBe("classificationOverride");
+		});
+
+		test("Step of the Wind should parse ki cost", () => {
+			const result = CharacterSheetState.detectActivatableFeature({
+				name: "Step of the Wind",
+				description: "You can spend 1 ki point to take the Disengage or Dash action as a bonus action.",
+			});
+			expect(result.kiCost).toBe(1);
+			expect(result.activationAction).toBe("bonus");
+		});
+
+		test("Slow Fall should be classified as combat", () => {
+			const result = CharacterSheetState.detectActivatableFeature({
+				name: "Slow Fall",
+				description: "As a reaction when you fall, you can reduce falling damage by 5 times your monk level.",
+			});
+			expect(result).not.toBeNull();
+			expect(result.interactionMode).toBe("combat");
+		});
+
+		test("Flurry of Blows should NOT appear in activatable features", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 5});
+			state._data.features = [
+				{id: "f1", name: "Flurry of Blows", description: "You can expend 1 Focus Point to make two Unarmed Strikes as a Bonus Action."},
+				{id: "f2", name: "Step of the Wind", description: "You can take the Dash action as a Bonus Action."},
+			];
+			const activatables = state.getActivatableFeatures();
+			const names = activatables.map(a => a.feature.name);
+			expect(names).not.toContain("Flurry of Blows");
+			expect(names).not.toContain("Step of the Wind");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// Fix 3: isMonkWeapon — XPHB type handling
+	// -------------------------------------------------------------------------
+	describe("isMonkWeapon — XPHB compatibility", () => {
+		beforeEach(() => {
+			state.addClass({name: "Monk", source: "XPHB", level: 5});
+		});
+
+		it("should recognize PHB quarterstaff as monk weapon", () => {
+			expect(state.isMonkWeapon({
+				name: "Quarterstaff",
+				type: "M",
+				weaponCategory: "simple",
+				property: ["V"],
+			})).toBe(true);
+		});
+
+		it("should recognize XPHB quarterstaff as monk weapon", () => {
+			expect(state.isMonkWeapon({
+				name: "Quarterstaff",
+				type: "M|XPHB",
+				weaponCategory: "simple",
+				property: ["V|XPHB"],
+			})).toBe(true);
+		});
+
+		it("should recognize PHB spear as monk weapon", () => {
+			expect(state.isMonkWeapon({
+				name: "Spear",
+				type: "M",
+				weaponCategory: "simple",
+				property: ["T", "V"],
+			})).toBe(true);
+		});
+
+		it("should recognize XPHB spear as monk weapon", () => {
+			expect(state.isMonkWeapon({
+				name: "Spear",
+				type: "M|XPHB",
+				weaponCategory: "simple",
+				property: ["T|XPHB", "V|XPHB"],
+			})).toBe(true);
+		});
+
+		it("should recognize shortsword as monk weapon", () => {
+			expect(state.isMonkWeapon({
+				name: "Shortsword",
+				type: "M",
+				weaponCategory: "martial",
+				property: ["F", "L"],
+			})).toBe(true);
+		});
+
+		it("should reject greataxe (heavy weapon)", () => {
+			expect(state.isMonkWeapon({
+				name: "Greataxe",
+				type: "M",
+				weaponCategory: "martial",
+				property: ["H", "2H"],
+			})).toBe(false);
+		});
+
+		it("should reject XPHB heavy weapon", () => {
+			expect(state.isMonkWeapon({
+				name: "Greataxe",
+				type: "M|XPHB",
+				weaponCategory: "martial",
+				property: ["H|XPHB", "2H|XPHB"],
+			})).toBe(false);
+		});
+
+		it("should reject longsword (martial, not simple)", () => {
+			expect(state.isMonkWeapon({
+				name: "Longsword",
+				type: "M",
+				weaponCategory: "martial",
+				property: ["V"],
+			})).toBe(false);
+		});
+
+		it("should reject items with special property", () => {
+			expect(state.isMonkWeapon({
+				name: "Net",
+				type: "R",
+				weaponCategory: "martial",
+				property: ["S", "T"],
+			})).toBe(false);
+		});
+
+		it("should return false for non-monks", () => {
+			const nonMonk = new CharacterSheetState();
+			nonMonk.addClass({name: "Fighter", source: "PHB", level: 5});
+			expect(nonMonk.isMonkWeapon({
+				name: "Quarterstaff",
+				type: "M",
+				weaponCategory: "simple",
+				property: ["V"],
+			})).toBe(false);
+		});
+
+		it("should return false for null/undefined item", () => {
+			expect(state.isMonkWeapon(null)).toBe(false);
+			expect(state.isMonkWeapon(undefined)).toBe(false);
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// Verify: Feature effect implementations
+	// -------------------------------------------------------------------------
+	describe("Feature Effect Implementations", () => {
+		it("Evasion should have savingThrowProperty effect at level 7", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 7});
+			const calc = state.getFeatureCalculations();
+			expect(calc.hasEvasion).toBe(true);
+		});
+
+		it("Empowered Strikes should have magical unarmed effect at level 6", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 6});
+			const calc = state.getFeatureCalculations();
+			expect(calc.hasEmpoweredStrikes).toBe(true);
+			expect(calc.hasKiEmpoweredStrikes).toBe(true);
+		});
+
+		it("Deflect Missiles should have damage reduction at level 3 (PHB)", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 3});
+			const calc = state.getFeatureCalculations();
+			expect(calc.deflectMissilesReduction).toBeDefined();
+			expect(calc.deflectMissilesReduction).toContain("1d10");
+		});
+
+		it("Deflect Attacks should have damage reduction at level 3 (XPHB)", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 3});
+			const calc = state.getFeatureCalculations();
+			expect(calc.deflectAttacksReduction).toBeDefined();
+			expect(calc.deflectMissilesReduction).toBeDefined();
+		});
+
+		it("Stunning Strike should be present at level 5", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 5});
+			const calc = state.getFeatureCalculations();
+			expect(calc.hasStunningStrike).toBe(true);
+		});
+
+		it("Slow Fall should have damage reduction at level 4", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 4});
+			const calc = state.getFeatureCalculations();
+			expect(calc.slowFallReduction).toBe(20); // 5 × 4
+		});
+
+		it("Slow Fall reduction should scale with level", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 10});
+			const calc = state.getFeatureCalculations();
+			expect(calc.slowFallReduction).toBe(50); // 5 × 10
+		});
 	});
 });
