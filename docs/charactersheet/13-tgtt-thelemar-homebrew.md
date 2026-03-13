@@ -109,6 +109,19 @@ TGTT's Fighter class variant with focus on exertion and combat traditions.
 | **Exertion Pool** | 1 | Uses per rest resource |
 | **Specialties** | 1, 5, 9, 13, 17 | Feature choice selections |
 | **Battle Tactics** | Various | See Battle Tactics section |
+| **Auto-Grant Traditions** | 3 (Warder) | Tempered Iron + Gallant Heart via `_subclassGrantedTraditions` |
+
+### ✅ Subclass Tradition Auto-Granting (Phase D)
+
+Subclasses that grant combat traditions automatically when selected:
+
+| Subclass | Tradition(s) Granted | Condition |
+|----------|---------------------|-----------|
+| **Warder** (Fighter) | Tempered Iron, Gallant Heart | TGTT source, level 3+ |
+| **Arcane Archer** (Fighter) | Biting Zephyr | TGTT source, level 3+ |
+| **Way of Mercy** (Monk) | Sanguine Knot | TGTT source, level 3+ |
+
+Generic `_subclassGrantedTraditions` pattern feeds into `combatTradition` effect type via `_aggregateCalculationBasedEffects()`. Traditions clear/re-apply on class change.
 
 ---
 
@@ -173,7 +186,7 @@ The exertion-based combat system is fully implemented.
 | **Exertion Recovery** | Full on long rest, half (rounded up) on short rest |
 | **Method Costs** | 1-3 exertion per method |
 | **Method DC** | `8 + proficiency + STR or DEX` |
-| **Stance System** | One active stance at a time |
+| **Stance System** | One active stance at a time, stance speed bonus wired into `getSpeedBonusFromStates()` |
 
 ### ✅ Combat Traditions (17 total)
 
@@ -374,9 +387,10 @@ These would require broader system changes:
 
 ## Testing Coverage
 
-### Test File
+### Test Files
 
-`CharacterSheetTGTT.test.js` - 737 tests
+- `CharacterSheetTGTT.test.js` — 737 tests (core TGTT systems)
+- `CharacterSheetCombatMethodsSurvey.test.js` — 81 tests (Phase D: tradition parsing, stance integration, subclass tradition grants, edge cases, degree progression, DC calculation, exertion pool)
 
 ### Test Categories
 
@@ -385,7 +399,7 @@ These would require broader system changes:
 | Variant Rules | ~50 |
 | Dreamwalker Class | ~120 |
 | Dreamwalker Abilities | ~80 |
-| Combat Methods | ~150 |
+| Combat Methods | ~150 + 81 (survey) |
 | Battle Tactics | ~80 |
 | Subclasses | ~200 |
 | Races | ~40 |

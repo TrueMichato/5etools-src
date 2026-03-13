@@ -1250,7 +1250,6 @@ describe("Character Sheet Toggle Abilities", () => {
 				{name: "Acrobatic Movement", description: "You can move along vertical surfaces and across liquids without falling."},
 				// Monk specialties
 				{name: "Adept Speed", description: "Your speed increases by 10 feet."},
-				{name: "Wall Walk", description: "You can move along vertical surfaces and across ceilings without falling."},
 				{name: "Agile Acrobat", description: "You gain proficiency in Acrobatics and your Dexterity increases by 2 to a maximum of 20."},
 				{name: "Perfect Flow", description: "Your movement doesn't provoke opportunity attacks."},
 				{name: "Sixth Sense", description: "You have advantage on initiative rolls. Your Intelligence skills can use Wisdom instead."},
@@ -1279,6 +1278,7 @@ describe("Character Sheet Toggle Abilities", () => {
 				{name: "Flurry of Blows", description: "You can spend 1 ki point to make two unarmed strikes as a bonus action."},
 				{name: "Step of the Wind", description: "You can spend 1 ki point to take the Disengage or Dash action as a bonus action."},
 				{name: "Slow Fall", description: "As a reaction when you fall, you can reduce falling damage by 5 times your monk level."},
+				{name: "Wall Walk", description: "You can move along vertical surfaces and across ceilings without falling. As a bonus action, spend 1 exertion to gain Spider Climb."},
 			];
 
 			test.each(combatFeatures)("$name should return interactionMode 'combat'", ({name, description}) => {
@@ -1395,5 +1395,100 @@ describe("Character Sheet Toggle Abilities", () => {
 			expect(names).not.toContain("Heightened Focus");
 			expect(names).not.toContain("Evasion");
 		});
+	});
+});
+
+// =========================================================================
+// Patient Defense — Visual Feedback & Effect Integration (Phase E)
+// =========================================================================
+
+describe("Patient Defense — Effects & Summary", () => {
+
+	let charState;
+
+	beforeEach(() => {
+		charState = new CharacterSheetState();
+	});
+
+	it("patientDefense state type has correct effect definitions", () => {
+		const pd = CharacterSheetState.ACTIVE_STATE_TYPES.patientDefense;
+		expect(pd).toBeDefined();
+		expect(pd.effects).toHaveLength(2);
+
+		const disadvEffect = pd.effects.find(e => e.type === "disadvantage");
+		expect(disadvEffect).toBeDefined();
+		expect(disadvEffect.target).toBe("attacksAgainst");
+
+		const advEffect = pd.effects.find(e => e.type === "advantage");
+		expect(advEffect).toBeDefined();
+		expect(advEffect.target).toBe("save:dex");
+	});
+
+	it("summarizeEffects returns human-readable Patient Defense summary", () => {
+		const pd = CharacterSheetState.ACTIVE_STATE_TYPES.patientDefense;
+		const summary = CharacterSheetState.summarizeEffects(pd.effects);
+		expect(summary).toContain("Attacks against you have disadvantage");
+		expect(summary).toContain("Advantage on DEX saves");
+	});
+
+	it("Patient Defense has correct resource cost and activation action", () => {
+		const pd = CharacterSheetState.ACTIVE_STATE_TYPES.patientDefense;
+		expect(pd.resourceName).toBe("Ki Points");
+		expect(pd.resourceCost).toBe(1);
+		expect(pd.activationAction).toBe("bonus");
+		expect(pd.duration).toBe("Until start of next turn");
+	});
+
+	it("Patient Defense effects apply on activation", () => {
+		charState.addClass({name: "Monk", source: "PHB", level: 5, hitDice: "d8"});
+		charState.activateState("patientDefense");
+
+		expect(charState.isStateTypeActive("patientDefense")).toBe(true);
+		const effects = charState.getActiveStateEffects();
+		expect(effects.some(e => e.type === "disadvantage" && e.target === "attacksAgainst")).toBe(true);
+		expect(effects.some(e => e.type === "advantage" && e.target === "save:dex")).toBe(true);
+	});
+
+	it("Patient Defense disadvantage on attacksAgainst is present in active effects", () => {
+		charState.addClass({name: "Monk", source: "PHB", level: 5, hitDice: "d8"});
+		charState.activateState("patientDefense");
+
+		const effects = charState.getActiveStateEffects();
+		const disadv = effects.find(e => e.type === "disadvantage" && e.target === "attacksAgainst");
+		expect(disadv).toBeDefined();
+	});
+
+	it("Patient Defense advantage applies to DEX saves", () => {
+		charState.addClass({name: "Monk", source: "PHB", level: 5, hitDice: "d8"});
+		charState.activateState("patientDefense");
+
+		expect(charState.hasAdvantageFromStates("save:dex")).toBe(true);
+	});
+
+	it("Patient Defense deactivation removes effects", () => {
+		charState.addClass({name: "Monk", source: "PHB", level: 5, hitDice: "d8"});
+		charState.activateState("patientDefense");
+		charState.deactivateState("patientDefense");
+
+		expect(charState.getActiveState()).toBeNull();
+		expect(charState.hasDisadvantageFromStates("attacksAgainst")).toBe(false);
+		expect(charState.hasAdvantageFromStates("save:dex")).toBe(false);
+	});
+
+	it("analyzeToggleability recognizes Patient Defense text", () => {
+		const analysis = CharacterSheetState.analyzeToggleability(
+			"Patient Defense. As a bonus action, you can spend 1 ki point to take the Dodge action.",
+		);
+		expect(analysis.isToggle || analysis.confidence > 0).toBe(true);
+	});
+
+	it("Heightened Focus modifies Patient Defense to grant temp HP", () => {
+		charState.addClass({name: "Monk", source: "XPHB", level: 10, hitDice: "d8"});
+		charState.setAbilityBase("wis", 16);
+		const calcs = charState.getFeatureCalculations();
+		expect(calcs.hasHeightenedFocus).toBe(true);
+		expect(calcs.heightenedPatientDefenseTempHp).toBeDefined();
+		// Should be martialArtsDie + WIS mod
+		expect(calcs.heightenedPatientDefenseTempHp).toMatch(/d\d+\+\d+/);
 	});
 });

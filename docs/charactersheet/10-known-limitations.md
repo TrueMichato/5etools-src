@@ -127,7 +127,7 @@ it("should produce 2 elixirs at level 6", () => {
 |---------|--------|-------|
 | **Cover bonuses** | Missing | No tracking for half/three-quarters cover |
 | **Flanking** | Missing | Optional rule not implemented |
-| **Multi-target attacks** | Partial | No UI for AoE damage distribution |
+| **Multi-target attacks** | ✅ Implemented | Whirlpool Strike multi-target modal (`_showWhirlpoolStrikeModal`) with creature count → per-hit damage. Generic AoE distribution not yet supported for other features. |
 | **Reaction tracking** | Missing | No per-round reaction usage tracking |
 
 ### Resource Management
@@ -250,7 +250,7 @@ Homebrew content quality varies:
 - Some homebrew sources incompatible
 
 **Well-Supported Homebrew:**
-- **TGTT (Thelemar)**: Comprehensive support - 737 tests, all variant rules, classes, subclasses, combat methods, and battle tactics. See [TGTT Documentation](./13-tgtt-thelemar-homebrew.md).
+- **TGTT (Thelemar)**: Comprehensive support - 818+ tests (737 core + 81 combat methods survey), all variant rules, classes, subclasses, combat methods (17 traditions parsed, stance speed bonuses, subclass auto-grants), and battle tactics. See [TGTT Documentation](./13-tgtt-thelemar-homebrew.md).
 
 ---
 
@@ -261,7 +261,7 @@ Homebrew content quality varies:
 1. ~~**Complete subclass calculations**~~ ✅ Done - All core subclasses implemented
 2. ~~**Fix weak test patterns**~~ ✅ Mostly done - Converted to `getFeatureCalculations()`
 3. **XPHB 2024 completion** - Full support for revised rules (in progress)
-4. ~~**TGTT Homebrew**~~ ✅ Done - 737 tests, comprehensive coverage
+4. ~~**TGTT Homebrew**~~ ✅ Done - 818+ tests, comprehensive coverage (incl. 81-test combat methods survey)
 
 ### Medium Priority
 

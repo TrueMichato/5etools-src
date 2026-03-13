@@ -1852,6 +1852,21 @@ class CharacterSheetClassUtils {
 	static applyFeatBonuses (state, feat, featChoices = null) {
 		const choices = featChoices || feat._featChoices || {};
 
+		// Apply damage immunities from feat/boon data (e.g., Epic Boons with "immune": ["radiant"])
+		if (feat.immune) {
+			feat.immune.forEach(type => {
+				state.addImmunity(type);
+			});
+		}
+
+		// Apply condition immunities from feat/boon data
+		if (feat.conditionImmune) {
+			feat.conditionImmune.forEach(cond => {
+				const condition = typeof cond === "string" ? cond : cond.conditionImmune;
+				if (condition) state.addConditionImmunity(condition);
+			});
+		}
+
 		if (feat.ability) {
 			feat.ability.forEach(ablChoice => {
 				const max = ablChoice.max || 20;

@@ -195,6 +195,91 @@ Users can configure custom source with `charsheet-npc-export-source-config` stor
 ### Item Charge Restoration
 Recognizes recharge types: `restLong`, `dawn`, `dusk`, `midnight` (on long rest), `restShort` (short rest only). Parses `rechargeAmount` dice notation (e.g., `"1d6 + 1"`) and rolls if present.
 
+## Combat Action Effects Pipeline
+
+The combat action effects pipeline transforms class/subclass feature text into structured combat actions displayed in the combat tab with dice rolling, effect application, and choice modals.
+
+### Pipeline Overview
+
+```
+Feature text → _parseCombatActionEffects() → combatActionEffects object
+                                                    ↓
+combatActionEffects → _getFeatureSpecificContent() → modal HTML
+                                                    ↓
+User clicks "Use" → _useCombatAction() → _applyCombatActionEffects() → state changes
+                                       → _rollCombatActionDice() → dice results
+```
+
+### Feature Classification
+
+Features are classified into display categories via `FEATURE_CLASSIFICATION_OVERRIDES`:
+- `"combat"` — Shown in combat tab with Use button (Flurry of Blows, Step of the Wind, Wall Walk, Instant Step, Whirlpool Strike, Wind Strike, Religious Training)
+- `"passive"` — Applied automatically (Disciplined Survivor, Agile Acrobat)
+- Toggle states remain in `ACTIVE_STATE_TYPES` (Patient Defense, Rage, Bladesong)
+
+### Effect Schema
+
+`_parseCombatActionEffects()` extracts from feature text:
+```javascript
+{
+    actionType: "Action" | "Bonus Action" | "Reaction" | "Free",
+    cost: { resource: "Ki Points", amount: 1 },
+    damage: { die: "1d10", type: "force", scaling: "martialArtsDie" },
+    bonusDamage: { die: "1d6", condition: "per subsequent hit" },
+    range: "20/60 ft",
+    save: { ability: "dex", dc: "combatMethodDC" },
+    saveBonuses: [{ target: "save:con", value: "+proficiency" }],
+    applyCondition: { name: "Invisible", duration: "until start of next turn", self: true },
+    grantsAdvantage: true,
+    isMultiTarget: true,
+    choiceModal: true,  // Detected from "replace" wording (e.g., FoHaH replaces FoB attack)
+    exertionCost: 2,
+}
+```
+
+### Modal Rendering
+
+`_getFeatureSpecificContent()` returns feature-specific HTML for the combat action modal:
+- **Flurry of Blows**: Strike count (2, or 3 at L10 with Heightened Focus), healing/harm hint when `hasFlurryOfHealingAndHarm`
+- **Step of the Wind**: Dash/Disengage description, jump bonus
+- **Wall Walk**: Spider Climb self-cast description, duration
+- **Instant Step**: Range display, invisibility condition preview
+- **Wind Strike**: Ranged attack with advantage indicator, conditional bonus damage
+- **Whirlpool Strike**: Multi-target creature count input, per-hit damage
+
+`_renderModalRollSection()` adds dice roller UI when `damage` or `save` present. `_renderEffectsPreview()` shows effect badges (conditions, advantage, disadvantage).
+
+### Choice Modals
+
+`_showCombatActionChoiceModal()` presents branching options when `choiceModal: true`:
+- **Flurry of Healing and Harm** (Mercy Monk L11): Replaces one FoB strike with Hand of Healing or Hand of Harm
+- Detection: Parser finds "replace" / "in place of" wording in feature text
+- Integration: FoB modal shows choice hint, clicking opens sub-modal
+
+### Whirlpool Strike Modal
+
+`_showWhirlpoolStrikeModal()` implements a multi-step flow:
+1. User selects number of creatures (1-N)
+2. For each creature, rolls attack + applies per-hit bonus damage (1d6)
+3. Results displayed in aggregate
+
+### Subclass Tradition Auto-Grants
+
+`_subclassGrantedTraditions` maps subclass keys to combat traditions:
+```javascript
+_subclassGrantedTraditions: {
+    "warder": ["temperedIron", "gallantHeart"],
+    "tgttArcaneArcher": ["bitingZephyr"],
+    "tgttMercyMonk": ["sanguineKnot"],
+}
+```
+Applied via `combatTradition` effect type during feature calculations. Cleared and re-applied each `getFeatureCalculations()` call.
+
+### Test Coverage
+
+- `CharacterSheetCombatActionEffects.test.js` — 90 tests: effect pipeline, modal rendering, dice rolling, choice modals, Patient Defense preview, FoHaH choice integration
+- `CharacterSheetCombatMethodsSurvey.test.js` — 81 tests: all 17 traditions parsed, stance integration, subclass grants, degree progression, DC calculation, exertion pool
+
 ## Custom Abilities
 
 ### Data Structure

@@ -276,3 +276,108 @@ describe("Boon of Skill — Skill Proficiencies and Expertise", () => {
 		});
 	});
 });
+
+// =============================================================================
+// Epic Boon Immunity Application
+// =============================================================================
+describe("Epic Boon — Immunity Application via applyFeatBonuses", () => {
+	let state;
+	const ClassUtils = globalThis.CharacterSheetClassUtils;
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+	});
+
+	it("should apply damage immunity from boon 'immune' property", () => {
+		const boon = {
+			name: "Boon of Blazing Dawn",
+			source: "ABH",
+			category: "EB",
+			immune: ["radiant"],
+			ability: [{choose: {from: ["str", "dex", "con", "int", "wis", "cha"]}, max: 30}],
+		};
+
+		ClassUtils.applyFeatBonuses(state, boon, {});
+
+		const immunities = state.getImmunities?.() || state._data?.immunities || [];
+		expect(immunities).toContain("radiant");
+	});
+
+	it("should apply multiple damage immunities", () => {
+		const boon = {
+			name: "Test Boon",
+			source: "TST",
+			immune: ["fire", "cold"],
+		};
+
+		ClassUtils.applyFeatBonuses(state, boon, {});
+
+		const immunities = state.getImmunities?.() || state._data?.immunities || [];
+		expect(immunities).toContain("fire");
+		expect(immunities).toContain("cold");
+	});
+
+	it("should not duplicate immunity if already present", () => {
+		state.addImmunity("radiant");
+
+		const boon = {
+			name: "Boon of Blazing Dawn",
+			source: "ABH",
+			immune: ["radiant"],
+		};
+
+		ClassUtils.applyFeatBonuses(state, boon, {});
+
+		const immunities = state.getImmunities?.() || state._data?.immunities || [];
+		const radiantCount = immunities.filter(i => i === "radiant").length;
+		expect(radiantCount).toBe(1);
+	});
+
+	it("should apply condition immunity from boon 'conditionImmune' property", () => {
+		const boon = {
+			name: "Test Condition Boon",
+			source: "TST",
+			conditionImmune: ["poisoned"],
+		};
+
+		ClassUtils.applyFeatBonuses(state, boon, {});
+
+		const condImmunities = state._data?.conditionImmunities || [];
+		expect(condImmunities).toContain("poisoned");
+	});
+
+	it("should apply both immunity and ability bonus from same boon", () => {
+		const boon = {
+			name: "Boon of Blazing Dawn",
+			source: "ABH",
+			category: "EB",
+			immune: ["radiant"],
+			ability: [{choose: {from: ["str", "dex", "con", "int", "wis", "cha"]}, max: 30}],
+			_epicBoonAbilityChoice: {ability: "cha", amount: 1, max: 30},
+		};
+
+		state.setAbilityBase("cha", 20);
+		ClassUtils.applyFeatBonuses(state, boon, {});
+
+		// Check immunity applied
+		const immunities = state.getImmunities?.() || state._data?.immunities || [];
+		expect(immunities).toContain("radiant");
+
+		// Check ability score increased beyond 20
+		expect(state.getAbilityBase("cha")).toBe(21);
+	});
+
+	it("should not add immunity when boon has no immune property", () => {
+		const boon = {
+			name: "Boon of Combat Prowess",
+			source: "XPHB",
+			category: "EB",
+			ability: [{choose: {from: ["str", "dex", "con", "int", "wis", "cha"]}, max: 30}],
+		};
+
+		ClassUtils.applyFeatBonuses(state, boon, {});
+
+		const immunities = state.getImmunities?.() || state._data?.immunities || [];
+		expect(immunities).toHaveLength(0);
+	});
+});

@@ -280,7 +280,7 @@ describe("TGTT Way of Mercy Monk", () => {
 		// =================================================================
 		describe("Hand of Healing Amount Scaling", () => {
 			// TGTT Monk martial arts die: 1d6(<5), 1d8(5-10), 1d10(11-16), 1d12(17+)
-			// WIS 16 = +3
+			// WIS 16 = +3 (but at level 20, Body and Mind adds +4 → WIS 20 = +5)
 			const healingProgression = [
 				{level: 3, expected: "1d6+3"},
 				{level: 4, expected: "1d6+3"},
@@ -289,7 +289,7 @@ describe("TGTT Way of Mercy Monk", () => {
 				{level: 11, expected: "1d10+3"},
 				{level: 16, expected: "1d10+3"},
 				{level: 17, expected: "1d12+3"},
-				{level: 20, expected: "1d12+3"},
+				{level: 20, expected: "1d12+5"},
 			];
 
 			healingProgression.forEach(({level, expected}) => {

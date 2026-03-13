@@ -119,6 +119,12 @@ class CharacterSheetRespec {
 		$header.append($classInfo).append($editBtn);
 		$card.append($header);
 
+		// Show race/background grants at level 1
+		if (level === 1) {
+			const $grants = this._renderRaceBackgroundGrants();
+			if ($grants) $card.append($grants);
+		}
+
 		// Choices summary
 		const $choices = $(`<div class="charsheet__level-entry-choices"></div>`);
 
@@ -293,6 +299,136 @@ class CharacterSheetRespec {
 
 		// Show edit modal
 		await this._showEditModal(level, history, editableChoices);
+	}
+
+	/**
+	 * Render a read-only summary of race and background grants for the level 1 card.
+	 * @returns {jQuery|null} The grants element, or null if no race/background set
+	 */
+	_renderRaceBackgroundGrants () {
+		const race = this._state.getRace();
+		const background = this._state.getBackground();
+
+		if (!race && !background) return null;
+
+		const $grants = $(`<div class="charsheet__level-entry-grants mt-1 mb-1"></div>`);
+
+		// Race grants
+		if (race) {
+			const raceName = this._state.getRaceName() || race.name;
+			const $raceGrants = $(`<div class="charsheet__level-grants-section"></div>`);
+			$raceGrants.append(`<div class="ve-small ve-bold">🧬 ${raceName}</div>`);
+
+			const items = [];
+
+			// Speed
+			if (race.speed) {
+				const speed = typeof race.speed === "number" ? race.speed : race.speed.walk;
+				if (speed) items.push(`Speed ${speed} ft.`);
+				if (typeof race.speed === "object") {
+					["fly", "swim", "climb", "burrow"].forEach(t => {
+						if (race.speed[t]) items.push(`${t.toTitleCase()} ${race.speed[t]} ft.`);
+					});
+				}
+			}
+
+			// Darkvision
+			if (race.darkvision) items.push(`Darkvision ${race.darkvision} ft.`);
+
+			// Size
+			if (race.size?.length) {
+				const sizeMap = {T: "Tiny", S: "Small", M: "Medium", L: "Large", H: "Huge", G: "Gargantuan"};
+				items.push(race.size.map(s => sizeMap[s] || s).join("/"));
+			}
+
+			// Resistances
+			if (race.resist?.length) {
+				const resists = race.resist.filter(r => typeof r === "string");
+				if (resists.length) items.push(`Resist: ${resists.join(", ")}`);
+			}
+
+			// Skill proficiencies
+			if (race.skillProficiencies?.length) {
+				const skills = [];
+				race.skillProficiencies.forEach(sp => {
+					Object.keys(sp).forEach(s => {
+						if (s !== "any" && s !== "choose") skills.push(s.toTitleCase());
+					});
+				});
+				if (skills.length) items.push(`Skills: ${skills.join(", ")}`);
+			}
+
+			// Language proficiencies
+			if (race.languageProficiencies?.length) {
+				const langs = [];
+				race.languageProficiencies.forEach(lp => {
+					Object.keys(lp).forEach(l => {
+						if (l !== "anyStandard" && l !== "any") langs.push(l.toTitleCase());
+					});
+				});
+				if (langs.length) items.push(`Languages: ${langs.join(", ")}`);
+			}
+
+			if (items.length) {
+				$raceGrants.append(`<div class="ve-small ve-muted ml-2">${items.join(" · ")}</div>`);
+			}
+
+			$grants.append($raceGrants);
+		}
+
+		// Background grants
+		if (background) {
+			const $bgGrants = $(`<div class="charsheet__level-grants-section mt-1"></div>`);
+			$bgGrants.append(`<div class="ve-small ve-bold">📜 ${background.name}</div>`);
+
+			const items = [];
+
+			// Skill proficiencies
+			if (background.skillProficiencies?.length) {
+				const skills = [];
+				background.skillProficiencies.forEach(sp => {
+					Object.keys(sp).forEach(s => {
+						if (s !== "any" && s !== "choose") skills.push(s.toTitleCase());
+					});
+				});
+				if (skills.length) items.push(`Skills: ${skills.join(", ")}`);
+			}
+
+			// Tool proficiencies
+			if (background.toolProficiencies?.length) {
+				const tools = [];
+				background.toolProficiencies.forEach(tp => {
+					Object.keys(tp).forEach(t => {
+						if (t !== "any" && t !== "choose" && t !== "anyArtisansTool" && t !== "anyMusicalInstrument") tools.push(t.toTitleCase());
+					});
+				});
+				if (tools.length) items.push(`Tools: ${tools.join(", ")}`);
+			}
+
+			// Language proficiencies
+			if (background.languageProficiencies?.length) {
+				const langs = [];
+				background.languageProficiencies.forEach(lp => {
+					Object.keys(lp).forEach(l => {
+						if (l !== "anyStandard" && l !== "any") langs.push(l.toTitleCase());
+					});
+				});
+				if (langs.length) items.push(`Languages: ${langs.join(", ")}`);
+			}
+
+			// Starting equipment
+			if (background.startingEquipment?.length) {
+				items.push("Starting Equipment");
+			}
+
+			if (items.length) {
+				$bgGrants.append(`<div class="ve-small ve-muted ml-2">${items.join(" · ")}</div>`);
+			}
+
+			$grants.append($bgGrants);
+		}
+
+		return $grants;
 	}
 
 	/**

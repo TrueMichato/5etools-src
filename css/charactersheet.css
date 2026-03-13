@@ -3861,7 +3861,8 @@
 }
 
 /* AC Breakdown Popup */
-.charsheet__ac-breakdown {
+.charsheet__ac-breakdown,
+.charsheet__stat-breakdown {
 	position: absolute;
 	top: 100%;
 	left: 50%;
@@ -3881,7 +3882,9 @@
 }
 
 .charsheet__combat-stat--ac:hover .charsheet__ac-breakdown,
-.charsheet__combat-stat--ac.is-expanded .charsheet__ac-breakdown {
+.charsheet__combat-stat--ac.is-expanded .charsheet__ac-breakdown,
+.charsheet__combat-stat--speed:hover .charsheet__stat-breakdown,
+.charsheet__combat-stat--initiative:hover .charsheet__stat-breakdown {
 	opacity: 1;
 	visibility: visible;
 	pointer-events: auto;
@@ -9130,7 +9133,7 @@ body:has(.charsheet__quickbuild-overlay) .toast__container {
 	gap: var(--cs-space-lg, 1.25rem);
 	min-height: 60vh;
 	max-height: calc(90vh - 100px);
-	overflow: hidden;
+	overflow: auto;
 }
 
 /* Summary Sidebar */
@@ -11091,7 +11094,7 @@ body:has(.charsheet-page) .ui-modal__inner {
 
 /* Content-heavy modals (those using full width) get a taller height */
 body:has(.charsheet-page) .ui-modal__inner.w-100 {
-	height: min(600px, 70vh) !important;
+	height: min(700px, 80vh) !important;
 }
 
 /* The scroller inside needs to fill the available height */

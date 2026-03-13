@@ -5346,37 +5346,9 @@ class CharacterSheetState {
 		// Normalize skill key to lowercase without spaces
 		const normalizedSkill = skill.toLowerCase().replace(/\s+/g, "");
 
-		const skillAbilities = {
-			acrobatics: "dex",
-			animalhandling: "wis",
-			arcana: "int",
-			athletics: "str",
-			deception: "cha",
-			history: "int",
-			insight: "wis",
-			intimidation: "cha",
-			investigation: "int",
-			medicine: "wis",
-			nature: "int",
-			perception: "wis",
-			performance: "cha",
-			persuasion: "cha",
-			religion: "int",
-			sleightofhand: "dex",
-			stealth: "dex",
-			survival: "wis",
-		};
-
-		let ability = skillAbilities[normalizedSkill];
-
-		// If not a standard skill, check custom skills
-		if (!ability) {
-			const customSkill = this._data.customSkills.find(s =>
-				s.name.toLowerCase().replace(/\s+/g, "") === normalizedSkill,
-			);
-			// Custom skills can have no ability (empty string or null)
-			ability = customSkill?.ability || null;
-		}
+		// Use getSkillAbility() as single source of truth for skill→ability mapping
+		// Covers standard skills, hardcoded homebrew skills (cooking, culture, etc.), and custom skills
+		let ability = this.getSkillAbility(normalizedSkill);
 
 		// Check for ability swap modifiers (e.g., "use WIS instead of INT for Arcana")
 		// Uses MAX of default ability mod and swapped ability mod
@@ -5931,6 +5903,271 @@ class CharacterSheetState {
 			total,
 			components,
 		};
+	}
+
+	/**
+	 * Get a breakdown of saving throw modifier components
+	 * @param {string} ability - The ability abbreviation (e.g., "str", "dex")
+	 * @returns {{total: number, components: Array<{type: string, name: string, value: number, icon: string}>}}
+	 */
+	getSaveBreakdown (ability) {
+		const components = [];
+		const mod = this.getAbilityMod(ability);
+		if (mod !== 0) components.push({type: "ability", name: `${ability.toUpperCase()} modifier`, value: mod, icon: "🎲"});
+
+		const prof = this.hasSaveProficiency(ability) ? this.getProficiencyBonus() : 0;
+		if (prof !== 0) components.push({type: "proficiency", name: "Proficiency", value: prof, icon: "⭐"});
+
+		const custom = this._data.customModifiers.savingThrows[ability] || 0;
+		if (custom !== 0) components.push({type: "custom", name: "Custom Modifier", value: custom, icon: "⚙️"});
+
+		const itemBonus = this._data.itemBonuses?.savingThrow || this._data.itemBonuses?.saves || 0;
+		if (itemBonus !== 0) components.push({type: "item", name: "Magic Items", value: itemBonus, icon: "💎"});
+
+		const abilityKey = `savingThrow${ability.charAt(0).toUpperCase() + ability.slice(1)}`;
+		const perAbilityItemBonus = this._data.itemBonuses?.[abilityKey] || 0;
+		if (perAbilityItemBonus !== 0) components.push({type: "item", name: `${ability.toUpperCase()} Save Item`, value: perAbilityItemBonus, icon: "💎"});
+
+		const stateBonus = this.getSaveBonusFromStates(ability);
+		if (stateBonus !== 0) components.push({type: "state", name: "Active Effects", value: stateBonus, icon: "🔮"});
+
+		const stanceBonus = this._getStanceSaveBonus(ability);
+		if (stanceBonus !== 0) components.push({type: "stance", name: "Combat Stance", value: stanceBonus, icon: "⚔️"});
+
+		const exhaustionPenalty = this._getExhaustionD20Penalty();
+		if (exhaustionPenalty !== 0) components.push({type: "penalty", name: "Exhaustion", value: -exhaustionPenalty, icon: "😫"});
+
+		const total = components.reduce((sum, comp) => sum + comp.value, 0);
+		return {total, components};
+	}
+
+	/**
+	 * Get a breakdown of skill modifier components
+	 * @param {string} skill - The skill key (e.g., "athletics", "stealth")
+	 * @returns {{total: number, components: Array<{type: string, name: string, value: number, icon: string}>, ability: string|null}}
+	 */
+	getSkillBreakdown (skill) {
+		const normalizedSkill = skill.toLowerCase().replace(/\s+/g, "");
+		const components = [];
+
+		// Determine ability (including swaps)
+		let ability = this.getSkillAbility(normalizedSkill);
+		let swappedFrom = null;
+		if (ability) {
+			const swapMods = this._data.namedModifiers.filter(m =>
+				m.enabled && m.type === `abilitySwap:${normalizedSkill}` && m.newAbility,
+			);
+			if (swapMods.length) {
+				const defaultMod = this.getAbilityMod(ability);
+				let bestAbility = ability;
+				let bestMod = defaultMod;
+				for (const swap of swapMods) {
+					const swapMod = this.getAbilityMod(swap.newAbility);
+					if (swapMod > bestMod) {
+						bestMod = swapMod;
+						bestAbility = swap.newAbility;
+					}
+				}
+				if (bestAbility !== ability) {
+					swappedFrom = ability;
+					ability = bestAbility;
+				}
+			}
+		}
+
+		const mod = ability ? this.getAbilityMod(ability) : 0;
+		if (mod !== 0) {
+			const abilityLabel = swappedFrom
+				? `${ability.toUpperCase()} modifier (swapped from ${swappedFrom.toUpperCase()})`
+				: `${ability.toUpperCase()} modifier`;
+			components.push({type: "ability", name: abilityLabel, value: mod, icon: "🎲"});
+		}
+
+		const profLevel = this.getSkillProficiency(normalizedSkill);
+		const profBonus = this.getProficiencyBonus();
+		if (profLevel === 2) {
+			components.push({type: "proficiency", name: "Expertise (2×)", value: profLevel * profBonus, icon: "🌟"});
+		} else if (profLevel === 1) {
+			components.push({type: "proficiency", name: "Proficiency", value: profBonus, icon: "⭐"});
+		} else if (this.hasJackOfAllTrades()) {
+			components.push({type: "proficiency", name: "Jack of All Trades", value: Math.floor(profBonus / 2), icon: "🃏"});
+		}
+
+		const custom = this.getSkillCustomMod(normalizedSkill);
+		if (custom !== 0) components.push({type: "custom", name: "Custom Modifier", value: custom, icon: "⚙️"});
+
+		const itemBonus = this._data.itemBonuses?.abilityCheck || 0;
+		if (itemBonus !== 0) components.push({type: "item", name: "Magic Items", value: itemBonus, icon: "💎"});
+
+		const dynamicFeatureBonus = this._getDynamicSkillFeatureBonus(normalizedSkill);
+		if (dynamicFeatureBonus !== 0) components.push({type: "feature", name: "Feature Bonus", value: dynamicFeatureBonus, icon: "📜"});
+
+		const abilityCheckBonus = ability ? this.getAbilityCheckCustomMod(ability) : 0;
+		if (abilityCheckBonus !== 0) components.push({type: "custom", name: `${(ability || "").toUpperCase()} Check Modifier`, value: abilityCheckBonus, icon: "⚙️"});
+
+		const stateBonus = this.getSkillBonusFromStates(normalizedSkill, this.getSkillAbility(normalizedSkill) || ability);
+		if (stateBonus !== 0) components.push({type: "state", name: "Active Effects", value: stateBonus, icon: "🔮"});
+
+		const stanceBonus = this._getStanceSkillBonus(normalizedSkill);
+		if (stanceBonus !== 0) components.push({type: "stance", name: "Combat Stance", value: stanceBonus, icon: "⚔️"});
+
+		const exhaustionPenalty = this._getExhaustionD20Penalty();
+		if (exhaustionPenalty !== 0) components.push({type: "penalty", name: "Exhaustion", value: -exhaustionPenalty, icon: "😫"});
+
+		const total = components.reduce((sum, comp) => sum + comp.value, 0);
+		return {total, components, ability};
+	}
+
+	/**
+	 * Get a breakdown of speed components for a given movement type
+	 * @param {string} [type="walk"] - The speed type
+	 * @returns {{total: number, components: Array<{type: string, name: string, value: number, icon: string}>}}
+	 */
+	getSpeedBreakdown (type = "walk") {
+		const components = [];
+
+		const base = this._data.speed[type] || (type === "walk" ? 30 : 0);
+		if (base > 0) components.push({type: "base", name: type === "walk" ? "Base Speed" : `Base ${type.charAt(0).toUpperCase() + type.slice(1)} Speed`, value: base, icon: "🏃"});
+
+		// For non-walk speeds that are 0, return empty breakdown
+		if (type !== "walk" && base === 0) {
+			const itemSpeedStatic = this._data.itemBonuses?.speedStatic || {};
+			const itemSpeedEqual = this._data.itemBonuses?.speedEqual || {};
+			if (!itemSpeedStatic[type] && !itemSpeedEqual[type]) {
+				return {total: 0, components: []};
+			}
+		}
+
+		const speedMods = this._data.customModifiers.speed || {};
+		const customMod = speedMods[type] || 0;
+		if (customMod !== 0) components.push({type: "custom", name: "Custom Modifier", value: customMod, icon: "⚙️"});
+
+		const stateBonus = this.getSpeedBonusFromStates(type);
+		if (stateBonus !== 0) components.push({type: "state", name: "Active Effects", value: stateBonus, icon: "🔮"});
+
+		if (type === "walk") {
+			const unarmoredBonus = this.getUnarmoredMovementBonus();
+			if (unarmoredBonus !== 0) components.push({type: "feature", name: "Unarmored Movement", value: unarmoredBonus, icon: "🧘"});
+
+			const armorPenalty = this.getArmorStrengthPenalty();
+			if (armorPenalty !== 0) components.push({type: "penalty", name: "Armor STR Penalty", value: armorPenalty, icon: "⚠️"});
+		}
+
+		const itemSpeedBonus = this._data.itemBonuses?.speedBonus || {};
+		const typeItemBonus = (itemSpeedBonus[type] || 0) + (itemSpeedBonus["*"] || 0);
+		if (typeItemBonus !== 0) components.push({type: "item", name: "Magic Items", value: typeItemBonus, icon: "💎"});
+
+		const itemSpeedStatic = this._data.itemBonuses?.speedStatic || {};
+		if (itemSpeedStatic[type] && itemSpeedStatic[type] > base) {
+			components.push({type: "item", name: `Item Override (${itemSpeedStatic[type]} ft.)`, value: itemSpeedStatic[type] - base, icon: "💎"});
+		}
+
+		const speedMultiplier = this.getSpeedMultiplierFromConditions();
+		if (speedMultiplier === 0) {
+			components.push({type: "condition", name: "Grappled/Restrained", value: 0, icon: "🔗"});
+		} else if (speedMultiplier !== 1) {
+			const rawTotal = components.reduce((sum, comp) => sum + comp.value, 0);
+			const reducedAmount = Math.floor(rawTotal * speedMultiplier) - rawTotal;
+			if (reducedAmount !== 0) components.push({type: "condition", name: "Slowed", value: reducedAmount, icon: "🐌"});
+		}
+
+		const itemSpeedMultiply = this._data.itemBonuses?.speedMultiply || {};
+		const typeMultiplier = (itemSpeedMultiply[type] || 1) * (itemSpeedMultiply["*"] || 1);
+		if (typeMultiplier !== 1) {
+			const rawTotal = components.reduce((sum, comp) => sum + comp.value, 0);
+			const multipliedAmount = Math.floor(rawTotal * typeMultiplier) - rawTotal;
+			if (multipliedAmount !== 0) components.push({type: "item", name: `Speed Multiplier (×${typeMultiplier})`, value: multipliedAmount, icon: "⚡"});
+		}
+
+		const exhaustionPenalty = this._getExhaustionSpeedPenalty();
+		if (exhaustionPenalty !== 0) components.push({type: "penalty", name: "Exhaustion", value: -exhaustionPenalty, icon: "😫"});
+
+		const total = Math.max(0, components.reduce((sum, comp) => sum + comp.value, 0));
+		return {total, components};
+	}
+
+	/**
+	 * Get a breakdown of initiative modifier components
+	 * @returns {{total: number, components: Array<{type: string, name: string, value: number, icon: string}>}}
+	 */
+	getInitiativeBreakdown () {
+		const components = [];
+
+		const dexMod = this.getAbilityMod("dex");
+		if (dexMod !== 0) components.push({type: "ability", name: "DEX modifier", value: dexMod, icon: "🎯"});
+
+		const custom = this._data.customModifiers.initiative || 0;
+		if (custom !== 0) components.push({type: "custom", name: "Custom Modifier", value: custom, icon: "⚙️"});
+
+		if (this.hasJackOfAllTrades()) {
+			const halfProf = Math.floor(this.getProficiencyBonus() / 2);
+			if (halfProf !== 0) components.push({type: "proficiency", name: "Jack of All Trades", value: halfProf, icon: "🃏"});
+		}
+
+		const exhaustionPenalty = this._getExhaustionD20Penalty();
+		if (exhaustionPenalty !== 0) components.push({type: "penalty", name: "Exhaustion", value: -exhaustionPenalty, icon: "😫"});
+
+		const total = components.reduce((sum, comp) => sum + comp.value, 0);
+		return {total, components};
+	}
+
+	/**
+	 * Get a breakdown of spell attack bonus components
+	 * @param {string} [className] - Optional class name for class-specific ability
+	 * @returns {{total: number, components: Array<{type: string, name: string, value: number, icon: string}>}|null}
+	 */
+	getSpellAttackBreakdown (className) {
+		const spellcastingAbilities = {Wizard: "int", Cleric: "wis", Druid: "wis", Sorcerer: "cha", Bard: "cha", Paladin: "cha", Ranger: "wis", Warlock: "cha", Artificer: "int"};
+		const ability = className ? spellcastingAbilities[className] : this._data.spellcasting.ability;
+		if (!ability) return null;
+
+		const components = [];
+		const prof = this.getProficiencyBonus();
+		components.push({type: "proficiency", name: "Proficiency", value: prof, icon: "⭐"});
+
+		const mod = this.getAbilityMod(ability);
+		if (mod !== 0) components.push({type: "ability", name: `${ability.toUpperCase()} modifier`, value: mod, icon: "🎲"});
+
+		const custom = this._data.customModifiers.spellAttack || 0;
+		if (custom !== 0) components.push({type: "custom", name: "Custom Modifier", value: custom, icon: "⚙️"});
+
+		const itemBonus = this._data.itemBonuses?.spellAttack || 0;
+		if (itemBonus !== 0) components.push({type: "item", name: "Magic Items", value: itemBonus, icon: "💎"});
+
+		const exhaustionPenalty = this._getExhaustionD20Penalty();
+		if (exhaustionPenalty !== 0) components.push({type: "penalty", name: "Exhaustion", value: -exhaustionPenalty, icon: "😫"});
+
+		const total = components.reduce((sum, comp) => sum + comp.value, 0);
+		return {total, components};
+	}
+
+	/**
+	 * Get a breakdown of spell save DC components
+	 * @param {string} [className] - Optional class name for class-specific ability
+	 * @returns {{total: number, components: Array<{type: string, name: string, value: number, icon: string}>}|null}
+	 */
+	getSpellDcBreakdown (className) {
+		const spellcastingAbilities = {Wizard: "int", Cleric: "wis", Druid: "wis", Sorcerer: "cha", Bard: "cha", Paladin: "cha", Ranger: "wis", Warlock: "cha", Artificer: "int"};
+		const ability = className ? spellcastingAbilities[className] : this._data.spellcasting.ability;
+		if (!ability) return null;
+
+		const components = [];
+		components.push({type: "base", name: "Base DC", value: 8, icon: "🎯"});
+
+		const prof = this.getProficiencyBonus();
+		components.push({type: "proficiency", name: "Proficiency", value: prof, icon: "⭐"});
+
+		const mod = this.getAbilityMod(ability);
+		if (mod !== 0) components.push({type: "ability", name: `${ability.toUpperCase()} modifier`, value: mod, icon: "🎲"});
+
+		const custom = this._data.customModifiers.spellDc || 0;
+		if (custom !== 0) components.push({type: "custom", name: "Custom Modifier", value: custom, icon: "⚙️"});
+
+		const itemBonus = this._data.itemBonuses?.spellSaveDc || 0;
+		if (itemBonus !== 0) components.push({type: "item", name: "Magic Items", value: itemBonus, icon: "💎"});
+
+		const total = components.reduce((sum, comp) => sum + comp.value, 0);
+		return {total, components};
 	}
 
 	setBaseAc (ac) { this._data.ac.base = ac; }
@@ -8538,6 +8775,11 @@ class CharacterSheetState {
 						calculations.canRunOnWater = true;
 					}
 
+					// Unhindered Flurry (TGTT level 8) - Flurry of Blows costs 0 focus
+					if (source === "TGTT" && level >= 8) {
+						calculations.hasUnhinderedFlurry = true;
+					}
+
 					// Acrobatic Movement (XPHB level 9) - difficult terrain doesn't cost extra
 					if (is2024 && level >= 9) {
 						calculations.hasAcrobaticMovement = true;
@@ -8551,11 +8793,15 @@ class CharacterSheetState {
 					// Heightened Focus (XPHB level 10) - improved Flurry/Patient Defense/Step of Wind
 					if (is2024 && level >= 10) {
 						calculations.hasHeightenedFocus = true;
+						calculations.heightenedFlurryAttacks = 3;
+						calculations.heightenedPatientDefenseTempHp = `${martialArtsDice}+${this.getAbilityMod("wis")}`;
+						calculations.heightenedStepOfTheWindDistance = 20;
 					}
 
 					// Self-Restoration (XPHB level 10) - end charmed/frightened on turn
 					if (is2024 && level >= 10) {
 						calculations.hasSelfRestoration = true;
+						calculations.selfRestorationConditions = ["charmed", "frightened"];
 					}
 
 					// Tongue of the Sun and Moon (PHB level 13)
@@ -8576,6 +8822,8 @@ class CharacterSheetState {
 					// Disciplined Survivor (XPHB level 14) - proficient in all saves, spend focus to reroll
 					if (is2024 && level >= 14) {
 						calculations.hasDisciplinedSurvivor = true;
+						calculations.disciplinedSurvivorRerollCost = 1;
+						calculations.hasDeathSaveProficiency = true;
 					}
 
 					// Timeless Body (PHB level 15) - no frailty of old age
@@ -8610,6 +8858,9 @@ class CharacterSheetState {
 					// Body and Mind (XPHB level 20) - +4 DEX and WIS (max 25)
 					if (is2024 && level >= 20) {
 						calculations.hasBodyAndMind = true;
+						calculations.bodyAndMindDexBonus = 4;
+						calculations.bodyAndMindWisBonus = 4;
+						calculations.bodyAndMindMaxScore = 25;
 					}
 
 					// Uncanny Metabolism (XPHB level 2) - regain ki on short rest roll
@@ -8841,9 +9092,19 @@ class CharacterSheetState {
 					if (cls.subclass?.shortName === "Mercy") {
 						const subSource = cls.subclass?.source || source;
 						const isMercy2024 = subSource === "XPHB";
+						const isMercyFromTGTT = cls.source === "TGTT" || cls.subclass?.source === "TGTT";
 
 						// Implements of Mercy (level 3) - Insight, Medicine, Herbalism Kit proficiency
 						calculations.hasImplementsOfMercy = true;
+
+						// TGTT Mercy Monk: Combat Methods — auto-grant Sanguine Knot tradition
+						if (isMercyFromTGTT) {
+							calculations.hasMercyCombatMethods = true;
+							if (!calculations._subclassGrantedTraditions) calculations._subclassGrantedTraditions = [];
+							calculations._subclassGrantedTraditions.push(
+								{tradition: "Sanguine Knot", source: "Way of Mercy: Combat Methods"},
+							);
+						}
 
 						// Hand of Healing (level 3) - heal with ki
 						calculations.hasHandOfHealing = true;
@@ -9070,6 +9331,9 @@ class CharacterSheetState {
 							calculations.hasInstantStep = true;
 							calculations.instantStepRange = 500;
 							calculations.instantStepCost = 4;
+							calculations.instantStepEffects = {
+								applyCondition: {name: "Invisible", duration: "until start of next turn", self: true},
+							};
 						}
 
 						// Shadow Walk: bonus action teleport 60 ft in dim light/darkness
@@ -9081,6 +9345,9 @@ class CharacterSheetState {
 						// Wall Walk: move on vertical surfaces + spider climb for 1 exertion
 						if (monkFeatures.some(f => f.name === "Wall Walk")) {
 							calculations.hasWallWalk = true;
+							calculations.wallWalkSpiderClimbEffects = {
+								applyCondition: {name: "Spider Climb (self)", duration: "concentration, up to 10 minutes", self: true},
+							};
 						}
 
 						// Agile Acrobat: Acrobatics proficiency + DEX +2 (max 20)
@@ -10268,6 +10535,15 @@ class CharacterSheetState {
 						if (level >= 15) {
 							calculations.hasEverReadyShot = true;
 						}
+
+						// TGTT Arcane Archer: Combat Methods — auto-grant Biting Zephyr tradition
+						if (isAAFromTGTT) {
+							calculations.hasArcaneArcherCombatMethods = true;
+							if (!calculations._subclassGrantedTraditions) calculations._subclassGrantedTraditions = [];
+							calculations._subclassGrantedTraditions.push(
+								{tradition: "Biting Zephyr", source: "Arcane Archer: Combat Methods"},
+							);
+						}
 					}
 
 					// Cavalier subclass
@@ -10429,6 +10705,13 @@ class CharacterSheetState {
 							// Combat Methods (Warder): Tempered Iron + Gallant Heart traditions
 							calculations.hasWarderCombatMethods = true;
 							calculations.warderCombatTraditions = ["Tempered Iron", "Gallant Heart"];
+
+							// Generic: auto-grant traditions via effect pipeline
+							if (!calculations._subclassGrantedTraditions) calculations._subclassGrantedTraditions = [];
+							calculations._subclassGrantedTraditions.push(
+								{tradition: "Tempered Iron", source: "Warder: Combat Methods"},
+								{tradition: "Gallant Heart", source: "Warder: Combat Methods"},
+							);
 						}
 
 						// Level 7: Warding Senses, Warder Bond Improvement
@@ -15020,6 +15303,53 @@ class CharacterSheetState {
 			});
 		}
 
+		// Body and Mind (XPHB Monk 20): +4 DEX and WIS, max 25
+		if (calculations.hasBodyAndMind && !alreadyProcessed("Body and Mind")) {
+			effects.push({
+				type: "abilityScoreBonus",
+				ability: "dex",
+				value: calculations.bodyAndMindDexBonus || 4,
+				maxScore: calculations.bodyAndMindMaxScore || 25,
+				source: "Body and Mind",
+			});
+			effects.push({
+				type: "abilityScoreBonus",
+				ability: "wis",
+				value: calculations.bodyAndMindWisBonus || 4,
+				maxScore: calculations.bodyAndMindMaxScore || 25,
+				source: "Body and Mind",
+			});
+		}
+
+		// Agile Acrobat (TGTT Monk Specialty): Acrobatics proficiency + DEX +2 (max 20)
+		if (calculations.hasAgileAcrobat && !alreadyProcessed("Agile Acrobat")) {
+			effects.push({
+				type: "skillProficiency",
+				skill: "acrobatics",
+				level: 1,
+				source: "Agile Acrobat",
+			});
+			effects.push({
+				type: "abilityScoreBonus",
+				ability: "dex",
+				value: 2,
+				maxScore: 20,
+				source: "Agile Acrobat",
+			});
+		}
+
+		// Superior Defense (XPHB Monk 18): spend 3 focus for resistance to one damage type
+		if (calculations.hasSuperiorDefense && !alreadyProcessed("Superior Defense")) {
+			effects.push({
+				type: "modifier",
+				modType: "resistance:chosen",
+				value: 1,
+				source: "Superior Defense",
+				conditional: `spend ${calculations.superiorDefenseCost || 3} Focus Points as action`,
+				enabled: false,
+			});
+		}
+
 		// =========================================================
 		// BARBARIAN FEATURES
 		// =========================================================
@@ -15768,6 +16098,15 @@ class CharacterSheetState {
 				source: "Extra Attack",
 			});
 		}
+
+		// =========================================================
+		// SUBCLASS-GRANTED COMBAT TRADITIONS (TGTT)
+		// =========================================================
+		if (calculations._subclassGrantedTraditions) {
+			for (const {tradition, source} of calculations._subclassGrantedTraditions) {
+				effects.push({type: "combatTradition", tradition, source});
+			}
+		}
 	}
 
 	/**
@@ -16148,6 +16487,26 @@ class CharacterSheetState {
 				return `${effect.source}: ${effect.property} for ${effect.resource}`;
 			}
 
+			// ===== ABILITY SCORE BONUS =====
+			case "abilityScoreBonus": {
+				// Apply ability score increase with max cap
+				const current = this.getAbilityScore(effect.ability);
+				const maxScore = effect.maxScore || 20;
+				const increase = Math.min(effect.value, maxScore - current);
+				if (increase > 0) {
+					this.addAbilityBonus(effect.ability, increase);
+				}
+				return `${effect.source}: +${effect.value} ${effect.ability.toUpperCase()} (max ${maxScore})`;
+			}
+
+			// ===== COMBAT TRADITIONS (TGTT) =====
+			case "combatTradition": {
+				this.addCombatTradition(effect.tradition);
+				if (!this._data._classFeatureCombatTraditions) this._data._classFeatureCombatTraditions = [];
+				this._data._classFeatureCombatTraditions.push(effect.tradition);
+				return `${effect.source}: ${effect.tradition} tradition`;
+			}
+
 			default:
 				return null;
 		}
@@ -16275,6 +16634,14 @@ class CharacterSheetState {
 		this._data._classFeatureToolExpertise = false;
 		this._data._classFeatureAttunementSlots = null;
 		this._data._classFeatureIgnoreAttunementRequirements = false;
+
+		// Remove class feature combat traditions (TGTT subclass grants)
+		if (this._data._classFeatureCombatTraditions) {
+			this._data._classFeatureCombatTraditions.forEach(t => {
+				this.removeCombatTradition(t);
+			});
+		}
+		this._data._classFeatureCombatTraditions = [];
 
 		// Clear applied effects list
 		this._data.appliedClassFeatureEffects = [];
@@ -19092,6 +19459,12 @@ class CharacterSheetState {
 				}
 			}
 		}
+
+		// Include combat stance speed bonus (TGTT) — stances grant walking speed only
+		if (speedType === "walk") {
+			bonus += this._getActiveStanceEffects()?.speedBonus || 0;
+		}
+
 		return bonus;
 	}
 
@@ -19543,7 +19916,9 @@ class CharacterSheetState {
 		}
 
 		// Check if this feature grants a natural weapon and auto-add as attack
-		if (feature.description && NaturalWeaponParser.isNaturalWeapon(feature.description)) {
+		// Skip combat methods (CTM:) — they are not standalone attacks
+		const isCombatMethod = feature.optionalFeatureTypes?.some(ft => ft?.startsWith?.("CTM:"));
+		if (!isCombatMethod && feature.description && NaturalWeaponParser.isNaturalWeapon(feature.description)) {
 			const naturalWeapon = NaturalWeaponParser.parseNaturalWeapon(feature.description, feature.name);
 			if (naturalWeapon) {
 				// Check if attack already exists
@@ -20598,6 +20973,111 @@ class CharacterSheetState {
 	}
 
 	/**
+	 * Parse combat action effects from feature description text.
+	 * Extracts structured effects that the combat module can apply when the action is used.
+	 * @param {string} text - Lowercased, tag-stripped description text
+	 * @param {string} rawText - Original description text (may contain HTML)
+	 * @returns {object|null} Structured effects or null if none detected
+	 */
+	static _parseCombatActionEffects (text, rawText) {
+		const effects = {};
+		let hasEffect = false;
+
+		// --- Condition application ---
+		// "you become invisible", "you are invisible", "target is stunned", etc.
+		const conditionPatterns = [
+			{re: /you (?:become|are|turn) (invisible)\b/i, self: true},
+			{re: /(?:target|creature|enemy|it) (?:is|becomes|must be|be) (stunned|blinded|deafened|frightened|paralyzed|poisoned|prone|restrained|incapacitated|charmed|petrified|unconscious)\b/i, self: false},
+			{re: /(?:or (?:be|become)|saving throw or be) (stunned|blinded|deafened|frightened|paralyzed|poisoned|prone|restrained|incapacitated|charmed|petrified|invisible|unconscious)\b/i, self: false},
+			{re: /(?:applies?|inflicts?|imposes?|gains?) (?:the )?(stunned|blinded|deafened|frightened|paralyzed|poisoned|prone|restrained|incapacitated|charmed|petrified|invisible|unconscious) condition/i, self: false},
+		];
+		for (const {re, self} of conditionPatterns) {
+			const match = text.match(re);
+			if (match) {
+				const condName = match[1].toLowerCase();
+				// Try to extract duration from nearby text
+				let duration = null;
+				const durationMatch = text.match(/until (?:the )?(?:start|end) of (?:your|its|their) next turn/i)
+					|| text.match(/for (\d+) (?:minutes?|hours?|rounds?)/i)
+					|| text.match(/until (?:the )?(?:end of|start of) (?:your|the creature's) next turn/i);
+				if (durationMatch) {
+					duration = durationMatch[0];
+				}
+				effects.applyCondition = {name: condName, duration, self};
+				hasEffect = true;
+				break;
+			}
+		}
+
+		// --- Temporary HP ---
+		// "you gain X temporary hit points", "gain temporary hit points equal to Xd8 + WIS"
+		const tempHpMatch = text.match(/gain (\d+) temporary hit points/i)
+			|| text.match(/gains? (\d+) temporary hit points/i);
+		if (tempHpMatch) {
+			effects.grantTempHp = {value: parseInt(tempHpMatch[1])};
+			hasEffect = true;
+		} else {
+			const tempHpDice = text.match(/gain (?:temporary hit points equal to )?(\d+d\d+(?:\s*\+\s*\w+)?)\s*(?:temporary hit points)?/i);
+			if (tempHpDice) {
+				effects.grantTempHp = {formula: tempHpDice[1].replace(/\s+/g, "")};
+				hasEffect = true;
+			}
+		}
+
+		// --- Dice roll ---
+		// "deal Xd6 damage", "roll Xd8", "XdY + MOD damage"
+		const damageMatch = text.match(/(?:deal|deals?|takes?|suffers?|rolls?) (\d+d\d+(?:\s*\+\s*\w+)?)\s*(?:\w+\s+)?damage/i);
+		if (damageMatch) {
+			effects.rollDice = {
+				type: "damage",
+				formula: damageMatch[1].replace(/\s+/g, ""),
+				label: "Damage",
+			};
+			hasEffect = true;
+		}
+
+		// --- Healing roll ---
+		const healMatch = text.match(/(?:regains?|heals?|restores?) (\d+d\d+(?:\s*\+\s*\w+)?)\s*hit points/i);
+		if (healMatch) {
+			effects.rollDice = {
+				type: "healing",
+				formula: healMatch[1].replace(/\s+/g, ""),
+				label: "Healing",
+			};
+			hasEffect = true;
+		}
+
+		// --- Save prompt ---
+		// "DC X {ability} saving throw", "must succeed on a DC X {ability} save"
+		const saveMatch = text.match(/dc (\d+) (strength|dexterity|constitution|intelligence|wisdom|charisma) sav/i)
+			|| text.match(/(?:must (?:make|succeed on) (?:a )?)?(?:dc )?(\d+)?\s*(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+saving throw/i);
+		if (saveMatch && saveMatch[1]) {
+			if (!effects.rollDice) {
+				effects.rollDice = {};
+			}
+			effects.rollDice.dc = parseInt(saveMatch[1]);
+			effects.rollDice.saveAbility = saveMatch[2].toLowerCase().slice(0, 3);
+			effects.rollDice.type = effects.rollDice.type || "save";
+			hasEffect = true;
+		}
+
+		// --- Multi-target ---
+		if (/(?:each|all|every)\s+(?:creature|enemy|target)/i.test(text) || /any\s+number\s+of\s+creatures?/i.test(text)) {
+			effects.multiTarget = true;
+			hasEffect = true;
+		}
+
+		// --- Choice modal ---
+		// "choose one" / "you can replace one" / "you may choose" patterns
+		if (/choose (?:one|to)\b/i.test(text) || /you (?:can|may) (?:replace|choose)\b/i.test(text)) {
+			effects.choiceModal = true;
+			hasEffect = true;
+		}
+
+		return hasEffect ? effects : null;
+	}
+
+	/**
 	 * Parse mechanical effects from a combat method's entry text
 	 * @param {object} feature - The feature object
 	 * @returns {object} Parsed effects including exertionCost, actionType, saveType, isStance, degree, tradition
@@ -20611,6 +21091,11 @@ class CharacterSheetState {
 			degree: 0,
 			tradition: null,
 			stanceEffects: null,
+			isMultiTarget: false,
+			maxTargets: null, // null = unlimited (within reach), number = cap, "proficiency" = prof bonus
+			range: null, // {normal, long} for ranged methods like Wind Strike
+			grantsAdvantage: false,
+			bonusDamage: null, // e.g. {die: "1d6", condition: "per subsequent hit"}
 		};
 
 		// Extract degree and tradition from optionalFeatureTypes
@@ -20662,6 +21147,47 @@ class CharacterSheetState {
 		if (/This\s+stance\s+lasts/i.test(text) || /enter\s+(?:a\s+)?.*stance/i.test(text) || /adopt\s+(?:a\s+)?.*stance/i.test(text)) {
 			effects.isStance = true;
 			effects.stanceEffects = this._parseStanceEffects(text);
+		}
+
+		// Multi-target detection: "attack against any number of creatures within X ft"
+		if (/any\s+number\s+of\s+creatures?\s+within/i.test(text) || /attack\s+(?:against\s+)?(?:any\s+number|each\s+creature)/i.test(text)) {
+			effects.isMultiTarget = true;
+
+			// Check for target cap: "up to your proficiency bonus"
+			if (/up\s+to\s+(?:your\s+)?proficiency\s+bonus/i.test(text)) {
+				effects.maxTargets = "proficiency";
+			}
+		}
+
+		// Range override: "normal range of X feet and long range of Y feet"
+		const rangeMatch = text.match(/(?:normal\s+)?range\s+of\s+(\d+)\s*(?:feet|ft)\.?\s+and\s+(?:a\s+)?long\s+range\s+of\s+(\d+)\s*(?:feet|ft)/i);
+		if (rangeMatch) {
+			effects.range = {normal: parseInt(rangeMatch[1], 10), long: parseInt(rangeMatch[2], 10)};
+		}
+
+		// Advantage detection: "advantage on attack rolls"
+		if (/(?:have\s+)?advantage\s+on\s+attack\s+rolls/i.test(text)) {
+			effects.grantsAdvantage = true;
+		}
+
+		// Bonus damage parsing: "+1d6 damage" or "additional Xd6" or "extra weapon damage die"
+		const bonusDieMatch = text.match(/(?:additional|extra|bonus)\s+(\d+d\d+)\s*(?:damage)?/i);
+		if (bonusDieMatch) {
+			let condition = null;
+			if (/per\s+(?:subsequent|additional)\s+(?:hit|attack)/i.test(text) || /each\s+(?:subsequent|additional)\s+(?:hit|attack)/i.test(text) || /after\s+(?:the\s+)?first/i.test(text)) {
+				condition = "per subsequent hit";
+			} else if (/(?:both|two)\s+attack\s+rolls?\s+hit/i.test(text)) {
+				condition = "both attacks hit";
+			}
+			effects.bonusDamage = {die: bonusDieMatch[1], condition};
+		}
+		// "additional weapon damage die" (Wind Strike)
+		if (!effects.bonusDamage && /(?:additional|extra)\s+weapon\s+damage\s+die/i.test(text)) {
+			let condition = null;
+			if (/(?:both|two)\s+attack\s+rolls?\s+hit/i.test(text)) {
+				condition = "both attacks hit";
+			}
+			effects.bonusDamage = {die: "weapon", condition};
 		}
 
 		return effects;
@@ -26715,7 +27241,7 @@ class CharacterSheetState {
 		"acrobatic movement": "passive",
 		// Monk specialties that are passive enhancements
 		"adept speed": "passive",
-		"wall walk": "passive",
+		"wall walk": "combat",
 		"agile acrobat": "passive",
 		"perfect flow": "passive",
 		"sixth sense": "passive",
@@ -26738,9 +27264,15 @@ class CharacterSheetState {
 		"shadow walk": "combat",
 		"religious training": "combat",
 		"instant strike": "combat",
+		"whirlpool strike": "combat",
+		"whirlwind strike": "combat",
+		"wind strike": "combat",
 		"flurry of blows": "combat",
 		"step of the wind": "combat",
 		"slow fall": "combat",
+
+		// === Race feature combat actions ===
+		"shapechanger": "combat",
 
 		// === Reactions wrongly detected as activatable toggle states ===
 		"deflect attacks": "reaction",
@@ -26820,6 +27352,9 @@ class CharacterSheetState {
 				activationAction = "reaction";
 			}
 
+			// Build combatActionEffects from parsed description
+			const combatActionEffects = this._parseCombatActionEffects(text, rawText);
+
 			return {
 				stateTypeId: "custom",
 				isCustom: true,
@@ -26827,6 +27362,7 @@ class CharacterSheetState {
 				interactionMode: classificationOverride, // "combat" or "reaction"
 				activationAction: classificationOverride === "reaction" ? "reaction" : activationAction,
 				effects: parsedEffects,
+				combatActionEffects,
 				kiCost: kiMatch ? parseInt(kiMatch[1]) : null,
 				exertionCost: exertionMatch ? parseInt(exertionMatch[1]) : null,
 				isToggle: false,
