@@ -1629,6 +1629,39 @@ describe("Monk Core Class Features (XPHB 2024)", () => {
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.hasHeightenedFocus).toBe(true);
 		});
+
+		it("should NOT have Heightened Focus below level 10", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 9});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasHeightenedFocus).toBeFalsy();
+		});
+
+		it("should grant 3 Flurry of Blows attacks", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.heightenedFlurryAttacks).toBe(3);
+		});
+
+		it("should provide Patient Defense temp HP formula", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 10});
+			state.setAbilityBase("wis", 16); // +3 mod
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.heightenedPatientDefenseTempHp).toBeDefined();
+			// Should contain martial arts die + WIS mod
+			expect(calculations.heightenedPatientDefenseTempHp).toMatch(/d\d+\+3/);
+		});
+
+		it("should provide Step of the Wind extra distance", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.heightenedStepOfTheWindDistance).toBe(20);
+		});
+
+		it("should NOT have Heightened Focus for PHB Monk", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasHeightenedFocus).toBeFalsy();
+		});
 	});
 
 	// -------------------------------------------------------------------------
@@ -1639,6 +1672,24 @@ describe("Monk Core Class Features (XPHB 2024)", () => {
 			state.addClass({name: "Monk", source: "XPHB", level: 10});
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.hasSelfRestoration).toBe(true);
+		});
+
+		it("should NOT have Self-Restoration below level 10", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 9});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSelfRestoration).toBeFalsy();
+		});
+
+		it("should track charmed and frightened as conditions that end", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.selfRestorationConditions).toEqual(["charmed", "frightened"]);
+		});
+
+		it("should NOT have Self-Restoration for PHB Monk", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 10});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSelfRestoration).toBeFalsy();
 		});
 	});
 
@@ -1662,6 +1713,33 @@ describe("Monk Core Class Features (XPHB 2024)", () => {
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.hasDisciplinedSurvivor).toBe(true);
 		});
+
+		it("should NOT have Disciplined Survivor below level 14", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 13});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasDisciplinedSurvivor).toBeFalsy();
+		});
+
+		it("should grant proficiency in all six saving throws", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 14});
+			// Trigger effect application
+			state.getFeatureCalculations();
+			["str", "dex", "con", "int", "wis", "cha"].forEach(ability => {
+				expect(state.hasSaveProficiency(ability)).toBe(true);
+			});
+		});
+
+		it("should have reroll cost of 1 focus point", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 14});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.disciplinedSurvivorRerollCost).toBe(1);
+		});
+
+		it("should NOT have Disciplined Survivor for PHB Monk", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 14});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasDisciplinedSurvivor).toBeFalsy();
+		});
 	});
 
 	// -------------------------------------------------------------------------
@@ -1674,10 +1752,22 @@ describe("Monk Core Class Features (XPHB 2024)", () => {
 			expect(calculations.hasPerfectFocus).toBe(true);
 		});
 
+		it("should NOT have Perfect Focus below level 15", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 14});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPerfectFocus).toBeFalsy();
+		});
+
 		it("should recover 4 focus points", () => {
 			state.addClass({name: "Monk", source: "XPHB", level: 15});
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.perfectFocusRecovery).toBe(4);
+		});
+
+		it("should NOT have Perfect Focus for PHB Monk", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 15});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasPerfectFocus).toBeFalsy();
 		});
 	});
 
@@ -1691,10 +1781,30 @@ describe("Monk Core Class Features (XPHB 2024)", () => {
 			expect(calculations.hasSuperiorDefense).toBe(true);
 		});
 
+		it("should NOT have Superior Defense below level 18", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 17});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSuperiorDefense).toBeFalsy();
+		});
+
 		it("should cost 3 focus points", () => {
 			state.addClass({name: "Monk", source: "XPHB", level: 18});
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.superiorDefenseCost).toBe(3);
+		});
+
+		it("should register a conditional resistance modifier", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 18});
+			// Superior Defense creates a conditional modifier via the effects pipeline
+			const applied = state.getAppliedClassFeatureEffects();
+			const resistanceEffect = applied.find(e => e.includes("Superior Defense"));
+			expect(resistanceEffect).toBeDefined();
+		});
+
+		it("should NOT have Superior Defense for PHB Monk", () => {
+			state.addClass({name: "Monk", source: "PHB", level: 18});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasSuperiorDefense).toBeFalsy();
 		});
 	});
 
@@ -1707,6 +1817,93 @@ describe("Monk Core Class Features (XPHB 2024)", () => {
 			const calculations = state.getFeatureCalculations();
 			expect(calculations.hasBodyAndMind).toBe(true);
 		});
+
+		it("should NOT have Body and Mind below level 20", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 19});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.hasBodyAndMind).toBeFalsy();
+		});
+
+		it("should have +4 DEX and +4 WIS bonus values", () => {
+			state.addClass({name: "Monk", source: "XPHB", level: 20});
+			const calculations = state.getFeatureCalculations();
+			expect(calculations.bodyAndMindDexBonus).toBe(4);
+			expect(calculations.bodyAndMindWisBonus).toBe(4);
+			expect(calculations.bodyAndMindMaxScore).toBe(25);
+		});
+
+		it("should increase DEX score by 4", () => {
+			state.setAbilityBase("dex", 16);
+			state.addClass({name: "Monk", source: "XPHB", level: 20});
+			state.getFeatureCalculations();
+			expect(state.getAbilityScore("dex")).toBe(20); // 16 + 4 = 20
+		});
+
+		it("should increase WIS score by 4", () => {
+			state.setAbilityBase("wis", 14);
+			state.addClass({name: "Monk", source: "XPHB", level: 20});
+			state.getFeatureCalculations();
+			expect(state.getAbilityScore("wis")).toBe(18); // 14 + 4 = 18
+		});
+
+		it("should cap at 25 for DEX", () => {
+			state.setAbilityBase("dex", 22);
+			state.addClass({name: "Monk", source: "XPHB", level: 20});
+			state.getFeatureCalculations();
+			expect(state.getAbilityScore("dex")).toBe(25); // 22 + 3 (capped at 25)
+		});
+
+		it("should cap at 25 for WIS", () => {
+			state.setAbilityBase("wis", 23);
+			state.addClass({name: "Monk", source: "XPHB", level: 20});
+			state.getFeatureCalculations();
+			expect(state.getAbilityScore("wis")).toBe(25); // 23 + 2 (capped at 25)
+		});
+
+		it("should NOT increase DEX/WIS for PHB Monk", () => {
+			state.setAbilityBase("dex", 16);
+			state.setAbilityBase("wis", 14);
+			state.addClass({name: "Monk", source: "PHB", level: 20});
+			state.getFeatureCalculations();
+			expect(state.getAbilityScore("dex")).toBe(16);
+			expect(state.getAbilityScore("wis")).toBe(14);
+		});
+	});
+});
+
+// ==========================================================================
+// PART 13B: UNHINDERED FLURRY (TGTT LEVEL 8)
+// ==========================================================================
+describe("Unhindered Flurry (TGTT Level 8)", () => {
+	let state;
+
+	beforeEach(() => {
+		state = new CharacterSheetState();
+		state.setRace({name: "Human", source: "XPHB"});
+	});
+
+	it("should have Unhindered Flurry at level 8 for TGTT Monk", () => {
+		state.addClass({name: "Monk", source: "TGTT", level: 8});
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasUnhinderedFlurry).toBe(true);
+	});
+
+	it("should NOT have Unhindered Flurry below level 8 for TGTT Monk", () => {
+		state.addClass({name: "Monk", source: "TGTT", level: 7});
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasUnhinderedFlurry).toBeFalsy();
+	});
+
+	it("should NOT have Unhindered Flurry for XPHB Monk", () => {
+		state.addClass({name: "Monk", source: "XPHB", level: 8});
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasUnhinderedFlurry).toBeFalsy();
+	});
+
+	it("should NOT have Unhindered Flurry for PHB Monk", () => {
+		state.addClass({name: "Monk", source: "PHB", level: 8});
+		const calculations = state.getFeatureCalculations();
+		expect(calculations.hasUnhinderedFlurry).toBeFalsy();
 	});
 });
 

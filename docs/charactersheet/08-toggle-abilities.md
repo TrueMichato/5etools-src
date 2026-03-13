@@ -580,6 +580,37 @@ _renderActiveEffects() {
 }
 ```
 
+### Effect Summaries
+
+`summarizeEffects()` produces human-readable labels from effect definitions, used in combat UI badges:
+
+```javascript
+CharacterSheetState.summarizeEffects(patientDefense.effects);
+// → "Attacks against you have disadvantage; Advantage on DEX saves"
+```
+
+These labels appear in the combat panel when a state is active, providing at-a-glance visibility of mechanical effects.
+
+### Patient Defense — Enhanced Display (Phase C/E)
+
+Patient Defense is intentionally a **toggle state** (not a combat action) because its effects are ongoing and benefit from the state tracking system (round countdown, deactivation cleanup, effect aggregation).
+
+**Visual feedback enhancements:**
+- **Inline effect labels**: When Patient Defense is active, the combat panel shows "Attackers have disadvantage • Advantage on DEX saves"
+- **`summarizeEffects()`** generates these labels from the `effects` array
+- **Heightened Focus variant** (Monk XPHB L10): Also grants temp HP equal to `martialArtsDice + WIS mod` on Patient Defense activation
+- **Deactivation**: `removeActiveState()` clears all effects, including temp HP if Heightened Focus granted it
+
+**Test coverage** (in `CharacterSheetToggleAbilities.test.js`):
+- State type definition shape (effects, resourceName, resourceCost, activationAction, duration)
+- `summarizeEffects()` output string
+- Activation via `activateState()` and `isStateTypeActive()` check
+- Disadvantage on attacksAgainst present in effects array (note: `hasDisadvantageFromStates()` intentionally skips `attacksAgainst` — those affect enemies, not the player's rolls)
+- Advantage on DEX saves via `hasAdvantageFromStates("save:dex")`
+- Deactivation cleanup
+- `analyzeToggleability()` recognition from feature text
+- Heightened Focus temp HP formula
+
 ---
 
 ## Testing

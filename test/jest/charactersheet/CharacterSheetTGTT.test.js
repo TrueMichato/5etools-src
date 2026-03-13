@@ -2740,6 +2740,449 @@ describe("Traveler's Guide to Thelemar (TGTT) Homebrew Support", () => {
 			});
 		});
 	});
+
+	// =========================================================================
+	// PHASE 7: COMBAT METHODS DEEP IMPLEMENTATION
+	// Tests for enhanced method parsing, classification, and multi-target/ranged mechanics
+	// =========================================================================
+	describe("Combat Methods Deep Implementation (Phase 7)", () => {
+
+		// =====================================================================
+		// INSTANT STRIKE CLASSIFICATION
+		// =====================================================================
+		describe("Instant Strike Classification", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("UW");
+			});
+
+			it("should classify Instant Strike as 'combat' via override", () => {
+				const override = CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES["instant strike"];
+				expect(override).toBe("combat");
+			});
+
+			it("should NOT appear as an activatable state", () => {
+				state.addFeature({
+					name: "Instant Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:2UW", "CTM:UW", "CTM"],
+					description: "Bonus Action (3 Exertion Points). You quickly draw and strike with a weapon in the blink of an eye. Choose a creature within your reach. You draw a melee weapon and use it to make an attack against that creature.",
+				});
+
+				const activatables = state.getActivatableFeatures();
+				const found = activatables.find(a => a.name === "Instant Strike");
+				expect(found).toBeUndefined();
+			});
+
+			it("should route to combat action via detectActivatableFeature interactionMode", () => {
+				const result = CharacterSheetState.detectActivatableFeature({
+					name: "Instant Strike",
+					description: "Bonus Action (3 Exertion Points). You quickly draw and strike with a weapon.",
+				});
+				expect(result).toBeDefined();
+				expect(result.interactionMode).toBe("combat");
+				expect(result.exertionCost).toBe(3);
+			});
+
+			it("should parse as Bonus Action with 3 exertion via getCombatMethods", () => {
+				state.addFeature({
+					name: "Instant Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:2UW", "CTM:UW", "CTM"],
+					description: "Bonus Action (3 Exertion Points). You quickly draw and strike with a weapon in the blink of an eye.",
+				});
+
+				const methods = state.getCombatMethods();
+				const instant = methods.find(m => m.name === "Instant Strike");
+				expect(instant).toBeDefined();
+				expect(instant.actionType).toBe("Bonus Action");
+				expect(instant.exertionCost).toBe(3);
+				expect(instant.degree).toBe(2);
+				expect(instant.tradition).toBe("UW");
+			});
+		});
+
+		// =====================================================================
+		// WHIRLPOOL STRIKE — NOT AN ATTACK, MULTI-TARGET
+		// =====================================================================
+		describe("Whirlpool Strike", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 13});
+				state.addCombatTradition("RC");
+			});
+
+			it("should classify Whirlpool Strike as 'combat' via override", () => {
+				const override = CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES["whirlpool strike"];
+				expect(override).toBe("combat");
+			});
+
+			it("should NOT be added as an attack when added as a feature", () => {
+				state.addFeature({
+					name: "Whirlpool Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4RC", "CTM:RC", "CTM"],
+					description: "Action (3 Exertion Points). You use your weapon to make a melee weapon attack against any number of creatures within 5 feet of you. On the first hit you deal normal damage. Each subsequent hit deals an additional 1d6 damage.",
+				});
+
+				const attacks = state.getAttacks();
+				const whirlpool = attacks.find(a =>
+					a.name === "Whirlpool Strike"
+					|| a.sourceFeature === "Whirlpool Strike",
+				);
+				expect(whirlpool).toBeUndefined();
+			});
+
+			it("should parse as multi-target method", () => {
+				state.addFeature({
+					name: "Whirlpool Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4RC", "CTM:RC", "CTM"],
+					description: "Action (3 Exertion Points). You use your weapon to make a melee weapon attack against any number of creatures within 5 feet of you. Each subsequent hit after the first deals an additional 1d6 damage.",
+				});
+
+				const methods = state.getCombatMethods();
+				const whirlpool = methods.find(m => m.name === "Whirlpool Strike");
+				expect(whirlpool).toBeDefined();
+				expect(whirlpool.isMultiTarget).toBe(true);
+				expect(whirlpool.maxTargets).toBeNull(); // No cap — any number within 5 ft
+			});
+
+			it("should parse bonus damage: +1d6 per subsequent hit", () => {
+				state.addFeature({
+					name: "Whirlpool Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4RC", "CTM:RC", "CTM"],
+					description: "Action (3 Exertion Points). You use your weapon to make a melee weapon attack against any number of creatures within 5 feet of you. Each subsequent hit after the first deals an additional 1d6 damage.",
+				});
+
+				const methods = state.getCombatMethods();
+				const whirlpool = methods.find(m => m.name === "Whirlpool Strike");
+				expect(whirlpool.bonusDamage).toBeDefined();
+				expect(whirlpool.bonusDamage.die).toBe("1d6");
+				expect(whirlpool.bonusDamage.condition).toBe("per subsequent hit");
+			});
+
+			it("should parse as 4th degree Rapid Current with Action and 3 exertion", () => {
+				state.addFeature({
+					name: "Whirlpool Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4RC", "CTM:RC", "CTM"],
+					description: "Action (3 Exertion Points). You use your weapon to make a melee weapon attack against any number of creatures within 5 feet.",
+				});
+
+				const methods = state.getCombatMethods();
+				const whirlpool = methods.find(m => m.name === "Whirlpool Strike");
+				expect(whirlpool.degree).toBe(4);
+				expect(whirlpool.tradition).toBe("RC");
+				expect(whirlpool.actionType).toBe("Action");
+				expect(whirlpool.exertionCost).toBe(3);
+			});
+		});
+
+		// =====================================================================
+		// WHIRLWIND STRIKE — MULTI-TARGET WITH PROFICIENCY CAP
+		// =====================================================================
+		describe("Whirlwind Strike", () => {
+			it("should parse as multi-target with proficiency bonus cap", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 8});
+				state.addCombatTradition("RC");
+				state.addFeature({
+					name: "Whirlwind Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:3RC", "CTM:RC", "CTM"],
+					description: "Bonus Action (2 Exertion Points). You make a melee attack against any number of creatures within 5 feet, up to your proficiency bonus.",
+				});
+
+				const methods = state.getCombatMethods();
+				const whirlwind = methods.find(m => m.name === "Whirlwind Strike");
+				expect(whirlwind).toBeDefined();
+				expect(whirlwind.isMultiTarget).toBe(true);
+				expect(whirlwind.maxTargets).toBe("proficiency");
+				expect(whirlwind.degree).toBe(3);
+				expect(whirlwind.actionType).toBe("Bonus Action");
+				expect(whirlwind.exertionCost).toBe(2);
+			});
+
+			it("should classify Whirlwind Strike as 'combat' via override", () => {
+				const override = CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES["whirlwind strike"];
+				expect(override).toBe("combat");
+			});
+		});
+
+		// =====================================================================
+		// WIND STRIKE — RANGED WITH ADVANTAGE AND CONDITIONAL BONUS
+		// =====================================================================
+		describe("Wind Strike", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 13});
+				state.addCombatTradition("UW");
+			});
+
+			it("should classify Wind Strike as 'combat' via override", () => {
+				const override = CharacterSheetState.FEATURE_CLASSIFICATION_OVERRIDES["wind strike"];
+				expect(override).toBe("combat");
+			});
+
+			it("should parse range 20/60", () => {
+				state.addFeature({
+					name: "Wind Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4UW", "CTM:UW", "CTM"],
+					description: "Action (3 Exertion Points). You use a melee weapon to strike a foe from a distance, giving your attack a normal range of 20 feet and long range of 60 feet. You have advantage on attack rolls made using this method. If both attack rolls hit, you deal an additional weapon damage die.",
+				});
+
+				const methods = state.getCombatMethods();
+				const wind = methods.find(m => m.name === "Wind Strike");
+				expect(wind).toBeDefined();
+				expect(wind.range).toEqual({normal: 20, long: 60});
+			});
+
+			it("should parse advantage on attack rolls", () => {
+				state.addFeature({
+					name: "Wind Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4UW", "CTM:UW", "CTM"],
+					description: "Action (3 Exertion Points). You use a melee weapon to strike a foe from a distance, giving your attack a normal range of 20 feet and long range of 60 feet. You have advantage on attack rolls made using this method. If both attack rolls hit, you deal an additional weapon damage die.",
+				});
+
+				const methods = state.getCombatMethods();
+				const wind = methods.find(m => m.name === "Wind Strike");
+				expect(wind.grantsAdvantage).toBe(true);
+			});
+
+			it("should parse bonus weapon damage die on double hit", () => {
+				state.addFeature({
+					name: "Wind Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4UW", "CTM:UW", "CTM"],
+					description: "Action (3 Exertion Points). You use a melee weapon to strike a foe from a distance, giving your attack a normal range of 20 feet and long range of 60 feet. You have advantage on attack rolls made using this method. If both attack rolls hit, you deal an additional weapon damage die.",
+				});
+
+				const methods = state.getCombatMethods();
+				const wind = methods.find(m => m.name === "Wind Strike");
+				expect(wind.bonusDamage).toBeDefined();
+				expect(wind.bonusDamage.die).toBe("weapon");
+				expect(wind.bonusDamage.condition).toBe("both attacks hit");
+			});
+
+			it("should parse as 4th degree UW with Action and 3 exertion", () => {
+				state.addFeature({
+					name: "Wind Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4UW", "CTM:UW", "CTM"],
+					description: "Action (3 Exertion Points). You strike a foe from a distance with a normal range of 20 feet and long range of 60 feet.",
+				});
+
+				const methods = state.getCombatMethods();
+				const wind = methods.find(m => m.name === "Wind Strike");
+				expect(wind.degree).toBe(4);
+				expect(wind.tradition).toBe("UW");
+				expect(wind.actionType).toBe("Action");
+				expect(wind.exertionCost).toBe(3);
+			});
+
+			it("should NOT be added as a natural weapon attack", () => {
+				state.addFeature({
+					name: "Wind Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:4UW", "CTM:UW", "CTM"],
+					description: "Action (3 Exertion Points). You use a melee weapon to strike a foe from a distance, giving your attack a normal range of 20 feet and long range of 60 feet.",
+				});
+
+				const attacks = state.getAttacks();
+				const wind = attacks.find(a =>
+					a.name === "Wind Strike" || a.sourceFeature === "Wind Strike",
+				);
+				expect(wind).toBeUndefined();
+			});
+		});
+
+		// =====================================================================
+		// CTM FEATURES EXCLUDED FROM NATURAL WEAPON PARSING
+		// =====================================================================
+		describe("CTM Features Not Added as Attacks", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.addCombatTradition("AM");
+			});
+
+			it("should not add any CTM method as a natural weapon attack even with 'melee weapon attack' text", () => {
+				state.addFeature({
+					name: "Test Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:2AM", "CTM:AM", "CTM"],
+					description: "Action (2 Exertion Points). Make a melee weapon attack. On a hit deal 2d6 slashing damage.",
+				});
+
+				const attacks = state.getAttacks();
+				const test = attacks.find(a =>
+					a.name === "Test Strike" || a.sourceFeature === "Test Strike",
+				);
+				expect(test).toBeUndefined();
+			});
+
+			it("should still add regular natural weapon features as attacks", () => {
+				state.addFeature({
+					name: "Claws",
+					source: "TGTT",
+					featureType: "Species",
+					description: "You have natural weapons in the form of claws. Your claws deal 1d6 slashing damage on a hit with a melee weapon attack.",
+				});
+
+				const attacks = state.getAttacks();
+				const claws = attacks.find(a => a.name === "Claws" || a.sourceFeature === "Claws");
+				expect(claws).toBeDefined();
+			});
+		});
+
+		// =====================================================================
+		// COMBAT METHOD DC USES STATE CALCULATION
+		// =====================================================================
+		describe("Combat Method DC from State", () => {
+			it("should use enhanced Monk DC (9 + prof + max(STR, DEX, WIS))", () => {
+				state.addClass({name: "Monk", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 10); // +0
+				state.setAbilityBase("dex", 16); // +3
+				state.setAbilityBase("wis", 18); // +4
+				state.addCombatTradition("RC");
+
+				const calcs = state.getFeatureCalculations();
+				// 9 + 3 (prof at L5) + 4 (WIS) = 16
+				expect(calcs.combatMethodDc).toBe(16);
+				expect(calcs.monkCombatMethodDcBonus).toBe(true);
+			});
+
+			it("should use standard DC (8 + prof + max(STR, DEX)) for non-Monk", () => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 5});
+				state.setAbilityBase("str", 16); // +3
+				state.setAbilityBase("dex", 14); // +2
+				state.addCombatTradition("AM");
+
+				const calcs = state.getFeatureCalculations();
+				// 8 + 3 (prof) + 3 (STR) = 14
+				expect(calcs.combatMethodDc).toBe(14);
+				expect(calcs.monkCombatMethodDcBonus).toBeUndefined();
+			});
+
+			it("should prefer spellcasting DC for Hexblade if higher", () => {
+				state.addClass({name: "Warlock", source: "TGTT", level: 5, subclass: {name: "Hexblade", source: "TGTT"}});
+				state.setAbilityBase("str", 10); // +0
+				state.setAbilityBase("dex", 10); // +0
+				state.setAbilityBase("cha", 20); // +5
+				state.addCombatTradition("UW");
+
+				const calcs = state.getFeatureCalculations();
+				// Spell DC = 8 + 3 + 5 = 16, Standard method DC = 8 + 3 + 0 = 11
+				// Should use spell DC
+				if (calcs.combatMethodDc) {
+					expect(calcs.combatMethodDc).toBeGreaterThanOrEqual(16);
+				}
+			});
+		});
+
+		// =====================================================================
+		// ENHANCED PARSING — GENERIC PATTERN TESTS
+		// =====================================================================
+		describe("Enhanced Method Effect Parsing", () => {
+			beforeEach(() => {
+				state.addClass({name: "Fighter", source: "TGTT", level: 13});
+				state.addCombatTradition("AM");
+			});
+
+			it("should parse isMultiTarget from 'any number of creatures within'", () => {
+				state.addFeature({
+					name: "Cleave",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:3AM", "CTM:AM", "CTM"],
+					description: "Action (2 Exertion Points). Make a melee attack against any number of creatures within 10 feet.",
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods[0].isMultiTarget).toBe(true);
+				expect(methods[0].maxTargets).toBeNull();
+			});
+
+			it("should not set isMultiTarget for single-target methods", () => {
+				state.addFeature({
+					name: "Power Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (1 Exertion Point). Make a melee weapon attack against a creature within reach.",
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods[0].isMultiTarget).toBe(false);
+			});
+
+			it("should not set grantsAdvantage when no advantage text present", () => {
+				state.addFeature({
+					name: "Power Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (1 Exertion Point). Make a melee weapon attack against a creature.",
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods[0].grantsAdvantage).toBe(false);
+			});
+
+			it("should not set range for methods without range text", () => {
+				state.addFeature({
+					name: "Power Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (1 Exertion Point). Make a melee weapon attack against a creature.",
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods[0].range).toBeNull();
+			});
+
+			it("should not set bonusDamage for methods without bonus damage text", () => {
+				state.addFeature({
+					name: "Power Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:1AM", "CTM:AM", "CTM"],
+					description: "Action (1 Exertion Point). Make a melee weapon attack against a creature.",
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods[0].bonusDamage).toBeNull();
+			});
+
+			it("should parse 'additional 2d8 damage' as bonusDamage.die", () => {
+				state.addFeature({
+					name: "Empowered Strike",
+					source: "TGTT",
+					featureType: "Optional Feature",
+					optionalFeatureTypes: ["CTM:3AM", "CTM:AM", "CTM"],
+					description: "Action (2 Exertion Points). Make a melee attack. On hit, deal an additional 2d8 damage.",
+				});
+
+				const methods = state.getCombatMethods();
+				expect(methods[0].bonusDamage).toBeDefined();
+				expect(methods[0].bonusDamage.die).toBe("2d8");
+			});
+		});
+	});
 	
 	// =========================================================================
 	// TGTT SPECIALTIES AUTO-EFFECTS

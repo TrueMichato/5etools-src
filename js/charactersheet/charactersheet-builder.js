@@ -30,6 +30,7 @@ class CharacterSheetBuilder {
 		this._selectedFeatureOptions = {}; // For class/subclass features with embedded options (like Specialties)
 		this._selectedFeatureSkillChoices = {}; // For specialty features that require skill/expertise choices
 		this._selectedCombatTraditions = []; // For combat tradition proficiency choices (Thelemar homebrew)
+		this._selectedClassToolProficiencies = []; // For class tool proficiency choices (e.g., Monk artisan/instrument)
 		this._selectedRacialSkills = []; // For racial skill proficiency choices (e.g., Elf)
 		this._selectedRacialTools = []; // For racial tool proficiency choices (e.g., Dwarf)
 		this._selectedRacialLanguages = {}; // For racial language proficiency choices, keyed by profIdx
@@ -1332,10 +1333,19 @@ class CharacterSheetBuilder {
 			});
 		}
 
-		// Tool proficiencies
-		if (this._selectedClass.startingProficiencies?.tools) {
+		// Tool proficiencies — user-selected class tool choices (e.g., Monk artisan/instrument)
+		if (this._selectedClassToolProficiencies?.length) {
+			this._selectedClassToolProficiencies.forEach(choice => {
+				if (choice.tool) {
+					this._state.addToolProficiency(choice.tool.toTitleCase());
+				}
+			});
+		} else if (this._selectedClass.startingProficiencies?.tools) {
+			// Fallback: parse text tool descriptions (for classes without structured toolProficiencies)
 			this._selectedClass.startingProficiencies.tools.forEach(tool => {
 				if (typeof tool === "string") {
+					// Skip choice descriptions like "any one type of..." — handled by UI above
+					if (/\bany\b.*\bchoice\b|\bchoose\b/i.test(tool)) return;
 					// Extract tool name from {@item} tags if present and normalize
 					const toolName = tool.replace(/{@item\s+([^|}]+)[^}]*}/gi, "$1").toTitleCase();
 					this._state.addToolProficiency(toolName);
@@ -3605,6 +3615,12 @@ class CharacterSheetBuilder {
 			$content.append($(`<p><strong>Tools:</strong> ${Renderer.get().render(tools)}</p>`));
 		}
 
+		// Tool proficiency choices (structured data — e.g., Monk: choose artisan OR instrument)
+		if (cls.startingProficiencies?.toolProficiencies) {
+			const $toolChoiceSection = this._renderClassToolProficiencyChoice(cls);
+			if ($toolChoiceSection) $content.append($toolChoiceSection);
+		}
+
 		// Skills selection
 		if (cls.startingProficiencies?.skills) {
 			const skillChoices = cls.startingProficiencies.skills;
@@ -3683,6 +3699,131 @@ class CharacterSheetBuilder {
 		$content.append($quickBuildSection);
 
 		$preview.append($content);
+	}
+
+	/**
+	 * Render tool proficiency choice UI for class starting proficiencies.
+	 * Handles anyArtisansTool/anyMusicalInstrument structured data.
+	 */
+	_renderClassToolProficiencyChoice (cls) {
+		const toolProfs = cls.startingProficiencies.toolProficiencies;
+		let anyArtisanCount = 0;
+		let anyMusicalCount = 0;
+
+		for (const tp of toolProfs) {
+			if (tp.anyArtisansTool) anyArtisanCount += tp.anyArtisansTool;
+			if (tp.anyMusicalInstrument) anyMusicalCount += tp.anyMusicalInstrument;
+		}
+
+		// Common case: choose 1 artisan OR 1 musical instrument (Monk)
+		if (anyArtisanCount === 1 && anyMusicalCount === 1) {
+			const $section = $(`<div class="charsheet__builder-tool-choice mt-2"></div>`);
+			$section.append(`<p class="mb-1"><strong>Tool Proficiency:</strong> Choose one artisan's tool or musical instrument</p>`);
+
+			const artisanTools = Renderer.generic.FEATURE__TOOLS_ARTISANS || [];
+			const musicalInstruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS || [];
+
+			const $categorySelect = $(`
+				<select class="form-control form-control--minimal mb-1">
+					<option value="">-- Select Category --</option>
+					<option value="artisan">Artisan's Tools</option>
+					<option value="instrument">Musical Instrument</option>
+				</select>
+			`);
+
+			const $toolSelect = $(`
+				<select class="form-control form-control--minimal mb-1" style="display: none;">
+					<option value="">-- Select Tool --</option>
+				</select>
+			`);
+
+			// Pre-select if already chosen
+			const existing = this._selectedClassToolProficiencies.find(t => t.isArtisanOrInstrument);
+			const populateToolSelect = (category) => {
+				$toolSelect.empty().append(`<option value="">-- Select ${category === "artisan" ? "Artisan's Tool" : "Musical Instrument"} --</option>`);
+				const tools = category === "artisan" ? artisanTools : musicalInstruments;
+				tools.forEach(tool => {
+					$toolSelect.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+				});
+				$toolSelect.show();
+			};
+
+			if (existing) {
+				const cat = existing.isArtisan ? "artisan" : "instrument";
+				$categorySelect.val(cat);
+				populateToolSelect(cat);
+				$toolSelect.val(existing.tool);
+			}
+
+			$categorySelect.on("change", (e) => {
+				this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !t.isArtisanOrInstrument);
+				if (e.target.value) {
+					populateToolSelect(e.target.value);
+				} else {
+					$toolSelect.hide();
+				}
+			});
+
+			$toolSelect.on("change", (e) => {
+				this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !t.isArtisanOrInstrument);
+				const category = $categorySelect.val();
+				if (e.target.value) {
+					this._selectedClassToolProficiencies.push({
+						tool: e.target.value,
+						isArtisan: category === "artisan",
+						isMusicalInstrument: category === "instrument",
+						isArtisanOrInstrument: true,
+					});
+				}
+			});
+
+			$section.append($categorySelect, $toolSelect);
+			return $section;
+		}
+
+		// Fallback: individual artisan/instrument pickers
+		if (anyArtisanCount > 0 || anyMusicalCount > 0) {
+			const $section = $(`<div class="charsheet__builder-tool-choice mt-2"></div>`);
+			$section.append(`<p class="mb-1"><strong>Tool Proficiency Choices:</strong></p>`);
+
+			for (let i = 0; i < anyArtisanCount; i++) {
+				const tools = Renderer.generic.FEATURE__TOOLS_ARTISANS || [];
+				const $select = $(`<select class="form-control form-control--minimal mb-1"><option value="">-- Select Artisan's Tool --</option></select>`);
+				tools.forEach(tool => $select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`));
+
+				const existing = this._selectedClassToolProficiencies.find(t => t.isArtisan && t.idx === i);
+				if (existing) $select.val(existing.tool);
+
+				$select.on("change", (e) => {
+					this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !(t.isArtisan && t.idx === i));
+					if (e.target.value) {
+						this._selectedClassToolProficiencies.push({tool: e.target.value, isArtisan: true, idx: i});
+					}
+				});
+				$section.append($select);
+			}
+
+			for (let i = 0; i < anyMusicalCount; i++) {
+				const instruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS || [];
+				const $select = $(`<select class="form-control form-control--minimal mb-1"><option value="">-- Select Musical Instrument --</option></select>`);
+				instruments.forEach(tool => $select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`));
+
+				const existing = this._selectedClassToolProficiencies.find(t => t.isMusicalInstrument && t.idx === i);
+				if (existing) $select.val(existing.tool);
+
+				$select.on("change", (e) => {
+					this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !(t.isMusicalInstrument && t.idx === i));
+					if (e.target.value) {
+						this._selectedClassToolProficiencies.push({tool: e.target.value, isMusicalInstrument: true, idx: i});
+					}
+				});
+				$section.append($select);
+			}
+
+			return $section;
+		}
+
+		return null;
 	}
 
 	_renderClassSkillSelection (cls, skillChoices) {

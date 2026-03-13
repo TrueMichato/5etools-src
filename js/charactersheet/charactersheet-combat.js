@@ -430,7 +430,7 @@ class CharacterSheetCombat {
 		if (attackId?.startsWith?.("auto_")) {
 			// Extract the weapon ID from the attack ID (format: auto_weaponId)
 			const weaponId = attackId.substring(5); // Remove "auto_" prefix
-			const weapon = this._state.getInventory().find(item => item.id === weaponId);
+			const weapon = this._state.getItems().find(item => item.id === weaponId);
 
 			if (!weapon) {
 				JqueryUtil.doToast({type: "warning", content: "Weapon not found in inventory."});
@@ -524,6 +524,8 @@ class CharacterSheetCombat {
 					<div class="charsheet__attack-field">
 						<label class="charsheet__attack-label">Ability</label>
 						<select class="charsheet__attack-select charsheet__attack-select--ability">
+							<option value="finesse" ${attack.abilityMod === "finesse" ? "selected" : ""}>Finesse (STR/DEX)</option>
+							<option value="spellcasting" ${attack.abilityMod === "spellcasting" ? "selected" : ""}>Spellcasting (INT/WIS/CHA)</option>
 							${Parser.ABIL_ABVS.map(a => `<option value="${a}" ${attack.abilityMod === a ? "selected" : ""}>${Parser.attAbvToFull(a)} (${a.toUpperCase()})</option>`).join("")}
 						</select>
 					</div>
@@ -1267,6 +1269,12 @@ class CharacterSheetCombat {
 			// Roll death save
 			const roll = this._page.rollDice(1, 20);
 
+			// C9: Disciplined Survivor adds proficiency bonus to death saves
+			const calc = this._state.getFeatureCalculations?.() || {};
+			const profBonus = calc.hasDeathSaveProficiency ? (this._state.getProficiencyBonus?.() || 0) : 0;
+			const total = roll + profBonus;
+			const profNote = profBonus > 0 ? ` (+${profBonus} prof)` : "";
+
 			if (roll === 20) {
 				// Natural 20: regain 1 HP
 				this._state.heal(1);
@@ -1280,27 +1288,27 @@ class CharacterSheetCombat {
 				this._page.showDiceResult({
 					title: "Death Save",
 					roll,
-					total: roll,
+					total,
 					resultClass: "text-danger",
-					resultNote: " (2 Failures!)",
+					resultNote: ` (2 Failures!)${profNote}`,
 				});
-			} else if (roll >= 10) {
+			} else if (total >= 10) {
 				deathSaves.successes = Math.min(3, deathSaves.successes + 1);
 				this._page.showDiceResult({
 					title: "Death Save",
 					roll,
-					total: roll,
+					total,
 					resultClass: "text-success",
-					resultNote: " (Success)",
+					resultNote: ` (Success)${profNote}`,
 				});
 			} else {
 				deathSaves.failures = Math.min(3, deathSaves.failures + 1);
 				this._page.showDiceResult({
 					title: "Death Save",
 					roll,
-					total: roll,
+					total,
 					resultClass: "text-danger",
-					resultNote: " (Failure)",
+					resultNote: ` (Failure)${profNote}`,
 				});
 			}
 		}
@@ -1569,6 +1577,33 @@ class CharacterSheetCombat {
 		$(".charsheet__death-save-failure .charsheet__death-save-pip").each((i, el) => {
 			$(el).toggleClass("filled", i < deathSaves.failures);
 		});
+
+		// C9: Render Disciplined Survivor reroll button + proficiency note
+		const calc = this._state.getFeatureCalculations?.() || {};
+		const $rerollContainer = $(".charsheet__death-save-reroll");
+		if ($rerollContainer.length) {
+			$rerollContainer.empty();
+			if (calc.hasDisciplinedSurvivor) {
+				const profBonus = this._state.getProficiencyBonus?.() || 0;
+				if (profBonus > 0) {
+					$rerollContainer.append(`<span class="ve-small ve-muted mr-2">+${profBonus} prof</span>`);
+				}
+				const rerollCost = calc.disciplinedSurvivorRerollCost || 1;
+				const $btn = $(`<button class="ve-btn ve-btn-xs ve-btn-primary" title="Spend ${rerollCost} Focus Point to reroll a failed death save">Reroll (${rerollCost} Focus)</button>`);
+				$btn.on("click", () => {
+					const focusPoints = this._state.getResource?.("focusPoints") || this._state.getFocusPoints?.() || 0;
+					if (focusPoints < rerollCost) {
+						JqueryUtil.doToast({type: "warning", content: "Not enough Focus Points to reroll!"});
+						return;
+					}
+					if (this._state.spendResource) this._state.spendResource("focusPoints", rerollCost);
+					else if (this._state.spendFocusPoints) this._state.spendFocusPoints(rerollCost);
+					this._rollDeathSave();
+					JqueryUtil.doToast({type: "info", content: `Spent ${rerollCost} Focus Point to reroll death save`});
+				});
+				$rerollContainer.append($btn);
+			}
+		}
 	}
 
 	renderCombatSpells () {
@@ -1855,6 +1890,23 @@ class CharacterSheetCombat {
 
 		// Render class/race/feat actions first
 		for (const feature of combatActions) {
+			// Enrich feature with parsed combat action effects if not already present
+			if (!feature.combatActionEffects) {
+				const desc = feature.description || "";
+				const textClean = desc.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
+				feature.combatActionEffects = CharacterSheetState._parseCombatActionEffects?.(textClean, desc) || null;
+			}
+
+			// Merge calculation-driven effects for features with pre-computed data
+			const calc = this._state.getFeatureCalculations?.() || {};
+			const nameLower = feature.name?.toLowerCase() || "";
+			if (nameLower === "wall walk" && calc.wallWalkSpiderClimbEffects) {
+				feature.combatActionEffects = {...(feature.combatActionEffects || {}), ...calc.wallWalkSpiderClimbEffects};
+			}
+			if (nameLower === "instant step" && calc.instantStepEffects) {
+				feature.combatActionEffects = {...(feature.combatActionEffects || {}), ...calc.instantStepEffects};
+			}
+
 			const $action = this._createCombatActionElement(feature);
 			$container.append($action);
 		}
@@ -2244,6 +2296,24 @@ class CharacterSheetCombat {
 			features[idx].uses = feature.uses;
 		}
 
+		// Apply combat action effects (conditions, temp HP, state activation)
+		const effects = feature.combatActionEffects;
+		if (effects) {
+			this._applyCombatActionEffects(feature, effects);
+		}
+
+		// C6: Flurry of Healing and Harm — show choice modal when using Flurry of Blows
+		const nameLower = feature.name?.toLowerCase() || "";
+		const calc = this._state.getFeatureCalculations?.() || {};
+		if (nameLower === "flurry of blows" && calc.hasFlurryOfHealingAndHarm) {
+			this._showFlurryChoiceModal(feature, calc);
+		}
+
+		// C11: Whirlpool Strike — show multi-target workflow
+		if (nameLower === "whirlpool strike") {
+			this._showWhirlpoolStrikeModal(feature);
+		}
+
 		// Re-render
 		this.renderCombatActions();
 		this.renderCombatResources();
@@ -2262,6 +2332,340 @@ class CharacterSheetCombat {
 			content: `Used ${feature.name}!${remainingText}${costText}`,
 		});
 	}
+
+	// region Combat Action Effects Pipeline
+
+	/**
+	 * Apply combat action effects after resource deduction.
+	 * Processes conditions, temp HP, state activation, and dice rolls.
+	 * @param {object} feature - The feature being used
+	 * @param {object} effects - The combatActionEffects object
+	 */
+	_applyCombatActionEffects (feature, effects) {
+		if (!effects) return;
+
+		// Apply condition (e.g., Instant Step → invisible)
+		if (effects.applyCondition) {
+			const cond = effects.applyCondition;
+			const added = this._state.addCondition?.({
+				name: cond.name,
+				source: feature.name,
+			});
+			if (added) {
+				const durationText = cond.duration ? ` (${cond.duration})` : "";
+				JqueryUtil.doToast({
+					type: "info",
+					content: `${feature.name}: Applied ${cond.name}${durationText}`,
+				});
+			}
+		}
+
+		// Activate a toggle state (e.g., a stance)
+		if (effects.activateState) {
+			this._page._activateState?.(effects.activateState);
+		}
+
+		// Grant temporary HP
+		if (effects.grantTempHp) {
+			const tempHp = this._resolveTempHp(effects.grantTempHp, feature);
+			if (tempHp > 0) {
+				const currentTemp = this._state.getTempHp?.() || 0;
+				// Temp HP doesn't stack — use the higher value
+				if (tempHp > currentTemp) {
+					this._state.setTempHp?.(tempHp);
+					JqueryUtil.doToast({
+						type: "info",
+						content: `${feature.name}: Gained ${tempHp} temporary HP`,
+					});
+				}
+			}
+		}
+
+		// Remove a condition
+		if (effects.removeCondition) {
+			const removed = this._state.removeCondition?.(effects.removeCondition);
+			if (removed) {
+				JqueryUtil.doToast({
+					type: "info",
+					content: `${feature.name}: Removed ${effects.removeCondition}`,
+				});
+			}
+		}
+
+		// Roll dice (damage, healing, etc.)
+		if (effects.rollDice) {
+			this._rollCombatActionDice(feature, effects.rollDice);
+		}
+	}
+
+	/**
+	 * Resolve a temp HP formula to a concrete number.
+	 * Supports static numbers and simple formulas like "1d8+WIS".
+	 * @param {object} config - {formula: string} or {value: number}
+	 * @param {object} feature - The source feature (for context)
+	 * @returns {number} Resolved temp HP value
+	 */
+	_resolveTempHp (config, feature) {
+		if (typeof config.value === "number") return config.value;
+		if (!config.formula) return 0;
+
+		// Parse dice formula: NdX+MOD
+		const diceMatch = config.formula.match(/(\d+)d(\d+)(?:\s*\+\s*(\w+))?/i);
+		if (diceMatch) {
+			const numDice = parseInt(diceMatch[1]);
+			const dieSize = parseInt(diceMatch[2]);
+			const modStr = diceMatch[3];
+			let roll = 0;
+			for (let i = 0; i < numDice; i++) {
+				roll += (typeof RollerUtil !== "undefined" ? RollerUtil.randomise(dieSize) : Math.ceil(Math.random() * dieSize));
+			}
+			let mod = 0;
+			if (modStr) {
+				const abilityMod = this._state.getAbilityMod?.(modStr.toLowerCase());
+				mod = typeof abilityMod === "number" ? abilityMod : (parseInt(modStr) || 0);
+			}
+			return roll + mod;
+		}
+
+		// Static number
+		const num = parseInt(config.formula);
+		return isNaN(num) ? 0 : num;
+	}
+
+	/**
+	 * Roll dice for a combat action and display the result.
+	 * Supports attack rolls (d20 with bonus), save prompts (DC display), and damage dice.
+	 * @param {object} feature - The feature being used
+	 * @param {object} diceConfig - Configuration for the roll
+	 * @param {string} [diceConfig.type] - "attack", "save", "damage", "healing"
+	 * @param {string} [diceConfig.formula] - Dice formula (e.g., "2d6+3")
+	 * @param {string} [diceConfig.label] - Display label for the roll
+	 * @param {number} [diceConfig.dc] - DC for save-type rolls
+	 * @param {string} [diceConfig.saveAbility] - Ability for save-type rolls
+	 * @param {number} [diceConfig.attackBonus] - Bonus for attack-type rolls
+	 * @param {"advantage"|"disadvantage"|"normal"} [diceConfig.mode] - Roll mode
+	 */
+	_rollCombatActionDice (feature, diceConfig) {
+		if (!diceConfig) return;
+
+		const type = diceConfig.type || "damage";
+
+		if (type === "attack") {
+			const bonus = diceConfig.attackBonus || 0;
+			const mode = diceConfig.mode || "normal";
+			const result = this._page.rollD20?.({mode}) || {roll: 10, roll1: 10, roll2: 10, mode};
+			const total = result.roll + bonus;
+			const bonusStr = bonus >= 0 ? `+${bonus}` : `${bonus}`;
+			const modeNote = mode !== "normal" ? ` (${mode})` : "";
+			this._page._showDiceResult?.(
+				`${feature.name} — Attack Roll`,
+				total,
+				`d20(${result.roll}) ${bonusStr}${modeNote}`,
+				result.roll === 20 ? "charsheet__dice-crit" : result.roll === 1 ? "charsheet__dice-fumble" : "",
+			);
+			return {type: "attack", total, roll: result.roll, isNat20: result.roll === 20, isNat1: result.roll === 1};
+		}
+
+		if (type === "save") {
+			const dc = diceConfig.dc || 10;
+			const ability = diceConfig.saveAbility || "con";
+			const abilityName = ability.charAt(0).toUpperCase() + ability.slice(1).toUpperCase();
+			this._page._showDiceResult?.(
+				`${feature.name} — Save Required`,
+				`DC ${dc}`,
+				`${abilityName} saving throw`,
+			);
+			return {type: "save", dc, saveAbility: ability};
+		}
+
+		if (type === "damage" || type === "healing") {
+			const formula = diceConfig.formula;
+			if (!formula) return null;
+			const result = this._parseDamage(formula);
+			const label = diceConfig.label || (type === "healing" ? "Healing" : "Damage");
+			this._page._showDiceResult?.(
+				`${feature.name} — ${label}`,
+				result.total,
+				`${formula} = [${result.rolls.join(", ")}]`,
+			);
+			return {type, total: result.total, rolls: result.rolls};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Show a choice modal for combat actions with multiple sub-options.
+	 * Used for abilities like Flurry of Healing/Harm where the user picks a variant.
+	 * @param {object} feature - The parent feature
+	 * @param {Array<{name: string, description?: string, effects?: object}>} choices - Available sub-actions
+	 * @param {Function} [onChoice] - Callback receiving the chosen option
+	 * @returns {Promise<object|null>} The chosen option, or null if cancelled
+	 */
+	async _showCombatActionChoiceModal (feature, choices, onChoice) {
+		if (!choices?.length) return null;
+
+		const {$modalInner, doClose, pGetResolved} = await UiUtil.pGetShowModal({
+			title: `${feature.name} — Choose`,
+			isMinHeight0: true,
+			zIndex: 10003,
+			isUncappedHeight: true,
+		});
+
+		let resolved = null;
+
+		for (const choice of choices) {
+			const $btn = $(`<button class="ve-btn ve-btn-default w-100 mb-2 text-left p-2">
+				<div class="bold">${choice.name}</div>
+				${choice.description ? `<div class="ve-muted ve-small mt-1">${choice.description}</div>` : ""}
+			</button>`);
+
+			$btn.on("click", () => {
+				resolved = choice;
+				if (onChoice) onChoice(choice);
+				doClose(true);
+			});
+
+			$modalInner.append($btn);
+		}
+
+		// Cancel button
+		$(`<button class="ve-btn ve-btn-default w-100 mt-2 ve-muted">Cancel</button>`)
+			.on("click", () => doClose(false))
+			.appendTo($modalInner);
+
+		await pGetResolved;
+		return resolved;
+	}
+
+	// endregion
+
+	// region Feature-Specific Modal Flows (Phase C)
+
+	/**
+	 * C6: Show choice modal for Flurry of Healing and Harm.
+	 * When using Flurry of Blows at level 11+, one unarmed strike can be
+	 * replaced with Hand of Healing or Hand of Harm.
+	 */
+	async _showFlurryChoiceModal (feature, calc) {
+		const martialArtsDie = calc.martialArtsDie || "1d6";
+		const wisMod = this._state.getAbilityMod?.("wis") || 0;
+
+		const choices = [
+			{
+				name: "Hand of Healing",
+				description: `Restore ${martialArtsDie}+${wisMod} HP to a creature you touch`,
+				effects: {rollDice: {type: "healing", formula: `${martialArtsDie}+${wisMod}`, label: "Healing"}},
+			},
+			{
+				name: "Hand of Harm",
+				description: `Deal ${martialArtsDie}+${wisMod} necrotic damage (on unarmed hit)`,
+				effects: {rollDice: {type: "damage", formula: `${martialArtsDie}+${wisMod}`, label: "necrotic damage"}},
+			},
+		];
+
+		const chosen = await this._showCombatActionChoiceModal(feature, choices, (choice) => {
+			if (choice.effects) {
+				this._applyCombatActionEffects(feature, choice.effects);
+			}
+		});
+
+		if (chosen) {
+			JqueryUtil.doToast({
+				type: "info",
+				content: `${feature.name}: Chose ${chosen.name}`,
+			});
+		}
+	}
+
+	/**
+	 * C11: Show multi-target workflow modal for Whirlpool Strike.
+	 * Lets user choose number of targets, pick an attack, roll each,
+	 * and calculates escalating bonus damage per subsequent hit.
+	 */
+	async _showWhirlpoolStrikeModal (feature) {
+		const {$modalInner, doClose, pGetResolved} = await UiUtil.pGetShowModal({
+			title: `${feature.name} — Multi-Target Attack`,
+			isMinHeight0: true,
+			zIndex: 10003,
+			isUncappedHeight: true,
+		});
+
+		// Get available melee attacks
+		const attacks = (this._state.getAttacks?.() || []).filter(a =>
+			a.isMelee || a.type === "melee" || (a.range && !a.range.includes("/")),
+		);
+
+		if (!attacks.length) {
+			$modalInner.append(`<div class="ve-muted p-2">No melee attacks available</div>`);
+			$(`<button class="ve-btn ve-btn-default w-100 mt-2">Close</button>`)
+				.on("click", () => doClose(false))
+				.appendTo($modalInner);
+			await pGetResolved;
+			return;
+		}
+
+		// Step 1: Choose number of creatures
+		$modalInner.append(`<div class="mb-2 ve-small"><strong>How many creatures?</strong> (each in reach)</div>`);
+		const $numInput = $(`<input type="number" class="form-control form-control-sm mb-3" min="1" max="10" value="2" style="width: 80px;">`);
+		$modalInner.append($numInput);
+
+		// Step 2: Choose weapon
+		$modalInner.append(`<div class="mb-2 ve-small"><strong>Choose weapon attack:</strong></div>`);
+		const $select = $(`<select class="form-control form-control-sm mb-3"></select>`);
+		for (const atk of attacks) {
+			$select.append(`<option value="${atk.id}">${atk.name} (+${atk.attackBonus || 0})</option>`);
+		}
+		$modalInner.append($select);
+
+		// Step 3: Roll button and results
+		const $resultArea = $(`<div class="charsheet__whirlpool-results"></div>`);
+		$modalInner.append($resultArea);
+
+		const $rollBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary mb-2">🎲 Roll Attacks</button>`);
+		$rollBtn.on("click", () => {
+			const numTargets = Math.max(1, Math.min(10, parseInt($numInput.val()) || 2));
+			const selectedAtkId = $select.val();
+			const selectedAtk = attacks.find(a => String(a.id) === String(selectedAtkId)) || attacks[0];
+			const bonus = selectedAtk.attackBonus || 0;
+
+			$resultArea.empty();
+			const rows = [];
+			for (let i = 0; i < numTargets; i++) {
+				const result = this._page.rollD20?.({mode: "normal"}) || {roll: 10};
+				const total = result.roll + bonus;
+				const bonusDamage = i > 0 ? `+${i}d6` : "—";
+				const critClass = result.roll === 20 ? "text-success bold" : result.roll === 1 ? "text-danger bold" : "";
+				rows.push(`<tr>
+					<td>${i + 1}</td>
+					<td class="${critClass}">${result.roll}</td>
+					<td>${total}</td>
+					<td>${bonusDamage}</td>
+				</tr>`);
+			}
+			$resultArea.html(`
+				<table class="w-100 ve-small mb-2" style="border-collapse: collapse;">
+					<thead><tr>
+						<th class="p-1 border-bottom">Target</th>
+						<th class="p-1 border-bottom">Roll</th>
+						<th class="p-1 border-bottom">Total</th>
+						<th class="p-1 border-bottom">Bonus Dmg</th>
+					</tr></thead>
+					<tbody>${rows.join("")}</tbody>
+				</table>
+				<div class="ve-muted ve-small">Bonus damage: 2nd target +1d6, 3rd +2d6, etc.</div>
+			`);
+		});
+		$modalInner.append($rollBtn);
+
+		$(`<button class="ve-btn ve-btn-default w-100 mt-2">Close</button>`)
+			.on("click", () => doClose(false))
+			.appendTo($modalInner);
+
+		await pGetResolved;
+	}
+
+	// endregion
 
 	/**
 	 * Parse a resource cost (ki/focus/exertion) from a feature's description.
@@ -2282,13 +2686,15 @@ class CharacterSheetCombat {
 
 	/**
 	 * Show a detail modal for a combat action feature.
-	 * Shows full description, action type, resource cost, and a Use button.
+	 * Shows full description, action type, resource cost, effects preview,
+	 * interactive dice rolls, and a Use button.
 	 */
 	async _showCombatActionModal (feature) {
 		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: feature.name,
 			isMinHeight0: true,
 			zIndex: 10002,
+			isUncappedHeight: true,
 		});
 
 		// Action type
@@ -2352,6 +2758,23 @@ class CharacterSheetCombat {
 			} catch { /* fall through */ }
 		}
 
+		// Feature-specific content (strike counts, choice hints, range, etc.)
+		const $featureContent = this._getFeatureSpecificContent(feature);
+		if ($featureContent) $modalInner.append($featureContent);
+
+		// Effects preview section
+		const effects = feature.combatActionEffects;
+		if (effects) {
+			const $effectsSection = this._renderEffectsPreview(effects, feature);
+			if ($effectsSection) $modalInner.append($effectsSection);
+		}
+
+		// Roll section (interactive dice)
+		if (effects?.rollDice) {
+			const $rollSection = this._renderModalRollSection(effects.rollDice, feature);
+			$modalInner.append($rollSection);
+		}
+
 		// Use + Close buttons
 		const canUse = this._isActionTypeAvailable(actionType)
 			&& (!feature.uses || feature.uses.current > 0);
@@ -2368,6 +2791,157 @@ class CharacterSheetCombat {
 	}
 
 	/**
+	 * Render an effects preview section for the combat action modal.
+	 * Shows what will happen when the action is used: conditions, temp HP, dice, etc.
+	 * @param {object} effects - The combatActionEffects object
+	 * @param {object} feature - The source feature
+	 * @returns {jQuery|null} The effects preview element, or null if nothing to show
+	 */
+	_renderEffectsPreview (effects, feature) {
+		const lines = [];
+
+		if (effects.applyCondition) {
+			const cond = effects.applyCondition;
+			const target = cond.self ? "Self" : "Target";
+			const duration = cond.duration ? ` (${cond.duration})` : "";
+			lines.push(`<span class="mr-1">🎯</span> <strong>Applies:</strong> ${cond.name}${duration} <span class="ve-muted">[${target}]</span>`);
+		}
+
+		if (effects.grantTempHp) {
+			const hp = effects.grantTempHp;
+			const amount = hp.value != null ? `${hp.value}` : hp.formula || "?";
+			lines.push(`<span class="mr-1">💛</span> <strong>Grants:</strong> ${amount} Temporary HP`);
+		}
+
+		if (effects.removeCondition) {
+			lines.push(`<span class="mr-1">✅</span> <strong>Removes:</strong> ${effects.removeCondition}`);
+		}
+
+		if (effects.activateState) {
+			lines.push(`<span class="mr-1">⚡</span> <strong>Activates:</strong> ${effects.activateState}`);
+		}
+
+		if (effects.rollDice) {
+			const dice = effects.rollDice;
+			if (dice.type === "damage" && dice.formula) {
+				lines.push(`<span class="mr-1">🗡️</span> <strong>Damage:</strong> ${dice.formula}${dice.label ? ` ${dice.label}` : ""}`);
+			} else if (dice.type === "healing" && dice.formula) {
+				lines.push(`<span class="mr-1">💚</span> <strong>Healing:</strong> ${dice.formula}`);
+			}
+		}
+
+		if (effects.multiTarget) {
+			lines.push(`<span class="mr-1">👥</span> <strong>Multi-target</strong>`);
+		}
+
+		if (!lines.length) return null;
+
+		return $(`
+			<div class="charsheet__action-modal-effects mb-3 p-2 ve-small" style="background: var(--bg-faint, #f8f9fa); border-radius: 4px; border-left: 3px solid var(--color-primary, #4a90d9);">
+				<div class="bold mb-1 ve-muted">Effects on Use</div>
+				${lines.map(l => `<div class="mb-1">${l}</div>`).join("")}
+			</div>
+		`);
+	}
+
+	/**
+	 * Render an interactive dice roll section for the combat action modal.
+	 * Shows attack roll, save DC, and damage/healing buttons with advantage indicator.
+	 * @param {object} diceConfig - The rollDice portion of combatActionEffects
+	 * @param {object} feature - The source feature
+	 * @returns {jQuery} The roll section element
+	 */
+	_renderModalRollSection (diceConfig, feature) {
+		const $section = $(`<div class="charsheet__action-modal-rolls mb-3 p-2" style="background: var(--bg-faint, #f8f9fa); border-radius: 4px;"></div>`);
+		$section.append(`<div class="bold mb-2">🎲 Dice</div>`);
+
+		// Determine advantage/disadvantage from active states
+		const hasAdvantage = this._state.hasAdvantageFromStates?.("attack") || false;
+		const hasDisadvantage = this._state.hasDisadvantageFromStates?.("attack") || false;
+		let rollMode = "normal";
+		if (hasAdvantage && !hasDisadvantage) rollMode = "advantage";
+		else if (hasDisadvantage && !hasAdvantage) rollMode = "disadvantage";
+
+		// Advantage/disadvantage indicator
+		if (rollMode !== "normal") {
+			const modeIcon = rollMode === "advantage" ? "🟢" : "🔴";
+			const modeLabel = rollMode === "advantage" ? "Advantage" : "Disadvantage";
+			$section.append(`
+				<div class="mb-2 ve-small">
+					<span class="mr-1">${modeIcon}</span>
+					<strong>${modeLabel}</strong> <span class="ve-muted">(from active states)</span>
+				</div>
+			`);
+		}
+
+		const type = diceConfig.type || "damage";
+
+		if (type === "attack") {
+			const bonus = diceConfig.attackBonus || 0;
+			const bonusStr = bonus >= 0 ? `+${bonus}` : `${bonus}`;
+			const $resultArea = $(`<div class="charsheet__action-modal-roll-result mt-1"></div>`);
+
+			const $atkBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary mr-2">🎯 Roll Attack (d20${bonusStr})</button>`);
+			$atkBtn.on("click", () => {
+				const result = this._rollCombatActionDice(feature, {...diceConfig, mode: rollMode});
+				if (result) {
+					const critClass = result.isNat20 ? "bold text-success" : result.isNat1 ? "bold text-danger" : "";
+					const critLabel = result.isNat20 ? " — Critical Hit!" : result.isNat1 ? " — Critical Miss!" : "";
+					$resultArea.html(`<span class="${critClass}">${result.total}${critLabel}</span>`);
+				}
+			});
+
+			$section.append($(`<div class="ve-flex-v-center"></div>`).append($atkBtn).append($resultArea));
+		}
+
+		if (type === "save") {
+			const dc = diceConfig.dc || 10;
+			const ability = diceConfig.saveAbility || "con";
+			const abilityLabel = ability.charAt(0).toUpperCase() + ability.slice(1).toUpperCase();
+			$section.append(`
+				<div class="charsheet__action-modal-save-prompt p-2 mb-1" style="border: 1px solid var(--color-warning, #f0ad4e); border-radius: 4px; background: var(--bg-warning-faint, #fff8e1);">
+					<strong>DC ${dc} ${abilityLabel}</strong> saving throw
+				</div>
+			`);
+		}
+
+		if ((type === "damage" || type === "healing") && diceConfig.formula) {
+			const label = diceConfig.label || (type === "healing" ? "Healing" : "Damage");
+			const icon = type === "healing" ? "💚" : "🗡️";
+			const $resultArea = $(`<div class="charsheet__action-modal-roll-result mt-1"></div>`);
+
+			const $dmgBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-default">${icon} Roll ${label} (${diceConfig.formula})</button>`);
+			$dmgBtn.on("click", () => {
+				const result = this._rollCombatActionDice(feature, diceConfig);
+				if (result) {
+					$resultArea.html(`<strong>${result.total}</strong> <span class="ve-muted">[${result.rolls.join(", ")}]</span>`);
+				}
+			});
+
+			$section.append($(`<div class="ve-flex-v-center mt-2"></div>`).append($dmgBtn).append($resultArea));
+		}
+
+		// Combined save + damage/healing (common pattern: "DC X save, then Nd6 damage")
+		if (type === "save" && diceConfig.formula) {
+			const label = diceConfig.label || "Damage";
+			const $resultArea = $(`<div class="charsheet__action-modal-roll-result mt-1"></div>`);
+
+			const $dmgBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-default mt-1">🗡️ Roll ${label} (${diceConfig.formula})</button>`);
+			$dmgBtn.on("click", () => {
+				const dmgConfig = {...diceConfig, type: "damage"};
+				const result = this._rollCombatActionDice(feature, dmgConfig);
+				if (result) {
+					$resultArea.html(`<strong>${result.total}</strong> <span class="ve-muted">[${result.rolls.join(", ")}]</span>`);
+				}
+			});
+
+			$section.append($(`<div class="ve-flex-v-center mt-1"></div>`).append($dmgBtn).append($resultArea));
+		}
+
+		return $section;
+	}
+
+	/**
 	 * Get combat-classified features from FEATURE_CLASSIFICATION_OVERRIDES.
 	 * Returns features whose classification is "combat" or "reaction".
 	 * Used by both the combat tab and overview tab.
@@ -2380,6 +2954,85 @@ class CharacterSheetCombat {
 			const cls = overrides[nameLower];
 			return cls === "combat" || cls === "reaction";
 		});
+	}
+
+	/**
+	 * Generate feature-specific contextual UI for the combat action modal.
+	 * Returns jQuery element with additional guidance, strike counts, choice hints, etc.
+	 * Uses getFeatureCalculations() to pull data-driven values.
+	 * @param {object} feature - The combat action feature
+	 * @returns {jQuery|null} Feature-specific content element, or null
+	 */
+	_getFeatureSpecificContent (feature) {
+		const nameLower = feature.name?.toLowerCase() || "";
+		const calc = this._state.getFeatureCalculations?.() || {};
+		const lines = [];
+
+		// --- C1: Flurry of Blows ---
+		if (nameLower === "flurry of blows") {
+			const strikes = calc.heightenedFlurryAttacks || 2;
+			lines.push(`<span class="mr-1">👊</span> Make <strong>${strikes} unarmed strike${strikes > 1 ? "s" : ""}</strong> as a bonus action`);
+			if (calc.hasHeightenedFocus && strikes === 3) {
+				lines.push(`<span class="mr-1">✨</span> <span class="ve-muted">Heightened Focus: 3rd strike added</span>`);
+			}
+			if (calc.hasFlurryOfHealingAndHarm) {
+				lines.push(`<span class="mr-1">🔄</span> You may replace one strike with <strong>Hand of Healing</strong> or <strong>Hand of Harm</strong>`);
+			}
+		}
+
+		// --- C3: Step of the Wind ---
+		if (nameLower === "step of the wind") {
+			lines.push(`<span class="mr-1">💨</span> <strong>Dash</strong> or <strong>Disengage</strong> as a bonus action`);
+			lines.push(`<span class="mr-1">🦘</span> Jump distance <strong>doubled</strong> for this turn`);
+			if (calc.hasHeightenedFocus) {
+				const dist = calc.heightenedStepOfTheWindDistance || 20;
+				lines.push(`<span class="mr-1">✨</span> <span class="ve-muted">Heightened Focus: Move one creature within 5 ft up to ${dist} ft</span>`);
+			}
+		}
+
+		// --- C7: Instant Step ---
+		if (nameLower === "instant step") {
+			const range = calc.instantStepRange || 60;
+			const cost = calc.instantStepCost || 4;
+			lines.push(`<span class="mr-1">⚡</span> Teleport up to <strong>${range} ft</strong> to an unoccupied space you can see`);
+			lines.push(`<span class="mr-1">👻</span> <strong>Invisible</strong> until the start of your next turn`);
+			lines.push(`<span class="mr-1">💎</span> Cost: <strong>${cost} exertion</strong>`);
+		}
+
+		// --- C8: Religious Training ---
+		if (nameLower === "religious training") {
+			lines.push(`<span class="mr-1">🙏</span> Spend exertion to gain temporary <strong>divine favor</strong>`);
+			lines.push(`<span class="mr-1">💎</span> Variable cost: choose exertion amount on use`);
+		}
+
+		// --- C10: Wind Strike ---
+		if (nameLower === "wind strike") {
+			lines.push(`<span class="mr-1">🏹</span> Ranged weapon attack, <strong>20/60 ft</strong>`);
+			lines.push(`<span class="mr-1">🟢</span> Roll with <strong>advantage</strong>`);
+			lines.push(`<span class="mr-1">🎯</span> If both dice hit: add <strong>extra weapon damage die</strong>`);
+		}
+
+		// --- C11: Whirlpool Strike ---
+		if (nameLower === "whirlpool strike") {
+			lines.push(`<span class="mr-1">🌊</span> Attack <strong>multiple creatures</strong> in reach`);
+			lines.push(`<span class="mr-1">🗡️</span> Choose a melee weapon attack to use`);
+			lines.push(`<span class="mr-1">📈</span> Each subsequent hit: <strong>+1d6 bonus damage</strong>`);
+		}
+
+		// --- C4: Wall Walk (combat action aspect) ---
+		if (nameLower === "wall walk") {
+			lines.push(`<span class="mr-1">🕷️</span> Cast <strong>Spider Climb</strong> on self as a bonus action`);
+			lines.push(`<span class="mr-1">💎</span> Cost: <strong>1 exertion</strong>`);
+			lines.push(`<span class="mr-1">🔮</span> Duration: concentration, up to <strong>10 minutes</strong>`);
+		}
+
+		if (!lines.length) return null;
+
+		return $(`
+			<div class="charsheet__action-modal-specific mb-3 p-2 ve-small" style="background: var(--bg-faint, #f8f9fa); border-radius: 4px; border-left: 3px solid var(--color-secondary, #6c757d);">
+				${lines.map(l => `<div class="mb-1">${l}</div>`).join("")}
+			</div>
+		`);
 	}
 
 	/**
@@ -3990,11 +4643,11 @@ class CharacterSheetCombat {
 		$container.empty();
 		$tabContainer.empty();
 
-		// Calculate Method DC: 8 + prof + STR or DEX mod (whichever is higher or chosen)
+		// Use state-calculated Method DC (handles Monk +1 base, WIS mod, Hexblade/Bladesinger override)
+		const calcs = this._state.getFeatureCalculations();
 		const profBonus = this._state.getProficiencyBonus();
-		const strMod = this._state.getAbilityMod("str");
-		const dexMod = this._state.getAbilityMod("dex");
-		const methodDC = 8 + profBonus + Math.max(strMod, dexMod);
+		const methodDC = calcs.combatMethodDc
+			?? (8 + profBonus + Math.max(this._state.getAbilityMod("str"), this._state.getAbilityMod("dex")));
 		$dcDisplay.text(methodDC);
 		$tabDcDisplay.text(methodDC);
 
@@ -4048,6 +4701,9 @@ class CharacterSheetCombat {
 				const exertionCost = this._getMethodExertionCost(method);
 				const methodId = `${method.name}-${method.source || ""}`.replace(/\s+/g, "-").toLowerCase();
 
+				// Parse enhanced effects from state
+				const parsed = this._state._parseCombatMethodEffects?.(method) || {};
+
 				// Create hoverable link for method name (like spells/weapons)
 				let methodNameHtml = method.name;
 				if (this._page?.getHoverLink && method.source) {
@@ -4062,12 +4718,32 @@ class CharacterSheetCombat {
 					}
 				}
 
+				// Build extra badges for method properties
+				const extraBadges = [];
+				if (parsed.isMultiTarget) {
+					const targetLabel = parsed.maxTargets === "proficiency" ? "Multi (Prof)" : "Multi-target";
+					extraBadges.push(`<span class="badge badge-info ml-1" title="Multi-target attack">${targetLabel}</span>`);
+				}
+				if (parsed.range) {
+					extraBadges.push(`<span class="badge badge-warning ml-1" title="Ranged: ${parsed.range.normal}/${parsed.range.long} ft">${parsed.range.normal}/${parsed.range.long} ft</span>`);
+				}
+				if (parsed.grantsAdvantage) {
+					extraBadges.push(`<span class="badge badge-success ml-1" title="Grants advantage on attack rolls">Adv</span>`);
+				}
+				if (parsed.actionType) {
+					let actionIcon = "⚔️";
+					if (parsed.actionType === "Bonus Action") actionIcon = "⚡";
+					else if (parsed.actionType === "Reaction") actionIcon = "🔄";
+					extraBadges.push(`<span class="badge badge-outline-secondary ml-1">${actionIcon} ${parsed.actionType}</span>`);
+				}
+
 				const $method = $(`
 					<div class="charsheet__method-item mb-1 p-1 ve-flex ve-flex-v-center ve-flex-h-space-between" style="border-left: 2px solid var(--rgb-link); padding-left: 0.5rem;">
-						<div class="ve-flex ve-flex-v-center">
+						<div class="ve-flex ve-flex-v-center ve-flex-wrap">
 							<span class="charsheet__method-name" style="font-weight: bold;">${methodNameHtml}</span>
 							<span class="ve-muted ve-small ml-2">(${degree}${this._getOrdinalSuffix(degree)})</span>
 							${exertionCost > 0 ? `<span class="badge badge-secondary ml-2" title="Exertion cost">${exertionCost} EP</span>` : ""}
+							${extraBadges.join("")}
 						</div>
 						${showUseButton ? `<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__method-use ml-2" data-method-id="${methodId}" data-cost="${exertionCost}" title="Use this method (costs ${exertionCost} exertion)">Use</button>` : ""}
 					</div>

@@ -475,16 +475,19 @@
 									<div class="charsheet__ac-breakdown" id="charsheet-ac-breakdown"></div>
 									<div class="charsheet__combat-stat-hint">Click for details</div>
 								</div>
-								<div class="charsheet__combat-stat charsheet__combat-stat--clickable charsheet__combat-stat--initiative" id="charsheet-box-initiative" title="Click to roll initiative (Shift: Advantage, Ctrl: Disadvantage)">
+								<div class="charsheet__combat-stat charsheet__combat-stat--clickable charsheet__combat-stat--initiative" id="charsheet-box-initiative" title="Click to roll initiative (Shift: Advantage, Ctrl: Disadvantage) - Hover for breakdown">
 									<div class="charsheet__combat-stat-icon">⚡</div>
 									<div class="charsheet__combat-stat-value" id="charsheet-disp-initiative">+0</div>
 									<div class="charsheet__combat-stat-label">Initiative</div>
+									<div class="charsheet__stat-breakdown" id="charsheet-initiative-breakdown"></div>
 									<div class="charsheet__combat-stat-hint">Click to roll</div>
 								</div>
-								<div class="charsheet__combat-stat charsheet__combat-stat--speed" id="charsheet-box-speed" title="Movement speed per turn">
+								<div class="charsheet__combat-stat charsheet__combat-stat--speed charsheet__combat-stat--clickable" id="charsheet-box-speed" title="Movement speed per turn - click for breakdown">
 									<div class="charsheet__combat-stat-icon">🏃</div>
 									<div class="charsheet__combat-stat-value" id="charsheet-disp-speed">30 ft.</div>
 									<div class="charsheet__combat-stat-label">Speed</div>
+									<div class="charsheet__stat-breakdown" id="charsheet-speed-breakdown"></div>
+									<div class="charsheet__combat-stat-hint">Click for details</div>
 								</div>
 							</div>
 									<!-- Movement & Physical Stats -->
@@ -595,6 +598,7 @@
 									<button class="ve-btn ve-btn-default ve-btn-xs mt-2 charsheet__deathsave-btn" id="charsheet-btn-deathsave" title="Roll a death saving throw">
 										<span class="charsheet__btn-icon">🎲</span> Roll Death Save
 									</button>
+									<div class="charsheet__death-save-reroll mt-1 ve-flex-v-center"></div>
 								</div>
 							</div>
 						</div>
@@ -925,7 +929,7 @@
 							<button class="ve-btn ve-btn-default ve-btn-sm mt-2" id="charsheet-btn-add-attack"><span class="glyphicon glyphicon-plus"></span> Add Custom Attack</button>
 						</div>
 						
-						<div class="charsheet__section mt-3" id="charsheet-combat-spells-section">
+						<div class="charsheet__section mt-3" id="charsheet-combat-spells-section" style="display: none;">
 							<h4 class="charsheet__section-title">Combat Spells</h4>
 							<div class="charsheet__combat-spell-stats mb-2">
 								<span class="ve-muted">Spell Attack: </span><span id="charsheet-combat-spell-attack" class="badge badge-primary">+0</span>

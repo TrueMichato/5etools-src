@@ -639,6 +639,7 @@ class CharacterSheetPage {
 
 		// Combat
 		$("#charsheet-box-ac").on("click", () => this._showAcBreakdownModal());
+		$("#charsheet-box-speed").on("click", () => this._showSpeedBreakdownModal());
 		$("#charsheet-box-initiative").on("click", (e) => this._rollInitiative(e));
 		$("#charsheet-btn-use-hitdie").on("click", () => this._onUseHitDie());
 		$("#charsheet-btn-deathsave").on("click", () => this._onDeathSave());
@@ -1953,9 +1954,13 @@ class CharacterSheetPage {
 			const isProficient = this._state.hasSaveProficiency(abl);
 			const mod = this._state.getSaveMod(abl);
 			const modStr = mod >= 0 ? `+${mod}` : mod;
+			const breakdown = this._state.getSaveBreakdown(abl);
+			const tooltipLines = breakdown.components.map(comp => `${comp.icon} ${comp.name}: ${comp.value >= 0 ? "+" : ""}${comp.value}`);
+			tooltipLines.push(`─────────\n🎯 Total: ${modStr}`);
+			const tooltip = tooltipLines.join("\n");
 
 			const $row = $(`
-				<div class="charsheet__save-row" data-save="${abl}" title="Click to roll ${Parser.attAbvToFull(abl)} save (Shift=Adv, Ctrl=Dis)">
+				<div class="charsheet__save-row" data-save="${abl}" title="${tooltip.replace(/"/g, "&quot;")}">
 					<span class="charsheet__prof-indicator ${isProficient ? "charsheet__prof-indicator--proficient" : ""}"></span>
 					<span class="charsheet__save-name">${Parser.attAbvToFull(abl)}</span>
 					<span class="charsheet__save-mod">${modStr}</span>
@@ -2015,8 +2020,13 @@ class CharacterSheetPage {
 			const defaultAbility = skill.ability || "";
 
 			const customClass = skill.isCustom ? " charsheet__skill-row--custom" : "";
+			const breakdown = this._state.getSkillBreakdown(skillKey);
+			const tooltipLines = breakdown.components.map(comp => `${comp.icon} ${comp.name}: ${comp.value >= 0 ? "+" : ""}${comp.value}`);
+			tooltipLines.push(`─────────\n🎯 Total: ${modStr}`);
+			const skillTooltip = tooltipLines.join("\n");
+
 			const $row = $(`
-				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${defaultAbility}" title="Click to roll ${skill.name} (Shift=Adv, Ctrl=Dis, Right-click for alternate ability)">
+				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${defaultAbility}" title="${skillTooltip.replace(/"/g, "&quot;")}">
 					<span class="charsheet__prof-indicator charsheet__prof-indicator--clickable ${profClass}" title="${profTitle}" data-skill="${skillKey}"></span>
 					<span class="charsheet__skill-name">${skill.name}${skill.isCustom ? " ✦" : ""}</span>
 					<span class="charsheet__skill-ability">(${abilityDisplay})</span>
@@ -2107,6 +2117,7 @@ class CharacterSheetPage {
 		this._renderAcBreakdown(acBreakdown);
 
 		$("#charsheet-disp-initiative").text(this._formatMod(this._state.getInitiative()));
+		this._renderStatBreakdown("#charsheet-initiative-breakdown", this._state.getInitiativeBreakdown());
 
 		// Calculate speed with exhaustion penalty
 		const exhaustion = this._state.getExhaustion();
@@ -2139,6 +2150,7 @@ class CharacterSheetPage {
 		}
 		
 		$("#charsheet-disp-speed").text(speedDisplay);
+		this._renderStatBreakdown("#charsheet-speed-breakdown", this._state.getSpeedBreakdown("walk"));
 
 		// Jump distances
 		// Standard rules: Long jump = STR score, High jump = 3 + STR mod
@@ -4645,7 +4657,11 @@ class CharacterSheetPage {
 		const customAbilities = this._state.getCustomAbilities?.() || [];
 		const limitedAbilities = customAbilities.filter(a => a.mode === "limited");
 
-		if (!limitedAbilities.length) {
+		// Get class resources (Channel Divinity, Ki Points, Rage, etc.)
+		const resources = this._state.getResources?.() || [];
+		const classResources = resources.filter(r => r.max > 0);
+
+		if (!limitedAbilities.length && !classResources.length) {
 			$container.html(`
 				<div class="charsheet__empty-state">
 					<span class="charsheet__empty-icon">💫</span>
@@ -4655,6 +4671,36 @@ class CharacterSheetPage {
 			return;
 		}
 
+		// Render class resources first
+		for (const resource of classResources) {
+			const rechargeIcon = resource.recharge === "short" ? "☀️" : "🌙";
+			const rechargeLabel = resource.recharge === "short" ? "short rest" : "long rest";
+			const canUse = resource.current > 0;
+
+			const $row = $(`
+				<div class="charsheet__ability-row charsheet__ability-row--resource" data-resource-name="${resource.name.replace(/"/g, "&quot;")}">
+					<div class="charsheet__ability-info">
+						<span class="charsheet__ability-icon" title="Class Resource">⚡</span>
+						<span class="charsheet__ability-name">${resource.name}</span>
+					</div>
+					<div class="charsheet__ability-controls">
+						<span class="charsheet__ability-uses">${resource.current}/${resource.max}</span>
+						<span class="charsheet__ability-recharge" title="${rechargeLabel}">${rechargeIcon}</span>
+						<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__ability-use-btn"
+							${!canUse ? "disabled" : ""}>Use</button>
+					</div>
+				</div>
+			`);
+
+			$row.find(".charsheet__ability-use-btn").on("click", (e) => {
+				e.stopPropagation();
+				this._useOverviewResource(resource);
+			});
+
+			$container.append($row);
+		}
+
+		// Render custom abilities
 		for (const ability of limitedAbilities) {
 			const uses = this._state.getCustomAbilityUsesDisplay?.(ability.id);
 			if (!uses) continue;
@@ -4727,6 +4773,19 @@ class CharacterSheetPage {
 
 			JqueryUtil.doToast({type: "success", content: `Used ${ability.name}!`});
 		}
+	}
+
+	_useOverviewResource (resource) {
+		if (resource.current <= 0) {
+			JqueryUtil.doToast({type: "warning", content: `No uses remaining for ${resource.name}!`});
+			return;
+		}
+
+		this._state.useResourceCharge?.(resource.name);
+		this._saveCurrentCharacter();
+		this._renderResources();
+		this._renderOverviewAbilities();
+		if (this._features) this._features._renderResources();
 	}
 
 	_showAbilityDetailModal (ability) {
@@ -5293,7 +5352,26 @@ class CharacterSheetPage {
 		if (isSpellEffect && state.grantsConditions?.length > 0) {
 			grantsConditionsHtml = `<span class="ve-small text-info ml-2" title="This spell grants these conditions">(Grants: ${state.grantsConditions.join(", ")})</span>`;
 		}
-		
+
+		// C2: Show inline effect labels for non-spell active states (e.g. Patient Defense)
+		let effectLabelsHtml = "";
+		if (isActive && !isSpellEffect && stateType?.effects?.length) {
+			const labels = stateType.effects.map(e => {
+				if (e.type === "disadvantage" && e.target === "attacksAgainst") return "Attackers have disadvantage";
+				if (e.type === "advantage" && e.target?.startsWith("save:")) {
+					const abil = e.target.split(":")[1]?.toUpperCase() || "";
+					return `Advantage on ${abil} saves`;
+				}
+				if (e.type === "advantage" && e.target === "attack") return "Advantage on attacks";
+				if (e.type === "resistance") return `Resist ${(e.target || "").replace("damage:", "")}`;
+				if (e.type === "ac") return `+${e.value || ""} AC`;
+				return null;
+			}).filter(Boolean);
+			if (labels.length) {
+				effectLabelsHtml = `<span class="ve-small ve-muted ml-2">${labels.join(" · ")}</span>`;
+			}
+		}
+
 		// Style differently for spell effects
 		const bgColor = isActive 
 			? (isSpellEffect ? "rgba(147, 51, 234, 0.15)" : "rgba(40, 167, 69, 0.1)") 
@@ -5307,7 +5385,7 @@ class CharacterSheetPage {
 				style="background: ${bgColor}; border: 1px solid ${borderColor};">
 				<span class="charsheet__state-icon mr-2" style="font-size: 1.2em;" title="${tooltip}">${icon}</span>
 				<span class="charsheet__state-name ve-bold" title="${tooltip}">${nameHtml}${concentrationHtml}</span>
-				${durationHtml}${grantsConditionsHtml}
+				${effectLabelsHtml}${durationHtml}${grantsConditionsHtml}
 				<div class="charsheet__state-controls ml-auto ve-flex-v-center">
 					${isSpellEffect ? `<span class="ve-small ve-muted mr-2" title="Remember to end this when the spell ends">Spell Effect</span>` : ""}
 					${isEndable ? `<button class="ve-btn ve-btn-xs ${isSpellEffect ? "ve-btn-danger" : "ve-btn-warning"} charsheet__end-state-btn">${isSpellEffect ? "End Spell" : "End"}</button>` : `<span class="ve-small ve-muted" title="This is a passive ability">Passive</span>`}
@@ -7853,6 +7931,123 @@ class CharacterSheetPage {
 		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-primary">Close</button>
 		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
+	/**
+	 * Generic stat breakdown renderer — renders components into a hover popup container
+	 * Uses same visual pattern as AC breakdown but works for any stat
+	 * @param {string} selector - jQuery selector for the breakdown container
+	 * @param {{total: number, components: Array<{type: string, name: string, value: number, icon: string, subtype?: string}>}} breakdown
+	 */
+	_renderStatBreakdown (selector, breakdown) {
+		const $container = $(selector);
+		$container.empty();
+
+		if (!breakdown || !breakdown.components.length) return;
+
+		breakdown.components.forEach(comp => {
+			const valueClass = comp.value > 0 && comp.type !== "base" ? "charsheet__ac-breakdown-value--positive"
+				: comp.value < 0 ? "charsheet__ac-breakdown-value--negative" : "";
+			const displayValue = comp.type === "base" ? comp.value : this._formatMod(comp.value);
+			const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-breakdown-subtype">(${comp.subtype})</span>` : "";
+
+			$container.append(`
+				<div class="charsheet__ac-breakdown-item">
+					<span class="charsheet__ac-breakdown-name">
+						<span class="charsheet__ac-breakdown-icon">${comp.icon || ""}</span>
+						${comp.name}${subtypeHtml}
+					</span>
+					<span class="charsheet__ac-breakdown-value ${valueClass}">${displayValue}</span>
+				</div>
+			`);
+		});
+
+		$container.append(`
+			<div class="charsheet__ac-breakdown-item charsheet__ac-breakdown-item--total">
+				<span class="charsheet__ac-breakdown-name">
+					<span class="charsheet__ac-breakdown-icon">🎯</span>
+					Total
+				</span>
+				<span class="charsheet__ac-breakdown-value charsheet__ac-breakdown-value--total">${this._formatMod(breakdown.total)}</span>
+			</div>
+		`);
+	}
+
+	/**
+	 * Show speed breakdown in a modal dialog (click handler for speed box)
+	 */
+	async _showSpeedBreakdownModal () {
+		const walkBreakdown = this._state.getSpeedBreakdown("walk");
+		const speedTypes = ["fly", "swim", "climb", "burrow"];
+		const otherBreakdowns = speedTypes
+			.map(type => ({type, breakdown: this._state.getSpeedBreakdown(type)}))
+			.filter(({breakdown}) => breakdown.total > 0 || breakdown.components.length > 0);
+
+		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: "🏃 Speed Breakdown",
+			isMinHeight0: true,
+		});
+
+		const $content = $(`<div class="charsheet__ac-modal-content"></div>`).appendTo($modalInner);
+
+		// Walk speed display
+		$content.append(`
+			<div class="charsheet__ac-modal-total">
+				<div class="charsheet__ac-modal-total-value">${walkBreakdown.total} ft.</div>
+				<div class="charsheet__ac-modal-total-label">Walking Speed</div>
+			</div>
+		`);
+
+		// Walk breakdown
+		const $walkList = $(`<div class="charsheet__ac-modal-breakdown"></div>`).appendTo($content);
+		this._renderModalBreakdownItems($walkList, walkBreakdown, "ft.");
+
+		// Other movement types
+		for (const {type, breakdown} of otherBreakdowns) {
+			const label = type.charAt(0).toUpperCase() + type.slice(1);
+			$content.append(`
+				<div class="charsheet__ac-modal-total mt-3">
+					<div class="charsheet__ac-modal-total-value" style="font-size: 1.5rem;">${breakdown.total} ft.</div>
+					<div class="charsheet__ac-modal-total-label">${label} Speed</div>
+				</div>
+			`);
+			const $list = $(`<div class="charsheet__ac-modal-breakdown"></div>`).appendTo($content);
+			this._renderModalBreakdownItems($list, breakdown, "ft.");
+		}
+
+		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			<button class="ve-btn ve-btn-primary">Close</button>
+		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+	}
+
+	/**
+	 * Render breakdown items into a modal list container
+	 * @param {jQuery} $list - The list container
+	 * @param {{total: number, components: Array}} breakdown - The breakdown data
+	 * @param {string} [unit=""] - Optional unit suffix (e.g., "ft.")
+	 */
+	_renderModalBreakdownItems ($list, breakdown, unit = "") {
+		if (!breakdown.components.length) {
+			$list.append(`<div class="charsheet__ac-modal-item"><span class="charsheet__ac-modal-item-name">No modifiers</span></div>`);
+			return;
+		}
+
+		breakdown.components.forEach(comp => {
+			const valueClass = comp.value > 0 && comp.type !== "base" ? "charsheet__ac-modal-item-value--positive"
+				: comp.value < 0 ? "charsheet__ac-modal-item-value--negative" : "";
+			const displayValue = comp.type === "base" ? `${comp.value}${unit ? ` ${unit}` : ""}` : `${this._formatMod(comp.value)}${unit ? ` ${unit}` : ""}`;
+			const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-modal-item-subtype">(${comp.subtype})</span>` : "";
+
+			$list.append(`
+				<div class="charsheet__ac-modal-item">
+					<span class="charsheet__ac-modal-item-name">
+						<span class="charsheet__ac-modal-item-icon">${comp.icon || "📦"}</span>
+						${comp.name}${subtypeHtml}
+					</span>
+					<span class="charsheet__ac-modal-item-value ${valueClass}">${displayValue}</span>
+				</div>
+			`);
+		});
 	}
 
 	/**

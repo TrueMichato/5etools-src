@@ -1430,7 +1430,7 @@ class CharacterSheetLevelUp {
 					if (boon.ability?.length) {
 						const ab = boon.ability[0];
 						if (ab.choose) {
-							abilityHint = ` — +1 to ${ab.choose.from?.map(a => a.toUpperCase()).join("/") || "ability"} (max 30)`;
+							abilityHint = ` — +1 to ${ab.choose.from?.map(a => a.toUpperCase()).join("/") || "ability"} (max ${ab.max || 30})`;
 						} else {
 							const entries = Object.entries(ab).filter(([k]) => Parser.ABIL_ABVS.includes(k));
 							if (entries.length) {
@@ -1439,14 +1439,22 @@ class CharacterSheetLevelUp {
 						}
 					}
 
+					// Detect choices (same logic as regular feats)
+					const boonChoices = getFeatChoices(boon);
+					const hasChoices = boonChoices.skills || boonChoices.languages || boonChoices.ability || boonChoices.tools || boonChoices.expertise || boonChoices.spells;
+
 					const $boon = $(`
 						<div class="charsheet__levelup-feat-option" data-feat="${boon.name}">
 							<input type="radio" name="feat-choice" value="${boon.name}">
-							<strong>${boon.name}</strong>
 							<span class="ve-muted">(${Parser.sourceJsonToAbv(boon.source)})</span>
+							${hasChoices ? ` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>` : ""}
 							${abilityHint ? `<span class="ve-small text-info">${abilityHint}</span>` : ""}
 						</div>
 					`);
+
+					// Add hoverable name link (same pattern as regular feats)
+					const boonLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_FEATS, boon.name, boon.source);
+					$boon.find("input").after($(`<strong></strong>`).append(boonLink));
 
 					$boon.on("click", () => {
 						// Deselect from both lists
@@ -1457,6 +1465,11 @@ class CharacterSheetLevelUp {
 
 						// Show ability choice UI if boon has choose
 						this._renderEpicBoonAbilityChoice(boon, $epicSection);
+
+						// Show additional choices UI if boon has skill/spell/tool choices
+						if (hasChoices) {
+							this._renderFeatChoicesUI(boon, boonChoices, $featChoicesContainer);
+						}
 					});
 
 					$epicList.append($boon);
@@ -1505,8 +1518,17 @@ class CharacterSheetLevelUp {
 			// Tool proficiency choices
 			if (feat.toolProficiencies) {
 				for (const tp of feat.toolProficiencies) {
+					if (tp.anyArtisansTool && tp.anyMusicalInstrument) {
+						// Combined: choose artisan OR instrument (not yet handled — treat as artisan for now)
+						choices.tools = {count: tp.anyArtisansTool, type: "artisanOrInstrument"};
+						break;
+					}
 					if (tp.anyArtisansTool) {
 						choices.tools = {count: tp.anyArtisansTool, type: "artisan"};
+						break;
+					}
+					if (tp.anyMusicalInstrument) {
+						choices.tools = {count: tp.anyMusicalInstrument, type: "instrument"};
 						break;
 					}
 					if (tp.any) {
@@ -1516,6 +1538,15 @@ class CharacterSheetLevelUp {
 					if (tp.choose) {
 						choices.tools = {count: tp.choose.count || 1, from: tp.choose.from || []};
 						break;
+					}
+				}
+
+				// Check for artisan+instrument combo across separate entries (Monk data format)
+				if (!choices.tools) {
+					const hasArtisan = toolProfs => toolProfs.some(tp => tp.anyArtisansTool);
+					const hasInstrument = toolProfs => toolProfs.some(tp => tp.anyMusicalInstrument);
+					if (hasArtisan(feat.toolProficiencies) && hasInstrument(feat.toolProficiencies)) {
+						choices.tools = {count: 1, type: "artisanOrInstrument"};
 					}
 				}
 			}
@@ -1770,14 +1801,31 @@ class CharacterSheetLevelUp {
 			$toolSection.append(`<label class="ve-small">Choose ${choices.tools.count} tool${choices.tools.count > 1 ? "s" : ""}:</label>`);
 			const $toolGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
 
-			// Get tool list - artisan tools or from specified list
+			// Get tool list - artisan tools, instruments, combined, or from specified list
 			let availableTools = [];
+			const artisanToolsFallback = ["Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies", "Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools", "Cook's Utensils", "Glassblower's Tools", "Jeweler's Tools", "Leatherworker's Tools", "Mason's Tools", "Painter's Supplies", "Potter's Tools", "Smith's Tools", "Tinker's Tools", "Weaver's Tools", "Woodcarver's Tools"];
+			const musicalInstrumentsFallback = ["Bagpipes", "Drum", "Dulcimer", "Flute", "Horn", "Lute", "Lyre", "Pan Flute", "Shawm", "Viol"];
+
 			if (choices.tools.type === "artisan") {
 				const allTools = this._page.getToolsList() || [];
 				availableTools = allTools.filter(t => t.toolType === "artisan" || (t.name || "").toLowerCase().includes("artisan") || (t.name || "").toLowerCase().includes("tools"));
 				if (availableTools.length === 0) {
-					availableTools = ["Alchemist's Supplies", "Brewer's Supplies", "Calligrapher's Supplies", "Carpenter's Tools", "Cartographer's Tools", "Cobbler's Tools", "Cook's Utensils", "Glassblower's Tools", "Jeweler's Tools", "Leatherworker's Tools", "Mason's Tools", "Painter's Supplies", "Potter's Tools", "Smith's Tools", "Tinker's Tools", "Weaver's Tools", "Woodcarver's Tools"].map(n => ({name: n}));
+					availableTools = artisanToolsFallback.map(n => ({name: n}));
 				}
+			} else if (choices.tools.type === "instrument") {
+				const allTools = this._page.getToolsList() || [];
+				availableTools = allTools.filter(t => t.toolType === "instrument" || (t.name || "").toLowerCase().includes("instrument"));
+				if (availableTools.length === 0) {
+					availableTools = musicalInstrumentsFallback.map(n => ({name: n}));
+				}
+			} else if (choices.tools.type === "artisanOrInstrument") {
+				// Combined: both artisan tools and musical instruments
+				const allTools = this._page.getToolsList() || [];
+				const artisanTools = allTools.filter(t => t.toolType === "artisan" || (t.name || "").toLowerCase().includes("tools"));
+				const instruments = allTools.filter(t => t.toolType === "instrument" || (t.name || "").toLowerCase().includes("instrument"));
+				const artisanList = artisanTools.length > 0 ? artisanTools : artisanToolsFallback.map(n => ({name: n}));
+				const instrumentList = instruments.length > 0 ? instruments : musicalInstrumentsFallback.map(n => ({name: n}));
+				availableTools = [...artisanList, ...instrumentList];
 			} else if (choices.tools.from?.length) {
 				availableTools = choices.tools.from.map(t => ({name: t}));
 			}
