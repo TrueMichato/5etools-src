@@ -120,7 +120,45 @@ class _RenderSpellsImplBase extends RenderPageImplBase {
 	/* ----- */
 
 	_getCommonHtmlParts_levelSchoolRitual ({ent}) {
-		return `<tr><td colspan="6">${Renderer.spell.getHtmlPtLevelSchoolRitual(ent, {styleHint: this._style})}</td></tr>`;
+		const levelSchoolRitual = Renderer.spell.getHtmlPtLevelSchoolRitual(ent, {styleHint: this._style});
+
+		// If TgttFilter is available, combine with rarity/legality
+		if (typeof TgttFilter !== "undefined") {
+			const metadata = TgttFilter.computeSpellMetadata(ent);
+			const rarity = ent.tgttRarity || metadata.rarity;
+			const legality = ent.tgttLegality || metadata.legality;
+
+			return `<tr><td colspan="6" class="tgtt-rarity-legality-cell" style="padding: 0;">
+				<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 2px 5px; box-sizing: border-box;">
+					<div><i>${levelSchoolRitual}</i></div>
+					<div>
+						<strong>
+							<a href="variantrules.html#spell%20availability_tgtt"
+								onmouseover="Renderer.hover.pHandleLinkMouseOver(event, this)"
+								onmouseleave="Renderer.hover.handleLinkMouseLeave(event, this)"
+								onmousemove="Renderer.hover.handleLinkMouseMove(event, this)"
+								onclick="Renderer.hover.handleLinkClick(event, this)"
+								data-vet-page="variantrules.html"
+								data-vet-source="TGTT"
+								data-vet-hash="spell%20availability_tgtt"
+								style="text-transform: capitalize;">${rarity}</a>
+							|
+							<a href="variantrules.html#legal%20status%20of%20magic_tgtt"
+								onmouseover="Renderer.hover.pHandleLinkMouseOver(event, this)"
+								onmouseleave="Renderer.hover.handleLinkMouseLeave(event, this)"
+								onmousemove="Renderer.hover.handleLinkMouseMove(event, this)"
+								onclick="Renderer.hover.handleLinkClick(event, this)"
+								data-vet-page="variantrules.html"
+								data-vet-source="TGTT"
+								data-vet-hash="legal%20status%20of%20magic_tgtt"
+								style="text-transform: capitalize;">${legality}</a>
+						</strong>
+					</div>
+				</div>
+			</td></tr>`;
+		}
+
+		return `<tr><td colspan="6">${levelSchoolRitual}</td></tr>`;
 	}
 
 	/* ----- */

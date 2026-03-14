@@ -1,0 +1,633 @@
+"use strict";
+
+/**
+ * TGTT (Traveler's Guide to Thelemar) Filter System
+ *
+ * Provides:
+ * - Priority filtering to prefer TGTT homebrew over official sources when duplicates exist
+ * - Spell rarity/legality system for Thelemar campaign setting
+ * - Draggable toggle button for enabling/disabling the filter
+ */
+
+class TgttFilter {
+	static PRIORITY_SOURCE = "TGTT";
+	static ICON_PATH = "thelemar_symbol_wip_2_icon.ico";
+	static STORAGE_KEY = "tgttFilterState";
+	static POSITION_STORAGE_KEY = "tgttFilterButtonPosition";
+
+	// Official sources that have "common" rarity
+	static OFFICIAL_SOURCES = new Set([
+		"PHB", "PHB'14", "DMG", "MM", "CoS", "EEPC", "EET", "HotDQ", "LMoP", "OotA", "PotA", "RoT", "RoTOS",
+		"SCAG", "SKT", "ToA", "TLK", "ToD", "TTP", "TftYP", "TftYP-AtG", "TftYP-DiT", "TftYP-TFoF", "TftYP-THSoT",
+		"TftYP-TSC", "TftYP-ToH", "TftYP-WPM", "VGM", "XGE", "OGA", "MTF", "WDH", "WDMM", "GGR", "KKW", "LLK",
+		"AZfyT", "GoS", "AI", "OoW", "ESK", "DIP", "HftT", "DC", "SLW", "SDW", "BGDIA", "LR", "AL", "SAC", "ERLW",
+		"EFR", "RMBRE", "RMR", "MFF", "AWM", "IMR", "SADS", "EGW", "ToR", "DD", "FS", "US", "MOT", "IDRotF", "TCE",
+		"VRGR", "HoL", "RtG", "AitFR", "AitFR-ISF", "AitFR-THP", "AitFR-AVT", "AitFR-DN", "AitFR-FCD", "WBtW",
+		"DoD", "MaBJoV", "FTD", "SCC", "SCC-CK", "SCC-HfMT", "SCC-TMM", "SCC-ARiR", "MPMM", "CRCotN", "JttRC",
+		"SAiS", "AAG", "BAM", "LoX", "DoSI", "DSotDQ", "KftGV", "BGG", "TDCSR", "PaBTSO", "PAitM", "SatO",
+		"ToFW", "MPP", "BMT", "DMTCRG", "QftIS", "VEoR", "XPHB", "XDMG", "XMM", "DrDe", "DrDe-DaS",
+		"DrDe-BD", "DrDe-TWoO", "DrDe-FWtVC", "DrDe-TDoN", "DrDe-TFV", "DrDe-BtS", "DrDe-SD", "DrDe-ACfaS",
+		"DrDe-DotSC", "HotB", "WttHC", "FRAiF", "FRHoF", "ABH", "NF", "TD", "Screen", "ScreenWildernessKit",
+		"ScreenDungeonKit", "ScreenSpelljammer", "XScreen", "HF", "HFFotM", "HFStCM", "PaF", "HFDoMM", "CM",
+		"NRH", "NRH-TCMC", "NRH-AVitW", "NRH-ASS", "NRH-CoI", "NRH-TLT", "NRH-AWoL", "NRH-AT", "MGELFT", "VD",
+		"SjA", "HAT-TG", "HAT-LMI", "GotSF", "LK", "CoA", "PiP", "DitLCoT", "VNotEE", "LRDT", "UtHftLH",
+		"ScoEE", "HBTD", "BQGT", "PHB'24", "EFA", "TGTT",
+	]);
+
+	// Source-specific rarity overrides
+	static SOURCES_RARITY_MAP = {
+		"TftS": "common",
+		"IllR": "common",
+		"VSS:PP": "uncommon",
+		"HWCS": "common",
+		"BoET": "rare",
+		"DoDk": "uncommon",
+	};
+
+	constructor () {
+		this._filterState = {
+			rarity: {common: "ignore", uncommon: "ignore", rare: "ignore"},
+			legality: {legal: "ignore", "illegal-i": "ignore", "illegal-ii": "ignore", "illegal-iii": "ignore", "illegal-iv": "ignore"},
+		};
+		this._isActive = true;
+		this._button = null;
+		this._dynamicStyleSheet = null;
+		this._filterTimeout = null;
+		this._initialized = false;
+	}
+
+	// ==================== Public API ====================
+
+	/**
+	 * Initialize the TGTT filter system
+	 * @param {Object} opts Options
+	 * @param {boolean} opts.enableButton Whether to show the toggle button
+	 * @param {boolean} opts.enableSpellFilters Whether to enable spell rarity/legality filters
+	 */
+	async init (opts = {}) {
+		if (this._initialized) return;
+		this._initialized = true;
+
+		const {enableButton = true, enableSpellFilters = true} = opts;
+
+		this._loadFilterState();
+		this._injectStyles();
+
+		if (enableButton) {
+			this._createButton();
+		}
+
+		this._setupObserver();
+		this._filterLists();
+
+		if (enableSpellFilters && this._isSpellsPage()) {
+			this._tagListItems();
+			this._applyFilterCSS();
+		}
+	}
+
+	/**
+	 * Check if the filter is currently active
+	 * @returns {boolean}
+	 */
+	isActive () {
+		return this._isActive;
+	}
+
+	/**
+	 * Toggle the filter state
+	 * @param {boolean} [state] Explicit state to set, or toggle if undefined
+	 */
+	toggle (state) {
+		this._isActive = state ?? !this._isActive;
+		document.body.classList.toggle("tgtt-filter-active", this._isActive);
+
+		if (this._button) {
+			this._button.classList.toggle("active", this._isActive);
+		}
+
+		this._updateButtonText();
+	}
+
+	/**
+	 * Compute spell metadata (rarity and legality) for a spell entity
+	 * @param {Object} spell The spell entity
+	 * @returns {{rarity: string, legality: string}}
+	 */
+	static computeSpellMetadata (spell) {
+		const sourceAbv = Parser.sourceJsonToAbv(spell.source);
+		let rarity = "common";
+		let legality = "legal";
+
+		// Check for explicit rarity/legality in spell data
+		if (spell.tgttRarity) {
+			rarity = spell.tgttRarity.toLowerCase();
+		} else if (TgttFilter.SOURCES_RARITY_MAP[sourceAbv]) {
+			rarity = TgttFilter.SOURCES_RARITY_MAP[sourceAbv];
+		} else if (!TgttFilter.OFFICIAL_SOURCES.has(sourceAbv)) {
+			rarity = "uncommon";
+		}
+
+		if (spell.tgttLegality) {
+			legality = spell.tgttLegality.toLowerCase();
+		}
+
+		return {rarity, legality};
+	}
+
+	/**
+	 * Get the filter state for external use
+	 * @returns {Object}
+	 */
+	getFilterState () {
+		return JSON.parse(JSON.stringify(this._filterState));
+	}
+
+	/**
+	 * Set filter state for a specific filter type and key
+	 * @param {string} filterType "rarity" or "legality"
+	 * @param {string} key The filter key
+	 * @param {string} state "yes", "no", or "ignore"
+	 */
+	setFilterState (filterType, key, state) {
+		if (this._filterState[filterType] && this._filterState[filterType][key] !== undefined) {
+			this._filterState[filterType][key] = state;
+			this._saveFilterState();
+			this._applyFilterCSS();
+		}
+	}
+
+	/**
+	 * Reset all filters for a type
+	 * @param {string} filterType "rarity" or "legality"
+	 */
+	resetFilters (filterType) {
+		if (this._filterState[filterType]) {
+			Object.keys(this._filterState[filterType]).forEach(key => {
+				this._filterState[filterType][key] = "ignore";
+			});
+			this._saveFilterState();
+			this._applyFilterCSS();
+		}
+	}
+
+	// ==================== Private Methods ====================
+
+	_isSpellsPage () {
+		return window.location.href.includes("spells.html");
+	}
+
+	_loadFilterState () {
+		try {
+			const saved = StorageUtil.syncGetForPage(TgttFilter.STORAGE_KEY);
+			if (saved) {
+				Object.assign(this._filterState.rarity, saved.rarity || {});
+				Object.assign(this._filterState.legality, saved.legality || {});
+			}
+		} catch {
+			// Silent fail - state will use defaults
+		}
+	}
+
+	_saveFilterState () {
+		try {
+			StorageUtil.syncSetForPage(TgttFilter.STORAGE_KEY, this._filterState);
+		} catch {
+			// Silent fail
+		}
+	}
+
+	_loadButtonPosition () {
+		try {
+			return StorageUtil.syncGetForPage(TgttFilter.POSITION_STORAGE_KEY);
+		} catch {
+			return null;
+		}
+	}
+
+	_saveButtonPosition (x, y) {
+		try {
+			StorageUtil.syncSetForPage(TgttFilter.POSITION_STORAGE_KEY, {x, y});
+		} catch {
+			// Silent fail
+		}
+	}
+
+	_injectStyles () {
+		// Main styles are loaded via CSS file, but we need a dynamic stylesheet for filters
+		if (!this._dynamicStyleSheet) {
+			this._dynamicStyleSheet = document.createElement("style");
+			this._dynamicStyleSheet.id = "tgtt-dynamic-filter-styles";
+			document.head.appendChild(this._dynamicStyleSheet);
+		}
+	}
+
+	_createButton () {
+		if (document.getElementById("tgtt-toggle-btn")) return;
+
+		const savedPos = this._loadButtonPosition();
+		const defaultTop = window.innerHeight - 60;
+		const defaultLeft = 20;
+
+		const btn = document.createElement("button");
+		btn.id = "tgtt-toggle-btn";
+		btn.className = "tgtt-toggle-btn active";
+		btn.style.top = `${savedPos?.y ?? defaultTop}px`;
+		btn.style.left = `${savedPos?.x ?? defaultLeft}px`;
+
+		// Icon
+		const iconImg = document.createElement("img");
+		iconImg.id = "tgtt-btn-icon";
+		iconImg.className = "tgtt-btn-icon";
+		iconImg.src = TgttFilter.ICON_PATH;
+		iconImg.alt = "TGTT";
+
+		// Text
+		const textSpan = document.createElement("span");
+		textSpan.id = "tgtt-btn-text";
+		textSpan.className = "tgtt-btn-text";
+		textSpan.textContent = "TGTT Filter: ON";
+
+		btn.appendChild(iconImg);
+		btn.appendChild(textSpan);
+
+		// Set initial active state
+		document.body.classList.add("tgtt-filter-active");
+		this._isActive = true;
+
+		// Drag logic
+		let isDragging = false;
+		let hasMoved = false;
+		let offsetX, offsetY;
+
+		btn.addEventListener("mousedown", (e) => {
+			isDragging = true;
+			hasMoved = false;
+			offsetX = e.clientX - btn.getBoundingClientRect().left;
+			offsetY = e.clientY - btn.getBoundingClientRect().top;
+		});
+
+		document.addEventListener("mousemove", (e) => {
+			if (!isDragging) return;
+			hasMoved = true;
+
+			let newX = e.clientX - offsetX;
+			let newY = e.clientY - offsetY;
+
+			// Keep on screen
+			newX = Math.max(0, Math.min(window.innerWidth - btn.offsetWidth, newX));
+			newY = Math.max(0, Math.min(window.innerHeight - btn.offsetHeight, newY));
+
+			btn.style.left = `${newX}px`;
+			btn.style.top = `${newY}px`;
+		});
+
+		document.addEventListener("mouseup", () => {
+			if (isDragging && hasMoved) {
+				// Save position
+				this._saveButtonPosition(
+					parseInt(btn.style.left),
+					parseInt(btn.style.top),
+				);
+			}
+			isDragging = false;
+		});
+
+		// Click logic
+		btn.addEventListener("click", () => {
+			if (hasMoved) return;
+			this.toggle();
+		});
+
+		this._button = btn;
+		document.body.appendChild(btn);
+	}
+
+	_updateButtonText () {
+		const textSpan = document.getElementById("tgtt-btn-text");
+		if (!textSpan) return;
+
+		const hiddenCount = document.querySelectorAll(".tgtt-duplicate").length;
+		let text = this._isActive ? `TGTT Filter: ON (${hiddenCount})` : "TGTT Filter: OFF";
+
+		// Count active filters
+		const activeFilters = [
+			...Object.values(this._filterState.rarity),
+			...Object.values(this._filterState.legality),
+		].filter(s => s !== "ignore").length;
+
+		if (activeFilters > 0) {
+			text += ` [${activeFilters} filters]`;
+		}
+
+		textSpan.textContent = text;
+	}
+
+	_filterLists () {
+		const listItems = document.querySelectorAll("a.lst__row-border");
+		const itemsByName = {};
+
+		listItems.forEach(item => {
+			const nameEl = item.querySelector(".bold");
+			const sourceEl = item.querySelector("[class*='source__']");
+
+			if (nameEl && sourceEl) {
+				const name = nameEl.textContent.trim();
+				const source = sourceEl.textContent.trim();
+
+				if (!itemsByName[name]) itemsByName[name] = [];
+				itemsByName[name].push({element: item, source});
+			}
+		});
+
+		Object.keys(itemsByName).forEach(name => {
+			const group = itemsByName[name];
+			const hasPriority = group.some(entry => entry.source.includes(TgttFilter.PRIORITY_SOURCE));
+
+			if (hasPriority) {
+				group.forEach(entry => {
+					if (!entry.source.includes(TgttFilter.PRIORITY_SOURCE)) {
+						entry.element.classList.add("tgtt-duplicate");
+						entry.element.classList.remove("tgtt-winner");
+					} else {
+						entry.element.classList.remove("tgtt-duplicate");
+						entry.element.classList.add("tgtt-winner");
+					}
+				});
+			}
+		});
+
+		this._updateButtonText();
+	}
+
+	_tagListItems () {
+		if (!this._isSpellsPage()) return;
+
+		const listItems = document.querySelectorAll("a.lst__row-border");
+
+		listItems.forEach(item => {
+			if (item.hasAttribute("data-tgtt-rarity")) return;
+
+			const sourceEl = item.querySelector("[class*='source__']");
+			if (sourceEl) {
+				const sourceText = sourceEl.textContent.trim();
+				const metadata = this._computeMetadataFromSource(sourceText);
+
+				item.setAttribute("data-tgtt-rarity", metadata.rarity);
+				item.setAttribute("data-tgtt-legality", metadata.legality);
+			}
+		});
+	}
+
+	_computeMetadataFromSource (sourceText) {
+		let rarity = "common";
+		let legality = "legal";
+
+		if (TgttFilter.SOURCES_RARITY_MAP[sourceText]) {
+			rarity = TgttFilter.SOURCES_RARITY_MAP[sourceText];
+		} else if (!TgttFilter.OFFICIAL_SOURCES.has(sourceText)) {
+			rarity = "uncommon";
+		}
+
+		return {rarity, legality};
+	}
+
+	_applyFilterCSS () {
+		if (!this._isSpellsPage()) return;
+		if (!this._dynamicStyleSheet) return;
+
+		let css = "";
+
+		// Get active (yes) and excluded (no) filters
+		const activeRarityFilters = Object.entries(this._filterState.rarity)
+			.filter(([_, state]) => state === "yes")
+			.map(([key]) => key);
+
+		const excludedRarityFilters = Object.entries(this._filterState.rarity)
+			.filter(([_, state]) => state === "no")
+			.map(([key]) => key);
+
+		const activeLegalityFilters = Object.entries(this._filterState.legality)
+			.filter(([_, state]) => state === "yes")
+			.map(([key]) => key);
+
+		const excludedLegalityFilters = Object.entries(this._filterState.legality)
+			.filter(([_, state]) => state === "no")
+			.map(([key]) => key);
+
+		// If any 'yes' filters are active, hide items that don't match ANY of them (OR logic)
+		if (activeRarityFilters.length > 0) {
+			const selectors = activeRarityFilters.map(r => `[data-tgtt-rarity="${r}"]`).join(",");
+			css += `a.lst__row-border:not(:is(${selectors})) { display: none !important; }\n`;
+		}
+
+		// Hide explicitly excluded items
+		excludedRarityFilters.forEach(rarity => {
+			css += `a.lst__row-border[data-tgtt-rarity="${rarity}"] { display: none !important; }\n`;
+		});
+
+		// Same for legality
+		if (activeLegalityFilters.length > 0) {
+			const selectors = activeLegalityFilters.map(l => `[data-tgtt-legality="${l}"]`).join(",");
+			css += `a.lst__row-border:not(:is(${selectors})) { display: none !important; }\n`;
+		}
+
+		excludedLegalityFilters.forEach(legality => {
+			css += `a.lst__row-border[data-tgtt-legality="${legality}"] { display: none !important; }\n`;
+		});
+
+		this._dynamicStyleSheet.textContent = css;
+		this._updateButtonText();
+	}
+
+	_setupObserver () {
+		const observer = new MutationObserver((mutations) => {
+			let shouldUpdate = false;
+			for (const mutation of mutations) {
+				if (mutation.addedNodes.length > 0) {
+					shouldUpdate = true;
+					break;
+				}
+			}
+			if (shouldUpdate) {
+				clearTimeout(this._filterTimeout);
+				this._filterTimeout = setTimeout(() => {
+					this._filterLists();
+					if (this._isSpellsPage()) {
+						this._tagListItems();
+						this._applyFilterCSS();
+					}
+				}, 150);
+			}
+		});
+
+		observer.observe(document.body, {childList: true, subtree: true});
+	}
+}
+
+// ==================== TGTT Filter UI for Filter Modal ====================
+
+class TgttFilterModalUI {
+	constructor (tgttFilter) {
+		this._tgttFilter = tgttFilter;
+		this._injected = false;
+	}
+
+	/**
+	 * Initialize the modal UI watcher
+	 */
+	init () {
+		this._watchForFilterModal();
+	}
+
+	_watchForFilterModal () {
+		const modalObserver = new MutationObserver(() => {
+			const isModalOpen = document.body.classList.contains("ui-modal__body-active");
+			if (isModalOpen && !this._injected) {
+				setTimeout(() => this._injectFilterUI(), 100);
+			} else if (!isModalOpen) {
+				this._injected = false;
+			}
+		});
+
+		modalObserver.observe(document.body, {attributes: true, attributeFilter: ["class"]});
+	}
+
+	_injectFilterUI () {
+		if (!window.location.href.includes("spells.html")) return;
+		if (document.querySelector(".tgtt-filter-section")) {
+			this._injected = true;
+			return;
+		}
+
+		const modalScroller = document.querySelector(".ui-modal__scroller");
+		if (!modalScroller) return;
+
+		// Create filter sections
+		const raritySection = this._createFilterSection("TGTT Rarity", "rarity", [
+			{key: "common", label: "Common"},
+			{key: "uncommon", label: "Uncommon"},
+			{key: "rare", label: "Rare"},
+		]);
+
+		const legalitySection = this._createFilterSection("TGTT Legality", "legality", [
+			{key: "legal", label: "Legal"},
+			{key: "illegal-i", label: "Illegal-I"},
+			{key: "illegal-ii", label: "Illegal-II"},
+			{key: "illegal-iii", label: "Illegal-III"},
+			{key: "illegal-iv", label: "Illegal-IV"},
+		]);
+
+		// Find insertion point
+		const saveButtons = modalScroller.querySelector(".w-100.ve-flex-vh-center.my-1");
+		if (saveButtons) {
+			modalScroller.insertBefore(raritySection, saveButtons);
+			modalScroller.insertBefore(legalitySection, saveButtons);
+		} else {
+			modalScroller.appendChild(raritySection);
+			modalScroller.appendChild(legalitySection);
+		}
+
+		this._updatePillStates();
+		this._injected = true;
+	}
+
+	_createFilterSection (title, filterType, options) {
+		const filterState = this._tgttFilter.getFilterState();
+
+		const section = document.createElement("div");
+		section.className = "tgtt-filter-section";
+
+		section.innerHTML = `
+			<div class="fltr__dropdown-divider mb-1"></div>
+			<div class="split fltr__h mb-1">
+				<div class="fltr__h-text ve-flex-h-center mobile-sm__w-100">
+					<span>⚜️ ${title}</span>
+				</div>
+				<div class="ve-flex-v-center fltr__h-wrp-btns-outer mobile-sm__hidden">
+					<div class="ve-btn-group ve-flex-v-center w-100">
+						<button class="ve-btn ve-btn-default ve-btn-xs tgtt-reset-btn" data-filter-type="${filterType}">Reset</button>
+					</div>
+				</div>
+			</div>
+			<div class="fltr__wrp-pills fltr__container-pills tgtt-pills-container" data-filter-type="${filterType}">
+				${options.map(opt => `
+					<div class="tgtt-filter-pill" 
+						 data-filter-type="${filterType}" 
+						 data-filter-key="${opt.key}" 
+						 data-state="${filterState[filterType]?.[opt.key] || "ignore"}"
+						 title="Click to cycle: Include → Exclude → Ignore">
+						${opt.label}
+					</div>
+				`).join("")}
+			</div>
+		`;
+
+		// Add click handlers
+		section.querySelectorAll(".tgtt-filter-pill").forEach(pill => {
+			pill.addEventListener("click", (e) => this._handlePillClick(e));
+		});
+
+		section.querySelector(".tgtt-reset-btn").addEventListener("click", (e) => this._handleResetClick(e));
+
+		return section;
+	}
+
+	_handlePillClick (e) {
+		const pill = e.currentTarget;
+		const filterType = pill.dataset.filterType;
+		const filterKey = pill.dataset.filterKey;
+		const currentState = pill.dataset.state;
+
+		// Cycle: ignore -> yes -> no -> ignore
+		const nextState = currentState === "ignore" ? "yes"
+			: currentState === "yes" ? "no"
+				: "ignore";
+
+		pill.dataset.state = nextState;
+		this._tgttFilter.setFilterState(filterType, filterKey, nextState);
+	}
+
+	_handleResetClick (e) {
+		const filterType = e.currentTarget.dataset.filterType;
+		this._tgttFilter.resetFilters(filterType);
+		this._updatePillStates();
+	}
+
+	_updatePillStates () {
+		const filterState = this._tgttFilter.getFilterState();
+
+		document.querySelectorAll(".tgtt-filter-pill").forEach(pill => {
+			const filterType = pill.dataset.filterType;
+			const filterKey = pill.dataset.filterKey;
+			if (filterState[filterType]?.[filterKey]) {
+				pill.dataset.state = filterState[filterType][filterKey];
+			}
+		});
+	}
+}
+
+// ==================== Singleton Instance ====================
+
+globalThis.TgttFilter = TgttFilter;
+globalThis.TgttFilterModalUI = TgttFilterModalUI;
+
+// Auto-initialize if on a supported page
+if (typeof window !== "undefined") {
+	window.addEventListener("load", () => {
+		// Check if TGTT features should be enabled (could check a setting here)
+		const tgttFilter = new TgttFilter();
+		const tgttFilterUI = new TgttFilterModalUI(tgttFilter);
+
+		tgttFilter.init({
+			enableButton: true,
+			enableSpellFilters: true,
+		});
+
+		tgttFilterUI.init();
+
+		// Expose for debugging
+		globalThis.tgttFilter = tgttFilter;
+		globalThis.tgttFilterUI = tgttFilterUI;
+	});
+}

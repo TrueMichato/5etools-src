@@ -1,0 +1,203 @@
+/**
+ * TGTT (Traveler's Guide to Thelemar) Filter Styles
+ * 
+ * Styling for the TGTT filtering system including:
+ * - Toggle button
+ * - Duplicate/winner highlighting
+ * - Filter pills in modal
+ */
+
+/* ==================== HIDING LOGIC (When Filter is ON) ==================== */
+
+body.tgtt-filter-active .tgtt-duplicate {
+	display: none !important;
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* ==================== HIGHLIGHTING LOGIC (When Filter is OFF) ==================== */
+
+/* Show gold border on the TGTT winner when filter is OFF */
+body:not(.tgtt-filter-active) .tgtt-winner {
+	box-shadow: inset 2px 0 0 #d9b257;
+	background-color: rgba(217, 178, 87, 0.05);
+}
+
+/* ==================== TOGGLE BUTTON STYLES ==================== */
+
+.tgtt-toggle-btn,
+#tgtt-toggle-btn {
+	position: fixed;
+	z-index: 9999;
+	padding: 8px 12px;
+	background-color: #222;
+	color: #ddd;
+	border: 1px solid #444;
+	border-radius: 8px;
+	cursor: grab;
+	font-family: sans-serif;
+	font-size: 13px;
+	font-weight: bold;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	transition: background 0.2s, border 0.2s, color 0.2s;
+	user-select: none;
+}
+
+.tgtt-toggle-btn:active,
+#tgtt-toggle-btn:active {
+	cursor: grabbing;
+}
+
+.tgtt-toggle-btn.active,
+#tgtt-toggle-btn.active {
+	background-color: #005E66;
+	border-color: #d9b257;
+	color: #fff;
+}
+
+.tgtt-btn-icon,
+#tgtt-btn-icon {
+	width: 20px;
+	height: 20px;
+	display: block;
+	pointer-events: none;
+}
+
+.tgtt-btn-text,
+#tgtt-btn-text {
+	white-space: nowrap;
+}
+
+/* ==================== FILTER SECTION STYLES ==================== */
+
+.tgtt-filter-section {
+	margin-bottom: 8px;
+}
+
+.tgtt-filter-section .fltr__h-text {
+	color: #d9b257;
+	font-weight: bold;
+}
+
+/* ==================== FILTER PILL STYLES ==================== */
+
+.tgtt-filter-pill {
+	display: inline-block;
+	padding: 2px 8px;
+	margin: 2px;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 12px;
+	border: 1px solid #444;
+	background-color: #333;
+	color: #ddd;
+	transition: all 0.15s ease;
+	user-select: none;
+}
+
+.tgtt-filter-pill:hover {
+	border-color: #666;
+}
+
+/* Include state (yes) - teal */
+.tgtt-filter-pill[data-state="yes"] {
+	background-color: #005E66;
+	border-color: #00838f;
+	color: #fff;
+}
+
+/* Exclude state (no) - red */
+.tgtt-filter-pill[data-state="no"] {
+	background-color: #8b0000;
+	border-color: #a00;
+	color: #fff;
+}
+
+/* Ignore state - muted */
+.tgtt-filter-pill[data-state="ignore"] {
+	background-color: #333;
+	border-color: #555;
+	color: #888;
+}
+
+/* ==================== RARITY/LEGALITY DISPLAY ==================== */
+
+.tgtt-rarity-legality-cell {
+	padding: 0 !important;
+}
+
+.tgtt-rarity-legality-wrapper {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	width: 100%;
+	padding: 2px 5px;
+	box-sizing: border-box;
+}
+
+.tgtt-rarity-legality-wrapper .tgtt-spell-tags {
+	font-weight: bold;
+}
+
+.tgtt-rarity-legality-wrapper .tgtt-spell-tags a {
+	text-transform: capitalize;
+}
+
+/* ==================== LIGHT MODE OVERRIDES ==================== */
+
+:root[data-theme="day"] .tgtt-toggle-btn,
+:root[data-theme="day"] #tgtt-toggle-btn {
+	background-color: #f5f5f5;
+	color: #333;
+	border-color: #ccc;
+}
+
+:root[data-theme="day"] .tgtt-toggle-btn.active,
+:root[data-theme="day"] #tgtt-toggle-btn.active {
+	background-color: #007580;
+	border-color: #c9a227;
+	color: #fff;
+}
+
+:root[data-theme="day"] .tgtt-filter-pill {
+	background-color: #f0f0f0;
+	border-color: #ccc;
+	color: #333;
+}
+
+:root[data-theme="day"] .tgtt-filter-pill[data-state="ignore"] {
+	background-color: #e8e8e8;
+	border-color: #bbb;
+	color: #888;
+}
+
+:root[data-theme="day"] .tgtt-filter-pill[data-state="yes"] {
+	background-color: #007580;
+	border-color: #00838f;
+	color: #fff;
+}
+
+:root[data-theme="day"] .tgtt-filter-pill[data-state="no"] {
+	background-color: #c62828;
+	border-color: #d32f2f;
+	color: #fff;
+}
+
+/* ==================== RESPONSIVE STYLES ==================== */
+
+@media (max-width: 768px) {
+	.tgtt-toggle-btn,
+	#tgtt-toggle-btn {
+		padding: 6px 10px;
+		font-size: 12px;
+	}
+
+	.tgtt-btn-icon,
+	#tgtt-btn-icon {
+		width: 16px;
+		height: 16px;
+	}
+}
