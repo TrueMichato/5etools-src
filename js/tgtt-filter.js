@@ -42,6 +42,8 @@ class TgttFilter {
 		"HWCS": "common",
 		"BoET": "rare",
 		"DoDk": "uncommon",
+		"GH:PG'24": "rare",
+		"GH:PG'14": "rare",
 	};
 
 	constructor () {
@@ -119,15 +121,28 @@ class TgttFilter {
 		let rarity = "common";
 		let legality = "legal";
 
-		// Check for explicit rarity/legality in spell data
-		if (spell.tgttRarity) {
-			rarity = spell.tgttRarity.toLowerCase();
-		} else if (TgttFilter.SOURCES_RARITY_MAP[sourceAbv]) {
+		// First check source-based defaults
+		if (TgttFilter.SOURCES_RARITY_MAP[sourceAbv]) {
 			rarity = TgttFilter.SOURCES_RARITY_MAP[sourceAbv];
 		} else if (!TgttFilter.OFFICIAL_SOURCES.has(sourceAbv)) {
 			rarity = "uncommon";
 		}
 
+		// Check subschools for rarity/legality markers (handles "rarity: X" or "(rarity: X)")
+		if (spell.subschools) {
+			for (const subschool of spell.subschools) {
+				const sub = subschool.toLowerCase();
+				const rarityMatch = sub.match(/rarity:\s*([^),\s]+)/i);
+				const legalityMatch = sub.match(/legality:\s*([^),\s]+)/i);
+				if (rarityMatch) rarity = rarityMatch[1].trim();
+				if (legalityMatch) legality = legalityMatch[1].trim();
+			}
+		}
+
+		// Explicit properties take highest priority
+		if (spell.tgttRarity) {
+			rarity = spell.tgttRarity.toLowerCase();
+		}
 		if (spell.tgttLegality) {
 			legality = spell.tgttLegality.toLowerCase();
 		}
@@ -365,18 +380,55 @@ class TgttFilter {
 
 		const listItems = document.querySelectorAll("a.lst__row-border");
 
+		// Try to get the spell data list from the page
+		const dataList = globalThis.dbg_page?._dataList || [];
+
 		listItems.forEach(item => {
 			if (item.hasAttribute("data-tgtt-rarity")) return;
 
 			const sourceEl = item.querySelector("[class*='source__']");
+			const nameEl = item.querySelector(".bold");
+
 			if (sourceEl) {
 				const sourceText = sourceEl.textContent.trim();
-				const metadata = this._computeMetadataFromSource(sourceText);
+				const spellName = nameEl?.textContent?.trim();
+
+				// Try to find the spell in the data list to get accurate rarity/legality
+				let metadata = this._computeMetadataFromSource(sourceText);
+
+				if (spellName && dataList.length > 0) {
+					const spell = dataList.find(s => s.name === spellName && Parser.sourceJsonToAbv(s.source) === sourceText);
+					if (spell) {
+						metadata = this._computeMetadataFromSpell(spell, metadata);
+					}
+				}
 
 				item.setAttribute("data-tgtt-rarity", metadata.rarity);
 				item.setAttribute("data-tgtt-legality", metadata.legality);
 			}
 		});
+	}
+
+	_computeMetadataFromSpell (spell, defaultMetadata) {
+		let rarity = defaultMetadata.rarity;
+		let legality = defaultMetadata.legality;
+
+		// Check subschools for rarity/legality markers (handles "rarity: X" or "(rarity: X)")
+		if (spell.subschools) {
+			for (const subschool of spell.subschools) {
+				const sub = subschool.toLowerCase();
+				const rarityMatch = sub.match(/rarity:\s*([^),\s]+)/i);
+				const legalityMatch = sub.match(/legality:\s*([^),\s]+)/i);
+				if (rarityMatch) rarity = rarityMatch[1].trim();
+				if (legalityMatch) legality = legalityMatch[1].trim();
+			}
+		}
+
+		// Also check if there are explicit tgtt properties
+		if (spell.tgttRarity) rarity = spell.tgttRarity.toLowerCase();
+		if (spell.tgttLegality) legality = spell.tgttLegality.toLowerCase();
+
+		return {rarity, legality};
 	}
 
 	_computeMetadataFromSource (sourceText) {

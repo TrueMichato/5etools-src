@@ -120,13 +120,29 @@ class _RenderSpellsImplBase extends RenderPageImplBase {
 	/* ----- */
 
 	_getCommonHtmlParts_levelSchoolRitual ({ent}) {
-		const levelSchoolRitual = Renderer.spell.getHtmlPtLevelSchoolRitual(ent, {styleHint: this._style});
+		let levelSchoolRitual = Renderer.spell.getHtmlPtLevelSchoolRitual(ent, {styleHint: this._style});
 
 		// If TgttFilter is available, combine with rarity/legality
 		if (typeof TgttFilter !== "undefined") {
 			const metadata = TgttFilter.computeSpellMetadata(ent);
-			const rarity = ent.tgttRarity || metadata.rarity;
-			const legality = ent.tgttLegality || metadata.legality;
+
+			// Check for explicit rarity/legality markers in the level/school text
+			let rarity = ent.tgttRarity || metadata.rarity;
+			let legality = ent.tgttLegality || metadata.legality;
+
+			// Parse rarity from level/school text if present
+			const rarityMatch = levelSchoolRitual.match(/\(rarity:\s*([^)]+)\)/i);
+			if (rarityMatch) {
+				rarity = rarityMatch[1].trim().toLowerCase();
+				levelSchoolRitual = levelSchoolRitual.replace(/\s*\(rarity:[^)]+\)/gi, "");
+			}
+
+			// Parse legality from level/school text if present
+			const legalityMatch = levelSchoolRitual.match(/\(legality:\s*([^)]+)\)/i);
+			if (legalityMatch) {
+				legality = legalityMatch[1].trim().toLowerCase();
+				levelSchoolRitual = levelSchoolRitual.replace(/\s*\(legality:[^)]+\)/gi, "");
+			}
 
 			return `<tr><td colspan="6" class="tgtt-rarity-legality-cell" style="padding: 0;">
 				<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 2px 5px; box-sizing: border-box;">
