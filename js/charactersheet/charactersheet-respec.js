@@ -7,20 +7,20 @@ class CharacterSheetRespec {
 		this._page = page;
 		this._state = state;
 
-		this._$timeline = null;
-		this._$legacyBadge = null;
-		this._$container = null;
+		this._timeline = null;
+		this._legacyBadge = null;
+		this._container = null;
 	}
 
 	/**
 	 * Initialize the respec module and bind to DOM elements
 	 */
 	init () {
-		this._$container = $("#charsheet-level-history");
-		this._$timeline = $("#charsheet-level-timeline");
-		this._$legacyBadge = $("#charsheet-legacy-badge");
+		this._container = document.getElementById("charsheet-level-history");
+		this._timeline = document.getElementById("charsheet-level-timeline");
+		this._legacyBadge = document.getElementById("charsheet-legacy-badge");
 
-		if (!this._$container.length) {
+		if (!this._container) {
 			console.warn("[Respec] Level history container not found");
 			return;
 		}
@@ -33,31 +33,31 @@ class CharacterSheetRespec {
 	 * Render the level history timeline
 	 */
 	render () {
-		if (!this._$timeline?.length) return;
+		if (!this._timeline) return;
 
 		const totalLevel = this._state.getTotalLevel();
 
 		// No levels yet - tab visibility handles showing/hiding
 		if (totalLevel === 0) {
-			this._$timeline.empty();
-			this._$timeline.append(`<p class="charsheet__respec-empty">No levels yet. Complete character creation in the Builder tab.</p>`);
+			this._timeline.innerHTML = "";
+			this._timeline.append(e_({outer: `<p class="charsheet__respec-empty">No levels yet. Complete character creation in the Builder tab.</p>`}));
 			return;
 		}
 
 		// Show legacy badge if applicable
 		const isLegacy = this._state.isLegacyCharacter();
-		this._$legacyBadge.toggleClass("ve-hidden", !isLegacy);
+		this._legacyBadge.classList.toggle("ve-hidden", !isLegacy);
 
 		// Build timeline entries
 		const levelHistory = this._state.getLevelHistory();
 		const historyByLevel = new Map(levelHistory.map(h => [h.level, h]));
 
-		this._$timeline.empty();
+		this._timeline.innerHTML = "";
 
 		for (let level = 1; level <= totalLevel; level++) {
 			const history = historyByLevel.get(level);
-			const $entry = this._renderLevelEntry(level, history, level === totalLevel);
-			this._$timeline.append($entry);
+			const entry = this._renderLevelEntry(level, history, level === totalLevel);
+			this._timeline.append(entry);
 		}
 	}
 
@@ -66,7 +66,7 @@ class CharacterSheetRespec {
 	 * @param {number} level - Character level
 	 * @param {object|null} history - History entry or null for legacy
 	 * @param {boolean} isCurrent - Whether this is the current level
-	 * @returns {jQuery} The entry element
+	 * @returns {HTMLElement} The entry element
 	 */
 	_renderLevelEntry (level, history, isCurrent) {
 		const isLegacy = !history;
@@ -88,45 +88,46 @@ class CharacterSheetRespec {
 			isCurrent ? "charsheet__level-entry--current" : "",
 		].filter(Boolean).join(" ");
 
-		const $entry = $(`<div class="${entryClasses}" data-level="${level}"></div>`);
+		const entry = e_({tag: "div", clazz: entryClasses});
+		entry.dataset.level = level;
 
-		const $card = $(`<div class="charsheet__level-entry-card"></div>`);
+		const card = e_({tag: "div", clazz: "charsheet__level-entry-card"});
 
 		// Header with class name and edit button
-		const $header = $(`<div class="charsheet__level-entry-header"></div>`);
+		const header = e_({tag: "div", clazz: "charsheet__level-entry-header"});
 
 		const className = levelClass?.name || "Unknown";
-		const $classInfo = $(`
+		const classInfo = e_({outer: `
 			<div class="charsheet__level-entry-class">
 				<span class="charsheet__level-entry-class-name">${className}</span>
 				<span class="charsheet__level-entry-class-level">Level ${level}</span>
 			</div>
-		`);
+		`});
 
 		// Edit button - disabled for legacy entries
-		const $editBtn = $(`
+		const editBtn = e_({outer: `
 			<button class="charsheet__level-entry-edit" title="${isLegacy ? "Cannot edit legacy level - level history not recorded" : "Edit choices for this level"}">
 				<span class="glyphicon glyphicon-pencil"></span>
 			</button>
-		`);
+		`});
 
 		if (isLegacy) {
-			$editBtn.prop("disabled", true);
+			editBtn.disabled = true;
 		} else {
-			$editBtn.on("click", () => this._onEditLevel(level, history));
+			editBtn.addEventListener("click", () => this._onEditLevel(level, history));
 		}
 
-		$header.append($classInfo).append($editBtn);
-		$card.append($header);
+		header.append(classInfo, editBtn);
+		card.append(header);
 
 		// Show race/background grants at level 1
 		if (level === 1) {
-			const $grants = this._renderRaceBackgroundGrants();
-			if ($grants) $card.append($grants);
+			const grants = this._renderRaceBackgroundGrants();
+			if (grants) card.append(grants);
 		}
 
 		// Choices summary
-		const $choices = $(`<div class="charsheet__level-entry-choices"></div>`);
+		const choices = e_({tag: "div", clazz: "charsheet__level-entry-choices"});
 
 		if (history?.choices && Object.keys(history.choices).length > 0) {
 			// ASI choice
@@ -134,67 +135,67 @@ class CharacterSheetRespec {
 				const asiText = Object.entries(history.choices.asi)
 					.map(([abl, val]) => `${Parser.attAbvToFull(abl)} +${val}`)
 					.join(", ");
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--asi">
 						<span class="charsheet__level-choice-icon">📈</span>
 						${asiText}
 					</span>
-				`);
+				`}));
 			}
 
 			// Feat choice
 			if (history.choices.feat) {
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--feat">
 						<span class="charsheet__level-choice-icon">⭐</span>
 						${history.choices.feat.name}
 					</span>
-				`);
+				`}));
 			}
 
 			// Subclass choice
 			if (history.choices.subclass) {
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--subclass">
 						<span class="charsheet__level-choice-icon">🎭</span>
 						${history.choices.subclass.name}
 					</span>
-				`);
+				`}));
 			}
 
 			// Skills chosen
 			if (history.choices.skills?.length > 0) {
 				const skillText = history.choices.skills.slice(0, 3).join(", ");
 				const more = history.choices.skills.length > 3 ? ` +${history.choices.skills.length - 3} more` : "";
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--skill">
 						<span class="charsheet__level-choice-icon">🎯</span>
 						${skillText}${more}
 					</span>
-				`);
+				`}));
 			}
 
 			// Feature choices
 			if (history.choices.featureChoices?.length > 0) {
 				history.choices.featureChoices.forEach(fc => {
-					$choices.append(`
+					choices.append(e_({outer: `
 						<span class="charsheet__level-choice charsheet__level-choice--feature">
 							<span class="charsheet__level-choice-icon">✦</span>
 							${fc.choice}
 						</span>
-					`);
+					`}));
 				});
 			}
 
 			// Optional features (invocations, metamagic, etc.)
 			if (history.choices.optionalFeatures?.length > 0) {
 				history.choices.optionalFeatures.forEach(of => {
-					$choices.append(`
+					choices.append(e_({outer: `
 						<span class="charsheet__level-choice charsheet__level-choice--feature">
 							<span class="charsheet__level-choice-icon">✧</span>
 							${of.name}
 						</span>
-					`);
+					`}));
 				});
 			}
 
@@ -202,24 +203,24 @@ class CharacterSheetRespec {
 			if (history.choices.expertise?.length > 0) {
 				const expertiseText = history.choices.expertise.map(e => e.toTitleCase()).slice(0, 3).join(", ");
 				const more = history.choices.expertise.length > 3 ? ` +${history.choices.expertise.length - 3} more` : "";
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--expertise">
 						<span class="charsheet__level-choice-icon">🔥</span>
 						Expertise: ${expertiseText}${more}
 					</span>
-				`);
+				`}));
 			}
 
 			// Combat traditions
 			if (history.choices.combatTraditions?.length > 0) {
 				const traditionsText = history.choices.combatTraditions.slice(0, 3).join(", ");
 				const more = history.choices.combatTraditions.length > 3 ? ` +${history.choices.combatTraditions.length - 3} more` : "";
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--feature">
 						<span class="charsheet__level-choice-icon">⚔️</span>
 						Traditions: ${traditionsText}${more}
 					</span>
-				`);
+				`}));
 			}
 
 			// Weapon masteries
@@ -229,56 +230,56 @@ class CharacterSheetRespec {
 					.slice(0, 2)
 					.join(", ");
 				const more = history.choices.weaponMasteries.length > 2 ? ` +${history.choices.weaponMasteries.length - 2} more` : "";
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--feature">
 						<span class="charsheet__level-choice-icon">🗡️</span>
 						Masteries: ${masteryText}${more}
 					</span>
-				`);
+				`}));
 			}
 
 			// Language choices
 			if (history.choices.languages?.length > 0) {
 				const langText = history.choices.languages.map(l => l.language).join(", ");
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--language">
 						<span class="charsheet__level-choice-icon">🗣️</span>
 						${langText}
 					</span>
-				`);
+				`}));
 			}
 
 			// Scholar skill (knowledge domain, sage, etc.)
 			if (history.choices.scholarSkill) {
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--scholar">
 						<span class="charsheet__level-choice-icon">📚</span>
 						Scholar: ${history.choices.scholarSkill.toTitleCase()}
 					</span>
-				`);
+				`}));
 			}
 
 			// Spellbook spells (wizard)
 			if (history.choices.spellbookSpells?.length > 0) {
 				const spellText = history.choices.spellbookSpells.map(s => s.name).slice(0, 2).join(", ");
 				const more = history.choices.spellbookSpells.length > 2 ? ` +${history.choices.spellbookSpells.length - 2} more` : "";
-				$choices.append(`
+				choices.append(e_({outer: `
 					<span class="charsheet__level-choice charsheet__level-choice--spells">
 						<span class="charsheet__level-choice-icon">📜</span>
 						Spellbook: ${spellText}${more}
 					</span>
-				`);
+				`}));
 			}
 		} else if (isLegacy) {
-			$choices.append(`<span class="charsheet__level-entry-empty">No history recorded (legacy character)</span>`);
+			choices.append(e_({outer: `<span class="charsheet__level-entry-empty">No history recorded (legacy character)</span>`}));
 		} else {
-			$choices.append(`<span class="charsheet__level-entry-empty">No choices at this level</span>`);
+			choices.append(e_({outer: `<span class="charsheet__level-entry-empty">No choices at this level</span>`}));
 		}
 
-		$card.append($choices);
-		$entry.append($card);
+		card.append(choices);
+		entry.append(card);
 
-		return $entry;
+		return entry;
 	}
 
 	/**
@@ -303,7 +304,7 @@ class CharacterSheetRespec {
 
 	/**
 	 * Render a read-only summary of race and background grants for the level 1 card.
-	 * @returns {jQuery|null} The grants element, or null if no race/background set
+	 * @returns {HTMLElement|null} The grants element, or null if no race/background set
 	 */
 	_renderRaceBackgroundGrants () {
 		const race = this._state.getRace();
@@ -311,13 +312,13 @@ class CharacterSheetRespec {
 
 		if (!race && !background) return null;
 
-		const $grants = $(`<div class="charsheet__level-entry-grants mt-1 mb-1"></div>`);
+		const grants = e_({tag: "div", clazz: "charsheet__level-entry-grants mt-1 mb-1"});
 
 		// Race grants
 		if (race) {
 			const raceName = this._state.getRaceName() || race.name;
-			const $raceGrants = $(`<div class="charsheet__level-grants-section"></div>`);
-			$raceGrants.append(`<div class="ve-small ve-bold">🧬 ${raceName}</div>`);
+			const raceGrants = e_({tag: "div", clazz: "charsheet__level-grants-section"});
+			raceGrants.append(e_({outer: `<div class="ve-small ve-bold">🧬 ${raceName}</div>`}));
 
 			const items = [];
 
@@ -370,16 +371,16 @@ class CharacterSheetRespec {
 			}
 
 			if (items.length) {
-				$raceGrants.append(`<div class="ve-small ve-muted ml-2">${items.join(" · ")}</div>`);
+				raceGrants.append(e_({outer: `<div class="ve-small ve-muted ml-2">${items.join(" · ")}</div>`}));
 			}
 
-			$grants.append($raceGrants);
+			grants.append(raceGrants);
 		}
 
 		// Background grants
 		if (background) {
-			const $bgGrants = $(`<div class="charsheet__level-grants-section mt-1"></div>`);
-			$bgGrants.append(`<div class="ve-small ve-bold">📜 ${background.name}</div>`);
+			const bgGrants = e_({tag: "div", clazz: "charsheet__level-grants-section mt-1"});
+			bgGrants.append(e_({outer: `<div class="ve-small ve-bold">📜 ${background.name}</div>`}));
 
 			const items = [];
 
@@ -422,13 +423,13 @@ class CharacterSheetRespec {
 			}
 
 			if (items.length) {
-				$bgGrants.append(`<div class="ve-small ve-muted ml-2">${items.join(" · ")}</div>`);
+				bgGrants.append(e_({outer: `<div class="ve-small ve-muted ml-2">${items.join(" · ")}</div>`}));
 			}
 
-			$grants.append($bgGrants);
+			grants.append(bgGrants);
 		}
 
-		return $grants;
+		return grants;
 	}
 
 	/**
@@ -533,7 +534,7 @@ class CharacterSheetRespec {
 	 * @param {Array} editableChoices - Editable choices
 	 */
 	async _showEditModal (level, history, editableChoices) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Edit Level ${level} Choices`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -541,39 +542,39 @@ class CharacterSheetRespec {
 			cbClose: () => {},
 		});
 
-		const $content = $(`<div class="charsheet__respec-modal"></div>`);
+		const content = e_({tag: "div", clazz: "charsheet__respec-modal"});
 
 		// Show current choices
-		$content.append(`<h4>Current Choices</h4>`);
+		content.append(e_({outer: `<h4>Current Choices</h4>`}));
 
-		const $choicesList = $(`<div class="charsheet__respec-choices-list"></div>`);
+		const choicesList = e_({tag: "div", clazz: "charsheet__respec-choices-list"});
 		editableChoices.forEach(choice => {
 			const currentText = typeof choice.current === "object"
 				? (choice.current.name || JSON.stringify(choice.current))
 				: String(choice.current);
 
-			const $choiceRow = $(`
+			const choiceRow = e_({outer: `
 				<div class="charsheet__respec-choice-row">
 					<span class="charsheet__respec-choice-label">${choice.label}:</span>
 					<span class="charsheet__respec-choice-current">${currentText}</span>
-					${choice.hasCascade ? `<span class="charsheet__respec-choice-warning" title="Changing this will remove dependent features">⚠️</span>` : ""}
+					${choice.hasCascade ? `<span class="charsheet__respec-choice-warning" title="Changing this will remove dependent features">\u26a0\ufe0f</span>` : ""}
 				</div>
-			`);
+			`});
 
-			const $editBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">Change</button>`);
-			$editBtn.on("click", () => this._editChoice(level, history, choice, doClose));
-			$choiceRow.append($editBtn);
+			const editBtn = e_({tag: "button", clazz: "ve-btn ve-btn-xs ve-btn-default", txt: "Change"});
+			editBtn.addEventListener("click", () => this._editChoice(level, history, choice, doClose));
+			choiceRow.append(editBtn);
 
-			$choicesList.append($choiceRow);
+			choicesList.append(choiceRow);
 		});
-		$content.append($choicesList);
+		content.append(choicesList);
 
 		// Close button
-		const $closeBtn = $(`<button class="ve-btn ve-btn-primary mt-3">Close</button>`);
-		$closeBtn.on("click", () => doClose());
-		$content.append($closeBtn);
+		const closeBtn = e_({tag: "button", clazz: "ve-btn ve-btn-primary mt-3", txt: "Close"});
+		closeBtn.addEventListener("click", () => doClose());
+		content.append(closeBtn);
 
-		$modalInner.append($content);
+		modalInner.append(content);
 	}
 
 	/**
@@ -612,7 +613,7 @@ class CharacterSheetRespec {
 	}
 
 	async _editCombatTraditions (level, history, closeParentModal) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Change Level ${level} Combat Traditions`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -644,50 +645,51 @@ class CharacterSheetRespec {
 
 		let selectedTraditions = [...(history.choices?.combatTraditions || [])];
 
-		$modalInner.append(`
+		modalInner.append(e_({outer: `
 			<p class="ve-muted mb-2">Choose up to ${requiredTraditions} traditions for this level history entry.</p>
 			<div class="ve-small ve-muted mb-2">Selected: <span id="respec-tradition-count">${selectedTraditions.length}</span>/${requiredTraditions}</div>
-		`);
+		`}));
 
-		const $list = $(`<div style="display:flex; flex-wrap:wrap; gap:8px;"></div>`).appendTo($modalInner);
+		const list = e_({tag: "div"});
+		Object.assign(list.style, {display: "flex", flexWrap: "wrap", gap: "8px"});
+		modalInner.append(list);
 		allTraditions.forEach(trad => {
 			const isSelected = selectedTraditions.includes(trad.code);
-			const $label = $(`
+			const label = e_({outer: `
 				<label style="display:flex; align-items:center; cursor:pointer; padding:4px 8px; border:1px solid var(--rgb-border-grey); border-radius:4px; ${isSelected ? "background: var(--rgb-bg-highlight);" : ""}">
 					<input type="checkbox" value="${trad.code}" ${isSelected ? "checked" : ""} style="margin-right:6px;">
 					<span>${trad.name}</span>
 					<span class="ve-small text-muted ml-1">(${trad.code})</span>
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (evt) => {
+			label.querySelector("input").addEventListener("change", (evt) => {
 				if (evt.target.checked) {
 					if (selectedTraditions.length < requiredTraditions) {
 						selectedTraditions.push(trad.code);
-						$label.css("background", "var(--rgb-bg-highlight)");
+						label.style.background = "var(--rgb-bg-highlight)";
 					} else {
 						evt.target.checked = false;
 						JqueryUtil.doToast({type: "warning", content: `You can only choose ${requiredTraditions} combat traditions.`});
 					}
 				} else {
 					selectedTraditions = selectedTraditions.filter(t => t !== trad.code);
-					$label.css("background", "");
+					label.style.background = "";
 				}
-				$("#respec-tradition-count").text(selectedTraditions.length);
+				document.getElementById("respec-tradition-count").textContent = selectedTraditions.length;
 			});
 
-			$list.append($label);
+			list.append(label);
 		});
 
-		$$`<div class="ve-flex-h-right mt-3">
+		const btnRow = ee`<div class="ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default mr-2">Cancel</button>
 			<button class="ve-btn ve-btn-primary">Apply Changes</button>
-		</div>`.appendTo($modalInner)
-			.find("button")
-			.eq(0)
-			.on("click", () => doClose());
+		</div>`;
+		modalInner.append(btnRow);
+		btnRow.querySelector(".ve-btn-default").addEventListener("click", () => doClose());
 
-		$modalInner.find(".ve-btn-primary").on("click", async () => {
+		btnRow.querySelector(".ve-btn-primary").addEventListener("click", async () => {
 			if (selectedTraditions.length !== requiredTraditions) {
 				JqueryUtil.doToast({type: "warning", content: `Please select exactly ${requiredTraditions} traditions.`});
 				return;
@@ -710,7 +712,7 @@ class CharacterSheetRespec {
 	}
 
 	async _editWeaponMasteries (level, history, closeParentModal) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Change Level ${level} Weapon Masteries`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -725,10 +727,10 @@ class CharacterSheetRespec {
 		);
 		let selectedMasteries = [...(history.choices?.weaponMasteries || [])];
 
-		$modalInner.append(`
+		modalInner.append(e_({outer: `
 			<p class="ve-muted mb-2">Choose up to ${requiredMasteries} weapon masteries for this level history entry.</p>
 			<div class="ve-small ve-muted mb-2">Selected: <span id="respec-mastery-count">${selectedMasteries.length}</span>/${requiredMasteries}</div>
-		`);
+		`}));
 
 		const weaponsWithMastery = (this._page.getItems() || []).filter(item => {
 			if (!item._isBaseItem) return false;
@@ -747,54 +749,54 @@ class CharacterSheetRespec {
 		const renderWeaponGroup = (weapons, groupName) => {
 			if (!weapons.length) return;
 
-			const $group = $(`<div class="mb-3"><strong>${groupName}:</strong></div>`);
-			const $checkboxes = $(`<div style="display:flex; flex-wrap:wrap; gap:8px;"></div>`);
+			const group = e_({outer: `<div class="mb-3"><strong>${groupName}:</strong></div>`});
+			const checkboxes = e_({tag: "div"});
+			Object.assign(checkboxes.style, {display: "flex", flexWrap: "wrap", gap: "8px"});
 
 			weapons.forEach(weapon => {
 				const weaponKey = `${weapon.name}|${weapon.source}`;
 				const isSelected = selectedMasteries.includes(weaponKey);
-				const $label = $(`
+				const label = e_({outer: `
 					<label style="display:flex; align-items:center; cursor:pointer; padding:4px 8px; border:1px solid var(--rgb-border-grey); border-radius:4px; ${isSelected ? "background: var(--rgb-bg-highlight);" : ""}">
 						<input type="checkbox" value="${weaponKey}" ${isSelected ? "checked" : ""} style="margin-right:6px;">
 						<span>${weapon.name}</span>
 					</label>
-				`);
+				`});
 
-				$label.find("input").on("change", (evt) => {
+				label.querySelector("input").addEventListener("change", (evt) => {
 					if (evt.target.checked) {
 						if (selectedMasteries.length < requiredMasteries) {
 							selectedMasteries.push(weaponKey);
-							$label.css("background", "var(--rgb-bg-highlight)");
+							label.style.background = "var(--rgb-bg-highlight)";
 						} else {
 							evt.target.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only choose ${requiredMasteries} weapon masteries.`});
 						}
 					} else {
 						selectedMasteries = selectedMasteries.filter(m => m !== weaponKey);
-						$label.css("background", "");
+						label.style.background = "";
 					}
-					$("#respec-mastery-count").text(selectedMasteries.length);
+					document.getElementById("respec-mastery-count").textContent = selectedMasteries.length;
 				});
 
-				$checkboxes.append($label);
+				checkboxes.append(label);
 			});
 
-			$group.append($checkboxes);
-			$modalInner.append($group);
+			group.append(checkboxes);
+			modalInner.append(group);
 		};
 
 		renderWeaponGroup(simpleWeapons, "Simple Weapons");
 		renderWeaponGroup(martialWeapons, "Martial Weapons");
 
-		$$`<div class="ve-flex-h-right mt-3">
+		const btnRow = ee`<div class="ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default mr-2">Cancel</button>
 			<button class="ve-btn ve-btn-primary">Apply Changes</button>
-		</div>`.appendTo($modalInner)
-			.find("button")
-			.eq(0)
-			.on("click", () => doClose());
+		</div>`;
+		modalInner.append(btnRow);
+		btnRow.querySelector(".ve-btn-default").addEventListener("click", () => doClose());
 
-		$modalInner.find(".ve-btn-primary").on("click", async () => {
+		btnRow.querySelector(".ve-btn-primary").addEventListener("click", async () => {
 			if (selectedMasteries.length !== requiredMasteries) {
 				JqueryUtil.doToast({type: "warning", content: `Please select exactly ${requiredMasteries} weapon masteries.`});
 				return;
@@ -824,7 +826,7 @@ class CharacterSheetRespec {
 	 * @param {Function} closeParentModal - Function to close parent modal
 	 */
 	async _editOptionalFeatures (level, history, choice, closeParentModal) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Change ${choice.label}`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -866,12 +868,13 @@ class CharacterSheetRespec {
 
 		let selectedNames = new Set(currentNames);
 
-		$modalInner.append(`
+		modalInner.append(e_({outer: `
 			<p class="ve-muted mb-2">Choose ${requiredCount} ${choice.label.toLowerCase()} for this level.</p>
 			<div class="ve-small ve-muted mb-2">Selected: <span id="respec-optfeat-count">${selectedNames.size}</span>/${requiredCount}</div>
-		`);
+		`}));
 
-		const $list = $(`<div style="max-height: 60vh; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>`);
+		const list = e_({tag: "div"});
+		Object.assign(list.style, {maxHeight: "60vh", overflowY: "auto", border: "1px solid var(--rgb-border-grey)", borderRadius: "4px", padding: "0.5rem"});
 
 		matchingOptions
 			.sort((a, b) => a.name.localeCompare(b.name))
@@ -880,7 +883,7 @@ class CharacterSheetRespec {
 				const isOtherLevel = existingFromOtherLevels.has(opt.name);
 				const isSelected = selectedNames.has(opt.name);
 
-				const $item = $(`
+				const item = e_({outer: `
 					<label style="display:flex; align-items:center; cursor:pointer; padding:6px 8px; border-bottom:1px solid var(--rgb-border-grey); ${isSelected ? "background: var(--rgb-bg-highlight);" : ""} ${isOtherLevel && !isCurrentLevel ? "opacity:0.5;" : ""}">
 						<input type="checkbox" ${isSelected ? "checked" : ""} ${isOtherLevel && !isCurrentLevel ? "disabled" : ""} style="margin-right:8px;">
 						<span>
@@ -889,38 +892,37 @@ class CharacterSheetRespec {
 							${isOtherLevel && !isCurrentLevel ? `<span class="text-muted ve-small ml-1">(known from another level)</span>` : ""}
 						</span>
 					</label>
-				`);
+				`});
 
-				$item.find("input").on("change", (evt) => {
+				item.querySelector("input").addEventListener("change", (evt) => {
 					if (evt.target.checked) {
 						if (selectedNames.size < requiredCount) {
 							selectedNames.add(opt.name);
-							$item.css("background", "var(--rgb-bg-highlight)");
+							item.style.background = "var(--rgb-bg-highlight)";
 						} else {
 							evt.target.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only choose ${requiredCount} ${choice.label.toLowerCase()}.`});
 						}
 					} else {
 						selectedNames.delete(opt.name);
-						$item.css("background", "");
+						item.style.background = "";
 					}
-					$("#respec-optfeat-count").text(selectedNames.size);
+					document.getElementById("respec-optfeat-count").textContent = selectedNames.size;
 				});
 
-				$list.append($item);
+				list.append(item);
 			});
 
-		$modalInner.append($list);
+		modalInner.append(list);
 
-		$$`<div class="ve-flex-h-right mt-3">
+		const btnRow = ee`<div class="ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default mr-2">Cancel</button>
 			<button class="ve-btn ve-btn-primary">Apply Changes</button>
-		</div>`.appendTo($modalInner)
-			.find("button")
-			.eq(0)
-			.on("click", () => doClose());
+		</div>`;
+		modalInner.append(btnRow);
+		btnRow.querySelector(".ve-btn-default").addEventListener("click", () => doClose());
 
-		$modalInner.find(".ve-btn-primary").on("click", async () => {
+		btnRow.querySelector(".ve-btn-primary").addEventListener("click", async () => {
 			if (selectedNames.size !== requiredCount) {
 				JqueryUtil.doToast({type: "warning", content: `Please select exactly ${requiredCount} ${choice.label.toLowerCase()}.`});
 				return;
@@ -1014,7 +1016,7 @@ class CharacterSheetRespec {
 	 * @param {Function} closeParentModal - Function to close parent modal
 	 */
 	async _editAsi (level, history, closeParentModal) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Change Level ${level} Ability Score Improvement`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -1022,20 +1024,20 @@ class CharacterSheetRespec {
 			cbClose: () => {},
 		});
 
-		const $content = $(`<div class="charsheet__respec-asi-modal"></div>`);
-		$content.append(`<h4>Allocate Points (2 points total)</h4>`);
+		const content = e_({tag: "div", clazz: "charsheet__respec-asi-modal"});
+		content.append(e_({outer: `<h4>Allocate Points (2 points total)</h4>`}));
 
 		const asiState = {...(history.choices?.asi || {})};
 		let pointsRemaining = 2 - Object.values(asiState).reduce((sum, v) => sum + v, 0);
 
-		const $pointsDisplay = $(`<div class="charsheet__respec-points-remaining">Points Remaining: <strong>${pointsRemaining}</strong></div>`);
-		$content.append($pointsDisplay);
+		const pointsDisplay = e_({outer: `<div class="charsheet__respec-points-remaining">Points Remaining: <strong>${pointsRemaining}</strong></div>`});
+		content.append(pointsDisplay);
 
-		const $asiGrid = $(`<div class="charsheet__respec-asi-grid"></div>`);
+		const asiGrid = e_({tag: "div", clazz: "charsheet__respec-asi-grid"});
 		Parser.ABIL_ABVS.forEach(abl => {
 			const currentBonus = asiState[abl] || 0;
 			const baseScore = this._state.getAbilityBase(abl) - (history.choices?.asi?.[abl] || 0);
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__respec-asi-row">
 					<span class="charsheet__respec-asi-name">${Parser.attAbvToFull(abl)}</span>
 					<span class="charsheet__respec-asi-base">${baseScore}</span>
@@ -1046,41 +1048,46 @@ class CharacterSheetRespec {
 					</div>
 					<span class="charsheet__respec-asi-total">${baseScore + currentBonus}</span>
 				</div>
-			`);
-			$asiGrid.append($row);
+			`});
+			asiGrid.append(row);
 		});
-		$content.append($asiGrid);
+		content.append(asiGrid);
 
 		// Wire up ASI controls
-		$content.on("click", ".charsheet__respec-asi-plus", (e) => {
-			const abl = $(e.currentTarget).data("abl");
-			const current = asiState[abl] || 0;
-			const baseScore = this._state.getAbilityBase(abl) - (history.choices?.asi?.[abl] || 0);
-			if (pointsRemaining > 0 && current < 2 && baseScore + current < 20) {
-				asiState[abl] = current + 1;
-				pointsRemaining--;
-				this._updateAsiDisplay($content, asiState, pointsRemaining, $pointsDisplay, history);
+		content.addEventListener("click", (e) => {
+			const plusBtn = e.target.closest(".charsheet__respec-asi-plus");
+			if (plusBtn) {
+				const abl = plusBtn.dataset.abl;
+				const current = asiState[abl] || 0;
+				const baseScore = this._state.getAbilityBase(abl) - (history.choices?.asi?.[abl] || 0);
+				if (pointsRemaining > 0 && current < 2 && baseScore + current < 20) {
+					asiState[abl] = current + 1;
+					pointsRemaining--;
+					this._updateAsiDisplay(content, asiState, pointsRemaining, pointsDisplay, history);
+				}
+				return;
 			}
-		});
 
-		$content.on("click", ".charsheet__respec-asi-minus", (e) => {
-			const abl = $(e.currentTarget).data("abl");
-			const current = asiState[abl] || 0;
-			if (current > 0) {
-				asiState[abl] = current - 1;
-				if (asiState[abl] === 0) delete asiState[abl];
-				pointsRemaining++;
-				this._updateAsiDisplay($content, asiState, pointsRemaining, $pointsDisplay, history);
+			const minusBtn = e.target.closest(".charsheet__respec-asi-minus");
+			if (minusBtn) {
+				const abl = minusBtn.dataset.abl;
+				const current = asiState[abl] || 0;
+				if (current > 0) {
+					asiState[abl] = current - 1;
+					if (asiState[abl] === 0) delete asiState[abl];
+					pointsRemaining++;
+					this._updateAsiDisplay(content, asiState, pointsRemaining, pointsDisplay, history);
+				}
 			}
 		});
 
 		// Buttons
-		const $btnRow = $(`<div class="charsheet__respec-btn-row mt-3"></div>`);
-		const $cancelBtn = $(`<button class="ve-btn ve-btn-default">Cancel</button>`);
-		$cancelBtn.on("click", () => doClose());
+		const btnRow = e_({tag: "div", clazz: "charsheet__respec-btn-row mt-3"});
+		const cancelBtn = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel"});
+		cancelBtn.addEventListener("click", () => doClose());
 
-		const $applyBtn = $(`<button class="ve-btn ve-btn-primary">Apply Changes</button>`);
-		$applyBtn.on("click", async () => {
+		const applyBtn = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "Apply Changes"});
+		applyBtn.addEventListener("click", async () => {
 			if (pointsRemaining !== 0) {
 				JqueryUtil.doToast({type: "warning", content: "Please allocate all 2 points."});
 				return;
@@ -1095,10 +1102,10 @@ class CharacterSheetRespec {
 			JqueryUtil.doToast({type: "success", content: `Updated level ${level} ASI.`});
 		});
 
-		$btnRow.append($cancelBtn).append($applyBtn);
-		$content.append($btnRow);
+		btnRow.append(cancelBtn, applyBtn);
+		content.append(btnRow);
 
-		$modalInner.append($content);
+		modalInner.append(content);
 	}
 
 	/**
@@ -1108,7 +1115,7 @@ class CharacterSheetRespec {
 	 * @param {Function} closeParentModal - Function to close parent modal
 	 */
 	async _editFeat (level, history, closeParentModal) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Change Level ${level} Feat`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -1117,27 +1124,29 @@ class CharacterSheetRespec {
 		});
 
 		const currentFeat = history.choices?.feat;
-		const $content = $(`<div class="charsheet__respec-feat-modal"></div>`);
+		const content = e_({tag: "div", clazz: "charsheet__respec-feat-modal"});
 
-		$content.append(`<h4>Select New Feat</h4>`);
-		$content.append(`<p class="text-muted mb-2">Current: <strong>${currentFeat?.name || "None"}</strong></p>`);
+		content.append(e_({outer: `<h4>Select New Feat</h4>`}));
+		content.append(e_({outer: `<p class="text-muted mb-2">Current: <strong>${currentFeat?.name || "None"}</strong></p>`}));
 
 		// Feat filter
-		const $searchRow = $(`<div class="charsheet__respec-search-row mb-2"></div>`);
-		const $searchInput = $(`<input type="text" class="form-control" placeholder="Search feats...">`);
-		$searchRow.append($searchInput);
-		$content.append($searchRow);
+		const searchRow = e_({tag: "div", clazz: "charsheet__respec-search-row mb-2"});
+		const searchInput = e_({tag: "input", clazz: "form-control"});
+		searchInput.type = "text";
+		searchInput.placeholder = "Search feats...";
+		searchRow.append(searchInput);
+		content.append(searchRow);
 
 		// Feat list container
-		const $featList = $(`<div class="charsheet__respec-feat-list"></div>`);
-		$content.append($featList);
+		const featList = e_({tag: "div", clazz: "charsheet__respec-feat-list"});
+		content.append(featList);
 
 		// Load feats
 		const feats = this._page._levelUp?._feats || [];
 		let selectedFeat = null;
 
 		const renderFeats = (filter = "") => {
-			$featList.empty();
+			featList.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 			const filtered = feats.filter(f => {
 				if (!f.name.toLowerCase().includes(filterLower)) return false;
@@ -1145,41 +1154,41 @@ class CharacterSheetRespec {
 			}).slice(0, 50); // Limit for performance
 
 			if (filtered.length === 0) {
-				$featList.append(`<p class="text-muted">No feats found.</p>`);
+				featList.append(e_({outer: `<p class="text-muted">No feats found.</p>`}));
 				return;
 			}
 
 			filtered.forEach(feat => {
 				const isCurrent = currentFeat && feat.name === currentFeat.name && feat.source === currentFeat.source;
 				const isSelected = selectedFeat && feat.name === selectedFeat.name && feat.source === selectedFeat.source;
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="charsheet__respec-feat-item ${isCurrent ? "charsheet__respec-feat-current" : ""} ${isSelected ? "charsheet__respec-feat-selected" : ""}">
 						<strong>${feat.name}</strong>
 						<span class="text-muted">${Parser.sourceJsonToAbv(feat.source)}</span>
 					</div>
-				`);
-				$item.on("click", () => {
+				`});
+				item.addEventListener("click", () => {
 					selectedFeat = feat;
-					$featList.find(".charsheet__respec-feat-selected").removeClass("charsheet__respec-feat-selected");
-					$item.addClass("charsheet__respec-feat-selected");
+					featList.querySelectorAll(".charsheet__respec-feat-selected").forEach(el => el.classList.remove("charsheet__respec-feat-selected"));
+					item.classList.add("charsheet__respec-feat-selected");
 				});
-				$featList.append($item);
+				featList.append(item);
 			});
 		};
 
 		renderFeats();
 
-		$searchInput.on("input", () => {
-			renderFeats($searchInput.val());
+		searchInput.addEventListener("input", () => {
+			renderFeats(searchInput.value);
 		});
 
 		// Buttons
-		const $btnRow = $(`<div class="charsheet__respec-btn-row mt-3"></div>`);
-		const $cancelBtn = $(`<button class="ve-btn ve-btn-default">Cancel</button>`);
-		$cancelBtn.on("click", () => doClose());
+		const btnRow = e_({tag: "div", clazz: "charsheet__respec-btn-row mt-3"});
+		const cancelBtn = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel"});
+		cancelBtn.addEventListener("click", () => doClose());
 
-		const $applyBtn = $(`<button class="ve-btn ve-btn-primary">Apply Changes</button>`);
-		$applyBtn.on("click", async () => {
+		const applyBtn = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "Apply Changes"});
+		applyBtn.addEventListener("click", async () => {
 			if (!selectedFeat) {
 				JqueryUtil.doToast({type: "warning", content: "Please select a feat."});
 				return;
@@ -1195,10 +1204,10 @@ class CharacterSheetRespec {
 			JqueryUtil.doToast({type: "success", content: `Changed feat to ${selectedFeat.name}.`});
 		});
 
-		$btnRow.append($cancelBtn).append($applyBtn);
-		$content.append($btnRow);
+		btnRow.append(cancelBtn, applyBtn);
+		content.append(btnRow);
 
-		$modalInner.append($content);
+		modalInner.append(content);
 	}
 
 	/**
@@ -1209,7 +1218,7 @@ class CharacterSheetRespec {
 	 * @param {Function} closeParentModal - Function to close parent modal
 	 */
 	async _editFeatureChoice (level, history, choice, closeParentModal) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Change ${choice.label}`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -1218,9 +1227,9 @@ class CharacterSheetRespec {
 		});
 
 		const currentChoice = history.choices.featureChoices[choice.index];
-		const $content = $(`<div class="charsheet__respec-feature-modal"></div>`);
+		const content = e_({tag: "div", clazz: "charsheet__respec-feature-modal"});
 
-		$content.append(`<p class="text-muted mb-2">Current: <strong>${currentChoice.choice}</strong></p>`);
+		content.append(e_({outer: `<p class="text-muted mb-2">Current: <strong>${currentChoice.choice}</strong></p>`}));
 
 		// Get available options for this feature
 		const parentFeatureName = currentChoice.featureName;
@@ -1233,11 +1242,11 @@ class CharacterSheetRespec {
 		);
 
 		if (!parentFeature) {
-			$content.append(`<p class="text-danger">Could not find parent feature "${parentFeatureName}" to load options.</p>`);
-			const $closeBtn = $(`<button class="ve-btn ve-btn-default mt-3">Close</button>`);
-			$closeBtn.on("click", () => doClose());
-			$content.append($closeBtn);
-			$modalInner.append($content);
+			content.append(e_({outer: `<p class="text-danger">Could not find parent feature "${parentFeatureName}" to load options.</p>`}));
+			const closeBtn = e_({tag: "button", clazz: "ve-btn ve-btn-default mt-3", txt: "Close"});
+			closeBtn.addEventListener("click", () => doClose());
+			content.append(closeBtn);
+			modalInner.append(content);
 			return;
 		}
 
@@ -1246,11 +1255,11 @@ class CharacterSheetRespec {
 		const optionGroups = levelUp._findFeatureOptions(parentFeature, level);
 
 		if (!optionGroups.length || !optionGroups[0].options?.length) {
-			$content.append(`<p class="text-danger">No alternative options found for this feature.</p>`);
-			const $closeBtn = $(`<button class="ve-btn ve-btn-default mt-3">Close</button>`);
-			$closeBtn.on("click", () => doClose());
-			$content.append($closeBtn);
-			$modalInner.append($content);
+			content.append(e_({outer: `<p class="text-danger">No alternative options found for this feature.</p>`}));
+			const closeBtn = e_({tag: "button", clazz: "ve-btn ve-btn-default mt-3", txt: "Close"});
+			closeBtn.addEventListener("click", () => doClose());
+			content.append(closeBtn);
+			modalInner.append(content);
 			return;
 		}
 
@@ -1264,39 +1273,39 @@ class CharacterSheetRespec {
 			return !existingFeatureNames.has(opt.name);
 		});
 
-		$content.append(`<h5>Select New ${choice.label}</h5>`);
+		content.append(e_({outer: `<h5>Select New ${choice.label}</h5>`}));
 
 		// Option list
-		const $optionList = $(`<div class="charsheet__respec-feat-list"></div>`);
+		const optionList = e_({tag: "div", clazz: "charsheet__respec-feat-list"});
 		let selectedOption = null;
 
 		availableOptions.forEach(opt => {
 			const isCurrent = opt.name === currentChoice.choice;
-			const $item = $(`
+			const item = e_({outer: `
 				<div class="charsheet__respec-feat-item ${isCurrent ? "charsheet__respec-feat-current" : ""}">
 					<strong>${opt.name}</strong>
 					${opt.source ? `<span class="text-muted">${Parser.sourceJsonToAbv(opt.source)}</span>` : ""}
 				</div>
-			`);
+			`});
 
-			$item.on("click", () => {
+			item.addEventListener("click", () => {
 				selectedOption = opt;
-				$optionList.find(".charsheet__respec-feat-selected").removeClass("charsheet__respec-feat-selected");
-				$item.addClass("charsheet__respec-feat-selected");
+				optionList.querySelectorAll(".charsheet__respec-feat-selected").forEach(el => el.classList.remove("charsheet__respec-feat-selected"));
+				item.classList.add("charsheet__respec-feat-selected");
 			});
 
-			$optionList.append($item);
+			optionList.append(item);
 		});
 
-		$content.append($optionList);
+		content.append(optionList);
 
 		// Buttons
-		const $btnRow = $(`<div class="charsheet__respec-btn-row mt-3"></div>`);
-		const $cancelBtn = $(`<button class="ve-btn ve-btn-default">Cancel</button>`);
-		$cancelBtn.on("click", () => doClose());
+		const btnRow = e_({tag: "div", clazz: "charsheet__respec-btn-row mt-3"});
+		const cancelBtn = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel"});
+		cancelBtn.addEventListener("click", () => doClose());
 
-		const $applyBtn = $(`<button class="ve-btn ve-btn-primary">Apply Changes</button>`);
-		$applyBtn.on("click", async () => {
+		const applyBtn = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "Apply Changes"});
+		applyBtn.addEventListener("click", async () => {
 			if (!selectedOption) {
 				JqueryUtil.doToast({type: "warning", content: "Please select an option."});
 				return;
@@ -1318,10 +1327,10 @@ class CharacterSheetRespec {
 			JqueryUtil.doToast({type: "success", content: `Changed ${choice.label} to ${selectedOption.name}.`});
 		});
 
-		$btnRow.append($cancelBtn).append($applyBtn);
-		$content.append($btnRow);
+		btnRow.append(cancelBtn, applyBtn);
+		content.append(btnRow);
 
-		$modalInner.append($content);
+		modalInner.append(content);
 	}
 
 	/**
@@ -1384,16 +1393,18 @@ class CharacterSheetRespec {
 	/**
 	 * Update ASI display after change
 	 */
-	_updateAsiDisplay ($section, asiState, pointsRemaining, $pointsDisplay, history) {
-		$pointsDisplay.html(`Points Remaining: <strong>${pointsRemaining}</strong>`);
-		$pointsDisplay.toggleClass("text-danger", pointsRemaining < 0);
-		$pointsDisplay.toggleClass("text-success", pointsRemaining === 0);
+	_updateAsiDisplay (section, asiState, pointsRemaining, pointsDisplay, history) {
+		pointsDisplay.innerHTML = `Points Remaining: <strong>${pointsRemaining}</strong>`;
+		pointsDisplay.classList.toggle("text-danger", pointsRemaining < 0);
+		pointsDisplay.classList.toggle("text-success", pointsRemaining === 0);
 
 		Parser.ABIL_ABVS.forEach(abl => {
 			const bonus = asiState[abl] || 0;
 			const baseScore = this._state.getAbilityBase(abl) - (history.choices?.asi?.[abl] || 0);
-			$section.find(`.charsheet__respec-asi-bonus[data-abl="${abl}"]`).text(bonus > 0 ? `+${bonus}` : "0");
-			$section.find(`.charsheet__respec-asi-row:has([data-abl="${abl}"]) .charsheet__respec-asi-total`).text(baseScore + bonus);
+			const bonusEl = section.querySelector(`.charsheet__respec-asi-bonus[data-abl="${abl}"]`);
+			if (bonusEl) bonusEl.textContent = bonus > 0 ? `+${bonus}` : "0";
+			const totalEl = section.querySelector(`.charsheet__respec-asi-row:has([data-abl="${abl}"]) .charsheet__respec-asi-total`);
+			if (totalEl) totalEl.textContent = baseScore + bonus;
 		});
 	}
 
@@ -1505,7 +1516,7 @@ class CharacterSheetRespec {
 			return;
 		}
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Change ${history.class.name} Subclass`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -1513,21 +1524,21 @@ class CharacterSheetRespec {
 			cbClose: () => {},
 		});
 
-		const $content = $(`<div class="charsheet__respec-subclass-modal"></div>`);
+		const content = e_({tag: "div", clazz: "charsheet__respec-subclass-modal"});
 
 		// Show current subclass
-		$content.append(`<p class="text-muted mb-2">Current Subclass: <strong>${currentSubclass.name}</strong></p>`);
+		content.append(e_({outer: `<p class="text-muted mb-2">Current Subclass: <strong>${currentSubclass.name}</strong></p>`}));
 
 		// Get available subclasses for this class
 		const classes = this._page.getClasses();
 		const classData = classes.find(c => c.name === history.class.name && c.source === history.class.source);
 
 		if (!classData?.subclasses?.length) {
-			$content.append(`<p class="text-danger">Could not find subclass options for ${history.class.name}.</p>`);
-			const $closeBtn = $(`<button class="ve-btn ve-btn-default mt-3">Close</button>`);
-			$closeBtn.on("click", () => doClose());
-			$content.append($closeBtn);
-			$modalInner.append($content);
+			content.append(e_({outer: `<p class="text-danger">Could not find subclass options for ${history.class.name}.</p>`}));
+			const closeBtn = e_({tag: "button", clazz: "ve-btn ve-btn-default mt-3", txt: "Close"});
+			closeBtn.addEventListener("click", () => doClose());
+			content.append(closeBtn);
+			modalInner.append(content);
 			return;
 		}
 
@@ -1543,35 +1554,37 @@ class CharacterSheetRespec {
 
 		// Show cascade warning
 		if (willRemoveCount > 0) {
-			const $warning = $(`
+			const warning = e_({outer: `
 				<div class="charsheet__respec-cascade-warning">
-					<h5><span class="text-warning">⚠️</span> Features to be removed (${willRemoveCount}):</h5>
+					<h5><span class="text-warning">\u26a0\ufe0f</span> Features to be removed (${willRemoveCount}):</h5>
 					<ul class="charsheet__respec-cascade-list"></ul>
 				</div>
-			`);
-			const $list = $warning.find(".charsheet__respec-cascade-list");
+			`});
+			const warningList = warning.querySelector(".charsheet__respec-cascade-list");
 			featuresToRemove.slice(0, 10).forEach(f => {
-				$list.append(`<li>${f.name} <span class="text-muted">(Level ${f.level})</span></li>`);
+				warningList.append(e_({outer: `<li>${f.name} <span class="text-muted">(Level ${f.level})</span></li>`}));
 			});
 			if (willRemoveCount > 10) {
-				$list.append(`<li class="text-muted">...and ${willRemoveCount - 10} more</li>`);
+				warningList.append(e_({outer: `<li class="text-muted">...and ${willRemoveCount - 10} more</li>`}));
 			}
-			$content.append($warning);
+			content.append(warning);
 		}
 
 		// Subclass selection
-		$content.append(`<h5>Select New Subclass</h5>`);
+		content.append(e_({outer: `<h5>Select New Subclass</h5>`}));
 
-		const $searchRow = $(`<div class="charsheet__respec-search-row mb-2"></div>`);
-		const $searchInput = $(`<input type="text" class="form-control" placeholder="Search subclasses...">`);
-		$searchRow.append($searchInput);
-		$content.append($searchRow);
+		const searchRow = e_({tag: "div", clazz: "charsheet__respec-search-row mb-2"});
+		const searchInput = e_({tag: "input", clazz: "form-control"});
+		searchInput.type = "text";
+		searchInput.placeholder = "Search subclasses...";
+		searchRow.append(searchInput);
+		content.append(searchRow);
 
-		const $subclassList = $(`<div class="charsheet__respec-feat-list"></div>`);
+		const subclassList = e_({tag: "div", clazz: "charsheet__respec-feat-list"});
 		let selectedSubclass = null;
 
 		const renderSubclasses = (filter = "") => {
-			$subclassList.empty();
+			subclassList.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 			const filtered = availableSubclasses.filter(sc => {
 				if (!sc.name.toLowerCase().includes(filterLower)) return false;
@@ -1579,43 +1592,43 @@ class CharacterSheetRespec {
 			}).slice(0, 30);
 
 			if (filtered.length === 0) {
-				$subclassList.append(`<p class="text-muted">No subclasses found.</p>`);
+				subclassList.append(e_({outer: `<p class="text-muted">No subclasses found.</p>`}));
 				return;
 			}
 
 			filtered.forEach(subclass => {
 				const isCurrent = subclass.name === currentSubclass.name && subclass.source === currentSubclass.source;
 				const isSelected = selectedSubclass && subclass.name === selectedSubclass.name && subclass.source === selectedSubclass.source;
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="charsheet__respec-feat-item ${isCurrent ? "charsheet__respec-feat-current" : ""} ${isSelected ? "charsheet__respec-feat-selected" : ""}">
 						<strong>${subclass.name}</strong>
 						<span class="text-muted">${Parser.sourceJsonToAbv(subclass.source)}</span>
 					</div>
-				`);
-				$item.on("click", () => {
+				`});
+				item.addEventListener("click", () => {
 					selectedSubclass = subclass;
-					$subclassList.find(".charsheet__respec-feat-selected").removeClass("charsheet__respec-feat-selected");
-					$item.addClass("charsheet__respec-feat-selected");
+					subclassList.querySelectorAll(".charsheet__respec-feat-selected").forEach(el => el.classList.remove("charsheet__respec-feat-selected"));
+					item.classList.add("charsheet__respec-feat-selected");
 				});
-				$subclassList.append($item);
+				subclassList.append(item);
 			});
 		};
 
 		renderSubclasses();
 
-		$searchInput.on("input", () => {
-			renderSubclasses($searchInput.val());
+		searchInput.addEventListener("input", () => {
+			renderSubclasses(searchInput.value);
 		});
 
-		$content.append($subclassList);
+		content.append(subclassList);
 
 		// Buttons
-		const $btnRow = $(`<div class="charsheet__respec-btn-row mt-3"></div>`);
-		const $cancelBtn = $(`<button class="ve-btn ve-btn-default">Cancel</button>`);
-		$cancelBtn.on("click", () => doClose());
+		const btnRow = e_({tag: "div", clazz: "charsheet__respec-btn-row mt-3"});
+		const cancelBtn = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel"});
+		cancelBtn.addEventListener("click", () => doClose());
 
-		const $applyBtn = $(`<button class="ve-btn ve-btn-danger">Change Subclass</button>`);
-		$applyBtn.on("click", async () => {
+		const applyBtn = e_({tag: "button", clazz: "ve-btn ve-btn-danger", txt: "Change Subclass"});
+		applyBtn.addEventListener("click", async () => {
 			if (!selectedSubclass) {
 				JqueryUtil.doToast({type: "warning", content: "Please select a subclass."});
 				return;
@@ -1647,10 +1660,10 @@ class CharacterSheetRespec {
 			JqueryUtil.doToast({type: "success", content: `Changed subclass to ${selectedSubclass.name}.`});
 		});
 
-		$btnRow.append($cancelBtn).append($applyBtn);
-		$content.append($btnRow);
+		btnRow.append(cancelBtn, applyBtn);
+		content.append(btnRow);
 
-		$modalInner.append($content);
+		modalInner.append(content);
 	}
 
 	/**

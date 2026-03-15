@@ -56,7 +56,6 @@ describe("CharacterSheetSpells Metamagic Automation", () => {
 		state.setSpellcastingAbility("int");
 		state.setAbilityBase("int", 16);
 
-		globalThis.$ = jest.fn(input => input);
 		globalThis.JqueryUtil = {doToast: jest.fn()};
 		globalThis.Renderer = globalThis.Renderer || {};
 		globalThis.Renderer.dice = globalThis.Renderer.dice || {};
@@ -375,19 +374,33 @@ describe("CharacterSheetSpells Metamagic Automation", () => {
 		combat.renderCombatStates = jest.fn();
 		combat._updateQuickButtonStates = jest.fn();
 
-		const clickHandler = jest.fn();
-		const jqueryChain = {
-			toggle: jest.fn().mockReturnThis(),
-			attr: jest.fn().mockReturnThis(),
-			off: jest.fn().mockReturnThis(),
-			on: jest.fn((_, handler) => {
-				clickHandler.mockImplementation(handler);
-				return jqueryChain;
-			}),
+		let concentrateClickHandler;
+		const handlers = {};
+		const stubEl = (id) => {
+			const el = {
+				style: {},
+				_onclick: null,
+				get onclick () { return this._onclick; },
+				set onclick (fn) { this._onclick = fn; if (id) handlers[id] = fn; },
+				addEventListener: jest.fn(),
+				setAttribute: jest.fn(),
+				getAttribute: jest.fn(),
+				classList: {add: jest.fn(), remove: jest.fn(), toggle: jest.fn(), contains: jest.fn()},
+				querySelector: jest.fn(() => null),
+				querySelectorAll: jest.fn(() => []),
+				innerHTML: "",
+				firstChild: {attributes: []},
+			};
+			return el;
 		};
-		globalThis.$ = jest.fn(() => ({
-			...jqueryChain,
-		}));
+		const elMap = {};
+		globalThis.document = {
+			getElementById: jest.fn((id) => {
+				if (!elMap[id]) elMap[id] = stubEl(id);
+				return elMap[id];
+			}),
+			createElement: jest.fn(() => stubEl()),
+		};
 		globalThis.HASH_LIST_SEP = globalThis.HASH_LIST_SEP || "|";
 		globalThis.Parser = {
 			...(globalThis.Parser || {}),
@@ -403,12 +416,6 @@ describe("CharacterSheetSpells Metamagic Automation", () => {
 			...(globalThis.Renderer.hover || {}),
 			getHoverElementAttributes: jest.fn(() => "data-hover='1'"),
 		};
-		globalThis.document = globalThis.document || {
-			createElement: jest.fn(() => ({
-				innerHTML: "",
-				firstChild: {attributes: []},
-			})),
-		};
 		globalThis.InputUiUtil = {
 			pGetUserString: jest.fn(async () => "22"),
 		};
@@ -419,7 +426,7 @@ describe("CharacterSheetSpells Metamagic Automation", () => {
 			.mockReturnValueOnce(17);
 
 		combat._initQuickStateButtons();
-		await clickHandler();
+		await handlers["charsheet-combat-conc-save"]();
 
 		expect(state.isConcentrating()).toBe(true);
 		expect(state.canUseFocusedConcentrationReroll()).toBe(false);

@@ -28,151 +28,163 @@ class CharacterSheetInventory {
 	}
 
 	_initEventListeners () {
-		// Inventory view toggle buttons
-		$(document).on("click", "#charsheet-btn-view-list", () => {
-			$(".charsheet__inventory-list").removeClass("charsheet__inventory-list--compact");
-			$("#charsheet-btn-view-list").addClass("active");
-			$("#charsheet-btn-view-compact").removeClass("active");
-		});
+		// Delegated click handler for dynamic inventory elements
+		document.addEventListener("click", (e) => {
+			// Inventory view toggle buttons
+			if (e.target.closest("#charsheet-btn-view-list")) {
+				document.querySelector(".charsheet__inventory-list")?.classList.remove("charsheet__inventory-list--compact");
+				document.getElementById("charsheet-btn-view-list")?.classList.add("active");
+				document.getElementById("charsheet-btn-view-compact")?.classList.remove("active");
+				return;
+			}
+			if (e.target.closest("#charsheet-btn-view-compact")) {
+				document.querySelector(".charsheet__inventory-list")?.classList.add("charsheet__inventory-list--compact");
+				document.getElementById("charsheet-btn-view-compact")?.classList.add("active");
+				document.getElementById("charsheet-btn-view-list")?.classList.remove("active");
+				return;
+			}
 
-		$(document).on("click", "#charsheet-btn-view-compact", () => {
-			$(".charsheet__inventory-list").addClass("charsheet__inventory-list--compact");
-			$("#charsheet-btn-view-compact").addClass("active");
-			$("#charsheet-btn-view-list").removeClass("active");
-		});
+			// Add item button - support both ID variants
+			if (e.target.closest("#charsheet-add-item") || e.target.closest("#charsheet-btn-add-item")) {
+				this._showItemPicker();
+				return;
+			}
+			// Add custom item button
+			if (e.target.closest("#charsheet-btn-add-custom-item")) {
+				this._showAddCustomItem();
+				return;
+			}
 
-		// Add item button - support both ID variants
-		$(document).on("click", "#charsheet-add-item, #charsheet-btn-add-item", () => this._showItemPicker());
+			// --- Item row action buttons (delegated, dynamic) ---
+			const _getItemId = (target) => target.closest(".charsheet__item")?.dataset.itemId;
 
-		// Add custom item button
-		$(document).on("click", "#charsheet-btn-add-custom-item", () => this._showAddCustomItem());
+			if (e.target.closest(".charsheet__item-qty-decrease")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._changeQuantity(itemId, -1);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-qty-increase")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._changeQuantity(itemId, 1);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-equip")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._toggleEquipped(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-attune")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._toggleAttuned(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-remove")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._removeItem(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-info")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._showItemInfo(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-note")) {
+				const itemEl = e.target.closest(".charsheet__item");
+				const itemId = itemEl?.dataset.itemId;
+				if (!itemId) return;
+				const item = this._state.getItems().find(i => i.id === itemId);
+				const itemName = item?.name || "Item";
+				this._page.getNotes()?.showNoteModal("item", itemId, itemName, () => {
+					this._renderItemList();
+				});
+				return;
+			}
+			if (e.target.closest(".charsheet__item-use-charge")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._useCharge(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-restore-charge")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._restoreCharge(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-use")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._useConsumable(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-artifact-config")) {
+				const itemId = _getItemId(e.target);
+				if (itemId) this._showArtifactPropertiesModal(itemId);
+				return;
+			}
+			if (e.target.closest(".charsheet__item-star")) {
+				e.stopPropagation();
+				const itemId = _getItemId(e.target);
+				if (itemId) this._toggleStarred(itemId);
+				return;
+			}
 
-		// Item quantity buttons
-		$(document).on("click", ".charsheet__item-qty-decrease", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._changeQuantity(itemId, -1);
-		});
+			// Category header collapse toggle
+			const categoryHeader = e.target.closest(".charsheet__category-header");
+			if (categoryHeader) {
+				const category = categoryHeader.dataset.category;
+				this._toggleCategoryCollapse(category);
+				return;
+			}
 
-		$(document).on("click", ".charsheet__item-qty-increase", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._changeQuantity(itemId, 1);
-		});
+			// Starred filter toggle
+			if (e.target.closest("#charsheet-btn-starred-filter")) {
+				this._starredFilter = !this._starredFilter;
+				e.target.closest("#charsheet-btn-starred-filter").classList.toggle("active", this._starredFilter);
+				this._currentPage = 0;
+				this._renderItemList();
+				return;
+			}
 
-		// Equip item
-		$(document).on("click", ".charsheet__item-equip", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._toggleEquipped(itemId);
-		});
-
-		// Attune item
-		$(document).on("click", ".charsheet__item-attune", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._toggleAttuned(itemId);
-		});
-
-		// Remove item
-		$(document).on("click", ".charsheet__item-remove", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._removeItem(itemId);
-		});
-
-		// Item info
-		$(document).on("click", ".charsheet__item-info", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._showItemInfo(itemId);
-		});
-
-		// Item note
-		$(document).on("click", ".charsheet__item-note", (e) => {
-			const $item = $(e.currentTarget).closest(".charsheet__item");
-			const itemId = $item.data("item-id");
-			const item = this._state.getItems().find(i => i.id === itemId);
-			const itemName = item?.name || "Item";
-			this._page.getNotes()?.showNoteModal("item", itemId, itemName, () => {
-				this._renderItemList(); // Re-render to update note indicator
-			});
-		});
-
-		// Charge buttons - use and restore
-		$(document).on("click", ".charsheet__item-use-charge", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._useCharge(itemId);
-		});
-
-		$(document).on("click", ".charsheet__item-restore-charge", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._restoreCharge(itemId);
-		});
-
-		// Use consumable (potions, scrolls)
-		$(document).on("click", ".charsheet__item-use", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._useConsumable(itemId);
-		});
-
-		// Configure artifact properties
-		$(document).on("click", ".charsheet__item-artifact-config", (e) => {
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._showArtifactPropertiesModal(itemId);
-		});
-
-		// Star/favorite button
-		$(document).on("click", ".charsheet__item-star", (e) => {
-			e.stopPropagation();
-			const itemId = $(e.currentTarget).closest(".charsheet__item").data("item-id");
-			this._toggleStarred(itemId);
-		});
-
-		// Category header collapse toggle
-		$(document).on("click", ".charsheet__category-header", (e) => {
-			const $header = $(e.currentTarget);
-			const category = $header.data("category");
-			this._toggleCategoryCollapse(category);
+			// Sort direction toggle
+			if (e.target.closest("#charsheet-btn-sort-direction")) {
+				this._sortAsc = !this._sortAsc;
+				const btn = e.target.closest("#charsheet-btn-sort-direction");
+				const icon = btn.querySelector(".glyphicon");
+				icon.classList.toggle("glyphicon-sort-by-attributes", this._sortAsc);
+				icon.classList.toggle("glyphicon-sort-by-attributes-alt", !this._sortAsc);
+				btn.setAttribute("title", this._sortAsc ? "Sort ascending" : "Sort descending");
+				this._renderItemList();
+				return;
+			}
 		});
 
 		// Currency inputs
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
-			$(document).on("change", `#charsheet-currency-${currency}`, (e) => {
+			document.addEventListener("change", (e) => {
+				if (e.target.id !== `charsheet-currency-${currency}`) return;
 				const value = parseInt(e.target.value) || 0;
 				this._state.setCurrency(currency, value);
 				this._page.saveCharacter();
 			});
 		});
 
-		// Filter inputs
-		$(document).on("input", "#charsheet-item-search, #charsheet-ipt-inventory-search", (e) => {
-			this._itemFilter = e.target.value.toLowerCase();
-			this._currentPage = 0; // Reset to first page when filtering
-			this._renderItemList();
+		// Filter inputs (delegated)
+		document.addEventListener("input", (e) => {
+			if (e.target.id === "charsheet-item-search" || e.target.id === "charsheet-ipt-inventory-search") {
+				this._itemFilter = e.target.value.toLowerCase();
+				this._currentPage = 0;
+				this._renderItemList();
+			}
 		});
 
-		$(document).on("change", "#charsheet-item-type-filter", (e) => {
-			this._itemTypeFilter = e.target.value;
-			this._currentPage = 0; // Reset to first page when filtering
-			this._renderItemList();
-		});
-
-		// Starred filter toggle
-		$(document).on("click", "#charsheet-btn-starred-filter", (e) => {
-			this._starredFilter = !this._starredFilter;
-			$(e.currentTarget).toggleClass("active", this._starredFilter);
-			this._currentPage = 0;
-			this._renderItemList();
-		});
-
-		// Sort controls
-		$(document).on("change", "#charsheet-inventory-sort", (e) => {
-			this._sortBy = e.target.value;
-			this._renderItemList();
-		});
-
-		$(document).on("click", "#charsheet-btn-sort-direction", (e) => {
-			this._sortAsc = !this._sortAsc;
-			const $btn = $(e.currentTarget);
-			$btn.find(".glyphicon").toggleClass("glyphicon-sort-by-attributes", this._sortAsc)
-				.toggleClass("glyphicon-sort-by-attributes-alt", !this._sortAsc);
-			$btn.attr("title", this._sortAsc ? "Sort ascending" : "Sort descending");
-			this._renderItemList();
+		document.addEventListener("change", (e) => {
+			if (e.target.id === "charsheet-item-type-filter") {
+				this._itemTypeFilter = e.target.value;
+				this._currentPage = 0;
+				this._renderItemList();
+			}
+			if (e.target.id === "charsheet-inventory-sort") {
+				this._sortBy = e.target.value;
+				this._renderItemList();
+			}
 		});
 	}
 
@@ -212,25 +224,28 @@ class CharacterSheetInventory {
 		// Filter items by allowed sources
 		const items = this._page.filterByAllowedSources(this._allItems);
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🎒 Add Item",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
 		// Intro text
-		$modalInner.append(`
+		modalInner.append(e_({outer: `
 			<p class="ve-small ve-muted mb-3">
 				Browse and add items to your inventory. Hover over item names for details, or click <strong>+ Add</strong> to add directly.
 			</p>
-		`);
+		`}));
 
 		// Build enhanced filter UI
-		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
+		const filterContainer = e_({outer: `<div class="charsheet__modal-filter"></div>`});
+		modalInner.append(filterContainer);
 
 		// Search input with icon
-		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
-		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search items by name...">`).appendTo($searchWrapper);
+		const searchWrapper = e_({outer: `<div class="charsheet__modal-search"></div>`});
+		filterContainer.append(searchWrapper);
+		const search = e_({tag: "input", clazz: "form-control", attr: {type: "text", placeholder: "🔍 Search items by name..."}});
+		searchWrapper.append(search);
 
 		// Type filter - Multi-select dropdown
 		const itemTypes = [
@@ -247,7 +262,7 @@ class CharacterSheetInventory {
 		];
 		let selectedTypes = new Set(); // Empty = all types
 
-		const $typeDropdown = $(`
+		const typeDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📦</span>
@@ -270,47 +285,48 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`});
+		filterContainer.append(typeDropdown);
 
 		// Type dropdown behavior
-		const $typeBtn = $typeDropdown.find(".charsheet__source-multiselect-btn");
-		const $typeDropdownMenu = $typeDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $typeText = $typeDropdown.find(".charsheet__source-multiselect-text");
+		const typeBtn = typeDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const typeDropdownMenu = typeDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const typeText = typeDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$typeBtn.on("click", (e) => {
+		typeBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			$typeDropdownMenu.toggleClass("open");
+			typeDropdownMenu.classList.toggle("open");
 			// Close other dropdowns
-			$rarityDropdownMenu.removeClass("open");
-			$sourceDropdownMenu.removeClass("open");
+			rarityDropdownMenu.classList.remove("open");
+			sourceDropdownMenu.classList.remove("open");
 		});
 
 		const updateTypeText = () => {
-			const checked = $typeDropdown.find("input:checked");
+			const checked = [...typeDropdown.querySelectorAll("input:checked")];
 			if (checked.length === 0) {
-				$typeText.text("No Types");
+				typeText.textContent = "No Types";
 				selectedTypes = new Set(["__NONE__"]);
 			} else if (checked.length === itemTypes.length) {
-				$typeText.text("All Types");
+				typeText.textContent = "All Types";
 				selectedTypes = new Set();
 			} else if (checked.length <= 2) {
-				const labels = checked.map((_, el) => itemTypes.find(t => t.value === $(el).val())?.label || $(el).val()).get();
-				$typeText.text(labels.join(", "));
-				selectedTypes = new Set(checked.map((_, el) => $(el).val()).get());
+				const labels = checked.map(el => itemTypes.find(t => t.value === el.value)?.label || el.value);
+				typeText.textContent = labels.join(", ");
+				selectedTypes = new Set(checked.map(el => el.value));
 			} else {
-				$typeText.text(`${checked.length} Types`);
-				selectedTypes = new Set(checked.map((_, el) => $(el).val()).get());
+				typeText.textContent = `${checked.length} Types`;
+				selectedTypes = new Set(checked.map(el => el.value));
 			}
 			renderList();
 		};
 
-		$typeDropdown.find("input[type=checkbox]").on("change", updateTypeText);
-		$typeDropdown.find("[data-action=all]").on("click", () => {
-			$typeDropdown.find("input").prop("checked", true);
+		typeDropdown.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", updateTypeText));
+		typeDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			typeDropdown.querySelectorAll("input").forEach(cb => { cb.checked = true; });
 			updateTypeText();
 		});
-		$typeDropdown.find("[data-action=none]").on("click", () => {
-			$typeDropdown.find("input").prop("checked", false);
+		typeDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			typeDropdown.querySelectorAll("input").forEach(cb => { cb.checked = false; });
 			updateTypeText();
 		});
 
@@ -325,7 +341,7 @@ class CharacterSheetInventory {
 		];
 		let selectedRarities = new Set(); // Empty = all rarities
 
-		const $rarityDropdown = $(`
+		const rarityDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">🌟</span>
@@ -348,47 +364,48 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`});
+		filterContainer.append(rarityDropdown);
 
 		// Rarity dropdown behavior
-		const $rarityBtn = $rarityDropdown.find(".charsheet__source-multiselect-btn");
-		const $rarityDropdownMenu = $rarityDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $rarityText = $rarityDropdown.find(".charsheet__source-multiselect-text");
+		const rarityBtn = rarityDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const rarityDropdownMenu = rarityDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const rarityText = rarityDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$rarityBtn.on("click", (e) => {
+		rarityBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			$rarityDropdownMenu.toggleClass("open");
+			rarityDropdownMenu.classList.toggle("open");
 			// Close other dropdowns
-			$typeDropdownMenu.removeClass("open");
-			$sourceDropdownMenu.removeClass("open");
+			typeDropdownMenu.classList.remove("open");
+			sourceDropdownMenu.classList.remove("open");
 		});
 
 		const updateRarityText = () => {
-			const checked = $rarityDropdown.find("input:checked");
+			const checked = [...rarityDropdown.querySelectorAll("input:checked")];
 			if (checked.length === 0) {
-				$rarityText.text("No Rarities");
+				rarityText.textContent = "No Rarities";
 				selectedRarities = new Set(["__NONE__"]);
 			} else if (checked.length === rarities.length) {
-				$rarityText.text("All Rarities");
+				rarityText.textContent = "All Rarities";
 				selectedRarities = new Set();
 			} else if (checked.length <= 2) {
-				const labels = checked.map((_, el) => rarities.find(r => r.value === $(el).val())?.label || $(el).val()).get();
-				$rarityText.text(labels.join(", "));
-				selectedRarities = new Set(checked.map((_, el) => $(el).val()).get());
+				const labels = checked.map(el => rarities.find(r => r.value === el.value)?.label || el.value);
+				rarityText.textContent = labels.join(", ");
+				selectedRarities = new Set(checked.map(el => el.value));
 			} else {
-				$rarityText.text(`${checked.length} Rarities`);
-				selectedRarities = new Set(checked.map((_, el) => $(el).val()).get());
+				rarityText.textContent = `${checked.length} Rarities`;
+				selectedRarities = new Set(checked.map(el => el.value));
 			}
 			renderList();
 		};
 
-		$rarityDropdown.find("input[type=checkbox]").on("change", updateRarityText);
-		$rarityDropdown.find("[data-action=all]").on("click", () => {
-			$rarityDropdown.find("input").prop("checked", true);
+		rarityDropdown.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", updateRarityText));
+		rarityDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			rarityDropdown.querySelectorAll("input").forEach(cb => { cb.checked = true; });
 			updateRarityText();
 		});
-		$rarityDropdown.find("[data-action=none]").on("click", () => {
-			$rarityDropdown.find("input").prop("checked", false);
+		rarityDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			rarityDropdown.querySelectorAll("input").forEach(cb => { cb.checked = false; });
 			updateRarityText();
 		});
 
@@ -406,7 +423,7 @@ class CharacterSheetInventory {
 
 		// Multi-select source filter
 		let selectedSources = new Set(); // Empty = all sources
-		const $sourceDropdown = $(`
+		const sourceDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📚</span>
@@ -431,93 +448,102 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`});
+		filterContainer.append(sourceDropdown);
 
 		// Source dropdown toggle behavior
-		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
-		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
+		const sourceBtn = sourceDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const sourceDropdownMenu = sourceDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const sourceText = sourceDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$sourceBtn.on("click", (e) => {
+		sourceBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			$sourceDropdownMenu.toggleClass("open");
+			sourceDropdownMenu.classList.toggle("open");
 			// Close other dropdowns
-			$typeDropdownMenu.removeClass("open");
-			$rarityDropdownMenu.removeClass("open");
+			typeDropdownMenu.classList.remove("open");
+			rarityDropdownMenu.classList.remove("open");
 		});
 
 		// Close all dropdowns when clicking outside
-		$(document).on("click.itemFilter", () => {
-			$sourceDropdownMenu.removeClass("open");
-			$typeDropdownMenu.removeClass("open");
-			$rarityDropdownMenu.removeClass("open");
-		});
-		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
-		$typeDropdownMenu.on("click", (e) => e.stopPropagation());
-		$rarityDropdownMenu.on("click", (e) => e.stopPropagation());
+		const _closeDropdowns = () => {
+			sourceDropdownMenu.classList.remove("open");
+			typeDropdownMenu.classList.remove("open");
+			rarityDropdownMenu.classList.remove("open");
+		};
+		document.addEventListener("click", _closeDropdowns);
+		sourceDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
+		typeDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
+		rarityDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 
 		// Update source text based on selection
 		const updateSourceText = () => {
-			const checked = $sourceDropdown.find("input:checked");
+			const checked = [...sourceDropdown.querySelectorAll("input:checked")];
 			if (checked.length === 0) {
-				$sourceText.text("No Sources");
+				sourceText.textContent = "No Sources";
 				selectedSources = new Set(["__NONE__"]); // Special marker
 			} else if (checked.length === uniqueSources.length) {
-				$sourceText.text("All Sources");
+				sourceText.textContent = "All Sources";
 				selectedSources = new Set(); // Empty = all
 			} else if (checked.length <= 2) {
-				$sourceText.text(checked.map((_, el) => Parser.sourceJsonToAbv($(el).val())).get().join(", "));
-				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+				sourceText.textContent = checked.map(el => Parser.sourceJsonToAbv(el.value)).join(", ");
+				selectedSources = new Set(checked.map(el => el.value));
 			} else {
-				$sourceText.text(`${checked.length} Sources`);
-				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+				sourceText.textContent = `${checked.length} Sources`;
+				selectedSources = new Set(checked.map(el => el.value));
 			}
 			renderList();
 		};
 
 		// Checkbox change handler
-		$sourceDropdown.find("input[type=checkbox]").on("change", updateSourceText);
+		sourceDropdown.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", updateSourceText));
 
 		// Action buttons
-		$sourceDropdown.find("[data-action=all]").on("click", () => {
-			$sourceDropdown.find("input").prop("checked", true);
+		sourceDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			sourceDropdown.querySelectorAll("input").forEach(cb => { cb.checked = true; });
 			updateSourceText();
 		});
-		$sourceDropdown.find("[data-action=none]").on("click", () => {
-			$sourceDropdown.find("input").prop("checked", false);
+		sourceDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			sourceDropdown.querySelectorAll("input").forEach(cb => { cb.checked = false; });
 			updateSourceText();
 		});
-		$sourceDropdown.find("[data-action=official]").on("click", () => {
+		sourceDropdown.querySelector("[data-action=official]").addEventListener("click", () => {
 			const official = ["PHB", "DMG", "MM", "XGE", "TCE", "FTD", "XPHB", "XDMG", "VGM", "MTF", "SCAG", "AI", "EGW", "MOT", "IDRotF"];
-			$sourceDropdown.find("input").each((_, el) => {
-				$(el).prop("checked", official.includes($(el).val()));
+			sourceDropdown.querySelectorAll("input").forEach(el => {
+				el.checked = official.includes(el.value);
 			});
 			updateSourceText();
 		});
 
 		// Quick filter buttons row
-		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
+		const quickFilters = e_({outer: `<div class="charsheet__modal-quick-filters"></div>`});
+		modalInner.append(quickFilters);
 
 		let filterAttunement = false;
 		let filterMagic = false;
 		let filterMundane = false;
 		let filterConsumable = false;
 
-		const $attuneBtn = $(`<button class="charsheet__modal-filter-btn">🔗 Requires Attunement</button>`).appendTo($quickFilters);
-		const $magicBtn = $(`<button class="charsheet__modal-filter-btn">✨ Magical</button>`).appendTo($quickFilters);
-		const $mundaneBtn = $(`<button class="charsheet__modal-filter-btn">📦 Mundane</button>`).appendTo($quickFilters);
-		const $consumeBtn = $(`<button class="charsheet__modal-filter-btn">🧪 Consumables</button>`).appendTo($quickFilters);
+		const attuneBtn = e_({tag: "button", clazz: "charsheet__modal-filter-btn", txt: "🔗 Requires Attunement"});
+		quickFilters.append(attuneBtn);
+		const magicBtn = e_({tag: "button", clazz: "charsheet__modal-filter-btn", txt: "✨ Magical"});
+		quickFilters.append(magicBtn);
+		const mundaneBtn = e_({tag: "button", clazz: "charsheet__modal-filter-btn", txt: "📦 Mundane"});
+		quickFilters.append(mundaneBtn);
+		const consumeBtn = e_({tag: "button", clazz: "charsheet__modal-filter-btn", txt: "🧪 Consumables"});
+		quickFilters.append(consumeBtn);
 
 		// Results count
-		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);
+		const resultsCount = e_({outer: `<div class="charsheet__modal-results-count"></div>`});
+		modalInner.append(resultsCount);
 
 		// Item list
-		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
+		const list = e_({outer: `<div class="charsheet__modal-list"></div>`});
+		modalInner.append(list);
 
 		const renderList = () => {
-			$list.empty();
+			list.innerHTML = "";
 
-			const searchTerm = $search.val().toLowerCase();
+			const searchTerm = search.value.toLowerCase();
 
 			const filterItem = (item) => {
 				if (searchTerm && !item.name.toLowerCase().includes(searchTerm)) return false;
@@ -546,15 +572,15 @@ class CharacterSheetInventory {
 			const filtered = items.filter(filterItem).slice(0, 150); // Limit for performance
 			const totalMatches = items.filter(filterItem).length;
 
-			$resultsCount.html(`<span>${filtered.length}${totalMatches > 150 ? ` of ${totalMatches}` : ""} item${filtered.length !== 1 ? "s" : ""} found</span>${totalMatches > 150 ? `<span class="ml-2" style="opacity: 0.7;">(showing first 150)</span>` : ""}`);
+			resultsCount.innerHTML = `<span>${filtered.length}${totalMatches > 150 ? ` of ${totalMatches}` : ""} item${filtered.length !== 1 ? "s" : ""} found</span>${totalMatches > 150 ? `<span class="ml-2" style="opacity: 0.7;">(showing first 150)</span>` : ""}`;
 
 			if (!filtered.length) {
-				$list.html(`
+				list.innerHTML = `
 					<div class="charsheet__modal-empty">
 						<div class="charsheet__modal-empty-icon">🎒</div>
 						<div class="charsheet__modal-empty-text">No items match your filters.<br>Try adjusting your search or filters.</div>
 					</div>
-				`);
+				`;
 				return;
 			}
 
@@ -585,8 +611,9 @@ class CharacterSheetInventory {
 				const bIdx = typeOrder.indexOf(b[0]);
 				return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
 			}).forEach(([type, typeItems]) => {
-				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
-				$(`<div class="charsheet__modal-section-title">${typeEmojis[type] || "📦"} ${type} <span style="opacity: 0.6;">(${typeItems.length})</span></div>`).appendTo($section);
+				const section = e_({outer: `<div class="charsheet__modal-section"></div>`});
+				list.append(section);
+				section.append(e_({outer: `<div class="charsheet__modal-section-title">${typeEmojis[type] || "📦"} ${type} <span style="opacity: 0.6;">(${typeItems.length})</span></div>`}));
 
 				typeItems.forEach(item => {
 					const rarity = item.rarity && !["none", "unknown", "unknown (magic)", "varies"].includes(item.rarity.toLowerCase())
@@ -614,7 +641,7 @@ class CharacterSheetInventory {
 					// Create hoverable link for item name
 					const itemHoverLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_ITEMS, item.name, item.source);
 
-					const $item = $(`
+					const itemEl = e_({outer: `
 						<div class="charsheet__modal-list-item">
 							<div class="charsheet__modal-list-item-icon">${this._getItemTypeEmoji(item)}</div>
 							<div class="charsheet__modal-list-item-content">
@@ -625,97 +652,103 @@ class CharacterSheetInventory {
 							</div>
 							<button class="ve-btn ve-btn-primary ve-btn-xs item-picker-add">+ Add</button>
 						</div>
-					`);
+					`});
 
-					$item.find(".item-picker-add").on("click", (e) => {
+					itemEl.querySelector(".item-picker-add").addEventListener("click", (e) => {
 						e.stopPropagation();
 						this._addItem(item);
 						JqueryUtil.doToast({type: "success", content: `Added ${item.name} to your inventory!`});
 					});
 
 					// Click row as fallback for accessibility (keyboard/mobile users)
-					$item.on("click", (e) => {
+					itemEl.addEventListener("click", (e) => {
 						// Don't trigger if user clicked the hover link itself
-						if ($(e.target).closest("a").length) return;
+						if (e.target.closest("a")) return;
 						this._showItemInfoFromData(item);
 					});
 
-					$section.append($item);
+					section.append(itemEl);
 				});
 			});
 		};
 
 		// Toggle quick filter buttons
-		const toggleBtn = ($btn, prop) => {
+		const toggleBtn = (btn, prop) => {
 			if (prop === "attunement") filterAttunement = !filterAttunement;
 			if (prop === "magic") {
 				filterMagic = !filterMagic;
-				// If turning on magic filter, turn off mundane filter (mutually exclusive)
 				if (filterMagic && filterMundane) {
 					filterMundane = false;
-					$mundaneBtn.removeClass("active");
+					mundaneBtn.classList.remove("active");
 				}
 			}
 			if (prop === "mundane") {
 				filterMundane = !filterMundane;
-				// If turning on mundane filter, turn off magic filter (mutually exclusive)
 				if (filterMundane && filterMagic) {
 					filterMagic = false;
-					$magicBtn.removeClass("active");
+					magicBtn.classList.remove("active");
 				}
 			}
 			if (prop === "consumable") filterConsumable = !filterConsumable;
-			$btn.toggleClass("active");
+			btn.classList.toggle("active");
 			renderList();
 		};
 
-		$attuneBtn.on("click", () => toggleBtn($attuneBtn, "attunement"));
-		$magicBtn.on("click", () => toggleBtn($magicBtn, "magic"));
-		$mundaneBtn.on("click", () => toggleBtn($mundaneBtn, "mundane"));
-		$consumeBtn.on("click", () => toggleBtn($consumeBtn, "consumable"));
+		attuneBtn.addEventListener("click", () => toggleBtn(attuneBtn, "attunement"));
+		magicBtn.addEventListener("click", () => toggleBtn(magicBtn, "magic"));
+		mundaneBtn.addEventListener("click", () => toggleBtn(mundaneBtn, "mundane"));
+		consumeBtn.addEventListener("click", () => toggleBtn(consumeBtn, "consumable"));
 
-		$search.on("input", renderList);
+		search.addEventListener("input", renderList);
 		// Type, rarity, and source filters are handled by checkbox change events above
 
 		// Initial render
 		renderList();
 
 		// Focus search on open
-		setTimeout(() => $search.focus(), 100);
+		setTimeout(() => search.focus(), 100);
 
 		// Custom item section
-		const $customSection = $(`<div class="charsheet__modal-custom-section"></div>`).appendTo($modalInner);
-		$(`<div class="charsheet__modal-section-title" style="margin-bottom: 0.75rem;">✏️ Create Custom Item</div>`).appendTo($customSection);
-		$(`<p class="ve-small ve-muted mb-2">Can't find what you're looking for? Add a custom item:</p>`).appendTo($customSection);
+		const customSection = e_({outer: `<div class="charsheet__modal-custom-section"></div>`});
+		modalInner.append(customSection);
+		customSection.append(e_({outer: `<div class="charsheet__modal-section-title" style="margin-bottom: 0.75rem;">✏️ Create Custom Item</div>`}));
+		customSection.append(e_({outer: `<p class="ve-small ve-muted mb-2">Can't find what you're looking for? Add a custom item:</p>`}));
 
-		const $customInputs = $(`<div class="charsheet__modal-custom-inputs"></div>`).appendTo($customSection);
-		const $customName = $(`<input type="text" class="form-control" placeholder="Item name..." style="flex: 1;">`).appendTo($customInputs);
-		const $customQty = $(`<input type="number" class="form-control" placeholder="Qty" style="width: 70px;" value="1" min="1">`).appendTo($customInputs);
-		const $customWeight = $(`<input type="number" class="form-control" placeholder="Weight" style="width: 90px;" step="0.1" min="0">`).appendTo($customInputs);
-		const $customAddBtn = $(`<button class="ve-btn ve-btn-primary">+ Add Custom</button>`).appendTo($customInputs);
+		const customInputs = e_({outer: `<div class="charsheet__modal-custom-inputs"></div>`});
+		customSection.append(customInputs);
+		const customName = e_({tag: "input", clazz: "form-control", attr: {type: "text", placeholder: "Item name...", style: "flex: 1;"}});
+		customInputs.append(customName);
+		const customQty = e_({tag: "input", clazz: "form-control", attr: {type: "number", placeholder: "Qty", style: "width: 70px;", value: "1", min: "1"}});
+		customInputs.append(customQty);
+		const customWeight = e_({tag: "input", clazz: "form-control", attr: {type: "number", placeholder: "Weight", style: "width: 90px;", step: "0.1", min: "0"}});
+		customInputs.append(customWeight);
+		const customAddBtn = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "+ Add Custom"});
+		customInputs.append(customAddBtn);
 
-		$customAddBtn.on("click", () => {
-			const name = $customName.val().trim();
+		customAddBtn.addEventListener("click", () => {
+			const name = customName.value.trim();
 			if (name) {
-				const qty = parseInt($customQty.val()) || 1;
-				const weight = parseFloat($customWeight.val()) || 0;
+				const qty = parseInt(customQty.value) || 1;
+				const weight = parseFloat(customWeight.value) || 0;
 				this._addCustomItem(name, qty, weight);
-				$customName.val("");
-				$customQty.val("1");
-				$customWeight.val("");
+				customName.value = "";
+				customQty.value = "1";
+				customWeight.value = "";
 				JqueryUtil.doToast({type: "success", content: `Added custom item: ${name}`});
 			}
 		});
 
 		// Enter to add custom item
-		$customName.on("keydown", (e) => {
-			if (e.key === "Enter") $customAddBtn.click();
+		customName.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") customAddBtn.click();
 		});
 
 		// Close button
-		$$`<div class="charsheet__modal-footer">
+		const footer = ee`<div class="charsheet__modal-footer">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		modalInner.append(footer);
+		footer.querySelector("button").addEventListener("click", () => doClose(false));
 	}
 
 	_isMagicItem (item) {
@@ -766,7 +799,7 @@ class CharacterSheetInventory {
 	}
 
 	async _showItemInfoFromData (item) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: item.name,
 			isMinHeight0: true,
 		});
@@ -776,7 +809,7 @@ class CharacterSheetInventory {
 			? item.rarity.toTitleCase()
 			: "";
 
-		const $content = $(`
+		modalInner.append(e_({outer: `
 			<div class="charsheet__item-info-modal">
 				<div class="ve-flex gap-2 mb-2 ve-flex-wrap">
 					${typeTag ? `<span class="charsheet__modal-list-item-badge">${typeTag}</span>` : ""}
@@ -795,11 +828,13 @@ class CharacterSheetInventory {
 					<div class="rd__b">${Renderer.get().render({entries: item.entries})}</div>
 				` : ""}
 			</div>
-		`).appendTo($modalInner);
+		`}));
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeFooter = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		modalInner.append(closeFooter);
+		closeFooter.querySelector("button").addEventListener("click", () => doClose(false));
 	}
 
 	_getItemType (item) {
@@ -1065,7 +1100,7 @@ class CharacterSheetInventory {
 	}
 
 	async _showAddCustomItem () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "✨ Create Custom Item",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -1276,10 +1311,10 @@ class CharacterSheetInventory {
 		let selectedType = "gear";
 
 		// Build form
-		const $form = $(`<div class="charsheet__custom-item-form"></div>`);
+		const form = e_({outer: `<div class="charsheet__custom-item-form"></div>`});
 
 		// Basic Info Section
-		$form.append(`
+		form.append(e_({outer: `
 			<div class="charsheet__modal-info-banner charsheet__modal-info-banner--info">
 				<div class="charsheet__modal-info-banner-icon">✨</div>
 				<div class="charsheet__modal-info-banner-content">
@@ -1287,41 +1322,33 @@ class CharacterSheetInventory {
 					<div class="ve-small">Fill in the details for your custom item. Required fields are marked with *</div>
 				</div>
 			</div>
-		`);
+		`}));
 
 		// Item Type Selection
-		const $typeGrid = $(`<div class="charsheet__custom-item-types"></div>`);
+		const typeGrid = e_({outer: `<div class="charsheet__custom-item-types"></div>`});
 		itemTypes.forEach(type => {
-			const $btn = $(`
+			const btn = e_({outer: `
 				<button type="button" class="charsheet__custom-item-type-btn ${type.value === selectedType ? "selected" : ""}" data-type="${type.value}">
 					<span class="charsheet__custom-item-type-icon">${type.icon}</span>
 					<span class="charsheet__custom-item-type-label">${type.label}</span>
 				</button>
-			`);
-			$btn.on("click", () => {
-				$typeGrid.find(".charsheet__custom-item-type-btn").removeClass("selected");
-				$btn.addClass("selected");
+			`});
+			btn.addEventListener("click", () => {
+				typeGrid.querySelectorAll(".charsheet__custom-item-type-btn").forEach(b => b.classList.remove("selected"));
+				btn.classList.add("selected");
 				selectedType = type.value;
 				updateFieldVisibility();
 			});
-			$typeGrid.append($btn);
+			typeGrid.append(btn);
 		});
 
-		$form.append(`<div class="charsheet__custom-item-section">
+		form.append(e_({outer: `<div class="charsheet__custom-item-section">
 			<div class="charsheet__custom-item-section-title">📦 Item Type</div>
-			${$typeGrid.prop("outerHTML")}
-		</div>`);
-
-		// Rebind events after appending
-		$form.find(".charsheet__custom-item-type-btn").on("click", function () {
-			$form.find(".charsheet__custom-item-type-btn").removeClass("selected");
-			$(this).addClass("selected");
-			selectedType = $(this).data("type");
-			updateFieldVisibility();
-		});
+		</div>`}));
+		form.querySelector(".charsheet__custom-item-section:last-child").append(typeGrid);
 
 		// Basic Fields Section
-		const $basicFields = $(`
+		const basicFields = e_({outer: `
 			<div class="charsheet__custom-item-section">
 				<div class="charsheet__custom-item-section-title">📝 Basic Information</div>
 				<div class="charsheet__custom-item-fields">
@@ -1356,11 +1383,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($basicFields);
+		`});
+		form.append(basicFields);
 
 		// Weapon Fields Section
-		const $weaponFields = $(`
+		const weaponFields = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--weapon" style="display: none;">
 				<div class="charsheet__custom-item-section-title">⚔️ Weapon Statistics</div>
 				<div class="charsheet__custom-item-fields">
@@ -1432,11 +1459,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($weaponFields);
+		`});
+		form.append(weaponFields);
 
 		// Armor Fields Section
-		const $armorFields = $(`
+		const armorFields = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--armor" style="display: none;">
 				<div class="charsheet__custom-item-section-title">🛡️ Armor Statistics</div>
 				<div class="charsheet__custom-item-fields">
@@ -1473,11 +1500,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($armorFields);
+		`});
+		form.append(armorFields);
 
 		// Shield Fields Section
-		const $shieldFields = $(`
+		const shieldFields = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--shield" style="display: none;">
 				<div class="charsheet__custom-item-section-title">🔰 Shield Statistics</div>
 				<div class="charsheet__custom-item-fields">
@@ -1496,8 +1523,8 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($shieldFields);
+		`});
+		form.append(shieldFields);
 
 		// All damage types for defenses
 		const allDamageTypes = Parser.DMG_TYPES;
@@ -1554,7 +1581,7 @@ class CharacterSheetInventory {
 		];
 
 		// Magic Item Fields Section (expanded)
-		const $magicFields = $(`
+		const magicFields = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--magic" style="display: none;">
 				<div class="charsheet__custom-item-section-title">✨ Magic Properties</div>
 				<div class="charsheet__custom-item-fields">
@@ -1592,11 +1619,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($magicFields);
+		`});
+		form.append(magicFields);
 
 		// Bonuses Section (spell, saves, checks)
-		const $bonusesSection = $(`
+		const bonusesSection = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--bonuses">
 				<div class="charsheet__custom-item-section-title">📈 Bonuses (Optional)</div>
 				<div class="charsheet__custom-item-fields">
@@ -1681,11 +1708,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($bonusesSection);
+		`});
+		form.append(bonusesSection);
 
 		// Defenses Section
-		const $defensesSection = $(`
+		const defensesSection = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--defenses">
 				<div class="charsheet__custom-item-section-title">🛡️ Defenses (Optional)</div>
 				<div class="charsheet__custom-item-fields">
@@ -1725,11 +1752,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($defensesSection);
+		`});
+		form.append(defensesSection);
 
 		// Speed Section
-		const $speedSection = $(`
+		const speedSection = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--speed">
 				<div class="charsheet__custom-item-section-title">🏃 Speed Modifications (Optional)</div>
 				<div class="charsheet__custom-item-fields">
@@ -1815,11 +1842,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($speedSection);
+		`});
+		form.append(speedSection);
 
 		// Ability Scores Section
-		const $abilitySection = $(`
+		const abilitySection = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--abilities">
 				<div class="charsheet__custom-item-section-title">💪 Ability Score Modifications (Optional)</div>
 				<div class="charsheet__custom-item-subsection">
@@ -1881,11 +1908,11 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($abilitySection);
+		`});
+		form.append(abilitySection);
 
 		// Senses Section
-		const $sensesSection = $(`
+		const sensesSection = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--senses">
 				<div class="charsheet__custom-item-section-title">👁️ Senses (Optional)</div>
 				<div class="charsheet__custom-item-fields">
@@ -1907,14 +1934,14 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($sensesSection);
+		`});
+		form.append(sensesSection);
 
 		// Attached Spells Section
 		const allSpells = this._page.getSpells?.() || [];
 		const selectedSpells = [];
 
-		const $spellsSection = $(`
+		const spellsSection = e_({outer: `
 			<div class="charsheet__custom-item-section charsheet__custom-item-section--spells">
 				<div class="charsheet__custom-item-section-title">✨ Attached Spells (Optional)</div>
 				<div class="charsheet__custom-item-fields">
@@ -1955,14 +1982,14 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($spellsSection);
+		`});
+		form.append(spellsSection);
 
 		// Spell picker logic
 		const renderSpellList = () => {
-			const searchTerm = $form.find("#custom-item-spell-search").val()?.toLowerCase() || "";
-			const levelFilterVal = $form.find("#custom-item-spell-level-filter").val() || "";
-			const schoolFilterVal = $form.find("#custom-item-spell-school-filter").val() || "";
+			const searchTerm = form.querySelector("#custom-item-spell-search")?.value?.toLowerCase() || "";
+			const levelFilterVal = form.querySelector("#custom-item-spell-level-filter")?.value || "";
+			const schoolFilterVal = form.querySelector("#custom-item-spell-school-filter")?.value || "";
 
 			let filteredSpells = allSpells.filter(s => {
 				if (searchTerm && !s.name.toLowerCase().includes(searchTerm)) return false;
@@ -1973,19 +2000,19 @@ class CharacterSheetInventory {
 				return true;
 			}).slice(0, 30);
 
-			const $listContainer = $form.find("#custom-item-spell-list");
+			const listContainer = form.querySelector("#custom-item-spell-list");
 
 			if (!searchTerm && !levelFilterVal && !schoolFilterVal) {
-				$listContainer.html(`<div class="charsheet__custom-item-spell-hint">Type to search or use filters above</div>`);
+				listContainer.innerHTML = `<div class="charsheet__custom-item-spell-hint">Type to search or use filters above</div>`;
 				return;
 			}
 
 			if (!filteredSpells.length) {
-				$listContainer.html(`<div class="charsheet__custom-item-spell-empty">No matching spells</div>`);
+				listContainer.innerHTML = `<div class="charsheet__custom-item-spell-empty">No matching spells</div>`;
 				return;
 			}
 
-			$listContainer.html(filteredSpells.map(s => {
+			listContainer.innerHTML = filteredSpells.map(s => {
 				const levelStr = s.level === 0 ? "Cantrip" : `${s.level}${Parser.getOrdinalForm(s.level)}`;
 				const schoolStr = Parser.spSchoolAbvToFull(s.school) || "";
 				return `
@@ -1997,39 +2024,41 @@ class CharacterSheetInventory {
 						<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__custom-item-spell-add">Add</button>
 					</div>
 				`;
-			}).join(""));
+			}).join("");
 
 			// Bind add buttons
-			$listContainer.find(".charsheet__custom-item-spell-add").on("click", function () {
-				const $item = $(this).closest(".charsheet__custom-item-spell-item");
-				const name = $item.data("name");
-				const source = $item.data("source");
-				const level = parseInt($item.data("level"));
+			listContainer.querySelectorAll(".charsheet__custom-item-spell-add").forEach(btn => {
+				btn.addEventListener("click", function () {
+					const itemEl = this.closest(".charsheet__custom-item-spell-item");
+					const name = itemEl.dataset.name;
+					const source = itemEl.dataset.source;
+					const level = parseInt(itemEl.dataset.level);
 
-				if (!selectedSpells.some(s => s.name === name && s.source === source)) {
-					selectedSpells.push({
-						name,
-						source,
-						level,
-						usageType: level === 0 ? "will" : "charges", // Default: cantrips at-will, others use charges
-						uses: level === 0 ? null : 1,
-						recharge: "long",
-					});
-				}
-				renderSpellList();
-				renderSelectedSpells();
+					if (!selectedSpells.some(s => s.name === name && s.source === source)) {
+						selectedSpells.push({
+							name,
+							source,
+							level,
+							usageType: level === 0 ? "will" : "charges",
+							uses: level === 0 ? null : 1,
+							recharge: "long",
+						});
+					}
+					renderSpellList();
+					renderSelectedSpells();
+				});
 			});
 		};
 
 		const renderSelectedSpells = () => {
-			const $selectedContainer = $form.find("#custom-item-spell-selected");
+			const selectedContainer = form.querySelector("#custom-item-spell-selected");
 
 			if (!selectedSpells.length) {
-				$selectedContainer.html(`<div class="charsheet__custom-item-spell-empty">No spells selected</div>`);
+				selectedContainer.innerHTML = `<div class="charsheet__custom-item-spell-empty">No spells selected</div>`;
 				return;
 			}
 
-			$selectedContainer.html(selectedSpells.map((s, idx) => {
+			selectedContainer.innerHTML = selectedSpells.map((s, idx) => {
 				const levelStr = s.level === 0 ? "Cantrip" : `${s.level}${Parser.getOrdinalForm(s.level)}`;
 				const isCantrip = s.level === 0;
 
@@ -2060,38 +2089,46 @@ class CharacterSheetInventory {
 						<button type="button" class="ve-btn ve-btn-xs ve-btn-danger charsheet__custom-item-spell-remove">&times;</button>
 					</div>
 				`;
-			}).join(""));
+			}).join("");
 
 			// Bind handlers
-			$selectedContainer.find(".charsheet__custom-item-spell-selected-item").each(function () {
-				const $item = $(this);
-				const idx = parseInt($item.data("idx"));
+			selectedContainer.querySelectorAll(".charsheet__custom-item-spell-selected-item").forEach(itemEl => {
+				const idx = parseInt(itemEl.dataset.idx);
 				const spell = selectedSpells[idx];
 				if (!spell) return;
 
 				// Usage type change
-				$item.find(".spell-usage-type").on("change", function () {
-					spell.usageType = $(this).val();
-					if (spell.usageType === "will") {
-						spell.uses = null;
-					} else if (!spell.uses) {
-						spell.uses = 1;
-					}
-					renderSelectedSpells();
-				});
+				const usageTypeSelect = itemEl.querySelector(".spell-usage-type");
+				if (usageTypeSelect) {
+					usageTypeSelect.addEventListener("change", function () {
+						spell.usageType = this.value;
+						if (spell.usageType === "will") {
+							spell.uses = null;
+						} else if (!spell.uses) {
+							spell.uses = 1;
+						}
+						renderSelectedSpells();
+					});
+				}
 
 				// Uses input
-				$item.find(".spell-uses").on("change", function () {
-					spell.uses = parseInt($(this).val()) || 1;
-				});
+				const usesInput = itemEl.querySelector(".spell-uses");
+				if (usesInput) {
+					usesInput.addEventListener("change", function () {
+						spell.uses = parseInt(this.value) || 1;
+					});
+				}
 
 				// Recharge select
-				$item.find(".spell-recharge").on("change", function () {
-					spell.recharge = $(this).val();
-				});
+				const rechargeSelect = itemEl.querySelector(".spell-recharge");
+				if (rechargeSelect) {
+					rechargeSelect.addEventListener("change", function () {
+						spell.recharge = this.value;
+					});
+				}
 
 				// Remove button
-				$item.find(".charsheet__custom-item-spell-remove").on("click", function () {
+				itemEl.querySelector(".charsheet__custom-item-spell-remove")?.addEventListener("click", () => {
 					selectedSpells.splice(idx, 1);
 					renderSpellList();
 					renderSelectedSpells();
@@ -2100,12 +2137,12 @@ class CharacterSheetInventory {
 		};
 
 		// Bind spell filter handlers
-		$form.find("#custom-item-spell-search").on("input", MiscUtil.debounce(renderSpellList, 100));
-		$form.find("#custom-item-spell-level-filter").on("change", renderSpellList);
-		$form.find("#custom-item-spell-school-filter").on("change", renderSpellList);
+		form.querySelector("#custom-item-spell-search")?.addEventListener("input", MiscUtil.debounce(renderSpellList, 100));
+		form.querySelector("#custom-item-spell-level-filter")?.addEventListener("change", renderSpellList);
+		form.querySelector("#custom-item-spell-school-filter")?.addEventListener("change", renderSpellList);
 
 		// Description Section
-		const $descSection = $(`
+		const descSection = e_({outer: `
 			<div class="charsheet__custom-item-section">
 				<div class="charsheet__custom-item-section-title">📖 Description (Optional)</div>
 				<div class="charsheet__custom-item-fields">
@@ -2114,26 +2151,26 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
-		$form.append($descSection);
+		`});
+		form.append(descSection);
 
-		$modalInner.append($form);
+		modalInner.append(form);
 
 		// Field visibility logic
 		const updateFieldVisibility = () => {
-			$form.find(".charsheet__custom-item-section--weapon").toggle(selectedType === "weapon");
-			$form.find(".charsheet__custom-item-section--armor").toggle(selectedType === "armor");
-			$form.find(".charsheet__custom-item-section--shield").toggle(selectedType === "shield");
-			$form.find(".charsheet__custom-item-section--magic").toggle(["wondrous", "wand", "ring", "potion", "scroll"].includes(selectedType));
+			form.querySelector(".charsheet__custom-item-section--weapon").style.display = selectedType === "weapon" ? "" : "none";
+			form.querySelector(".charsheet__custom-item-section--armor").style.display = selectedType === "armor" ? "" : "none";
+			form.querySelector(".charsheet__custom-item-section--shield").style.display = selectedType === "shield" ? "" : "none";
+			form.querySelector(".charsheet__custom-item-section--magic").style.display = ["wondrous", "wand", "ring", "potion", "scroll"].includes(selectedType) ? "" : "none";
 		};
 		updateFieldVisibility();
 
 		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose(false));
-		const $btnCreate = $(`<button class="ve-btn ve-btn-primary">✨ Create Item</button>`)
-			.on("click", () => {
-				const name = $form.find("#custom-item-name").val()?.trim();
+		const btnCancel = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel"});
+		btnCancel.addEventListener("click", () => doClose(false));
+		const btnCreate = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "✨ Create Item"});
+		btnCreate.addEventListener("click", () => {
+				const name = form.querySelector("#custom-item-name")?.value?.trim();
 				if (!name) {
 					JqueryUtil.doToast({type: "warning", content: "Please enter an item name!"});
 					return;
@@ -2141,39 +2178,35 @@ class CharacterSheetInventory {
 
 				const options = {
 					type: selectedType,
-					value: parseInt($form.find("#custom-item-value").val()) || 0,
-					rarity: $form.find("#custom-item-rarity").val() || undefined,
-					requiresAttunement: $form.find("#custom-item-attunement").is(":checked"),
-					entries: $form.find("#custom-item-desc").val()?.trim() || undefined,
+					value: parseInt(form.querySelector("#custom-item-value")?.value) || 0,
+					rarity: form.querySelector("#custom-item-rarity")?.value || undefined,
+					requiresAttunement: form.querySelector("#custom-item-attunement")?.checked,
+					entries: form.querySelector("#custom-item-desc")?.value?.trim() || undefined,
 				};
 
 				// Weapon stats
 				if (selectedType === "weapon") {
-					options.weaponCategory = $form.find("#custom-item-weapon-cat").val();
-					options.dmg1 = $form.find("#custom-item-damage").val() || "1d6";
-					options.dmgType = $form.find("#custom-item-dmg-type").val();
-					const range = $form.find("#custom-item-range").val()?.trim();
+					options.weaponCategory = form.querySelector("#custom-item-weapon-cat")?.value;
+					options.dmg1 = form.querySelector("#custom-item-damage")?.value || "1d6";
+					options.dmgType = form.querySelector("#custom-item-dmg-type")?.value;
+					const range = form.querySelector("#custom-item-range")?.value?.trim();
 					if (range) options.range = range;
-					const bonus = parseInt($form.find("#custom-item-weapon-bonus").val());
+					const bonus = parseInt(form.querySelector("#custom-item-weapon-bonus")?.value);
 					if (bonus > 0) options.bonusWeapon = `+${bonus}`;
-					// Separate attack/damage bonuses
-					const bonusAttack = parseInt($form.find("#custom-item-bonus-attack").val()) || 0;
+					const bonusAttack = parseInt(form.querySelector("#custom-item-bonus-attack")?.value) || 0;
 					if (bonusAttack) options.bonusWeaponAttack = `+${bonusAttack}`;
-					const bonusDamage = parseInt($form.find("#custom-item-bonus-damage").val()) || 0;
+					const bonusDamage = parseInt(form.querySelector("#custom-item-bonus-damage")?.value) || 0;
 					if (bonusDamage) options.bonusWeaponDamage = `+${bonusDamage}`;
-					// Bonus crit damage
-					const critDamage = $form.find("#custom-item-crit-damage").val()?.trim();
+					const critDamage = form.querySelector("#custom-item-crit-damage")?.value?.trim();
 					if (critDamage) options.bonusWeaponCritDamage = critDamage;
-					// Weapon masteries (can select multiple)
 					const masteries = [];
-					$form.find(".weapon-mastery-check:checked").each(function () {
-						masteries.push($(this).val());
+					form.querySelectorAll(".weapon-mastery-check:checked").forEach(cb => {
+						masteries.push(cb.value);
 					});
 					if (masteries.length) options.mastery = masteries;
-					// Gather properties
 					const props = [];
-					$form.find(".weapon-prop-check:checked").each(function () {
-						props.push($(this).val());
+					form.querySelectorAll(".weapon-prop-check:checked").forEach(cb => {
+						props.push(cb.value);
 					});
 					if (props.length) options.property = props;
 				}
@@ -2181,58 +2214,58 @@ class CharacterSheetInventory {
 				// Armor stats
 				if (selectedType === "armor") {
 					options.armor = true;
-					options.ac = parseInt($form.find("#custom-item-ac").val()) || 10;
-					const bonus = parseInt($form.find("#custom-item-armor-bonus").val());
+					options.ac = parseInt(form.querySelector("#custom-item-ac")?.value) || 10;
+					const bonus = parseInt(form.querySelector("#custom-item-armor-bonus")?.value);
 					if (bonus > 0) options.bonusAc = `+${bonus}`;
-					const strReq = parseInt($form.find("#custom-item-str-req").val());
+					const strReq = parseInt(form.querySelector("#custom-item-str-req")?.value);
 					if (strReq > 0) options.strength = strReq;
-					if ($form.find("#custom-item-stealth-dis").is(":checked")) options.stealth = true;
+					if (form.querySelector("#custom-item-stealth-dis")?.checked) options.stealth = true;
 				}
 
 				// Shield stats
 				if (selectedType === "shield") {
 					options.armor = true;
-					options.ac = parseInt($form.find("#custom-item-shield-ac").val()) || 2;
-					const bonus = parseInt($form.find("#custom-item-shield-bonus").val());
+					options.ac = parseInt(form.querySelector("#custom-item-shield-ac")?.value) || 2;
+					const bonus = parseInt(form.querySelector("#custom-item-shield-bonus")?.value);
 					if (bonus > 0) options.bonusAc = `+${bonus}`;
 				}
 
-				// Magic item properties (charges, recharge, special)
+				// Magic item properties
 				if (["wondrous", "wand", "ring", "potion", "scroll"].includes(selectedType)) {
-					const charges = parseInt($form.find("#custom-item-charges").val());
+					const charges = parseInt(form.querySelector("#custom-item-charges")?.value);
 					if (charges > 0) {
 						options.charges = charges;
-						const recharge = $form.find("#custom-item-recharge").val();
+						const recharge = form.querySelector("#custom-item-recharge")?.value;
 						if (recharge) options.recharge = recharge;
-						const rechargeAmount = $form.find("#custom-item-recharge-amount").val()?.trim();
+						const rechargeAmount = form.querySelector("#custom-item-recharge-amount")?.value?.trim();
 						if (rechargeAmount) options.rechargeAmount = rechargeAmount;
 					}
-					if ($form.find("#custom-item-focus").is(":checked")) options.focus = true;
-					if ($form.find("#custom-item-cursed").is(":checked")) options.curse = true;
-					if ($form.find("#custom-item-sentient").is(":checked")) options.sentient = true;
+					if (form.querySelector("#custom-item-focus")?.checked) options.focus = true;
+					if (form.querySelector("#custom-item-cursed")?.checked) options.curse = true;
+					if (form.querySelector("#custom-item-sentient")?.checked) options.sentient = true;
 				}
 
-				// Bonuses (available for all magic items)
-				const bonusSpellAttack = parseInt($form.find("#custom-item-bonus-spell-attack").val()) || 0;
+				// Bonuses
+				const bonusSpellAttack = parseInt(form.querySelector("#custom-item-bonus-spell-attack")?.value) || 0;
 				if (bonusSpellAttack) options.bonusSpellAttack = `+${bonusSpellAttack}`;
-				const bonusSpellDc = parseInt($form.find("#custom-item-bonus-spell-dc").val()) || 0;
+				const bonusSpellDc = parseInt(form.querySelector("#custom-item-bonus-spell-dc")?.value) || 0;
 				if (bonusSpellDc) options.bonusSpellSaveDc = `+${bonusSpellDc}`;
-				const bonusSaveAll = parseInt($form.find("#custom-item-bonus-save-all").val()) || 0;
+				const bonusSaveAll = parseInt(form.querySelector("#custom-item-bonus-save-all")?.value) || 0;
 				if (bonusSaveAll) options.bonusSavingThrow = `+${bonusSaveAll}`;
-				const bonusConcentration = parseInt($form.find("#custom-item-bonus-concentration").val()) || 0;
+				const bonusConcentration = parseInt(form.querySelector("#custom-item-bonus-concentration")?.value) || 0;
 				if (bonusConcentration) options.bonusSavingThrowConcentration = `+${bonusConcentration}`;
-				const bonusChecks = parseInt($form.find("#custom-item-bonus-checks").val()) || 0;
+				const bonusChecks = parseInt(form.querySelector("#custom-item-bonus-checks")?.value) || 0;
 				if (bonusChecks) options.bonusAbilityCheck = `+${bonusChecks}`;
-				const critThreshold = parseInt($form.find("#custom-item-crit-threshold").val());
+				const critThreshold = parseInt(form.querySelector("#custom-item-crit-threshold")?.value);
 				if (critThreshold && critThreshold < 20) options.critThreshold = critThreshold;
 
 				// Individual save bonuses
-				const saveStr = parseInt($form.find("#custom-item-bonus-save-str").val()) || 0;
-				const saveDex = parseInt($form.find("#custom-item-bonus-save-dex").val()) || 0;
-				const saveCon = parseInt($form.find("#custom-item-bonus-save-con").val()) || 0;
-				const saveInt = parseInt($form.find("#custom-item-bonus-save-int").val()) || 0;
-				const saveWis = parseInt($form.find("#custom-item-bonus-save-wis").val()) || 0;
-				const saveCha = parseInt($form.find("#custom-item-bonus-save-cha").val()) || 0;
+				const saveStr = parseInt(form.querySelector("#custom-item-bonus-save-str")?.value) || 0;
+				const saveDex = parseInt(form.querySelector("#custom-item-bonus-save-dex")?.value) || 0;
+				const saveCon = parseInt(form.querySelector("#custom-item-bonus-save-con")?.value) || 0;
+				const saveInt = parseInt(form.querySelector("#custom-item-bonus-save-int")?.value) || 0;
+				const saveWis = parseInt(form.querySelector("#custom-item-bonus-save-wis")?.value) || 0;
+				const saveCha = parseInt(form.querySelector("#custom-item-bonus-save-cha")?.value) || 0;
 				if (saveStr) options.bonusSavingThrowStr = saveStr;
 				if (saveDex) options.bonusSavingThrowDex = saveDex;
 				if (saveCon) options.bonusSavingThrowCon = saveCon;
@@ -2242,15 +2275,14 @@ class CharacterSheetInventory {
 
 				// Defenses
 				const resist = [];
-				$form.find(".resist-check:checked").each(function () { resist.push($(this).val()); });
+				form.querySelectorAll(".resist-check:checked").forEach(cb => { resist.push(cb.value); });
 				if (resist.length) options.resist = resist;
 				const immune = [];
-				$form.find(".immune-check:checked").each(function () { immune.push($(this).val()); });
+				form.querySelectorAll(".immune-check:checked").forEach(cb => { immune.push(cb.value); });
 				if (immune.length) options.immune = immune;
 				const conditionImmune = [];
-				$form.find(".condition-immune-check:checked").each(function () {
-					// Value is stored as "name|source", extract just the name for storage
-					const val = String($(this).val() || "");
+				form.querySelectorAll(".condition-immune-check:checked").forEach(cb => {
+					const val = String(cb.value || "");
 					const condName = val.includes("|") ? val.split("|")[0] : val;
 					conditionImmune.push(condName);
 				});
@@ -2258,11 +2290,11 @@ class CharacterSheetInventory {
 
 				// Speed modifications
 				const speedBonus = {};
-				const speedWalk = parseInt($form.find("#custom-item-speed-walk").val()) || 0;
-				const speedFly = parseInt($form.find("#custom-item-speed-fly").val()) || 0;
-				const speedSwim = parseInt($form.find("#custom-item-speed-swim").val()) || 0;
-				const speedClimb = parseInt($form.find("#custom-item-speed-climb").val()) || 0;
-				const speedBurrow = parseInt($form.find("#custom-item-speed-burrow").val()) || 0;
+				const speedWalk = parseInt(form.querySelector("#custom-item-speed-walk")?.value) || 0;
+				const speedFly = parseInt(form.querySelector("#custom-item-speed-fly")?.value) || 0;
+				const speedSwim = parseInt(form.querySelector("#custom-item-speed-swim")?.value) || 0;
+				const speedClimb = parseInt(form.querySelector("#custom-item-speed-climb")?.value) || 0;
+				const speedBurrow = parseInt(form.querySelector("#custom-item-speed-burrow")?.value) || 0;
 				if (speedWalk) speedBonus.walk = speedWalk;
 				if (speedFly) speedBonus.fly = speedFly;
 				if (speedSwim) speedBonus.swim = speedSwim;
@@ -2270,10 +2302,10 @@ class CharacterSheetInventory {
 				if (speedBurrow) speedBonus.burrow = speedBurrow;
 
 				const speedStatic = {};
-				const grantFly = parseInt($form.find("#custom-item-grant-fly").val()) || 0;
-				const grantSwim = parseInt($form.find("#custom-item-grant-swim").val()) || 0;
-				const grantClimb = parseInt($form.find("#custom-item-grant-climb").val()) || 0;
-				const grantBurrow = parseInt($form.find("#custom-item-grant-burrow").val()) || 0;
+				const grantFly = parseInt(form.querySelector("#custom-item-grant-fly")?.value) || 0;
+				const grantSwim = parseInt(form.querySelector("#custom-item-grant-swim")?.value) || 0;
+				const grantClimb = parseInt(form.querySelector("#custom-item-grant-climb")?.value) || 0;
+				const grantBurrow = parseInt(form.querySelector("#custom-item-grant-burrow")?.value) || 0;
 				if (grantFly) speedStatic.fly = grantFly;
 				if (grantSwim) speedStatic.swim = grantSwim;
 				if (grantClimb) speedStatic.climb = grantClimb;
@@ -2281,16 +2313,16 @@ class CharacterSheetInventory {
 
 				// Speed equal-to (fly = walk, etc.)
 				const speedEqual = {};
-				const equalFly = $form.find("#custom-item-equal-fly").val();
-				const equalSwim = $form.find("#custom-item-equal-swim").val();
-				const equalClimb = $form.find("#custom-item-equal-climb").val();
+				const equalFly = form.querySelector("#custom-item-equal-fly")?.value;
+				const equalSwim = form.querySelector("#custom-item-equal-swim")?.value;
+				const equalClimb = form.querySelector("#custom-item-equal-climb")?.value;
 				if (equalFly) speedEqual.fly = equalFly;
 				if (equalSwim) speedEqual.swim = equalSwim;
 				if (equalClimb) speedEqual.climb = equalClimb;
 
 				// Speed multiply (walk x2, etc.)
 				const speedMultiply = {};
-				const multiplyWalk = parseFloat($form.find("#custom-item-multiply-walk").val());
+				const multiplyWalk = parseFloat(form.querySelector("#custom-item-multiply-walk")?.value);
 				if (multiplyWalk && multiplyWalk !== 1) speedMultiply.walk = multiplyWalk;
 
 				if (Object.keys(speedBonus).length || Object.keys(speedStatic).length || Object.keys(speedEqual).length || Object.keys(speedMultiply).length) {
@@ -2303,12 +2335,12 @@ class CharacterSheetInventory {
 
 				// Ability score modifications
 				const abilityStatic = {};
-				const setStr = parseInt($form.find("#custom-item-ability-set-str").val());
-				const setDex = parseInt($form.find("#custom-item-ability-set-dex").val());
-				const setCon = parseInt($form.find("#custom-item-ability-set-con").val());
-				const setInt = parseInt($form.find("#custom-item-ability-set-int").val());
-				const setWis = parseInt($form.find("#custom-item-ability-set-wis").val());
-				const setCha = parseInt($form.find("#custom-item-ability-set-cha").val());
+				const setStr = parseInt(form.querySelector("#custom-item-ability-set-str")?.value);
+				const setDex = parseInt(form.querySelector("#custom-item-ability-set-dex")?.value);
+				const setCon = parseInt(form.querySelector("#custom-item-ability-set-con")?.value);
+				const setInt = parseInt(form.querySelector("#custom-item-ability-set-int")?.value);
+				const setWis = parseInt(form.querySelector("#custom-item-ability-set-wis")?.value);
+				const setCha = parseInt(form.querySelector("#custom-item-ability-set-cha")?.value);
 				if (!isNaN(setStr) && setStr > 0) abilityStatic.str = setStr;
 				if (!isNaN(setDex) && setDex > 0) abilityStatic.dex = setDex;
 				if (!isNaN(setCon) && setCon > 0) abilityStatic.con = setCon;
@@ -2317,12 +2349,12 @@ class CharacterSheetInventory {
 				if (!isNaN(setCha) && setCha > 0) abilityStatic.cha = setCha;
 
 				const abilityBonus = {};
-				const bonusStr = parseInt($form.find("#custom-item-ability-bonus-str").val()) || 0;
-				const bonusDex = parseInt($form.find("#custom-item-ability-bonus-dex").val()) || 0;
-				const bonusCon = parseInt($form.find("#custom-item-ability-bonus-con").val()) || 0;
-				const bonusInt = parseInt($form.find("#custom-item-ability-bonus-int").val()) || 0;
-				const bonusWis = parseInt($form.find("#custom-item-ability-bonus-wis").val()) || 0;
-				const bonusCha = parseInt($form.find("#custom-item-ability-bonus-cha").val()) || 0;
+				const bonusStr = parseInt(form.querySelector("#custom-item-ability-bonus-str")?.value) || 0;
+				const bonusDex = parseInt(form.querySelector("#custom-item-ability-bonus-dex")?.value) || 0;
+				const bonusCon = parseInt(form.querySelector("#custom-item-ability-bonus-con")?.value) || 0;
+				const bonusInt = parseInt(form.querySelector("#custom-item-ability-bonus-int")?.value) || 0;
+				const bonusWis = parseInt(form.querySelector("#custom-item-ability-bonus-wis")?.value) || 0;
+				const bonusCha = parseInt(form.querySelector("#custom-item-ability-bonus-cha")?.value) || 0;
 				if (bonusStr) abilityBonus.str = bonusStr;
 				if (bonusDex) abilityBonus.dex = bonusDex;
 				if (bonusCon) abilityBonus.con = bonusCon;
@@ -2339,10 +2371,10 @@ class CharacterSheetInventory {
 
 				// Senses
 				const senses = {};
-				const senseDarkvision = parseInt($form.find("#custom-item-sense-darkvision").val()) || 0;
-				const senseBlindight = parseInt($form.find("#custom-item-sense-blindsight").val()) || 0;
-				const senseTremorsense = parseInt($form.find("#custom-item-sense-tremorsense").val()) || 0;
-				const senseTruesight = parseInt($form.find("#custom-item-sense-truesight").val()) || 0;
+				const senseDarkvision = parseInt(form.querySelector("#custom-item-sense-darkvision")?.value) || 0;
+				const senseBlindight = parseInt(form.querySelector("#custom-item-sense-blindsight")?.value) || 0;
+				const senseTremorsense = parseInt(form.querySelector("#custom-item-sense-tremorsense")?.value) || 0;
+				const senseTruesight = parseInt(form.querySelector("#custom-item-sense-truesight")?.value) || 0;
 				if (senseDarkvision) senses.darkvision = senseDarkvision;
 				if (senseBlindight) senses.blindsight = senseBlindight;
 				if (senseTremorsense) senses.tremorsense = senseTremorsense;
@@ -2379,18 +2411,19 @@ class CharacterSheetInventory {
 					if (Object.keys(attachedSpells).length) options.attachedSpells = attachedSpells;
 				}
 
-				const quantity = parseInt($form.find("#custom-item-qty").val()) || 1;
-				const weight = parseFloat($form.find("#custom-item-weight").val()) || 0;
+				const quantity = parseInt(form.querySelector("#custom-item-qty")?.value) || 1;
+				const weight = parseFloat(form.querySelector("#custom-item-weight")?.value) || 0;
 
 				this._addCustomItem(name, quantity, weight, options);
 				JqueryUtil.doToast({type: "success", content: `Created ${name}!`});
 				doClose(true);
 			});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3 gap-2">
-			${$btnCancel}
-			${$btnCreate}
-		</div>`.appendTo($modalInner);
+		const footer = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3 gap-2">
+			${btnCancel}
+			${btnCreate}
+		</div>`;
+		modalInner.append(footer);
 	}
 
 	_changeQuantity (itemId, delta) {
@@ -2704,16 +2737,18 @@ class CharacterSheetInventory {
 		// Try to find full item data
 		const itemData = this._allItems.find(i => i.name === item.name && i.source === item.source);
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: item.name,
 			isMinHeight0: true,
 		});
 
-		$modalInner.append(`<div>${itemData ? this._renderItemDetails(itemData) : this._renderBasicItemDetails(item)}</div>`);
+		modalInner.append(e_({outer: `<div>${itemData ? this._renderItemDetails(itemData) : this._renderBasicItemDetails(item)}</div>`}));
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeFooter = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		modalInner.append(closeFooter);
+		closeFooter.querySelector("button").addEventListener("click", () => doClose(false));
 	}
 
 	/**
@@ -2728,38 +2763,38 @@ class CharacterSheetInventory {
 		const requirements = this._state.getArtifactPropertyRequirements(itemId);
 		const selectedProperties = this._state.getArtifactProperties(itemId);
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `${item.name} - Artifact Properties`,
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
 		// Build the modal content
-		const $content = $(`<div class="charsheet__artifact-modal"></div>`);
+		const content = e_({outer: `<div class="charsheet__artifact-modal"></div>`});
 
 		// Requirements summary
 		if (requirements) {
-			const $requirements = $(`<div class="charsheet__artifact-requirements mb-3"></div>`);
-			$requirements.append(`<h5>Property Requirements</h5>`);
+			const requirementsEl = e_({outer: `<div class="charsheet__artifact-requirements mb-3"></div>`});
+			requirementsEl.append(e_({outer: `<h5>Property Requirements</h5>`}));
 			const reqList = [];
 			if (requirements.minorBeneficial > 0) reqList.push(`${requirements.minorBeneficial} Minor Beneficial`);
 			if (requirements.majorBeneficial > 0) reqList.push(`${requirements.majorBeneficial} Major Beneficial`);
 			if (requirements.minorDetrimental > 0) reqList.push(`${requirements.minorDetrimental} Minor Detrimental`);
 			if (requirements.majorDetrimental > 0) reqList.push(`${requirements.majorDetrimental} Major Detrimental`);
-			$requirements.append(`<p class="ve-muted">${reqList.length ? reqList.join(", ") : "No random properties required"}</p>`);
-			$content.append($requirements);
+			requirementsEl.append(e_({outer: `<p class="ve-muted">${reqList.length ? reqList.join(", ") : "No random properties required"}</p>`}));
+			content.append(requirementsEl);
 		}
 
 		// Selected properties display
-		const $selectedSection = $(`<div class="charsheet__artifact-selected mb-3"></div>`);
-		$selectedSection.append(`<h5>Selected Properties</h5>`);
-		const $selectedList = $(`<div class="charsheet__artifact-selected-list"></div>`);
+		const selectedSection = e_({outer: `<div class="charsheet__artifact-selected mb-3"></div>`});
+		selectedSection.append(e_({outer: `<h5>Selected Properties</h5>`}));
+		const selectedList = e_({outer: `<div class="charsheet__artifact-selected-list"></div>`});
 
 		const renderSelectedProperties = () => {
-			$selectedList.empty();
+			selectedList.innerHTML = "";
 			const props = this._state.getArtifactProperties(itemId);
 			if (props.length === 0) {
-				$selectedList.append(`<p class="ve-muted ve-small">No properties selected yet.</p>`);
+				selectedList.append(e_({outer: `<p class="ve-muted ve-small">No properties selected yet.</p>`}));
 			} else {
 				props.forEach((prop, index) => {
 					const typeLabels = {
@@ -2770,7 +2805,7 @@ class CharacterSheetInventory {
 					};
 					const typeInfo = typeLabels[prop.type] || {label: prop.type, class: ""};
 
-					const $propRow = $(`
+					selectedList.append(e_({outer: `
 						<div class="charsheet__artifact-property-row ve-flex-v-center mb-1 p-1 stripe-even">
 							<div class="ve-flex-1">
 								<span class="ve-small ${typeInfo.class}">[${typeInfo.label}]</span>
@@ -2782,19 +2817,18 @@ class CharacterSheetInventory {
 								<span class="glyphicon glyphicon-trash"></span>
 							</button>
 						</div>
-					`);
-					$selectedList.append($propRow);
+					`}));
 				});
 			}
 		};
 
 		renderSelectedProperties();
-		$selectedSection.append($selectedList);
-		$content.append($selectedSection);
+		selectedSection.append(selectedList);
+		content.append(selectedSection);
 
 		// Add property controls
-		const $addSection = $(`<div class="charsheet__artifact-add mb-3"></div>`);
-		$addSection.append(`<h5>Add Property</h5>`);
+		const addSection = e_({outer: `<div class="charsheet__artifact-add mb-3"></div>`});
+		addSection.append(e_({outer: `<h5>Add Property</h5>`}));
 
 		const propertyTypes = [
 			{id: "minorBeneficial", label: "Minor Beneficial", class: "ve-btn-success"},
@@ -2803,23 +2837,23 @@ class CharacterSheetInventory {
 			{id: "majorDetrimental", label: "Major Detrimental", class: "ve-btn-danger"},
 		];
 
-		const $typeSelect = $(`<select class="form-control form-control-sm mb-2" style="max-width: 200px;"></select>`);
+		const typeSelect = e_({outer: `<select class="form-control form-control-sm mb-2" style="max-width: 200px;"></select>`});
 		propertyTypes.forEach(type => {
-			$typeSelect.append(`<option value="${type.id}">${type.label}</option>`);
+			typeSelect.append(e_({outer: `<option value="${type.id}">${type.label}</option>`}));
 		});
-		$addSection.append($typeSelect);
+		addSection.append(typeSelect);
 
 		// Property table display
-		const $tableContainer = $(`<div class="charsheet__artifact-table mb-2" style="max-height: 200px; overflow-y: auto;"></div>`);
+		const tableContainer = e_({outer: `<div class="charsheet__artifact-table mb-2" style="max-height: 200px; overflow-y: auto;"></div>`});
 
 		const renderPropertyTable = (type) => {
-			$tableContainer.empty();
+			tableContainer.innerHTML = "";
 			const table = this._state.getArtifactPropertyTable(type);
-			const $table = $(`<table class="table table-sm table-striped ve-small"><thead><tr><th>d100</th><th>Property</th><th></th></tr></thead><tbody></tbody></table>`);
-			const $tbody = $table.find("tbody");
+			const tableEl = e_({outer: `<table class="table table-sm table-striped ve-small"><thead><tr><th>d100</th><th>Property</th><th></th></tr></thead><tbody></tbody></table>`});
+			const tbody = tableEl.querySelector("tbody");
 
 			table.forEach(prop => {
-				const $row = $(`
+				tbody.append(e_({outer: `
 					<tr>
 						<td class="ve-muted">${prop.min === prop.max ? prop.min : `${prop.min}-${prop.max}`}</td>
 						<td>
@@ -2832,49 +2866,53 @@ class CharacterSheetInventory {
 							</button>
 						</td>
 					</tr>
-				`);
-				$tbody.append($row);
+				`}));
 			});
 
-			$tableContainer.append($table);
+			tableContainer.append(tableEl);
 		};
 
-		$typeSelect.on("change", () => renderPropertyTable($typeSelect.val()));
+		typeSelect.addEventListener("change", () => renderPropertyTable(typeSelect.value));
 		renderPropertyTable("minorBeneficial");
 
-		$addSection.append($tableContainer);
+		addSection.append(tableContainer);
 
 		// Roll and Choose buttons
-		const $buttons = $(`<div class="ve-flex-v-center gap-2"></div>`);
-		const $rollBtn = $(`<button type="button" class="ve-btn ve-btn-sm ve-btn-primary"><span class="glyphicon glyphicon-random"></span> Roll d100</button>`);
-		$buttons.append($rollBtn);
-		$addSection.append($buttons);
+		const buttons = e_({outer: `<div class="ve-flex-v-center gap-2"></div>`});
+		const rollBtn = e_({outer: `<button type="button" class="ve-btn ve-btn-sm ve-btn-primary"><span class="glyphicon glyphicon-random"></span> Roll d100</button>`});
+		buttons.append(rollBtn);
+		addSection.append(buttons);
 
-		$content.append($addSection);
+		content.append(addSection);
 
 		// Event handlers
-		$content.on("click", ".charsheet__artifact-remove-prop", (e) => {
-			const index = parseInt($(e.currentTarget).data("index"));
-			this._state.removeArtifactProperty(itemId, index);
-			renderSelectedProperties();
-			this._page.saveCharacter();
-		});
-
-		$content.on("click", ".charsheet__artifact-select-prop", (e) => {
-			const type = $(e.currentTarget).data("type");
-			const min = parseInt($(e.currentTarget).data("min"));
-			const table = this._state.getArtifactPropertyTable(type);
-			const prop = table.find(p => p.min === min);
-			if (prop) {
-				this._state.setArtifactProperty(itemId, type, {...prop});
+		content.addEventListener("click", (e) => {
+			const removeBtn = e.target.closest(".charsheet__artifact-remove-prop");
+			if (removeBtn) {
+				const index = parseInt(removeBtn.dataset.index);
+				this._state.removeArtifactProperty(itemId, index);
 				renderSelectedProperties();
 				this._page.saveCharacter();
-				JqueryUtil.doToast({type: "success", content: `Added: ${prop.name}`});
+				return;
+			}
+			const selectBtn = e.target.closest(".charsheet__artifact-select-prop");
+			if (selectBtn) {
+				const type = selectBtn.dataset.type;
+				const min = parseInt(selectBtn.dataset.min);
+				const table = this._state.getArtifactPropertyTable(type);
+				const prop = table.find(p => p.min === min);
+				if (prop) {
+					this._state.setArtifactProperty(itemId, type, {...prop});
+					renderSelectedProperties();
+					this._page.saveCharacter();
+					JqueryUtil.doToast({type: "success", content: `Added: ${prop.name}`});
+				}
+				return;
 			}
 		});
 
-		$rollBtn.on("click", () => {
-			const type = $typeSelect.val();
+		rollBtn.addEventListener("click", () => {
+			const type = typeSelect.value;
 			const prop = this._state.rollArtifactProperty(type);
 			if (prop) {
 				this._state.setArtifactProperty(itemId, type, prop);
@@ -2884,13 +2922,15 @@ class CharacterSheetInventory {
 			}
 		});
 
-		$modalInner.append($content);
+		modalInner.append(content);
 
 		// Close button
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeFooter = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => {
-				this._renderItemList(); // Refresh to update badge
+		</div>`;
+		modalInner.append(closeFooter);
+		closeFooter.querySelector("button").addEventListener("click", () => {
+				this._renderItemList();
 				doClose(false);
 			});
 	}
@@ -2983,36 +3023,50 @@ class CharacterSheetInventory {
 		const heavilyEncumberedThreshold = strScore * 10;
 
 		// Update UI - support both ID variants
-		$("#charsheet-total-weight, #charsheet-carrying-current").text(totalWeight.toFixed(1));
-		$("#charsheet-carrying-capacity, #charsheet-carrying-max").text(carryingCapacity);
+		for (const id of ["charsheet-total-weight", "charsheet-carrying-current"]) {
+			const el = document.getElementById(id);
+			if (el) el.textContent = totalWeight.toFixed(1);
+		}
+		for (const id of ["charsheet-carrying-capacity", "charsheet-carrying-max"]) {
+			const el = document.getElementById(id);
+			if (el) el.textContent = carryingCapacity;
+		}
 
 		// Update carrying bar
 		const fillPercent = Math.min((totalWeight / carryingCapacity) * 100, 100);
-		$("#charsheet-carrying-fill").css("width", `${fillPercent}%`);
+		const fillEl = document.getElementById("charsheet-carrying-fill");
+		if (fillEl) {
+			fillEl.style.width = `${fillPercent}%`;
 
-		// Update bar color based on encumbrance
-		const $fill = $("#charsheet-carrying-fill");
-		$fill.removeClass("encumbered heavily-encumbered over-capacity");
-		if (totalWeight > carryingCapacity) {
-			$fill.addClass("over-capacity");
-		} else if (totalWeight > heavilyEncumberedThreshold) {
-			$fill.addClass("heavily-encumbered");
-		} else if (totalWeight > encumberedThreshold) {
-			$fill.addClass("encumbered");
+			// Update bar color based on encumbrance
+			fillEl.classList.remove("encumbered", "heavily-encumbered", "over-capacity");
+			if (totalWeight > carryingCapacity) {
+				fillEl.classList.add("over-capacity");
+			} else if (totalWeight > heavilyEncumberedThreshold) {
+				fillEl.classList.add("heavily-encumbered");
+			} else if (totalWeight > encumberedThreshold) {
+				fillEl.classList.add("encumbered");
+			}
 		}
 
 		// Update encumbrance status
-		const $encumbranceStatus = $("#charsheet-encumbrance-status");
-		$encumbranceStatus.removeClass("text-success text-warning text-danger");
+		const encumbranceStatus = document.getElementById("charsheet-encumbrance-status");
+		if (encumbranceStatus) {
+			encumbranceStatus.classList.remove("text-success", "text-warning", "text-danger");
 
-		if (totalWeight > carryingCapacity) {
-			$encumbranceStatus.addClass("text-danger").text("Over Capacity!");
-		} else if (totalWeight > heavilyEncumberedThreshold) {
-			$encumbranceStatus.addClass("text-danger").text("Heavily Encumbered");
-		} else if (totalWeight > encumberedThreshold) {
-			$encumbranceStatus.addClass("text-warning").text("Encumbered");
-		} else {
-			$encumbranceStatus.addClass("text-success").text("Normal");
+			if (totalWeight > carryingCapacity) {
+				encumbranceStatus.classList.add("text-danger");
+				encumbranceStatus.textContent = "Over Capacity!";
+			} else if (totalWeight > heavilyEncumberedThreshold) {
+				encumbranceStatus.classList.add("text-danger");
+				encumbranceStatus.textContent = "Heavily Encumbered";
+			} else if (totalWeight > encumberedThreshold) {
+				encumbranceStatus.classList.add("text-warning");
+				encumbranceStatus.textContent = "Encumbered";
+			} else {
+				encumbranceStatus.classList.add("text-success");
+				encumbranceStatus.textContent = "Normal";
+			}
 		}
 	}
 
@@ -3564,10 +3618,10 @@ class CharacterSheetInventory {
 	}
 
 	_renderItemList () {
-		const $container = $("#charsheet-inventory-list");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-inventory-list");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const items = this._state.getItems();
 
@@ -3584,9 +3638,9 @@ class CharacterSheetInventory {
 		}
 
 		if (!filtered.length) {
-			$container.append(`<div class="charsheet__inventory-empty">
+			container.append(e_({outer: `<div class="charsheet__inventory-empty">
 				<span class="ve-muted">${this._starredFilter ? "No starred items" : "No items in inventory"}</span>
-			</div>`);
+			</div>`}));
 			return;
 		}
 
@@ -3622,7 +3676,7 @@ class CharacterSheetInventory {
 		});
 
 		// Render toolbar
-		this._renderInventoryToolbar($container);
+		this._renderInventoryToolbar(container);
 
 		// Render each category
 		categoryOrder.forEach(category => {
@@ -3632,7 +3686,7 @@ class CharacterSheetInventory {
 			const isCollapsed = this._collapsedCategories.has(category);
 			const icon = this._getCategoryIcon(category);
 
-			const $categorySection = $(`
+			const categorySection = e_({outer: `
 				<div class="charsheet__inventory-category ${isCollapsed ? "collapsed" : ""}" data-category="${category}">
 					<div class="charsheet__category-header" data-category="${category}">
 						<span class="charsheet__category-collapse-icon">
@@ -3644,34 +3698,36 @@ class CharacterSheetInventory {
 					</div>
 					<div class="charsheet__category-items ${isCollapsed ? "hidden" : ""}"></div>
 				</div>
-			`);
+			`});
 
-			const $itemsContainer = $categorySection.find(".charsheet__category-items");
+			const itemsContainer = categorySection.querySelector(".charsheet__category-items");
 			items.forEach(item => {
-				const $item = this._renderItemRow(item);
-				$itemsContainer.append($item);
+				const itemEl = this._renderItemRow(item);
+				itemsContainer.append(itemEl);
 			});
 
-			$container.append($categorySection);
+			container.append(categorySection);
 		});
 	}
 
 	/**
 	 * Render the inventory toolbar with filters and sort controls
-	 * @param {jQuery} $container - The container to prepend to
+	 * @param {Element} container - The container to prepend to
 	 */
-	_renderInventoryToolbar ($container) {
+	_renderInventoryToolbar (container) {
 		// Check if toolbar already exists in parent
-		const $existingToolbar = $container.siblings(".charsheet__inventory-toolbar");
-		if ($existingToolbar.length) {
+		const existingToolbar = container.parentElement?.querySelector(".charsheet__inventory-toolbar");
+		if (existingToolbar) {
 			// Update the active state of starred filter
-			$existingToolbar.find("#charsheet-btn-starred-filter").toggleClass("active", this._starredFilter);
+			const starredBtn = existingToolbar.querySelector("#charsheet-btn-starred-filter");
+			if (starredBtn) starredBtn.classList.toggle("active", this._starredFilter);
 			// Update sort dropdown
-			$existingToolbar.find("#charsheet-inventory-sort").val(this._sortBy);
+			const sortSelect = existingToolbar.querySelector("#charsheet-inventory-sort");
+			if (sortSelect) sortSelect.value = this._sortBy;
 			return;
 		}
 
-		const $toolbar = $(`
+		const toolbar = e_({outer: `
 			<div class="charsheet__inventory-toolbar">
 				<div class="charsheet__inventory-toolbar-left">
 					<button type="button" class="ve-btn ve-btn-xs ${this._starredFilter ? "ve-btn-warning" : "ve-btn-default"} charsheet__btn-starred-filter" id="charsheet-btn-starred-filter" title="Show only starred items">
@@ -3690,14 +3746,14 @@ class CharacterSheetInventory {
 					</button>
 				</div>
 			</div>
-		`);
+		`});
 
-		$container.before($toolbar);
+		container.before(toolbar);
 	}
 
-	_renderPagination ($container, totalItems, totalPages) {
+	_renderPagination (container, totalItems, totalPages) {
 		// Remove existing pagination
-		$container.siblings(".charsheet__inventory-pagination").remove();
+		container.parentElement?.querySelector(".charsheet__inventory-pagination")?.remove();
 
 		// Only show pagination if there's more than one page
 		if (totalPages <= 1) return;
@@ -3705,7 +3761,7 @@ class CharacterSheetInventory {
 		const startIdx = this._currentPage * this._itemsPerPage + 1;
 		const endIdx = Math.min((this._currentPage + 1) * this._itemsPerPage, totalItems);
 
-		const $pagination = $(`
+		const pagination = e_({outer: `
 			<div class="charsheet__inventory-pagination">
 				<button class="ve-btn ve-btn-xs ve-btn-default charsheet__pagination-prev" ${this._currentPage === 0 ? "disabled" : ""}>
 					<span class="glyphicon glyphicon-chevron-left"></span> Prev
@@ -3717,23 +3773,23 @@ class CharacterSheetInventory {
 					Next <span class="glyphicon glyphicon-chevron-right"></span>
 				</button>
 			</div>
-		`);
+		`});
 
-		$pagination.find(".charsheet__pagination-prev").on("click", () => {
+		pagination.querySelector(".charsheet__pagination-prev").addEventListener("click", () => {
 			if (this._currentPage > 0) {
 				this._currentPage--;
 				this._renderItemList();
 			}
 		});
 
-		$pagination.find(".charsheet__pagination-next").on("click", () => {
+		pagination.querySelector(".charsheet__pagination-next").addEventListener("click", () => {
 			if (this._currentPage < totalPages - 1) {
 				this._currentPage++;
 				this._renderItemList();
 			}
 		});
 
-		$container.after($pagination);
+		container.after(pagination);
 	}
 
 	_renderItemRow (item) {
@@ -3792,7 +3848,7 @@ class CharacterSheetInventory {
 			? item.mastery.map(m => this._formatMasteryWithHover(m)).join(", ")
 			: "";
 
-		return $(`
+		return e_({outer: `
 			<div class="charsheet__item ${item.equipped ? "equipped" : ""} ${item.starred ? "starred" : ""}" data-item-id="${item.id}">
 				<div class="charsheet__item-star-wrapper">
 					<button type="button" class="charsheet__item-star ${item.starred ? "active" : ""}" title="${item.starred ? "Remove star" : "Star item"}">
@@ -3863,7 +3919,7 @@ class CharacterSheetInventory {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 	}
 
 	/**
@@ -3998,7 +4054,8 @@ class CharacterSheetInventory {
 		const currency = this._state.getCurrency();
 		["cp", "sp", "ep", "gp", "pp"].forEach(c => {
 			// Update inventory tab currency inputs
-			$(`#charsheet-inv-ipt-${c}`).val(currency[c] || 0);
+			const el = document.getElementById(`charsheet-inv-ipt-${c}`);
+			if (el) el.value = currency[c] || 0;
 		});
 
 		// Calculate total value in GP
@@ -4009,11 +4066,14 @@ class CharacterSheetInventory {
 			+ (currency.gp || 0)
 			+ (currency.pp || 0) * 10;
 
-		const $total = $("#charsheet-inv-currency-total");
-		if (totalGP > 0) {
-			$total.text(`≈ ${totalGP.toFixed(1)} GP`).show();
-		} else {
-			$total.hide();
+		const totalEl = document.getElementById("charsheet-inv-currency-total");
+		if (totalEl) {
+			if (totalGP > 0) {
+				totalEl.textContent = `≈ ${totalGP.toFixed(1)} GP`;
+				totalEl.style.display = "";
+			} else {
+				totalEl.style.display = "none";
+			}
 		}
 	}
 
@@ -4022,7 +4082,12 @@ class CharacterSheetInventory {
 	 */
 	_initCurrencyInputs () {
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
-			$(`#charsheet-inv-ipt-${currency}`).off("change").on("change", (e) => {
+			const el = document.getElementById(`charsheet-inv-ipt-${currency}`);
+			if (!el) return;
+			// Clone and replace to remove old listeners
+			const fresh = el.cloneNode(true);
+			el.replaceWith(fresh);
+			fresh.addEventListener("change", (e) => {
 				const value = parseInt(e.target.value) || 0;
 				this._state.setCurrency(currency, value);
 				this._renderCurrency();
@@ -4048,22 +4113,22 @@ class CharacterSheetInventory {
 	 * Render equipped items in the sidebar
 	 */
 	_renderEquippedItems () {
-		const $container = $("#charsheet-equipped-list");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-equipped-list");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const items = this._state.getItems();
 		const equippedItems = items.filter(i => i.equipped);
 
 		if (!equippedItems.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No items equipped</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">No items equipped</div>`}));
 			return;
 		}
 
 		equippedItems.forEach(item => {
-			const $item = this._renderEquipmentSummaryRow(item, "equipped");
-			$container.append($item);
+			const itemEl = this._renderEquipmentSummaryRow(item, "equipped");
+			container.append(itemEl);
 		});
 	}
 
@@ -4071,10 +4136,10 @@ class CharacterSheetInventory {
 	 * Render attuned items in the sidebar
 	 */
 	_renderAttunedItems () {
-		const $container = $("#charsheet-attuned-list");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-attuned-list");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const items = this._state.getItems();
 		const attunedItems = items.filter(i => i.attuned);
@@ -4082,16 +4147,16 @@ class CharacterSheetInventory {
 		const maxAttuned = this._state.getMaxAttunement();
 
 		if (!attunedItems.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No attuned items (${currentAttuned}/${maxAttuned})</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">No attuned items (${currentAttuned}/${maxAttuned})</div>`}));
 			return;
 		}
 
 		// Show attunement count header
-		$container.append(`<div class="ve-small ve-muted mb-1">Attunement Slots: ${currentAttuned}/${maxAttuned}</div>`);
+		container.append(e_({outer: `<div class="ve-small ve-muted mb-1">Attunement Slots: ${currentAttuned}/${maxAttuned}</div>`}));
 
 		attunedItems.forEach(item => {
-			const $item = this._renderEquipmentSummaryRow(item, "attuned");
-			$container.append($item);
+			const itemEl = this._renderEquipmentSummaryRow(item, "attuned");
+			container.append(itemEl);
 		});
 	}
 
@@ -4144,7 +4209,7 @@ class CharacterSheetInventory {
 			detailsHtml = `<div class="ve-small ve-muted">${detailParts.join(" | ")}</div>`;
 		}
 
-		return $(`
+		return e_({outer: `
 			<div class="charsheet__equipment-summary-item" data-item-id="${item.id}">
 				<div class="charsheet__equipment-summary-main">
 					<span class="charsheet__equipment-icon">${typeIcon}</span>
@@ -4153,7 +4218,7 @@ class CharacterSheetInventory {
 				</div>
 				${detailsHtml}
 			</div>
-		`);
+		`});
 	}
 
 	/**
@@ -4248,13 +4313,13 @@ class CharacterSheetInventory {
 		if (!item) return false;
 
 		// Scroll to and highlight the item in the inventory list
-		const $item = $(`.charsheet__item[data-item-id="${itemId}"]`);
-		if ($item.length) {
+		const itemEl = document.querySelector(`.charsheet__item[data-item-id="${itemId}"]`);
+		if (itemEl) {
 			// Scroll the item into view
-			$item[0].scrollIntoView({behavior: "smooth", block: "center"});
+			itemEl.scrollIntoView({behavior: "smooth", block: "center"});
 			// Highlight the item briefly
-			$item.addClass("charsheet__item--highlighted");
-			setTimeout(() => $item.removeClass("charsheet__item--highlighted"), 2000);
+			itemEl.classList.add("charsheet__item--highlighted");
+			setTimeout(() => itemEl.classList.remove("charsheet__item--highlighted"), 2000);
 		}
 
 		// Open the item info modal

@@ -3,6 +3,58 @@
  * Provides mocks for global utilities used by charactersheet-state.js
  */
 
+// Mock e_() and ee`` — vanilla DOM helpers used after jQuery removal.
+// In Node test environment there's no real DOM, so return stub objects with
+// the subset of properties that rendering code reads/writes.
+globalThis.e_ = function (opts = {}) {
+	const html = opts.outer || opts.html || "";
+	const el = {
+		tag: opts.tag || "div",
+		_html: html,
+		_children: [],
+		get innerHTML () { return this._html; },
+		set innerHTML (v) { this._html = v; },
+		get outerHTML () { return this._html; },
+		set outerHTML (v) { this._html = v; },
+		textContent: opts.txt || "",
+		style: {},
+		dataset: {},
+		classList: {add () {}, remove () {}, toggle () {}, contains () { return false; }},
+		get children () { return this._children; },
+		append (...children) {
+			for (const child of children) {
+				this._children.push(child);
+				const childHtml = typeof child === "string" ? child : (child?._html || child?.outerHTML || "");
+				// Insert child HTML before the last closing tag
+				const lastClose = this._html.lastIndexOf("</");
+				if (lastClose >= 0) {
+					this._html = this._html.slice(0, lastClose) + childHtml + this._html.slice(lastClose);
+				} else {
+					this._html += childHtml;
+				}
+			}
+		},
+		prepend (...children) { this._children.unshift(...children); },
+		querySelector () { return null; },
+		querySelectorAll () { return []; },
+		addEventListener () {},
+		removeEventListener () {},
+		setAttribute () {},
+		getAttribute () { return null; },
+		remove () {},
+		replaceWith () {},
+		closest () { return null; },
+		parentElement: null,
+		cloneNode () { return globalThis.e_(opts); },
+		insertAdjacentHTML (pos, html) { this._html += html; },
+		dispatchEvent () {},
+		matches () { return false; },
+		html () { return this._html; },
+	};
+	return el;
+};
+globalThis.ee = function () { return globalThis.e_({}); };
+
 // Add String.prototype.toTitleCase if not present
 if (!String.prototype.toTitleCase) {
 	String.prototype.toTitleCase = function () {

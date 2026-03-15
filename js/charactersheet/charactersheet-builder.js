@@ -210,41 +210,42 @@ class CharacterSheetBuilder {
 	}
 
 	_initStepClickHandlers () {
-		$(".charsheet__builder-step").on("click", (e) => {
-			const step = parseInt($(e.currentTarget).data("step"));
-			if (step <= this._currentStep) {
-				this._goToStep(step);
-			}
+		document.querySelectorAll(".charsheet__builder-step").forEach(el => {
+			el.addEventListener("click", (e) => {
+				const step = parseInt(e.currentTarget.dataset.step);
+				if (step <= this._currentStep) {
+					this._goToStep(step);
+				}
+			});
 		});
 	}
 
 	_initNavButtons () {
-		$("#charsheet-builder-prev").on("click", () => this._prevStep());
-		$("#charsheet-builder-next").on("click", () => this._nextStep());
+		document.getElementById("charsheet-builder-prev").addEventListener("click", () => this._prevStep());
+		document.getElementById("charsheet-builder-next").addEventListener("click", () => this._nextStep());
 	}
 
 	_updateStepIndicators () {
-		$(".charsheet__builder-step").each((i, el) => {
-			const $step = $(el);
-			const stepNum = parseInt($step.data("step"));
+		document.querySelectorAll(".charsheet__builder-step").forEach(el => {
+			const stepNum = parseInt(el.dataset.step);
 
-			$step.removeClass("active completed");
+			el.classList.remove("active", "completed");
 
 			if (stepNum === this._currentStep) {
-				$step.addClass("active");
+				el.classList.add("active");
 			} else if (stepNum < this._currentStep) {
-				$step.addClass("completed");
+				el.classList.add("completed");
 			}
 		});
 
 		// Update nav buttons
-		$("#charsheet-builder-prev").prop("disabled", this._currentStep <= 1);
-		const $nextBtn = $("#charsheet-builder-next");
+		document.getElementById("charsheet-builder-prev").disabled = this._currentStep <= 1;
+		const nextBtn = document.getElementById("charsheet-builder-next");
 
 		if (this._currentStep >= this._maxSteps) {
-			$nextBtn.html(`<span class="glyphicon glyphicon-ok"></span> Finish`);
+			nextBtn.innerHTML = `<span class="glyphicon glyphicon-ok"></span> Finish`;
 		} else {
-			$nextBtn.html(`Next <span class="glyphicon glyphicon-chevron-right"></span>`);
+			nextBtn.innerHTML = `Next <span class="glyphicon glyphicon-chevron-right"></span>`;
 		}
 	}
 
@@ -2088,36 +2089,36 @@ class CharacterSheetBuilder {
 	}
 
 	_renderCurrentStep () {
-		const $content = $("#charsheet-builder-content");
-		$content.empty();
+		const content = document.getElementById("charsheet-builder-content");
+		content.innerHTML = "";
 
 		switch (this._currentStep) {
 			case 1:
-				this._renderRaceStep($content);
+				this._renderRaceStep(content);
 				break;
 			case 2:
-				this._renderBackgroundStep($content);
+				this._renderBackgroundStep(content);
 				break;
 			case 3:
-				this._renderClassStep($content);
+				this._renderClassStep(content);
 				break;
 			case 4:
-				this._renderAbilitiesStep($content);
+				this._renderAbilitiesStep(content);
 				break;
 			case 5:
-				this._renderEquipmentStep($content);
+				this._renderEquipmentStep(content);
 				break;
 			case 6:
-				this._renderSpellsStep($content);
+				this._renderSpellsStep(content);
 				break;
 			case 7:
-				this._renderDetailsStep($content);
+				this._renderDetailsStep(content);
 				break;
 		}
 	}
 
 	// #region Step 1: Race
-	_renderRaceStep ($content) {
+	_renderRaceStep (content) {
 		// Get races filtered by allowed sources
 		const races = this._page.filterByAllowedSources(this._page.getRaces());
 
@@ -2168,7 +2169,7 @@ class CharacterSheetBuilder {
 			}
 		});
 
-		const $container = $(`
+		const container = e_({outer: `
 			<div class="charsheet__builder-selection">
 				<div class="charsheet__builder-list">
 					<div class="charsheet__builder-list-header">
@@ -2180,17 +2181,17 @@ class CharacterSheetBuilder {
 					<div class="charsheet__builder-preview-placeholder">Select a species to see details</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$content.append($container);
+		content.append(container);
 
-		const $list = $("#builder-race-list");
-		const $preview = $("#builder-race-preview");
-		const $search = $("#builder-race-search");
+		const list = document.getElementById("builder-race-list");
+		const preview = document.getElementById("builder-race-preview");
+		const search = document.getElementById("builder-race-search");
 
 		// Populate race list - show grouped races
 		const renderRaceList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 
 			// Convert map to array and sort by base name
@@ -2215,16 +2216,16 @@ class CharacterSheetBuilder {
 				);
 
 				const subraceCount = hasSubraces ? ` (${group.subraces.length} subraces)` : "";
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
 						<span class="charsheet__builder-list-item-name">${displayName}${subraceCount}</span>
 						<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(group.baseSource)}</span>
 					</div>
-				`);
+				`});
 
-				$item.on("click", () => {
-					$list.find(".charsheet__builder-list-item").removeClass("active");
-					$item.addClass("active");
+				item.addEventListener("click", () => {
+					[...list.querySelectorAll(".charsheet__builder-list-item")].forEach(el => el.classList.remove("active"));
+					item.classList.add("active");
 
 					// Reset racial proficiency selections when race group changes
 					this._selectedRacialSkills = [];
@@ -2238,20 +2239,20 @@ class CharacterSheetBuilder {
 						// Show subrace selection in preview
 						this._selectedRace = null;
 						this._selectedSubrace = null;
-						this._renderRaceGroupPreview($preview, group);
+						this._renderRaceGroupPreview(preview, group);
 					} else {
 						// Standalone race - select directly
 						this._selectedRace = group.standaloneRace;
 						this._selectedSubrace = null;
-						this._renderRacePreview($preview, group.standaloneRace);
+						this._renderRacePreview(preview, group.standaloneRace);
 					}
 				});
 
-				$list.append($item);
+				list.append(item);
 			});
 		};
 
-		$search.on("input", (e) => renderRaceList(e.target.value));
+		search.addEventListener("input", (e) => renderRaceList(e.target.value));
 		renderRaceList();
 
 		// If race already selected, show preview
@@ -2263,9 +2264,9 @@ class CharacterSheetBuilder {
 			const group = raceGroups.get(groupKey);
 
 			if (group && group.subraces.length > 0) {
-				this._renderRaceGroupPreview($preview, group);
+				this._renderRaceGroupPreview(preview, group);
 			} else {
-				this._renderRacePreview($preview, this._selectedRace);
+				this._renderRacePreview(preview, this._selectedRace);
 			}
 		}
 	}
@@ -2273,27 +2274,27 @@ class CharacterSheetBuilder {
 	/**
 	 * Render preview for a race group with subrace selection
 	 */
-	_renderRaceGroupPreview ($preview, group) {
-		$preview.empty();
+	_renderRaceGroupPreview (preview, group) {
+		preview.innerHTML = "";
 
-		const $content = $(`
+		const contentEl = e_({outer: `
 			<div>
 				<h4>${group.baseName}</h4>
 				<p class="ve-muted">${Parser.sourceJsonToFull(group.baseSource)}</p>
 			</div>
-		`);
+		`});
 
 		// Subrace selection dropdown
-		const $subraceSection = $(`
+		const subraceSection = e_({outer: `
 			<div class="mt-3">
 				<strong>Select Subrace:</strong>
 				<select class="form-control form-control--minimal mt-1" id="builder-subrace-select">
 					<option value="">-- Choose a subrace --</option>
 				</select>
 			</div>
-		`);
+		`});
 
-		const $select = $subraceSection.find("select");
+		const select = subraceSection.querySelector("select");
 
 		// Sort subraces alphabetically
 		const sortedSubraces = [...group.subraces].sort((a, b) => a.name.localeCompare(b.name));
@@ -2302,13 +2303,13 @@ class CharacterSheetBuilder {
 			// Extract just the subrace name part from "BaseName (SubraceName)"
 			const subraceName = this._extractSubraceName(subrace.name, group.baseName);
 			const sourceAbv = Parser.sourceJsonToAbv(subrace.source);
-			$select.append(`<option value="${idx}" data-source="${subrace.source}">${subraceName} (${sourceAbv})</option>`);
+			select.append(e_({tag: "option", val: `${idx}`, attrs: {"data-source": subrace.source}, txt: `${subraceName} (${sourceAbv})`}));
 		});
 
 		// Container for subrace details
-		const $detailsContainer = $(`<div id="builder-subrace-details" class="mt-3"></div>`);
+		const detailsContainer = e_({tag: "div", id: "builder-subrace-details", clazz: "mt-3"});
 
-		$select.on("change", (e) => {
+		select.addEventListener("change", (e) => {
 			const idx = e.target.value;
 			if (idx !== "") {
 				const selectedSubrace = sortedSubraces[parseInt(idx)];
@@ -2322,7 +2323,7 @@ class CharacterSheetBuilder {
 				this._selectedSubraceLanguages = [];
 				this._selectedRacialSpells = [];
 				this._selectedRacialSpellAbilities = {};
-				this._renderSubraceDetails($detailsContainer, selectedSubrace, group.baseName);
+				this._renderSubraceDetails(detailsContainer, selectedSubrace, group.baseName);
 			} else {
 				this._selectedRace = null;
 				this._selectedSubrace = null;
@@ -2333,7 +2334,7 @@ class CharacterSheetBuilder {
 				this._selectedSubraceLanguages = [];
 				this._selectedRacialSpells = [];
 				this._selectedRacialSpellAbilities = {};
-				$detailsContainer.empty();
+				detailsContainer.innerHTML = "";
 			}
 		});
 
@@ -2343,14 +2344,14 @@ class CharacterSheetBuilder {
 				sr.name === this._selectedRace.name && sr.source === this._selectedRace.source,
 			);
 			if (idx >= 0) {
-				$select.val(idx);
-				this._renderSubraceDetails($detailsContainer, sortedSubraces[idx], group.baseName);
+				select.value = idx;
+				this._renderSubraceDetails(detailsContainer, sortedSubraces[idx], group.baseName);
 			}
 		}
 
-		$content.append($subraceSection);
-		$content.append($detailsContainer);
-		$preview.append($content);
+		contentEl.append(subraceSection);
+		contentEl.append(detailsContainer);
+		preview.append(contentEl);
 	}
 
 	/**
@@ -2370,14 +2371,14 @@ class CharacterSheetBuilder {
 	/**
 	 * Render details for a selected subrace
 	 */
-	_renderSubraceDetails ($container, race, baseName) {
-		$container.empty();
+	_renderSubraceDetails (container, race, baseName) {
+		container.innerHTML = "";
 
 		const subraceName = this._extractSubraceName(race.name, baseName);
 
-		const $details = $(`<div class="charsheet__builder-subrace-details"></div>`);
+		const details = e_({tag: "div", clazz: "charsheet__builder-subrace-details"});
 
-		$details.append(`<h5>${subraceName}</h5>`);
+		details.append(e_({tag: "h5", txt: subraceName}));
 
 		// Ability scores
 		if (race.ability?.length) {
@@ -2406,58 +2407,58 @@ class CharacterSheetBuilder {
 				const abilityStr = abilityOptionTexts.length > 1
 					? abilityOptionTexts.join(" <em>or</em> ")
 					: abilityOptionTexts[0];
-				$details.append(`<p><strong>Ability Scores:</strong> ${abilityStr}</p>`);
+				details.append(e_({tag: "p", html: `<strong>Ability Scores:</strong> ${abilityStr}`}));
 			}
 
 			// Ability score choice UI
-			const $asiChoices = this._renderRaceAbilityChoices(race);
-			if ($asiChoices) {
-				$details.append($asiChoices);
+			const asiChoices = this._renderRaceAbilityChoices(race);
+			if (asiChoices) {
+				details.append(asiChoices);
 			}
 		}
 
 		// Speed
 		if (race.speed) {
 			const speedStr = typeof race.speed === "number" ? `${race.speed} ft.` : `${race.speed.walk || 30} ft.`;
-			$details.append(`<p><strong>Speed:</strong> ${speedStr}</p>`);
+			details.append(e_({tag: "p", html: `<strong>Speed:</strong> ${speedStr}`}));
 		}
 
 		// Size
 		if (race.size) {
 			const sizeStr = race.size.map(s => Parser.sizeAbvToFull(s)).join(" or ");
-			$details.append(`<p><strong>Size:</strong> ${sizeStr}</p>`);
+			details.append(e_({tag: "p", html: `<strong>Size:</strong> ${sizeStr}`}));
 		}
 
 		// Traits
 		if (race.entries) {
-			const $traits = $(`<div class="mt-2"><strong>Traits:</strong></div>`);
+			const traits = e_({tag: "div", html: `<strong>Traits:</strong>`, clazz: "mt-2"});
 			race.entries.forEach(entry => {
 				if (typeof entry === "object" && entry.name) {
-					$traits.append(`<p><em>${entry.name}.</em> ${Renderer.get().render({entries: entry.entries || []})}</p>`);
+					traits.append(e_({tag: "p", html: `<em>${entry.name}.</em> ${Renderer.get().render({entries: entry.entries || []})}`}));
 				}
 			});
-			$details.append($traits);
+			details.append(traits);
 		}
 
 		// Racial proficiency choices (skills, tools)
-		const $profChoices = this._renderRacialProficiencyChoices(race);
-		if ($profChoices) {
-			$details.append($profChoices);
+		const profChoices = this._renderRacialProficiencyChoices(race);
+		if (profChoices) {
+			details.append(profChoices);
 		}
 
 		// Racial spell choices (e.g., Child of the Empire cantrip)
-		const $spellChoices = this._renderRacialSpellChoices(race);
-		if ($spellChoices) {
-			$details.append($spellChoices);
+		const spellChoices = this._renderRacialSpellChoices(race);
+		if (spellChoices) {
+			details.append(spellChoices);
 		}
 
-		$container.append($details);
+		container.append(details);
 	}
 
 	/**
 	 * Render ability score choice dropdowns for races with choose-based ASI
 	 * @param {Object} race - The race data
-	 * @returns {jQuery|null} jQuery element with dropdowns, or null if no choices
+	 * @returns {HTMLElement|null} Element with dropdowns, or null if no choices
 	 */
 	_renderRaceAbilityChoices (race) {
 		if (!race.ability?.length) return null;
@@ -2472,57 +2473,57 @@ class CharacterSheetBuilder {
 			this._selectedRacialAbilityChoices[raceKey] = {};
 		}
 
-		const $container = $(`<div class="charsheet__builder-race-asi-choices mt-2"></div>`);
+		const container = e_({tag: "div", clazz: "charsheet__builder-race-asi-choices mt-2"});
 
 		// When multiple ability options exist (VRGR lineage), show radio buttons to select which option
 		if (race.ability.length > 1) {
-			$container.append(`<p class="ve-small ve-muted">Choose your ability score option:</p>`);
+			container.append(e_({tag: "p", clazz: "ve-small ve-muted", txt: "Choose your ability score option:"}));
 
-			const $optionSelector = $(`<div class="charsheet__builder-asi-option-selector mb-2"></div>`);
+			const optionSelector = e_({tag: "div", clazz: "charsheet__builder-asi-option-selector mb-2"});
 			const selectedSetIdx = this._selectedRacialAbilitySetIdx[raceKey] ?? 0;
 
 			race.ability.forEach((abiSet, optIdx) => {
 				const label = this._describeAbilitySet(abiSet);
 				const checked = optIdx === selectedSetIdx ? "checked" : "";
-				const $radio = $(`
+				const radio = e_({outer: `
 					<label class="ve-flex-v-center mb-1" style="cursor: pointer;">
 						<input type="radio" name="race-asi-option-${raceKey}" value="${optIdx}" ${checked} class="mr-2">
 						<span>${label}</span>
 					</label>
-				`);
+				`});
 
-				$radio.find("input").on("change", () => {
+				radio.querySelector("input").addEventListener("change", () => {
 					this._selectedRacialAbilitySetIdx[raceKey] = optIdx;
 					// Clear previous choose selections for this race since option changed
 					Object.keys(this._selectedRacialAbilityChoices[raceKey]).forEach(k => {
 						delete this._selectedRacialAbilityChoices[raceKey][k];
 					});
 					// Re-render the dropdown section
-					$dropdownSection.empty();
-					this._renderAbilityChoiceDropdowns(race.ability[optIdx], optIdx, raceKey, $dropdownSection);
+					dropdownSection.innerHTML = "";
+					this._renderAbilityChoiceDropdowns(race.ability[optIdx], optIdx, raceKey, dropdownSection);
 					this._updateAbilitySummary?.();
 				});
 
-				$optionSelector.append($radio);
+				optionSelector.append(radio);
 			});
 
-			$container.append($optionSelector);
+			container.append(optionSelector);
 		} else {
-			$container.append(`<p class="ve-small ve-muted">Choose your ability score increases:</p>`);
+			container.append(e_({tag: "p", clazz: "ve-small ve-muted", txt: "Choose your ability score increases:"}));
 		}
 
 		// Dropdown section for individual ability choices
-		const $dropdownSection = $(`<div class="charsheet__builder-asi-dropdowns"></div>`);
+		const dropdownSection = e_({tag: "div", clazz: "charsheet__builder-asi-dropdowns"});
 		const effectiveEntries = this._getEffectiveAbilityEntries(race.ability, race.name, race.source);
 		for (const {abiSet, originalIdx} of effectiveEntries) {
 			if (abiSet.choose) {
-				this._renderAbilityChoiceDropdowns(abiSet, originalIdx, raceKey, $dropdownSection);
+				this._renderAbilityChoiceDropdowns(abiSet, originalIdx, raceKey, dropdownSection);
 			}
 		}
-		$container.append($dropdownSection);
+		container.append(dropdownSection);
 
 		// Only return if we actually have content
-		return ($container.children().length > 0) ? $container : null;
+		return (container.children.length > 0) ? container : null;
 	}
 
 	/**
@@ -2550,7 +2551,7 @@ class CharacterSheetBuilder {
 	/**
 	 * Render dropdowns for a single ability set's choose block
 	 */
-	_renderAbilityChoiceDropdowns (abiSet, abiIdx, raceKey, $container) {
+	_renderAbilityChoiceDropdowns (abiSet, abiIdx, raceKey, container) {
 		if (!abiSet.choose) return;
 
 		const choose = abiSet.choose;
@@ -2562,52 +2563,51 @@ class CharacterSheetBuilder {
 		for (let i = 0; i < count; i++) {
 			const amount = isWeighted ? weights[i] : (choose.amount || 1);
 			const choiceKey = `choose_${abiIdx}_${i}`;
-			const $row = $(`<div class="ve-flex-v-center mb-1"></div>`);
-			$row.append(`<span class="mr-2">+${amount}:</span>`);
+			const row = e_({tag: "div", clazz: "ve-flex-v-center mb-1"});
+			row.append(e_({tag: "span", clazz: "mr-2", txt: `+${amount}:`}));
 
-			const $select = $(`<select class="form-control form-control--minimal ve-inline-block w-auto" data-race-asi-key="${choiceKey}"></select>`);
-			$select.append(`<option value="">-- Select --</option>`);
+			const select = e_({tag: "select", clazz: "form-control form-control--minimal ve-inline-block w-auto", attrs: {"data-race-asi-key": choiceKey}});
+			select.append(e_({tag: "option", val: "", txt: "-- Select --"}));
 
 			from.forEach(ab => {
 				const abName = Parser.attAbvToFull(ab);
-				const selected = this._selectedRacialAbilityChoices[raceKey]?.[choiceKey] === ab ? "selected" : "";
-				$select.append(`<option value="${ab}" ${selected}>${abName}</option>`);
+				const opt = e_({tag: "option", val: ab, txt: abName});
+				if (this._selectedRacialAbilityChoices[raceKey]?.[choiceKey] === ab) opt.selected = true;
+				select.append(opt);
 			});
 
-			$select.on("change", ((capturedAmount) => (e) => {
+			select.addEventListener("change", ((capturedAmount) => (e) => {
 				const val = e.target.value;
 				this._selectedRacialAbilityChoices[raceKey][choiceKey] = val || null;
 				this._selectedRacialAbilityChoices[raceKey][`${choiceKey}_amount`] = capturedAmount;
 
 				// Disable already-selected abilities in other dropdowns
-				$container.find("select").each((_, sel) => {
-					const $sel = $(sel);
-					const selKey = $sel.data("race-asi-key");
-					$sel.find("option").each((__, opt) => {
-						const $opt = $(opt);
-						const optVal = $opt.val();
+				[...container.querySelectorAll("select")].forEach(sel => {
+					const selKey = sel.dataset.raceAsiKey;
+					[...sel.querySelectorAll("option")].forEach(opt => {
+						const optVal = opt.value;
 						if (!optVal) return;
 						const isSelectedElsewhere = Object.entries(this._selectedRacialAbilityChoices[raceKey])
 							.some(([k, v]) => k.startsWith("choose_") && !k.includes("_amount") && k !== selKey && v === optVal);
-						$opt.prop("disabled", optVal && isSelectedElsewhere);
+						opt.disabled = !!(optVal && isSelectedElsewhere);
 					});
 				});
 
 				this._updateAbilitySummary?.();
 			})(amount));
 
-			$row.append($select);
-			$container.append($row);
+			row.append(select);
+			container.append(row);
 		}
 	}
 
 	/**
 	 * Render UI for racial proficiency choices (skills and tools)
 	 * @param {Object} race - The race data
-	 * @returns {jQuery|null} - jQuery element containing proficiency choices, or null if none
+	 * @returns {HTMLElement|null} - Element containing proficiency choices, or null if none
 	 */
 	_renderRacialProficiencyChoices (race) {
-		const $container = $(`<div class="charsheet__builder-racial-proficiencies mt-3"></div>`);
+		const container = e_({tag: "div", clazz: "charsheet__builder-racial-proficiencies mt-3"});
 		let hasChoices = false;
 
 		// Skill proficiency choices
@@ -2619,15 +2619,15 @@ class CharacterSheetBuilder {
 					const chooseCount = skillProf.choose.count || 1;
 
 					if (chooseFrom.length > 0) {
-						const $section = this._renderRacialSkillChoice(chooseFrom, chooseCount, profIdx);
-						$container.append($section);
+						const section = this._renderRacialSkillChoice(chooseFrom, chooseCount, profIdx);
+						container.append(section);
 					}
 				}
 				if (skillProf.any) {
 					hasChoices = true;
 					const anyCount = skillProf.any;
-					const $section = this._renderRacialSkillChoice(null, anyCount, profIdx);
-					$container.append($section);
+					const section = this._renderRacialSkillChoice(null, anyCount, profIdx);
+					container.append(section);
 				}
 			});
 		}
@@ -2641,27 +2641,27 @@ class CharacterSheetBuilder {
 					const chooseCount = toolProf.choose.count || 1;
 
 					if (chooseFrom.length > 0) {
-						const $section = this._renderRacialToolChoice(chooseFrom, chooseCount, profIdx);
-						$container.append($section);
+						const section = this._renderRacialToolChoice(chooseFrom, chooseCount, profIdx);
+						container.append(section);
 					}
 				}
 				if (toolProf.any) {
 					hasChoices = true;
 					const anyCount = toolProf.any;
-					const $section = this._renderRacialToolChoice(null, anyCount, profIdx, "any");
-					$container.append($section);
+					const section = this._renderRacialToolChoice(null, anyCount, profIdx, "any");
+					container.append(section);
 				}
 				if (toolProf.anyArtisansTool) {
 					hasChoices = true;
 					const anyCount = typeof toolProf.anyArtisansTool === "number" ? toolProf.anyArtisansTool : 1;
-					const $section = this._renderRacialToolChoice(null, anyCount, profIdx, "artisan");
-					$container.append($section);
+					const section = this._renderRacialToolChoice(null, anyCount, profIdx, "artisan");
+					container.append(section);
 				}
 				if (toolProf.anyMusicalInstrument) {
 					hasChoices = true;
 					const anyCount = typeof toolProf.anyMusicalInstrument === "number" ? toolProf.anyMusicalInstrument : 1;
-					const $section = this._renderRacialToolChoice(null, anyCount, profIdx, "musical");
-					$container.append($section);
+					const section = this._renderRacialToolChoice(null, anyCount, profIdx, "musical");
+					container.append(section);
 				}
 			});
 		}
@@ -2681,26 +2681,26 @@ class CharacterSheetBuilder {
 					const chooseFrom = langProf.choose.from || [];
 					const chooseCount = langProf.choose.count || 1;
 					if (chooseFrom.length > 0) {
-						const $section = this._renderRacialLanguageChoice(chooseFrom, chooseCount, profIdx, featureName);
-						$container.append($section);
+						const section = this._renderRacialLanguageChoice(chooseFrom, chooseCount, profIdx, featureName);
+						container.append(section);
 					}
 				}
 				if (langProf.anyStandard) {
 					hasChoices = true;
 					const anyCount = typeof langProf.anyStandard === "number" ? langProf.anyStandard : 1;
-					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx, featureName);
-					$container.append($section);
+					const section = this._renderRacialLanguageChoice(null, anyCount, profIdx, featureName);
+					container.append(section);
 				}
 				if (langProf.any) {
 					hasChoices = true;
 					const anyCount = typeof langProf.any === "number" ? langProf.any : 1;
-					const $section = this._renderRacialLanguageChoice(null, anyCount, profIdx, featureName);
-					$container.append($section);
+					const section = this._renderRacialLanguageChoice(null, anyCount, profIdx, featureName);
+					container.append(section);
 				}
 			});
 		}
 
-		return hasChoices ? $container : null;
+		return hasChoices ? container : null;
 	}
 
 	/**
@@ -2761,26 +2761,26 @@ class CharacterSheetBuilder {
 		const availableSkills = skills ? skills.map(s => s.split("|")[0].toTitleCase()) : allSkills;
 		const label = skills ? `Choose ${count} skill${count > 1 ? "s" : ""} from:` : `Choose any ${count} skill${count > 1 ? "s" : ""}:`;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-racial-skill-selection mt-2">
 				<p><strong>Racial Skills:</strong> ${label}</p>
 				<div class="charsheet__builder-skill-checkboxes"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-skill-count">${this._selectedRacialSkills.length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $section.find(".charsheet__builder-skill-checkboxes");
+		const checkboxes = section.querySelector(".charsheet__builder-skill-checkboxes");
 
 		availableSkills.forEach(skill => {
 			const isSelected = this._selectedRacialSkills.includes(skill);
-			const $label = $(`
+			const lbl = e_({outer: `
 				<label class="charsheet__builder-skill-checkbox mr-3 mb-1">
 					<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
 					${skill}
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (e) => {
+			lbl.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedRacialSkills.length < count) {
 						this._selectedRacialSkills.push(skill);
@@ -2791,13 +2791,13 @@ class CharacterSheetBuilder {
 				} else {
 					this._selectedRacialSkills = this._selectedRacialSkills.filter(s => s !== skill);
 				}
-				$section.find(".racial-skill-count").text(this._selectedRacialSkills.length);
+				section.querySelector(".racial-skill-count").textContent = this._selectedRacialSkills.length;
 			});
 
-			$checkboxes.append($label);
+			checkboxes.append(lbl);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -2806,7 +2806,7 @@ class CharacterSheetBuilder {
 	 * @param {number} count - Number of tools to choose
 	 * @param {number} profIdx - Index for tracking multiple choice sections
 	 * @param {string} [toolType] - Filter type: 'any', 'artisan', 'musical', or undefined for specific list
-	 * @returns {jQuery} - jQuery element
+	 * @returns {HTMLElement} - jQuery element
 	 */
 	_renderRacialToolChoice (tools, count, profIdx, toolType) {
 		// Common tools list - used when "any" is specified
@@ -2854,26 +2854,26 @@ class CharacterSheetBuilder {
 			label = `Choose any ${count} tool${count > 1 ? "s" : ""}:`;
 		}
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-racial-tool-selection mt-2">
 				<p><strong>Racial Tools:</strong> ${label}</p>
 				<div class="charsheet__builder-tool-checkboxes"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-tool-count">${this._selectedRacialTools.length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $section.find(".charsheet__builder-tool-checkboxes");
+		const checkboxes = section.querySelector(".charsheet__builder-tool-checkboxes");
 
 		availableTools.forEach(tool => {
 			const isSelected = this._selectedRacialTools.includes(tool);
-			const $label = $(`
+			const lbl = e_({outer: `
 				<label class="charsheet__builder-tool-checkbox mr-3 mb-1">
 					<input type="checkbox" value="${tool}" ${isSelected ? "checked" : ""}>
 					${tool}
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (e) => {
+			lbl.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedRacialTools.length < count) {
 						this._selectedRacialTools.push(tool);
@@ -2884,13 +2884,13 @@ class CharacterSheetBuilder {
 				} else {
 					this._selectedRacialTools = this._selectedRacialTools.filter(t => t !== tool);
 				}
-				$section.find(".racial-tool-count").text(this._selectedRacialTools.length);
+				section.querySelector(".racial-tool-count").textContent = this._selectedRacialTools.length;
 			});
 
-			$checkboxes.append($label);
+			checkboxes.append(lbl);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -2899,7 +2899,7 @@ class CharacterSheetBuilder {
 	 * @param {number} count - Number of languages to choose
 	 * @param {number} profIdx - Index for tracking multiple choice sections
 	 * @param {string} featureName - Name of the feature granting these languages (e.g., "Racial Languages" or "Trilinguals")
-	 * @returns {jQuery} - jQuery element
+	 * @returns {HTMLElement} - jQuery element
 	 */
 	_renderRacialLanguageChoice (languages, count, profIdx, featureName = "Racial Languages") {
 		// Get all available languages from the page, sorted by priority sources
@@ -2941,15 +2941,15 @@ class CharacterSheetBuilder {
 			? `Choose ${count} language${count > 1 ? "s" : ""} from:`
 			: `Choose any ${count} language${count > 1 ? "s" : ""}:`;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-racial-lang-selection mt-2">
 				<p><strong>${featureName}:</strong> ${label}</p>
 				<div class="charsheet__builder-lang-checkboxes"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="racial-lang-count">${(this._selectedRacialLanguages[profIdx] || []).length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $section.find(".charsheet__builder-lang-checkboxes");
+		const checkboxes = section.querySelector(".charsheet__builder-lang-checkboxes");
 
 		// Ensure array exists for this profIdx
 		if (!this._selectedRacialLanguages[profIdx]) {
@@ -2958,14 +2958,14 @@ class CharacterSheetBuilder {
 
 		availableLanguages.forEach(lang => {
 			const isSelected = this._selectedRacialLanguages[profIdx].includes(lang);
-			const $label = $(`
+			const lbl = e_({outer: `
 				<label class="charsheet__builder-lang-checkbox mr-3 mb-1">
 					<input type="checkbox" value="${lang}" ${isSelected ? "checked" : ""}>
 					${lang}
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (e) => {
+			lbl.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedRacialLanguages[profIdx].length < count) {
 						this._selectedRacialLanguages[profIdx].push(lang);
@@ -2976,24 +2976,24 @@ class CharacterSheetBuilder {
 				} else {
 					this._selectedRacialLanguages[profIdx] = this._selectedRacialLanguages[profIdx].filter(l => l !== lang);
 				}
-				$section.find(".racial-lang-count").text(this._selectedRacialLanguages[profIdx].length);
+				section.querySelector(".racial-lang-count").textContent = this._selectedRacialLanguages[profIdx].length;
 			});
 
-			$checkboxes.append($label);
+			checkboxes.append(lbl);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
 	 * Render proficiency choice UI for subrace-specific proficiencies (e.g., Hub Residence Trilingual)
 	 * @param {Object} subrace - The subrace data
-	 * @returns {jQuery|null} - jQuery element or null if no choices
+	 * @returns {HTMLElement|null} - jQuery element or null if no choices
 	 */
 	_renderSubraceProficiencyChoices (subrace) {
 		if (!subrace) return null;
 
-		const $container = $(`<div class="charsheet__builder-subrace-prof-choices mt-3"></div>`);
+		const container = e_({outer: `<div class="charsheet__builder-subrace-prof-choices mt-3"></div>`});
 		let hasChoices = false;
 
 		// Try to find the feature name for language proficiencies from entries
@@ -3008,26 +3008,26 @@ class CharacterSheetBuilder {
 					const chooseFrom = langProf.choose.from || [];
 					const chooseCount = langProf.choose.count || 1;
 					if (chooseFrom.length > 0) {
-						const $section = this._renderSubraceLanguageChoice(chooseFrom, chooseCount, profIdx, languageFeatureName);
-						$container.append($section);
+						const section = this._renderSubraceLanguageChoice(chooseFrom, chooseCount, profIdx, languageFeatureName);
+						container.append(section);
 					}
 				}
 				if (langProf.anyStandard) {
 					hasChoices = true;
 					const anyCount = typeof langProf.anyStandard === "number" ? langProf.anyStandard : 1;
-					const $section = this._renderSubraceLanguageChoice(null, anyCount, profIdx, languageFeatureName);
-					$container.append($section);
+					const section = this._renderSubraceLanguageChoice(null, anyCount, profIdx, languageFeatureName);
+					container.append(section);
 				}
 				if (langProf.any) {
 					hasChoices = true;
 					const anyCount = typeof langProf.any === "number" ? langProf.any : 1;
-					const $section = this._renderSubraceLanguageChoice(null, anyCount, profIdx, languageFeatureName);
-					$container.append($section);
+					const section = this._renderSubraceLanguageChoice(null, anyCount, profIdx, languageFeatureName);
+					container.append(section);
 				}
 			});
 		}
 
-		return hasChoices ? $container : null;
+		return hasChoices ? container : null;
 	}
 
 	/**
@@ -3057,7 +3057,7 @@ class CharacterSheetBuilder {
 	 * @param {number} count - Number of languages to choose
 	 * @param {number} profIdx - Index for tracking
 	 * @param {string} featureName - Name of the feature for labeling (e.g., "Trilinguals")
-	 * @returns {jQuery} - jQuery element
+	 * @returns {HTMLElement} - jQuery element
 	 */
 	_renderSubraceLanguageChoice (languages, count, profIdx, featureName) {
 		const allLanguages = this._page.getLanguageNamesSorted();
@@ -3088,26 +3088,26 @@ class CharacterSheetBuilder {
 			? `Choose ${count} language${count > 1 ? "s" : ""} from:`
 			: `Choose any ${count} language${count > 1 ? "s" : ""}:`;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-subrace-lang-selection mt-2">
 				<p><strong>${featureName}:</strong> ${label}</p>
 				<div class="charsheet__builder-lang-checkboxes"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="subrace-lang-count">${this._selectedSubraceLanguages.length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $section.find(".charsheet__builder-lang-checkboxes");
+		const checkboxes = section.querySelector(".charsheet__builder-lang-checkboxes");
 
 		availableLanguages.forEach(lang => {
 			const isSelected = this._selectedSubraceLanguages.includes(lang);
-			const $label = $(`
+			const lbl = e_({outer: `
 				<label class="charsheet__builder-lang-checkbox mr-3 mb-1">
 					<input type="checkbox" value="${lang}" ${isSelected ? "checked" : ""}>
 					${lang}
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (e) => {
+			lbl.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedSubraceLanguages.length < count) {
 						this._selectedSubraceLanguages.push(lang);
@@ -3118,13 +3118,13 @@ class CharacterSheetBuilder {
 				} else {
 					this._selectedSubraceLanguages = this._selectedSubraceLanguages.filter(l => l !== lang);
 				}
-				$section.find(".subrace-lang-count").text(this._selectedSubraceLanguages.length);
+				section.querySelector(".subrace-lang-count").textContent = this._selectedSubraceLanguages.length;
 			});
 
-			$checkboxes.append($label);
+			checkboxes.append(lbl);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -3239,20 +3239,20 @@ class CharacterSheetBuilder {
 	/**
 	 * Render UI for racial spell choices
 	 * @param {Object} race - The race data
-	 * @returns {jQuery|null} - jQuery element containing spell choices, or null if none
+	 * @returns {HTMLElement|null} - jQuery element containing spell choices, or null if none
 	 */
 	_renderRacialSpellChoices (race) {
 		const choices = this._getRacialSpellChoices(race);
 		if (choices.length === 0) return null;
 
-		const $container = $(`<div class="charsheet__builder-racial-spells mt-3"></div>`);
+		const container = e_({outer: `<div class="charsheet__builder-racial-spells mt-3"></div>`});
 
 		choices.forEach((choice, choiceIdx) => {
-			const $section = this._renderRacialSpellChoice(choice, choiceIdx);
-			$container.append($section);
+			const section = this._renderRacialSpellChoice(choice, choiceIdx);
+			container.append(section);
 		});
 
-		return $container;
+		return container;
 	}
 
 	/**
@@ -3275,7 +3275,7 @@ class CharacterSheetBuilder {
 			abilityDesc = ` (${abi.toUpperCase()} as spellcasting ability)`;
 		}
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-racial-spell-selection mt-2">
 				<p><strong>Racial ${spellType.toTitleCase()}:</strong> Choose ${choice.count} ${spellType}${abilityDesc}</p>
 				<div class="charsheet__builder-spell-choice">
@@ -3285,12 +3285,12 @@ class CharacterSheetBuilder {
 					${this._selectedRacialSpells[choiceIdx] ? `<span class="ms-2 ve-muted">(${Parser.sourceJsonToAbv(this._selectedRacialSpells[choiceIdx].source)})</span>` : ""}
 				</div>
 			</div>
-		`);
+		`});
 
 		// Add ability selector if multiple options
 		if (hasAbilityChoice) {
 			const currentAbility = this._selectedRacialSpellAbilities[choiceIdx] || choice.ability[0];
-			const $abilityRow = $(`
+			const abilityRow = e_({outer: `
 				<div class="charsheet__builder-spell-ability-choice mt-1">
 					<label class="ve-small">
 						Spellcasting Ability:
@@ -3299,9 +3299,9 @@ class CharacterSheetBuilder {
 						</select>
 					</label>
 				</div>
-			`);
+			`});
 
-			$abilityRow.find("select").on("change", (e) => {
+			abilityRow.querySelector("select").addEventListener("change", (e) => {
 				this._selectedRacialSpellAbilities[choiceIdx] = e.target.value;
 			});
 
@@ -3310,22 +3310,22 @@ class CharacterSheetBuilder {
 				this._selectedRacialSpellAbilities[choiceIdx] = choice.ability[0];
 			}
 
-			$section.find(".charsheet__builder-spell-choice").after($abilityRow);
+			section.querySelector(".charsheet__builder-spell-choice").after(abilityRow);
 		}
 
-		const $btn = $section.find(".charsheet__builder-spell-btn");
+		const btn = section.querySelector(".charsheet__builder-spell-btn");
 
-		$btn.on("click", async () => {
-			await this._showRacialSpellPicker(choice, choiceIdx, $btn, $section);
+		btn.addEventListener("click", async () => {
+			await this._showRacialSpellPicker(choice, choiceIdx, btn, section);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
 	 * Show spell picker modal for racial spell choice
 	 */
-	async _showRacialSpellPicker (choice, choiceIdx, $btn, $section) {
+	async _showRacialSpellPicker (choice, choiceIdx, btn, section) {
 		if (!this._page._spells?.showFilteredSpellPicker) {
 			JqueryUtil.doToast({type: "warning", content: "Spell data not loaded yet. Please wait..."});
 			return;
@@ -3341,27 +3341,27 @@ class CharacterSheetBuilder {
 			this._selectedRacialSpells[choiceIdx] = spell;
 
 			// Update the button text
-			$btn.text(spell.name);
+			btn.textContent = spell.name;
 
 			// Add source indicator
-			const existingSource = $section.find(".ve-muted");
-			if (existingSource.length) {
-				existingSource.text(`(${Parser.sourceJsonToAbv(spell.source)})`);
+			const existingSource = section.querySelector(".ve-muted");
+			if (existingSource) {
+				existingSource.textContent = `(${Parser.sourceJsonToAbv(spell.source)})`;
 			} else {
-				$btn.after(`<span class="ms-2 ve-muted">(${Parser.sourceJsonToAbv(spell.source)})</span>`);
+				btn.after(e_({outer: `<span class="ms-2 ve-muted">(${Parser.sourceJsonToAbv(spell.source)})</span>`}));
 			}
 		});
 	}
 
-	_renderRacePreview ($preview, race) {
-		$preview.empty();
+	_renderRacePreview (preview, race) {
+		preview.innerHTML = "";
 
-		const $content = $(`
+		const content = e_({outer: `
 			<div>
 				<h4>${race.name}</h4>
 				<p class="ve-muted">${Parser.sourceJsonToFull(race.source)}</p>
 			</div>
-		`);
+		`});
 
 		// Ability scores
 		if (race.ability?.length) {
@@ -3390,68 +3390,68 @@ class CharacterSheetBuilder {
 				const abilityStr = abilityOptionTexts.length > 1
 					? abilityOptionTexts.join(" <em>or</em> ")
 					: abilityOptionTexts[0];
-				$content.append(`<p><strong>Ability Scores:</strong> ${abilityStr}</p>`);
+				content.append(e_({outer: `<p><strong>Ability Scores:</strong> ${abilityStr}</p>`}));
 			}
 		}
 
 		// Ability score choice UI (for races with choose-based ASI)
-		const $asiChoices = this._renderRaceAbilityChoices(race);
-		if ($asiChoices) {
-			$content.append($asiChoices);
+		const asiChoices = this._renderRaceAbilityChoices(race);
+		if (asiChoices) {
+			content.append(asiChoices);
 		}
 
 		// Speed
 		if (race.speed) {
 			const speedStr = typeof race.speed === "number" ? `${race.speed} ft.` : `${race.speed.walk || 30} ft.`;
-			$content.append(`<p><strong>Speed:</strong> ${speedStr}</p>`);
+			content.append(e_({outer: `<p><strong>Speed:</strong> ${speedStr}</p>`}));
 		}
 
 		// Size
 		if (race.size) {
 			const sizeStr = race.size.map(s => Parser.sizeAbvToFull(s)).join(" or ");
-			$content.append(`<p><strong>Size:</strong> ${sizeStr}</p>`);
+			content.append(e_({outer: `<p><strong>Size:</strong> ${sizeStr}</p>`}));
 		}
 
 		// Traits
 		if (race.entries) {
-			const $traits = $(`<div class="mt-2"><strong>Traits:</strong></div>`);
+			const traits = e_({outer: `<div class="mt-2"><strong>Traits:</strong></div>`});
 			race.entries.forEach(entry => {
 				if (typeof entry === "object" && entry.name) {
-					$traits.append(`<p><em>${entry.name}.</em> ${Renderer.get().render({entries: entry.entries || []})}</p>`);
+					traits.append(e_({outer: `<p><em>${entry.name}.</em> ${Renderer.get().render({entries: entry.entries || []})}</p>`}));
 				}
 			});
-			$content.append($traits);
+			content.append(traits);
 		}
 
 		// Racial proficiency choices (skills, tools)
-		const $profChoices = this._renderRacialProficiencyChoices(race);
-		if ($profChoices) {
-			$content.append($profChoices);
+		const profChoices = this._renderRacialProficiencyChoices(race);
+		if (profChoices) {
+			content.append(profChoices);
 		}
 
 		// Racial spell choices (e.g., Child of the Empire cantrip)
-		const $spellChoices = this._renderRacialSpellChoices(race);
-		if ($spellChoices) {
-			$content.append($spellChoices);
+		const spellChoices = this._renderRacialSpellChoices(race);
+		if (spellChoices) {
+			content.append(spellChoices);
 		}
 
 		// Subraces
 		if (race.subraces?.length) {
-			const $subraces = $(`
+			const subraces = e_({outer: `
 				<div class="mt-3">
 					<strong>Subrace:</strong>
 					<select class="form-control form-control--minimal mt-1" id="builder-subrace-select">
 						<option value="">-- Select Subrace --</option>
 					</select>
 				</div>
-			`);
+			`});
 
-			const $select = $subraces.find("select");
+			const select = subraces.querySelector("select");
 			race.subraces.forEach((subrace, idx) => {
-				$select.append(`<option value="${idx}">${subrace.name}</option>`);
+				select.append(e_({outer: `<option value="${idx}">${subrace.name}</option>`}));
 			});
 
-			$select.on("change", (e) => {
+			select.addEventListener("change", (e) => {
 				const idx = e.target.value;
 				if (idx !== "") {
 					this._selectedSubrace = race.subraces[parseInt(idx)];
@@ -3462,36 +3462,36 @@ class CharacterSheetBuilder {
 					this._selectedSubraceLanguages = [];
 				}
 				// Re-render to show subrace proficiency choices
-				this._renderRacePreview($preview, race);
+				this._renderRacePreview(preview, race);
 			});
 
 			// Pre-select if already chosen
 			if (this._selectedSubrace) {
 				const idx = race.subraces.findIndex(s => s.name === this._selectedSubrace.name);
-				if (idx >= 0) $select.val(idx);
+				if (idx >= 0) select.value = idx;
 			}
 
-			$content.append($subraces);
+			content.append(subraces);
 		}
 
 		// Subrace-specific proficiency choices (e.g., Hub Residence Trilingual)
 		if (this._selectedSubrace) {
-			const $subraceProfChoices = this._renderSubraceProficiencyChoices(this._selectedSubrace);
-			if ($subraceProfChoices) {
-				$content.append($subraceProfChoices);
+			const subraceProfChoices = this._renderSubraceProficiencyChoices(this._selectedSubrace);
+			if (subraceProfChoices) {
+				content.append(subraceProfChoices);
 			}
 		}
 
-		$preview.append($content);
+		preview.append(content);
 	}
 	// #endregion
 
 	// #region Step 2: Class
-	_renderClassStep ($content) {
+	_renderClassStep (content) {
 		// Get classes filtered by allowed sources
 		const classes = this._page.filterByAllowedSources(this._page.getClasses());
 
-		const $container = $(`
+		const container = e_({outer: `
 			<div class="charsheet__builder-selection">
 				<div class="charsheet__builder-list">
 					<div class="charsheet__builder-list-header">
@@ -3503,16 +3503,16 @@ class CharacterSheetBuilder {
 					<div class="charsheet__builder-preview-placeholder">Select a class to see details</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$content.append($container);
+		content.append(container);
 
-		const $list = $("#builder-class-list");
-		const $preview = $("#builder-class-preview");
-		const $search = $("#builder-class-search");
+		const list = document.getElementById("builder-class-list");
+		const preview = document.getElementById("builder-class-preview");
+		const search = document.getElementById("builder-class-search");
 
 		const renderClassList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 
 			classes
@@ -3520,16 +3520,16 @@ class CharacterSheetBuilder {
 				.sort((a, b) => a.name.localeCompare(b.name))
 				.forEach(cls => {
 					const isSelected = this._selectedClass?.name === cls.name && this._selectedClass?.source === cls.source;
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
 							<span class="charsheet__builder-list-item-name">${cls.name}</span>
 							<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(cls.source)}</span>
 						</div>
-					`);
+					`});
 
-					$item.on("click", () => {
-						$list.find(".charsheet__builder-list-item").removeClass("active");
-						$item.addClass("active");
+					item.addEventListener("click", () => {
+						list.querySelectorAll(".charsheet__builder-list-item").forEach(el => el.classList.remove("active"));
+						item.classList.add("active");
 						this._selectedClass = cls;
 						this._selectedSubclass = null;
 						// Reset skill selections when changing class
@@ -3550,33 +3550,33 @@ class CharacterSheetBuilder {
 						this._selectedFeatureOptions = {};
 						// Reset combat traditions when changing class
 						this._selectedCombatTraditions = [];
-						this._renderClassPreview($preview, cls);
+						this._renderClassPreview(preview, cls);
 					});
 
-					$list.append($item);
+					list.append(item);
 				});
 		};
 
-		$search.on("input", (e) => renderClassList(e.target.value));
+		search.addEventListener("input", (e) => renderClassList(e.target.value));
 		renderClassList();
 
 		if (this._selectedClass) {
-			this._renderClassPreview($preview, this._selectedClass);
+			this._renderClassPreview(preview, this._selectedClass);
 		}
 	}
 
-	_renderClassPreview ($preview, cls) {
-		$preview.empty();
+	_renderClassPreview (preview, cls) {
+		preview.innerHTML = "";
 
 		const hitDie = cls.hd?.faces || 8;
 
-		const $content = $(`
+		const content = e_({outer: `
 			<div>
 				<h4>${cls.name}</h4>
 				<p class="ve-muted">${Parser.sourceJsonToFull(cls.source)}</p>
 				<p><strong>Hit Die:</strong> d${hitDie}</p>
 			</div>
-		`);
+		`});
 
 		// Primary ability
 		if (cls.primaryAbility) {
@@ -3586,88 +3586,88 @@ class CharacterSheetBuilder {
 					.map(([k]) => Parser.attAbvToFull(k))
 					.join(" or ");
 			}).join(", ");
-			$content.append(`<p><strong>Primary Ability:</strong> ${abilityStr}</p>`);
+			content.append(e_({outer: `<p><strong>Primary Ability:</strong> ${abilityStr}</p>`}));
 		}
 
 		// Saving throws
 		if (cls.proficiency) {
 			const saves = cls.proficiency.map(p => Parser.attAbvToFull(p)).join(", ");
-			$content.append(`<p><strong>Saving Throws:</strong> ${saves}</p>`);
+			content.append(e_({outer: `<p><strong>Saving Throws:</strong> ${saves}</p>`}));
 		}
 
 		// Armor
 		if (cls.startingProficiencies?.armor) {
 			const armor = cls.startingProficiencies.armor.map(a => typeof a === "string" ? a : a.full).join(", ");
 			// Render through Renderer to handle any tags
-			$content.append($(`<p><strong>Armor:</strong> ${Renderer.get().render(armor)}</p>`));
+			content.append(e_({outer: `<p><strong>Armor:</strong> ${Renderer.get().render(armor)}</p>`}));
 		}
 
 		// Weapons
 		if (cls.startingProficiencies?.weapons) {
 			const weapons = cls.startingProficiencies.weapons.map(w => typeof w === "string" ? w : w.full).join(", ");
 			// Render through Renderer to handle {@filter} and other tags
-			$content.append($(`<p><strong>Weapons:</strong> ${Renderer.get().render(weapons)}</p>`));
+			content.append(e_({outer: `<p><strong>Weapons:</strong> ${Renderer.get().render(weapons)}</p>`}));
 		}
 
 		// Tools
 		if (cls.startingProficiencies?.tools) {
 			const tools = cls.startingProficiencies.tools.map(t => typeof t === "string" ? t : t.full).join(", ");
-			$content.append($(`<p><strong>Tools:</strong> ${Renderer.get().render(tools)}</p>`));
+			content.append(e_({outer: `<p><strong>Tools:</strong> ${Renderer.get().render(tools)}</p>`}));
 		}
 
 		// Tool proficiency choices (structured data — e.g., Monk: choose artisan OR instrument)
 		if (cls.startingProficiencies?.toolProficiencies) {
-			const $toolChoiceSection = this._renderClassToolProficiencyChoice(cls);
-			if ($toolChoiceSection) $content.append($toolChoiceSection);
+			const toolChoiceSection = this._renderClassToolProficiencyChoice(cls);
+			if (toolChoiceSection) content.append(toolChoiceSection);
 		}
 
 		// Skills selection
 		if (cls.startingProficiencies?.skills) {
 			const skillChoices = cls.startingProficiencies.skills;
-			const $skillSection = this._renderClassSkillSelection(cls, skillChoices);
-			$content.append($skillSection);
+			const skillSection = this._renderClassSkillSelection(cls, skillChoices);
+			content.append(skillSection);
 		}
 
 		// Expertise selection (for classes with early expertise: Rogue level 1, Ranger level 1-2, etc.)
 		const expertiseInfo = this._getClassExpertiseInfoEarlyLevels(cls);
 		if (expertiseInfo && expertiseInfo.count > 0) {
-			const $expertiseSection = this._renderExpertiseSelection(cls, expertiseInfo);
-			$content.append($expertiseSection);
+			const expertiseSection = this._renderExpertiseSelection(cls, expertiseInfo);
+			content.append(expertiseSection);
 		}
 
 		// Class feature language grants (like Deft Explorer)
 		const classLangInfo = this._getClassFeatureLanguageGrants(cls);
 		if (classLangInfo && classLangInfo.count > 0) {
-			const $langSection = this._renderClassFeatureLanguageSelection(cls, classLangInfo);
-			$content.append($langSection);
+			const langSection = this._renderClassFeatureLanguageSelection(cls, classLangInfo);
+			content.append(langSection);
 		}
 
 		// Weapon Mastery selection (for Fighter, Paladin, Ranger, Rogue at level 1)
 		const weaponMasteryInfo = this._getClassWeaponMasteryInfo(cls, 1);
 		if (weaponMasteryInfo && weaponMasteryInfo.count > 0) {
-			const $masterySection = this._renderWeaponMasterySelection(cls, weaponMasteryInfo);
-			$content.append($masterySection);
+			const masterySection = this._renderWeaponMasterySelection(cls, weaponMasteryInfo);
+			content.append(masterySection);
 		}
 
 		// Optional features selection (invocations, metamagic, etc.)
 		if (cls.optionalfeatureProgression?.length) {
-			const $optFeatSection = this._renderClassOptionalFeatures(cls);
-			$content.append($optFeatSection);
+			const optFeatSection = this._renderClassOptionalFeatures(cls);
+			content.append(optFeatSection);
 		}
 
 		// Feature options selection (specialties, etc. - features with embedded type: "options")
-		const $featureOptionsSection = this._renderClassFeatureOptions(cls, 1);
-		if ($featureOptionsSection) {
-			$content.append($featureOptionsSection);
+		const featureOptionsSection = this._renderClassFeatureOptions(cls, 1);
+		if (featureOptionsSection) {
+			content.append(featureOptionsSection);
 		}
 
 		// Spellcasting
 		if (cls.spellcastingAbility) {
-			$content.append(`<p><strong>Spellcasting:</strong> ${Parser.attAbvToFull(cls.spellcastingAbility)}</p>`);
+			content.append(e_({outer: `<p><strong>Spellcasting:</strong> ${Parser.attAbvToFull(cls.spellcastingAbility)}</p>`}));
 		}
 
 		// Quick Build target level
-		const $quickBuildSection = $(`
+		const quickBuildSection = e_({outer: `
 			<div class="charsheet__builder-feat-opt-section mt-3">
 				<div class="charsheet__builder-feat-opt-header">
 					<span class="charsheet__builder-feat-opt-header-name">⚡ Quick Build — Start at Higher Level</span>
@@ -3682,23 +3682,23 @@ class CharacterSheetBuilder {
 					${(this._quickBuildTargetLevel || 1) > 1 ? `After building at level 1, Quick Build wizard will guide you through leveling to ${this._quickBuildTargetLevel}.` : "Level 1 — standard character creation (no Quick Build)."}
 				</div>
 			</div>
-		`);
+		`});
 
-		$quickBuildSection.find("#builder-quickbuild-level-slider").on("input", (e) => {
-			const val = parseInt($(e.target).val());
+		quickBuildSection.querySelector("#builder-quickbuild-level-slider").addEventListener("input", (e) => {
+			const val = parseInt(e.target.value);
 			this._quickBuildTargetLevel = val;
-			$quickBuildSection.find("#builder-quickbuild-level-display").text(val);
-			const $info = $quickBuildSection.find("#builder-quickbuild-info");
+			quickBuildSection.querySelector("#builder-quickbuild-level-display").textContent = val;
+			const info = quickBuildSection.querySelector("#builder-quickbuild-info");
 			if (val > 1) {
-				$info.html(`After building at level 1, Quick Build wizard will guide you through leveling to <strong>${val}</strong>.`);
+				info.innerHTML = `After building at level 1, Quick Build wizard will guide you through leveling to <strong>${val}</strong>.`;
 			} else {
-				$info.text("Level 1 — standard character creation (no Quick Build).");
+				info.textContent = "Level 1 — standard character creation (no Quick Build).";
 			}
 		});
 
-		$content.append($quickBuildSection);
+		content.append(quickBuildSection);
 
-		$preview.append($content);
+		preview.append(content);
 	}
 
 	/**
@@ -3717,56 +3717,56 @@ class CharacterSheetBuilder {
 
 		// Common case: choose 1 artisan OR 1 musical instrument (Monk)
 		if (anyArtisanCount === 1 && anyMusicalCount === 1) {
-			const $section = $(`<div class="charsheet__builder-tool-choice mt-2"></div>`);
-			$section.append(`<p class="mb-1"><strong>Tool Proficiency:</strong> Choose one artisan's tool or musical instrument</p>`);
+			const section = e_({outer: `<div class="charsheet__builder-tool-choice mt-2"></div>`});
+			section.append(e_({outer: `<p class="mb-1"><strong>Tool Proficiency:</strong> Choose one artisan's tool or musical instrument</p>`}));
 
 			const artisanTools = Renderer.generic.FEATURE__TOOLS_ARTISANS || [];
 			const musicalInstruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS || [];
 
-			const $categorySelect = $(`
+			const categorySelect = e_({outer: `
 				<select class="form-control form-control--minimal mb-1">
 					<option value="">-- Select Category --</option>
 					<option value="artisan">Artisan's Tools</option>
 					<option value="instrument">Musical Instrument</option>
 				</select>
-			`);
+			`});
 
-			const $toolSelect = $(`
+			const toolSelect = e_({outer: `
 				<select class="form-control form-control--minimal mb-1" style="display: none;">
 					<option value="">-- Select Tool --</option>
 				</select>
-			`);
+			`});
 
 			// Pre-select if already chosen
 			const existing = this._selectedClassToolProficiencies.find(t => t.isArtisanOrInstrument);
 			const populateToolSelect = (category) => {
-				$toolSelect.empty().append(`<option value="">-- Select ${category === "artisan" ? "Artisan's Tool" : "Musical Instrument"} --</option>`);
+				toolSelect.innerHTML = ""; toolSelect.append(e_({outer: `<option value="">-- Select ${category === "artisan" ? "Artisan's Tool" : "Musical Instrument"} --</option>`}));
 				const tools = category === "artisan" ? artisanTools : musicalInstruments;
 				tools.forEach(tool => {
-					$toolSelect.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+					toolSelect.append(e_({outer: `<option value="${tool}">${tool.toTitleCase()}</option>`}));
 				});
-				$toolSelect.show();
+				toolSelect.style.display = "";
 			};
 
 			if (existing) {
 				const cat = existing.isArtisan ? "artisan" : "instrument";
-				$categorySelect.val(cat);
+				categorySelect.value = cat;
 				populateToolSelect(cat);
-				$toolSelect.val(existing.tool);
+				toolSelect.value = existing.tool;
 			}
 
-			$categorySelect.on("change", (e) => {
+			categorySelect.addEventListener("change", (e) => {
 				this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !t.isArtisanOrInstrument);
 				if (e.target.value) {
 					populateToolSelect(e.target.value);
 				} else {
-					$toolSelect.hide();
+					toolSelect.style.display = "none";
 				}
 			});
 
-			$toolSelect.on("change", (e) => {
+			toolSelect.addEventListener("change", (e) => {
 				this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !t.isArtisanOrInstrument);
-				const category = $categorySelect.val();
+				const category = categorySelect.value;
 				if (e.target.value) {
 					this._selectedClassToolProficiencies.push({
 						tool: e.target.value,
@@ -3777,50 +3777,50 @@ class CharacterSheetBuilder {
 				}
 			});
 
-			$section.append($categorySelect, $toolSelect);
-			return $section;
+			section.append(categorySelect, toolSelect);
+			return section;
 		}
 
 		// Fallback: individual artisan/instrument pickers
 		if (anyArtisanCount > 0 || anyMusicalCount > 0) {
-			const $section = $(`<div class="charsheet__builder-tool-choice mt-2"></div>`);
-			$section.append(`<p class="mb-1"><strong>Tool Proficiency Choices:</strong></p>`);
+			const section = e_({outer: `<div class="charsheet__builder-tool-choice mt-2"></div>`});
+			section.append(e_({outer: `<p class="mb-1"><strong>Tool Proficiency Choices:</strong></p>`}));
 
 			for (let i = 0; i < anyArtisanCount; i++) {
 				const tools = Renderer.generic.FEATURE__TOOLS_ARTISANS || [];
-				const $select = $(`<select class="form-control form-control--minimal mb-1"><option value="">-- Select Artisan's Tool --</option></select>`);
-				tools.forEach(tool => $select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`));
+				const select = e_({outer: `<select class="form-control form-control--minimal mb-1"><option value="">-- Select Artisan's Tool --</option></select>`});
+				tools.forEach(tool => select.append(e_({outer: `<option value="${tool}">${tool.toTitleCase()}</option>`})));
 
 				const existing = this._selectedClassToolProficiencies.find(t => t.isArtisan && t.idx === i);
-				if (existing) $select.val(existing.tool);
+				if (existing) select.value = existing.tool;
 
-				$select.on("change", (e) => {
+				select.addEventListener("change", (e) => {
 					this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !(t.isArtisan && t.idx === i));
 					if (e.target.value) {
 						this._selectedClassToolProficiencies.push({tool: e.target.value, isArtisan: true, idx: i});
 					}
 				});
-				$section.append($select);
+				section.append(select);
 			}
 
 			for (let i = 0; i < anyMusicalCount; i++) {
 				const instruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS || [];
-				const $select = $(`<select class="form-control form-control--minimal mb-1"><option value="">-- Select Musical Instrument --</option></select>`);
-				instruments.forEach(tool => $select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`));
+				const select = e_({outer: `<select class="form-control form-control--minimal mb-1"><option value="">-- Select Musical Instrument --</option></select>`});
+				instruments.forEach(tool => select.append(e_({outer: `<option value="${tool}">${tool.toTitleCase()}</option>`})));
 
 				const existing = this._selectedClassToolProficiencies.find(t => t.isMusicalInstrument && t.idx === i);
-				if (existing) $select.val(existing.tool);
+				if (existing) select.value = existing.tool;
 
-				$select.on("change", (e) => {
+				select.addEventListener("change", (e) => {
 					this._selectedClassToolProficiencies = this._selectedClassToolProficiencies.filter(t => !(t.isMusicalInstrument && t.idx === i));
 					if (e.target.value) {
 						this._selectedClassToolProficiencies.push({tool: e.target.value, isMusicalInstrument: true, idx: i});
 					}
 				});
-				$section.append($select);
+				section.append(select);
 			}
 
-			return $section;
+			return section;
 		}
 
 		return null;
@@ -3861,26 +3861,26 @@ class CharacterSheetBuilder {
 			return match?.name || skillNameOnly.toTitleCase();
 		});
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-skill-selection mt-3">
 				<p><strong>Skills:</strong> Choose ${chooseCount} from:</p>
 				<div class="charsheet__builder-skill-checkboxes"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="skill-count">${this._selectedSkills.length}</span>/${chooseCount}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $section.find(".charsheet__builder-skill-checkboxes");
+		const checkboxes = section.querySelector(".charsheet__builder-skill-checkboxes");
 
 		formattedSkills.forEach(skill => {
 			const isSelected = this._selectedSkills.includes(skill);
-			const $label = $(`
+			const lbl = e_({outer: `
 				<label class="charsheet__builder-skill-checkbox mr-3 mb-1">
 					<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
 					${skill}
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (e) => {
+			lbl.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedSkills.length < chooseCount) {
 						this._selectedSkills.push(skill);
@@ -3893,15 +3893,15 @@ class CharacterSheetBuilder {
 					// Also remove from expertise if it was selected
 					this._selectedExpertise = this._selectedExpertise.filter(s => s !== skill);
 				}
-				$section.find(".skill-count").text(this._selectedSkills.length);
+				section.querySelector(".skill-count").textContent = this._selectedSkills.length;
 				// Update expertise section to reflect new available skills
 				this._updateExpertiseSection(cls);
 			});
 
-			$checkboxes.append($label);
+			checkboxes.append(lbl);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -3911,12 +3911,12 @@ class CharacterSheetBuilder {
 		const expertiseInfo = this._getClassExpertiseInfoEarlyLevels(cls);
 		if (!expertiseInfo || expertiseInfo.count === 0) return;
 
-		const $container = $(".charsheet__builder-expertise-selection");
-		if (!$container.length) return;
+		const container = document.querySelector(".charsheet__builder-expertise-selection");
+		if (!container) return;
 
 		// Replace with new section
-		const $newSection = this._renderExpertiseSelection(cls, expertiseInfo);
-		$container.replaceWith($newSection);
+		const newSection = this._renderExpertiseSelection(cls, expertiseInfo);
+		container.replaceWith(newSection);
 	}
 
 	/**
@@ -4157,16 +4157,16 @@ class CharacterSheetBuilder {
 	_renderExpertiseSelection (cls, expertiseInfo) {
 		const {count, allowTools, toolName} = expertiseInfo;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-expertise-selection mt-3">
 				<p><strong>Expertise:</strong> Choose ${count} skills you're proficient in to gain expertise (double proficiency bonus):</p>
 				${allowTools ? `<p class="ve-small ve-muted">You may also choose ${toolName} if you're proficient with it.</p>` : ""}
 				<div class="charsheet__builder-expertise-checkboxes"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="expertise-count">${this._selectedExpertise.length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $section.find(".charsheet__builder-expertise-checkboxes");
+		const checkboxes = section.querySelector(".charsheet__builder-expertise-checkboxes");
 
 		// Get available skills - must be skills the player is proficient in
 		// This includes class skills being selected AND background/racial skills already applied to state
@@ -4197,18 +4197,18 @@ class CharacterSheetBuilder {
 		const sortedSkills = [...availableSkills].sort();
 
 		if (sortedSkills.length === 0) {
-			$checkboxes.append(`<p class="ve-muted">Select your skill proficiencies first.</p>`);
+			checkboxes.append(e_({outer: `<p class="ve-muted">Select your skill proficiencies first.</p>`}));
 		} else {
 			sortedSkills.forEach(skill => {
 				const isSelected = this._selectedExpertise.includes(skill);
-				const $label = $(`
+				const lbl = e_({outer: `
 					<label class="charsheet__builder-skill-checkbox mr-3 mb-1">
 						<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
 						${skill}
 					</label>
-				`);
+				`});
 
-				$label.find("input").on("change", (e) => {
+				lbl.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (this._selectedExpertise.length < count) {
 							this._selectedExpertise.push(skill);
@@ -4219,14 +4219,14 @@ class CharacterSheetBuilder {
 					} else {
 						this._selectedExpertise = this._selectedExpertise.filter(s => s !== skill);
 					}
-					$section.find(".expertise-count").text(this._selectedExpertise.length);
+					section.querySelector(".expertise-count").textContent = this._selectedExpertise.length;
 				});
 
-				$checkboxes.append($label);
+				checkboxes.append(lbl);
 			});
 		}
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -4369,15 +4369,15 @@ class CharacterSheetBuilder {
 	_renderClassFeatureLanguageSelection (cls, langInfo) {
 		const {count, featureName} = langInfo;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-class-lang-selection mt-3">
 				<p><strong>Languages (${featureName}):</strong> Choose ${count} language${count > 1 ? "s" : ""}:</p>
 				<div class="charsheet__builder-class-lang-dropdowns"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="class-lang-count">${this._selectedClassFeatureLanguages.length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $dropdowns = $section.find(".charsheet__builder-class-lang-dropdowns");
+		const dropdowns = section.querySelector(".charsheet__builder-class-lang-dropdowns");
 
 		// Get grouped languages including homebrew
 		const langOptions = this._page.getLanguageOptionsGrouped?.() || {
@@ -4389,55 +4389,43 @@ class CharacterSheetBuilder {
 
 		for (let i = 0; i < count; i++) {
 			const selectId = `class-lang-choice-${i}`;
-			const $select = $(`
+			const select = e_({outer: `
 				<select class="form-control form-control--minimal mb-1" id="${selectId}">
 					<option value="">-- Select Language --</option>
 				</select>
-			`);
+			`});
 
 			// Add language options grouped by type
+			const addOptgroup = (labelText, langs) => {
+				const grp = document.createElement("optgroup");
+				grp.label = labelText;
+				langs.forEach(lang => grp.append(e_({tag: "option", val: lang, txt: lang})));
+				select.append(grp);
+			};
+
 			if (langOptions.homebrew.length) {
-				$select.append(`<optgroup label="──── Homebrew Languages ────">`);
-				langOptions.homebrew.forEach(lang => {
-					$select.append(`<option value="${lang}">${lang}</option>`);
-				});
-				$select.append(`</optgroup>`);
+				addOptgroup("──── Homebrew Languages ────", langOptions.homebrew);
 			}
-
-			$select.append(`<optgroup label="──── Standard Languages ────">`);
-			langOptions.standard.forEach(lang => {
-				$select.append(`<option value="${lang}">${lang}</option>`);
-			});
-			$select.append(`</optgroup>`);
-
-			$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
-			langOptions.exotic.forEach(lang => {
-				$select.append(`<option value="${lang}">${lang}</option>`);
-			});
-			$select.append(`</optgroup>`);
-
-			$select.append(`<optgroup label="──── Secret Languages ────">`);
-			langOptions.secret.forEach(lang => {
-				$select.append(`<option value="${lang}">${lang}</option>`);
-			});
-			$select.append(`</optgroup>`);
+			addOptgroup("──── Standard Languages ────", langOptions.standard);
+			addOptgroup("──── Exotic/Rare Languages ────", langOptions.exotic);
+			addOptgroup("──── Secret Languages ────", langOptions.secret);
 
 			const existingChoice = this._selectedClassFeatureLanguages[i];
 			if (existingChoice) {
-				$select.val(existingChoice);
+				select.value = existingChoice;
 			}
 
-			$select.on("change", (e) => {
+			select.addEventListener("change", (e) => {
 				this._selectedClassFeatureLanguages[i] = e.target.value || null;
 				// Count non-null selections
 				const selectedCount = this._selectedClassFeatureLanguages.filter(l => l).length;
-				$section.find(".class-lang-count").text(selectedCount);
+				section.querySelector(".class-lang-count").textContent = selectedCount;
 			});
 
-			$dropdowns.append($select);
+			dropdowns.append(select);
 		}
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -4671,16 +4659,16 @@ class CharacterSheetBuilder {
 	_renderWeaponMasterySelection (cls, masteryInfo) {
 		const {count} = masteryInfo;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-mastery-selection mt-3">
 				<p><strong>Weapon Mastery:</strong> Choose ${count} weapon${count > 1 ? "s" : ""} to master:</p>
 				<p class="ve-small ve-muted">You can use the mastery property of your chosen weapons. You can change these after a long rest.</p>
 				<div class="charsheet__builder-mastery-select-container"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="mastery-count">${this._selectedWeaponMasteries.length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__builder-mastery-select-container");
+		const container = section.querySelector(".charsheet__builder-mastery-select-container");
 
 		// Get only BASE weapons with mastery properties (not magic variants)
 		const allItems = this._page.getItems();
@@ -4721,22 +4709,22 @@ class CharacterSheetBuilder {
 		const renderWeaponGroup = (weapons, groupName) => {
 			if (!weapons.length) return;
 
-			const $group = $(`<div class="mb-2"><strong class="ve-small">${groupName}:</strong></div>`);
-			const $checkboxes = $(`<div class="charsheet__builder-mastery-checkboxes"></div>`);
+			const group = e_({outer: `<div class="mb-2"><strong class="ve-small">${groupName}:</strong></div>`});
+			const checkboxes = e_({outer: `<div class="charsheet__builder-mastery-checkboxes"></div>`});
 
 			weapons.forEach(weapon => {
 				const masteryName = getMasteryName(weapon.mastery?.[0]);
 				const weaponKey = `${weapon.name}|${weapon.source}`;
 				const isSelected = this._selectedWeaponMasteries.includes(weaponKey);
 
-				const $label = $(`
+				const lbl = e_({outer: `
 					<label class="charsheet__builder-skill-checkbox mr-3 mb-1" title="${masteryName ? `Mastery: ${masteryName}` : ""}">
 						<input type="checkbox" value="${weaponKey}" ${isSelected ? "checked" : ""}>
 						${weapon.name} ${masteryName ? `<span class="ve-small text-muted">(${masteryName})</span>` : ""}
 					</label>
-				`);
+				`});
 
-				$label.find("input").on("change", (e) => {
+				lbl.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (this._selectedWeaponMasteries.length < count) {
 							this._selectedWeaponMasteries.push(weaponKey);
@@ -4747,24 +4735,24 @@ class CharacterSheetBuilder {
 					} else {
 						this._selectedWeaponMasteries = this._selectedWeaponMasteries.filter(m => m !== weaponKey);
 					}
-					$section.find(".mastery-count").text(this._selectedWeaponMasteries.length);
+					section.querySelector(".mastery-count").textContent = this._selectedWeaponMasteries.length;
 				});
 
-				$checkboxes.append($label);
+				checkboxes.append(lbl);
 			});
 
-			$group.append($checkboxes);
-			$container.append($group);
+			group.append(checkboxes);
+			container.append(group);
 		};
 
 		renderWeaponGroup(simpleWeapons, "Simple Weapons");
 		renderWeaponGroup(martialWeapons, "Martial Weapons");
 
 		if (!simpleWeapons.length && !martialWeapons.length) {
-			$container.append(`<p class="ve-muted">No weapons with mastery properties found.</p>`);
+			container.append(e_({outer: `<p class="ve-muted">No weapons with mastery properties found.</p>`}));
 		}
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -5006,7 +4994,7 @@ class CharacterSheetBuilder {
 	_renderClassOptionalFeatures (cls) {
 		const allOptFeaturesRaw = this._page.getOptionalFeatures();
 		const allOptFeatures = this._filterOptFeaturesByEdition(allOptFeaturesRaw, cls?.source);
-		const $container = $(`<div class="charsheet__builder-optional-features mt-3"></div>`);
+		const container = e_({outer: `<div class="charsheet__builder-optional-features mt-3"></div>`});
 
 		cls.optionalfeatureProgression.forEach(optFeatProg => {
 			// Get how many of this feature type at level 1
@@ -5028,20 +5016,20 @@ class CharacterSheetBuilder {
 
 			if (isCombatMethods) {
 				// Handle Combat Methods with tradition selection
-				this._renderCombatMethodsSelection($container, cls, optFeatProg, count, name, featureKey, allOptFeatures);
+				this._renderCombatMethodsSelection(container, cls, optFeatProg, count, name, featureKey, allOptFeatures);
 			} else {
 				// Standard optional feature selection
-				this._renderStandardOptionalFeatures($container, optFeatProg, count, name, featureKey, allOptFeatures, featureTypes);
+				this._renderStandardOptionalFeatures(container, optFeatProg, count, name, featureKey, allOptFeatures, featureTypes);
 			}
 		});
 
-		return $container;
+		return container;
 	}
 
 	/**
 	 * Render Combat Methods selection with tradition choice first, then method selection
 	 */
-	_renderCombatMethodsSelection ($container, cls, optFeatProg, methodCount, name, featureKey, allOptFeatures) {
+	_renderCombatMethodsSelection (container, cls, optFeatProg, methodCount, name, featureKey, allOptFeatures) {
 		// Get traditions filtered by what the class has access to
 		const classAllowedTypes = optFeatProg.featureType || [];
 		const availableTraditions = this._getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, cls?.name);
@@ -5059,7 +5047,7 @@ class CharacterSheetBuilder {
 			this._selectedOptionalFeatures[featureKey] = [];
 		}
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-combat-methods mb-3">
 				<h6 class="mt-2 mb-1">Combat Traditions & Methods</h6>
 				<p class="ve-small ve-muted">First choose ${traditionCount} traditions you're proficient with, then select ${methodCount} methods from those traditions.</p>
@@ -5076,23 +5064,23 @@ class CharacterSheetBuilder {
 					<div class="ve-small ve-muted mt-1">Selected: <span class="method-count">${this._selectedOptionalFeatures[featureKey].length}</span>/${methodCount}</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		const $traditionList = $section.find(".charsheet__builder-tradition-list");
-		const $methodList = $section.find(".charsheet__builder-method-list");
+		const traditionList = section.querySelector(".charsheet__builder-tradition-list");
+		const methodList = section.querySelector(".charsheet__builder-method-list");
 
 		// Render tradition selection
 		availableTraditions.forEach(trad => {
 			const isSelected = this._selectedCombatTraditions.includes(trad.code);
-			const $item = $(`
+			const item = e_({outer: `
 				<label class="charsheet__builder-tradition-item d-block mb-1" style="cursor: pointer;">
 					<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
 					<strong>${trad.name}</strong>
 					<span class="ve-muted ve-small ml-1">(${trad.code})</span>
 				</label>
-			`);
+			`});
 
-			$item.find("input").on("change", (e) => {
+			item.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedCombatTraditions.length < traditionCount) {
 						this._selectedCombatTraditions.push(trad.code);
@@ -5107,35 +5095,35 @@ class CharacterSheetBuilder {
 					this._selectedOptionalFeatures[featureKey] = this._selectedOptionalFeatures[featureKey].filter(m => {
 						return !m.featureType?.some(ft => ft.includes(trad.code));
 					});
-					$section.find(".method-count").text(this._selectedOptionalFeatures[featureKey].length);
+					section.querySelector(".method-count").textContent = this._selectedOptionalFeatures[featureKey].length;
 				}
-				$section.find(".tradition-count").text(this._selectedCombatTraditions.length);
+				section.querySelector(".tradition-count").textContent = this._selectedCombatTraditions.length;
 				// Re-render method list when traditions change
-				this._renderMethodList($methodList, allOptFeatures, featureKey, methodCount, maxDegree, $section);
+				this._renderMethodList(methodList, allOptFeatures, featureKey, methodCount, maxDegree, section);
 			});
 
-			$traditionList.append($item);
+			traditionList.append(item);
 		});
 
 		// Initial method list render
-		this._renderMethodList($methodList, allOptFeatures, featureKey, methodCount, maxDegree, $section);
+		this._renderMethodList(methodList, allOptFeatures, featureKey, methodCount, maxDegree, section);
 
-		$container.append($section);
+		container.append(section);
 	}
 
 	/**
 	 * Render the list of available methods based on selected traditions and max degree
 	 */
-	_renderMethodList ($methodList, allOptFeatures, featureKey, methodCount, maxDegree, $section) {
-		$methodList.empty();
+	_renderMethodList (methodList, allOptFeatures, featureKey, methodCount, maxDegree, section) {
+		methodList.innerHTML = "";
 
 		if (this._selectedCombatTraditions.length === 0) {
-			$methodList.append(`<p class="ve-muted ve-small">Select traditions first to see available methods.</p>`);
+			methodList.append(e_({outer: `<p class="ve-muted ve-small">Select traditions first to see available methods.</p>`}));
 			return;
 		}
 
 		if (maxDegree === 0) {
-			$methodList.append(`<p class="ve-muted ve-small">No methods available at this level.</p>`);
+			methodList.append(e_({outer: `<p class="ve-muted ve-small">No methods available at this level.</p>`}));
 			return;
 		}
 
@@ -5145,7 +5133,7 @@ class CharacterSheetBuilder {
 		);
 
 		if (availableMethods.length === 0) {
-			$methodList.append(`<p class="ve-muted ve-small">No methods available for selected traditions at this degree.</p>`);
+			methodList.append(e_({outer: `<p class="ve-muted ve-small">No methods available for selected traditions at this degree.</p>`}));
 			return;
 		}
 
@@ -5175,26 +5163,26 @@ class CharacterSheetBuilder {
 			const methods = methodsByTradition.get(tradCode) || [];
 			if (methods.length === 0) continue;
 
-			const $tradGroup = $(`
+			const tradGroup = e_({outer: `
 				<div class="charsheet__builder-method-group mb-2">
 					<p class="ve-small mb-1"><strong>${this._getTraditionName(tradCode)}</strong></p>
 				</div>
-			`);
+			`});
 
 			methods.sort((a, b) => a.degree - b.degree || a.name.localeCompare(b.name)).forEach(method => {
 				const isSelected = this._selectedOptionalFeatures[featureKey].some(
 					s => s.name === method.name && s.source === method.source,
 				);
-				const $item = $(`
+				const item = e_({outer: `
 					<label class="charsheet__builder-method-item d-block mb-1 ml-2" style="cursor: pointer;">
 						<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
 						<span class="method-name"></span>
 						<span class="ve-muted ve-small ml-1">(${method.degree}${this._getOrdinalSuffix(method.degree)} degree)</span>
 					</label>
-				`);
+				`});
 
 				// Create hoverable link for the method name
-				const $methodName = $item.find(".method-name");
+				const methodName = item.querySelector(".method-name");
 				try {
 					const resolvedSource = this._page.resolveOptionalFeatureSource(method.name, [
 						method.source,
@@ -5202,12 +5190,12 @@ class CharacterSheetBuilder {
 						Parser.SRC_XPHB,
 						Parser.SRC_PHB,
 					]);
-					$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, resolvedSource));
+					methodName.innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, resolvedSource);
 				} catch (e) {
-					$methodName.text(method.name);
+					methodName.textContent = method.name;
 				}
 
-				$item.find("input").on("change", (e) => {
+				item.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (this._selectedOptionalFeatures[featureKey].length < methodCount) {
 							this._selectedOptionalFeatures[featureKey].push(method);
@@ -5220,13 +5208,13 @@ class CharacterSheetBuilder {
 							s => !(s.name === method.name && s.source === method.source),
 						);
 					}
-					$section.find(".method-count").text(this._selectedOptionalFeatures[featureKey].length);
+					section.querySelector(".method-count").textContent = this._selectedOptionalFeatures[featureKey].length;
 				});
 
-				$tradGroup.append($item);
+				tradGroup.append(item);
 			});
 
-			$methodList.append($tradGroup);
+			methodList.append(tradGroup);
 		}
 	}
 
@@ -5239,7 +5227,7 @@ class CharacterSheetBuilder {
 	/**
 	 * Render standard optional features (non-Combat Methods)
 	 */
-	_renderStandardOptionalFeatures ($container, optFeatProg, count, name, featureKey, allOptFeatures, featureTypes) {
+	_renderStandardOptionalFeatures (container, optFeatProg, count, name, featureKey, allOptFeatures, featureTypes) {
 		// Helper to check if a feature type matches the progression requirements
 		const matchesFeatureType = (optFeatTypes) => {
 			return optFeatTypes?.some(ft =>
@@ -5276,30 +5264,30 @@ class CharacterSheetBuilder {
 			this._selectedOptionalFeatures[featureKey] = [];
 		}
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__builder-opt-feat-section mb-3">
 				<p><strong>${name}:</strong> Choose ${count}</p>
 				<div class="charsheet__builder-opt-feat-list" style="max-height: 200px; overflow-y: auto;"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-feat-count">${this._selectedOptionalFeatures[featureKey].length}</span>/${count}</div>
 			</div>
-		`);
+		`});
 
-		const $list = $section.find(".charsheet__builder-opt-feat-list");
+		const list = section.querySelector(".charsheet__builder-opt-feat-list");
 
 		availableOptions.sort((a, b) => a.name.localeCompare(b.name)).forEach(opt => {
 			const isSelected = this._selectedOptionalFeatures[featureKey].some(
 				s => s.name === opt.name && s.source === opt.source,
 			);
-			const $item = $(`
+			const item = e_({outer: `
 				<label class="charsheet__builder-opt-feat-item d-block mb-1" style="cursor: pointer;">
 					<input type="checkbox" class="mr-2" ${isSelected ? "checked" : ""}>
 					<span class="opt-feat-name"></span>
 					<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 				</label>
-			`);
+			`});
 
 			// Create hoverable link for the optional feature name
-			const $optName = $item.find(".opt-feat-name");
+			const optName = item.querySelector(".opt-feat-name");
 			try {
 				const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
 					opt.source,
@@ -5307,12 +5295,12 @@ class CharacterSheetBuilder {
 					Parser.SRC_XPHB,
 					Parser.SRC_PHB,
 				]);
-				$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+				optName.innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource);
 			} catch (e) {
-				$optName.text(opt.name);
+				optName.textContent = opt.name;
 			}
 
-			$item.find("input").on("change", (e) => {
+			item.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedOptionalFeatures[featureKey].length < count) {
 						this._selectedOptionalFeatures[featureKey].push(opt);
@@ -5325,13 +5313,13 @@ class CharacterSheetBuilder {
 						s => !(s.name === opt.name && s.source === opt.source),
 					);
 				}
-				$section.find(".opt-feat-count").text(this._selectedOptionalFeatures[featureKey].length);
+				section.querySelector(".opt-feat-count").textContent = this._selectedOptionalFeatures[featureKey].length;
 			});
 
-			$list.append($item);
+			list.append(item);
 		});
 
-		$container.append($section);
+		container.append(section);
 	}
 
 	/**
@@ -5382,7 +5370,7 @@ class CharacterSheetBuilder {
 	 * Render a skill sub-choice UI below a specialty checkbox.
 	 * @param {Object} choice - From _parseFeatureSkillChoice: {type, count, from}
 	 * @param {string} choiceKey - Unique key for storing selections (featureKey + optName)
-	 * @returns {jQuery}
+	 * @returns {HTMLElement}
 	 */
 	_renderFeatureSkillSubChoice (choice, choiceKey) {
 		const allSkills = [
@@ -5415,26 +5403,26 @@ class CharacterSheetBuilder {
 			this._selectedFeatureSkillChoices[choiceKey] = [];
 		}
 
-		const $wrapper = $(`
+		const wrapper = e_({outer: `
 			<div class="charsheet__builder-feat-skill-sub-choice ml-4 mt-1 mb-1 pl-2" style="border-left: 2px solid var(--rgb-border-grey, #888);">
 				<div class="ve-small"><em>Choose ${choice.count} skill${choice.count > 1 ? "s" : ""} for ${typeLabel}:</em></div>
 				<div class="charsheet__builder-feat-skill-checkboxes"></div>
 				<div class="ve-small ve-muted">Selected: <span class="feat-skill-count">${this._selectedFeatureSkillChoices[choiceKey].length}</span>/${choice.count}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $wrapper.find(".charsheet__builder-feat-skill-checkboxes");
+		const checkboxes = wrapper.querySelector(".charsheet__builder-feat-skill-checkboxes");
 
 		for (const skill of availableSkills) {
 			const isSelected = this._selectedFeatureSkillChoices[choiceKey].includes(skill);
-			const $label = $(`
+			const lbl = e_({outer: `
 				<label class="charsheet__builder-feat-skill-cb mr-2 mb-1" style="display: inline-block;">
 					<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
 					<span class="ve-small">${skill}</span>
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (e) => {
+			lbl.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedFeatureSkillChoices[choiceKey].length < choice.count) {
 						this._selectedFeatureSkillChoices[choiceKey].push(skill);
@@ -5445,13 +5433,13 @@ class CharacterSheetBuilder {
 				} else {
 					this._selectedFeatureSkillChoices[choiceKey] = this._selectedFeatureSkillChoices[choiceKey].filter(s => s !== skill);
 				}
-				$wrapper.find(".feat-skill-count").text(this._selectedFeatureSkillChoices[choiceKey].length);
+				wrapper.querySelector(".feat-skill-count").textContent = this._selectedFeatureSkillChoices[choiceKey].length;
 			});
 
-			$checkboxes.append($label);
+			checkboxes.append(lbl);
 		}
 
-		return $wrapper;
+		return wrapper;
 	}
 
 	/**
@@ -5572,7 +5560,7 @@ class CharacterSheetBuilder {
 
 		if (filteredOptions.length === 0) return null;
 
-		const $container = $(`<div class="charsheet__builder-feature-options mt-3"></div>`);
+		const container = e_({outer: `<div class="charsheet__builder-feature-options mt-3"></div>`});
 
 		for (const optGroup of filteredOptions) {
 			const featureKey = `${optGroup.featureName}_${optGroup.featureSource}`;
@@ -5582,7 +5570,7 @@ class CharacterSheetBuilder {
 				this._selectedFeatureOptions[featureKey] = [];
 			}
 
-			const $section = $(`
+			const section = e_({outer: `
 				<div class="charsheet__builder-feat-opt-section">
 					<div class="charsheet__builder-feat-opt-header">
 						<span class="charsheet__builder-feat-opt-header-name">${optGroup.featureName}</span>
@@ -5591,9 +5579,9 @@ class CharacterSheetBuilder {
 					<div class="charsheet__builder-feat-opt-list"></div>
 					<div class="charsheet__builder-feat-opt-status">Selected: <span class="feat-opt-count">${this._selectedFeatureOptions[featureKey].length}</span> / ${optGroup.count}</div>
 				</div>
-			`);
+			`});
 
-			const $list = $section.find(".charsheet__builder-feat-opt-list");
+			const list = section.querySelector(".charsheet__builder-feat-opt-list");
 
 			// Get already-selected features in other groups (for same-session deduplication)
 			const allSelectedInSession = Object.values(this._selectedFeatureOptions).flat().map(s => s.name);
@@ -5620,16 +5608,16 @@ class CharacterSheetBuilder {
 					s => s.name === opt.name && s.ref === opt.ref,
 				);
 
-				const $item = $(`
+				const item = e_({outer: `
 					<label class="charsheet__builder-feat-opt-item">
 						<input type="checkbox" ${isSelected ? "checked" : ""}>
 						<span class="feat-opt-name"></span>
 						${opt.source ? `<span class="ve-muted ve-small">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 					</label>
-				`);
+				`});
 
 				// Create hoverable link for the option name
-				const $nameSpan = $item.find(".feat-opt-name");
+				const nameSpan = item.querySelector(".feat-opt-name");
 				if (opt.type === "classFeature" && opt.ref) {
 					const parts = opt.ref.split("|");
 					// Hash format: name, className, classSource, level, featureSource
@@ -5637,9 +5625,9 @@ class CharacterSheetBuilder {
 					const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
 					try {
 						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
-						$nameSpan.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`);
+						nameSpan.innerHTML = `<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`;
 					} catch (e) {
-						$nameSpan.text(opt.name);
+						nameSpan.textContent = opt.name;
 					}
 				} else if (opt.type === "optionalfeature" && opt.ref) {
 					const refParts = opt.ref.split("|");
@@ -5651,15 +5639,15 @@ class CharacterSheetBuilder {
 						Parser.SRC_PHB,
 					]);
 					try {
-						$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
+						nameSpan.innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource);
 					} catch (e) {
-						$nameSpan.text(opt.name);
+						nameSpan.textContent = opt.name;
 					}
 				} else {
-					$nameSpan.text(opt.name);
+					nameSpan.textContent = opt.name;
 				}
 
-				$item.find("input").on("change", (e) => {
+				item.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (this._selectedFeatureOptions[featureKey].length < optGroup.count) {
 							this._selectedFeatureOptions[featureKey].push(opt);
@@ -5668,8 +5656,8 @@ class CharacterSheetBuilder {
 							const skillChoice = this._parseFeatureSkillChoice(opt);
 							if (skillChoice) {
 								const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
-								const $subChoice = this._renderFeatureSkillSubChoice(skillChoice, choiceKey);
-								$item.after($subChoice);
+								const subChoice = this._renderFeatureSkillSubChoice(skillChoice, choiceKey);
+								item.after(subChoice);
 							}
 						} else {
 							e.target.checked = false;
@@ -5683,24 +5671,24 @@ class CharacterSheetBuilder {
 						// Remove skill sub-choice UI
 						const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
 						delete this._selectedFeatureSkillChoices[choiceKey];
-						$item.next(".charsheet__builder-feat-skill-sub-choice").remove();
+						{ const _nxt = item.nextElementSibling; if (_nxt?.matches(".charsheet__builder-feat-skill-sub-choice")) _nxt.remove(); };
 					}
-					$section.find(".feat-opt-count").text(this._selectedFeatureOptions[featureKey].length);
+					section.querySelector(".feat-opt-count").textContent = this._selectedFeatureOptions[featureKey].length;
 				});
 
-				$list.append($item);
+				list.append(item);
 			}
 
-			$container.append($section);
+			container.append(section);
 		}
 
-		return $container;
+		return container;
 	}
 	// #endregion
 
 	// #region Step 3: Abilities
-	_renderAbilitiesStep ($content) {
-		const $container = $(`
+	_renderAbilitiesStep (content) {
+		const container = e_({outer: `
 			<div class="charsheet__builder-abilities">
 				<div>
 					<div class="charsheet__builder-ability-method mb-3">
@@ -5730,16 +5718,16 @@ class CharacterSheetBuilder {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$content.append($container);
+		content.append(container);
 
 		// Method selection
-		$("input[name=\"ability-method\"]").on("change", (e) => {
+		document.querySelectorAll("input[name=\"ability-method\"]").forEach(radio => radio.addEventListener("change", (e) => {
 			this._abilityMethod = e.target.value;
 			this._resetAbilityScores();
 			this._renderAbilityInputs();
-		});
+		}));
 
 		// Render racial bonuses section with Tasha's option
 		this._renderRacialBonusesSection();
@@ -5750,11 +5738,11 @@ class CharacterSheetBuilder {
 	 * Render the racial bonuses section with optional Tasha's Custom Origin rules
 	 */
 	_renderRacialBonusesSection () {
-		const $container = $("#builder-racial-bonuses");
-		$container.empty();
+		const container = document.getElementById("builder-racial-bonuses");
+		container.innerHTML = "";
 
 		if (!this._selectedRace) {
-			$container.append(`<p class='ve-muted'>Select a race first</p>`);
+			container.append(e_({outer: `<p class='ve-muted'>Select a race first</p>`}));
 			return;
 		}
 
@@ -5763,25 +5751,25 @@ class CharacterSheetBuilder {
 		const hasRacialASI = this._getRacialASITotal() > 0;
 
 		if (raceIs2024) {
-			$container.append(`<p class='ve-muted'>2024 species do not provide ability score bonuses. ASI comes from your background choice.</p>`);
+			container.append(e_({outer: `<p class='ve-muted'>2024 species do not provide ability score bonuses. ASI comes from your background choice.</p>`}));
 			return;
 		}
 
 		if (!hasRacialASI) {
-			$container.append(`<p class='ve-muted'>No racial ability bonuses</p>`);
+			container.append(e_({outer: `<p class='ve-muted'>No racial ability bonuses</p>`}));
 			return;
 		}
 
 		// Show Tasha's Custom Origin option
-		const $tashasOption = $(`
+		const tashasOption = e_({outer: `
 			<label class="ve-flex-v-center mb-2" style="cursor: pointer;">
 				<input type="checkbox" class="mr-2" id="builder-tashas-rules" ${this._useTashasRules ? "checked" : ""}>
 				<span>Use Tasha's Custom Origin Rules</span>
 				<span class="ve-muted ve-small ml-1" title="Allows you to reassign racial ability scores, skill proficiencies, and languages">(reassign ASI, skills &amp; languages)</span>
 			</label>
-		`);
+		`});
 
-		$tashasOption.find("input").on("change", (e) => {
+		tashasOption.querySelector("input").addEventListener("change", (e) => {
 			this._useTashasRules = e.target.checked;
 			if (!this._useTashasRules) {
 				// Reset all custom choices when disabling
@@ -5793,15 +5781,15 @@ class CharacterSheetBuilder {
 			this._updateAbilitySummary();
 		});
 
-		$container.append($tashasOption);
+		container.append(tashasOption);
 
 		// Show either default bonuses or custom selection UI
 		if (this._useTashasRules) {
-			this._renderTashasASIChoices($container);
-			this._renderTashasSkillReplacements($container);
-			this._renderTashasLanguageReplacements($container);
+			this._renderTashasASIChoices(container);
+			this._renderTashasSkillReplacements(container);
+			this._renderTashasLanguageReplacements(container);
 		} else {
-			$container.append(`<div class="mt-2">${this._getRacialBonusesHtml()}</div>`);
+			container.append(e_({outer: `<div class="mt-2">${this._getRacialBonusesHtml()}</div>`}));
 		}
 	}
 
@@ -5852,47 +5840,47 @@ class CharacterSheetBuilder {
 	 * Render Tasha's skill proficiency replacements.
 	 * Replaces fixed racial skills with "choose any N skills".
 	 */
-	_renderTashasSkillReplacements ($container) {
+	_renderTashasSkillReplacements (container) {
 		const fixedSkills = this._getFixedRacialSkills();
 		if (!fixedSkills.length) return;
 
 		// Use the same data source as other skill pickers (includes homebrew/custom skills)
 		const allSkills = this._page.getSkillsList().map(s => s.name);
 
-		const $section = $(`<div class="charsheet__builder-tashas-skills mt-3"></div>`);
-		$section.append(`<p class="ve-small ve-muted mb-1">Replace ${fixedSkills.length} fixed racial skill${fixedSkills.length > 1 ? "s" : ""} (<em>${fixedSkills.map(s => s.toTitleCase()).join(", ")}</em>) with any skill${fixedSkills.length > 1 ? "s" : ""}:</p>`);
+		const section = e_({outer: `<div class="charsheet__builder-tashas-skills mt-3"></div>`});
+		section.append(e_({outer: `<p class="ve-small ve-muted mb-1">Replace ${fixedSkills.length} fixed racial skill${fixedSkills.length > 1 ? "s" : ""} (<em>${fixedSkills.map(s => s.toTitleCase()).join(", ")}</em>) with any skill${fixedSkills.length > 1 ? "s" : ""}:</p>`}));
 
 		for (let i = 0; i < fixedSkills.length; i++) {
-			const $select = $(`
+			const selectEl = e_({outer: `
 				<select class="form-control form-control--minimal mb-1" id="tashas-skill-${i}">
 					<option value="">-- Select Skill --</option>
 				</select>
-			`);
+			`});
 
 			allSkills.forEach(skill => {
-				$select.append(`<option value="${skill}">${skill}</option>`);
+				selectEl.append(e_({outer: `<option value="${skill}">${skill}</option>`}));
 			});
 
 			// Pre-select
 			if (this._tashasSkillReplacements[i]) {
-				$select.val(this._tashasSkillReplacements[i]);
+				selectEl.value = this._tashasSkillReplacements[i];
 			}
 
-			$select.on("change", (e) => {
+			selectEl.addEventListener("change", (e) => {
 				this._tashasSkillReplacements[i] = e.target.value || null;
 			});
 
-			$section.append($select);
+			section.append(selectEl);
 		}
 
-		$container.append($section);
+		container.append(section);
 	}
 
 	/**
 	 * Render Tasha's language replacements.
 	 * Replaces fixed racial languages (except Common) with "choose any N languages".
 	 */
-	_renderTashasLanguageReplacements ($container) {
+	_renderTashasLanguageReplacements (container) {
 		const fixedLanguages = this._getFixedRacialLanguages();
 		if (!fixedLanguages.length) return;
 
@@ -5900,33 +5888,33 @@ class CharacterSheetBuilder {
 		const allLanguages = this._page.getLanguageNamesSorted();
 		const standardLanguages = allLanguages.length > 0 ? allLanguages : ["Common", "Dwarvish", "Elvish", "Giant", "Gnomish", "Goblin", "Halfling", "Orc"];
 
-		const $section = $(`<div class="charsheet__builder-tashas-languages mt-3"></div>`);
-		$section.append(`<p class="ve-small ve-muted mb-1">Replace ${fixedLanguages.length} fixed racial language${fixedLanguages.length > 1 ? "s" : ""} (<em>${fixedLanguages.map(l => l.toTitleCase()).join(", ")}</em>) with any language${fixedLanguages.length > 1 ? "s" : ""}:</p>`);
+		const section = e_({outer: `<div class="charsheet__builder-tashas-languages mt-3"></div>`});
+		section.append(e_({outer: `<p class="ve-small ve-muted mb-1">Replace ${fixedLanguages.length} fixed racial language${fixedLanguages.length > 1 ? "s" : ""} (<em>${fixedLanguages.map(l => l.toTitleCase()).join(", ")}</em>) with any language${fixedLanguages.length > 1 ? "s" : ""}:</p>`}));
 
 		for (let i = 0; i < fixedLanguages.length; i++) {
-			const $select = $(`
+			const selectEl = e_({outer: `
 				<select class="form-control form-control--minimal mb-1" id="tashas-lang-${i}">
 					<option value="">-- Select Language --</option>
 				</select>
-			`);
+			`});
 
 			standardLanguages.forEach(lang => {
-				$select.append(`<option value="${lang}">${lang}</option>`);
+				selectEl.append(e_({outer: `<option value="${lang}">${lang}</option>`}));
 			});
 
 			// Pre-select
 			if (this._tashasLanguageReplacements[i]) {
-				$select.val(this._tashasLanguageReplacements[i]);
+				selectEl.value = this._tashasLanguageReplacements[i];
 			}
 
-			$select.on("change", (e) => {
+			selectEl.addEventListener("change", (e) => {
 				this._tashasLanguageReplacements[i] = e.target.value || null;
 			});
 
-			$section.append($select);
+			section.append(selectEl);
 		}
 
-		$container.append($section);
+		container.append(section);
 	}
 
 	/**
@@ -6009,46 +5997,44 @@ class CharacterSheetBuilder {
 	/**
 	 * Render Tasha's Custom Origin ASI selection
 	 */
-	_renderTashasASIChoices ($container) {
+	_renderTashasASIChoices (container) {
 		const bonuses = this._getRacialASIBonuses();
 		if (!bonuses.length) return;
 
-		const $info = $(`<p class="ve-small ve-muted mb-2">Reassign your racial ability score bonuses to any abilities you choose:</p>`);
-		$container.append($info);
+		const info = e_({outer: `<p class="ve-small ve-muted mb-2">Reassign your racial ability score bonuses to any abilities you choose:</p>`});
+		container.append(info);
 
-		const $choices = $(`<div class="charsheet__builder-tashas-asi-choices"></div>`);
+		const choices = e_({outer: `<div class="charsheet__builder-tashas-asi-choices"></div>`});
 		const abilities = ["str", "dex", "con", "int", "wis", "cha"];
 
 		bonuses.forEach((bonus, idx) => {
-			const $row = $(`<div class="ve-flex-v-center mb-1"></div>`);
-			$row.append(`<span class="mr-2">+${bonus.amount}:</span>`);
+			const row = e_({outer: `<div class="ve-flex-v-center mb-1"></div>`});
+			row.append(e_({outer: `<span class="mr-2">+${bonus.amount}:</span>`}));
 
-			const $select = $(`<select class="form-control form-control--minimal ve-inline-block w-auto" data-tasha-idx="${idx}"></select>`);
-			$select.append(`<option value="">-- Select --</option>`);
+			const selectEl = e_({outer: `<select class="form-control form-control--minimal ve-inline-block w-auto" data-tasha-idx="${idx}"></select>`});
+			selectEl.append(e_({outer: `<option value="">-- Select --</option>`}));
 
 			abilities.forEach(ab => {
 				const abName = Parser.attAbvToFull(ab);
 				const selected = this._tashasAbilityBonuses[`tasha_${idx}`] === ab ? "selected" : "";
-				$select.append(`<option value="${ab}" ${selected}>${abName}</option>`);
+				selectEl.append(e_({outer: `<option value="${ab}" ${selected}>${abName}</option>`}));
 			});
 
-			$select.on("change", (e) => {
+			selectEl.addEventListener("change", (e) => {
 				const val = e.target.value;
 				this._tashasAbilityBonuses[`tasha_${idx}`] = val;
 				this._tashasAbilityBonuses[`tasha_${idx}_amount`] = bonus.amount;
 
 				// Update other selects to disable already-selected options
-				$choices.find("select").each((i, sel) => {
-					const $sel = $(sel);
-					const selIdx = $sel.data("tasha-idx");
+				[...choices.querySelectorAll("select")].forEach((sel) => {
+					const selIdx = parseInt(sel.dataset.tashaIdx);
 					if (selIdx !== idx) {
-						$sel.find("option").each((j, opt) => {
-							const $opt = $(opt);
-							const optVal = $opt.val();
+						[...sel.querySelectorAll("option")].forEach((opt) => {
+							const optVal = opt.value;
 							// Check if this option is selected in another dropdown
 							const isSelectedElsewhere = Object.entries(this._tashasAbilityBonuses)
 								.some(([k, v]) => k.startsWith("tasha_") && !k.includes("_amount") && k !== `tasha_${selIdx}` && v === optVal);
-							$opt.prop("disabled", optVal && isSelectedElsewhere);
+							opt.disabled = optVal && isSelectedElsewhere;
 						});
 					}
 				});
@@ -6056,11 +6042,11 @@ class CharacterSheetBuilder {
 				this._updateAbilitySummary();
 			});
 
-			$row.append($select);
-			$choices.append($row);
+			row.append(selectEl);
+			choices.append(row);
 		});
 
-		$container.append($choices);
+		container.append(choices);
 	}
 
 	_resetAbilityScores () {
@@ -6075,11 +6061,11 @@ class CharacterSheetBuilder {
 	}
 
 	_renderAbilityInputs () {
-		const $container = $("#builder-abilities-inputs");
-		$container.empty();
+		const container = document.getElementById("builder-abilities-inputs");
+		container.innerHTML = "";
 
-		const $pointsDisplay = $("#builder-points-remaining");
-		$pointsDisplay.toggle(this._abilityMethod === "pointbuy");
+		const pointsDisplay = document.getElementById("builder-points-remaining");
+		pointsDisplay.style.display = (this._abilityMethod === "pointbuy") ? "" : "none";
 
 		// Initialize standard array pool if needed
 		if (this._abilityMethod === "standard" && !this._standardArrayPool) {
@@ -6098,7 +6084,7 @@ class CharacterSheetBuilder {
 					? `<input type="number" class="form-control form-control--minimal charsheet__builder-ability-score" value="${score}" min="3" max="18" title="Max starting score is 18 (before racial bonuses)">`
 					: `<span class="charsheet__builder-ability-score">${score}</span>`;
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__builder-ability-row">
 					<span class="charsheet__builder-ability-name">${Parser.attAbvToFull(abl)}</span>
 					<div class="charsheet__builder-ability-controls">
@@ -6109,15 +6095,15 @@ class CharacterSheetBuilder {
 						<span class="charsheet__builder-ability-mod">(${mod != null ? (mod >= 0 ? "+" : "") + mod : "—"})</span>
 					</div>
 				</div>
-			`);
+			`});
 
 			if (this._abilityMethod === "pointbuy") {
-				$row.find("[data-action=\"decrease\"]").on("click", () => this._adjustPointBuy(abl, -1));
-				$row.find("[data-action=\"increase\"]").on("click", () => this._adjustPointBuy(abl, 1));
+				row.querySelector("[data-action=\"decrease\"]").addEventListener("click", () => this._adjustPointBuy(abl, -1));
+				row.querySelector("[data-action=\"increase\"]").addEventListener("click", () => this._adjustPointBuy(abl, 1));
 			}
 
 			if (this._abilityMethod === "manual") {
-				$row.find("input").on("change", (e) => {
+				row.querySelector("input").addEventListener("change", (e) => {
 					// Max base score is 18 for starting characters (before racial bonuses)
 					this._abilityScores[abl] = Math.max(3, Math.min(18, parseInt(e.target.value) || 8));
 					e.target.value = this._abilityScores[abl]; // Update display if clamped
@@ -6125,49 +6111,49 @@ class CharacterSheetBuilder {
 				});
 			}
 
-			$container.append($row);
+			container.append(row);
 		});
 
 		// Standard array assignment
 		if (this._abilityMethod === "standard") {
-			this._renderStandardArrayAssignment($container);
+			this._renderStandardArrayAssignment(container);
 		}
 
 		this._updateAbilitySummary();
 	}
 
-	_renderStandardArrayAssignment ($container) {
-		const $assignment = $(`
+	_renderStandardArrayAssignment (container) {
+		const assignment = e_({outer: `
 			<div class="mt-3">
 				<p class="ve-muted">Click a score, then click an ability to assign it:</p>
 				<div class="ve-flex ve-flex-wrap" id="standard-array-pool"></div>
 			</div>
-		`);
+		`});
 
-		const $pool = $assignment.find("#standard-array-pool");
+		const pool = assignment.querySelector("#standard-array-pool");
 
 		// Render available scores
 		this._standardArrayPool.forEach((score, idx) => {
-			const $badge = $(`<span class="badge badge-primary mr-1 mb-1 charsheet__builder-score-badge" data-score="${score}" data-idx="${idx}" style="cursor: pointer; font-size: 1rem; padding: 0.5rem;">${score}</span>`);
+			const badge = e_({outer: `<span class="badge badge-primary mr-1 mb-1 charsheet__builder-score-badge" data-score="${score}" data-idx="${idx}" style="cursor: pointer; font-size: 1rem; padding: 0.5rem;">${score}</span>`});
 
-			$badge.on("click", () => {
+			badge.addEventListener("click", () => {
 				// Toggle selection
-				if ($badge.hasClass("active")) {
-					$badge.removeClass("active");
+				if (badge.classList.contains("active")) {
+					badge.classList.remove("active");
 					this._selectedStandardScore = null;
 				} else {
-					$pool.find(".badge").removeClass("active");
-					$badge.addClass("active");
+					[...pool.querySelectorAll(".badge")].forEach(_el => _el.classList.remove("active"));
+					badge.classList.add("active");
 					this._selectedStandardScore = {score, idx};
 				}
 			});
 
-			$pool.append($badge);
+			pool.append(badge);
 		});
 
 		// Add click handlers to ability dropzones
-		$container.find(".charsheet__builder-ability-dropzone").on("click", (e) => {
-			const abl = $(e.target).data("ability");
+		[...container.querySelectorAll(".charsheet__builder-ability-dropzone")].forEach(dz => dz.addEventListener("click", (e) => {
+			const abl = e.target.dataset.ability;
 			// Valid standard array scores that can be returned to pool
 			const STANDARD_ARRAY_SCORES = [15, 14, 13, 12, 10, 8];
 
@@ -6198,9 +6184,9 @@ class CharacterSheetBuilder {
 				this._abilityScores[abl] = null;
 				this._renderAbilityInputs();
 			}
-		});
+		}));
 
-		$container.append($assignment);
+		container.append(assignment);
 	}
 
 	_adjustPointBuy (ability, delta) {
@@ -6218,7 +6204,7 @@ class CharacterSheetBuilder {
 		this._abilityScores[ability] = newScore;
 		this._pointBuyRemaining -= costDelta;
 
-		$("#points-value").text(this._pointBuyRemaining);
+		document.getElementById("points-value").textContent = this._pointBuyRemaining;
 		this._renderAbilityInputs();
 	}
 
@@ -6330,8 +6316,8 @@ class CharacterSheetBuilder {
 	}
 
 	_updateAbilitySummary () {
-		const $summary = $("#builder-abilities-summary");
-		$summary.empty();
+		const summary = document.getElementById("builder-abilities-summary");
+		summary.innerHTML = "";
 
 		let allAssigned = true;
 		Parser.ABIL_ABVS.forEach(abl => {
@@ -6341,7 +6327,7 @@ class CharacterSheetBuilder {
 			// Handle unassigned scores (null in standard array mode)
 			if (base == null) {
 				allAssigned = false;
-				$summary.append(`
+				summary.append(`
 					<div class="ve-flex-v-center">
 						<strong class="mr-2" style="width: 80px;">${Parser.attAbvToFull(abl)}:</strong>
 						<span class="ve-muted">—${racial ? ` (+${racial})` : ""}</span>
@@ -6353,7 +6339,7 @@ class CharacterSheetBuilder {
 			const total = base + racial;
 			const mod = Math.floor((total - 10) / 2);
 
-			$summary.append(`
+			summary.append(`
 				<div class="ve-flex-v-center">
 					<strong class="mr-2" style="width: 80px;">${Parser.attAbvToFull(abl)}:</strong>
 					<span>${total} (${mod >= 0 ? "+" : ""}${mod})</span>
@@ -6363,17 +6349,17 @@ class CharacterSheetBuilder {
 
 		// Show warning if using standard array and not all scores assigned
 		if (this._abilityMethod === "standard" && !allAssigned) {
-			$summary.append(`<p class="ve-muted mt-2 ve-small">Assign all scores from the standard array above.</p>`);
+			summary.append(e_({outer: `<p class="ve-muted mt-2 ve-small">Assign all scores from the standard array above.</p>`}));
 		}
 	}
 	// #endregion
 
 	// #region Step 4: Background
-	_renderBackgroundStep ($content) {
+	_renderBackgroundStep (content) {
 		// Get backgrounds filtered by allowed sources
 		const backgrounds = this._page.filterByAllowedSources(this._page.getBackgrounds());
 
-		const $container = $(`
+		const container = e_({outer: `
 			<div class="charsheet__builder-selection">
 				<div class="charsheet__builder-list">
 					<div class="charsheet__builder-list-header">
@@ -6390,41 +6376,41 @@ class CharacterSheetBuilder {
 					<div class="charsheet__builder-preview-placeholder">Select a background to see details</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$content.append($container);
+		content.append(container);
 
-		const $list = $("#builder-bg-list");
-		const $preview = $("#builder-bg-preview");
-		const $search = $("#builder-bg-search");
+		const list = document.getElementById("builder-bg-list");
+		const preview = document.getElementById("builder-bg-preview");
+		const searchEl = document.getElementById("builder-bg-search");
 
 		// Custom background button
-		$("#builder-custom-bg-btn").on("click", () => {
-			this._showCustomBackgroundCreator($preview);
+		document.getElementById("builder-custom-bg-btn").addEventListener("click", () => {
+			this._showCustomBackgroundCreator(preview);
 		});
 
 		const renderBgList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 
 			// Add "Custom" option at the top if we have a custom background selected
 			if (this._customBackground) {
 				const isSelected = this._selectedBackground === this._customBackground;
-				const $customItem = $(`
+				const customItem = e_({outer: `
 					<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
 						<span class="charsheet__builder-list-item-name">${this._customBackground.name}</span>
 						<span class="charsheet__builder-list-item-source">Custom</span>
 					</div>
-				`);
-				$customItem.on("click", () => {
-					$list.find(".charsheet__builder-list-item").removeClass("active");
-					$customItem.addClass("active");
+				`});
+				customItem.addEventListener("click", () => {
+					[...list.querySelectorAll(".charsheet__builder-list-item")].forEach(_el => _el.classList.remove("active"));
+					customItem.classList.add("active");
 					this._selectedBackground = this._customBackground;
 					this._selectedToolProficiencies = [];
 					this._selectedLanguages = [];
-					this._renderBackgroundPreview($preview, this._customBackground);
+					this._renderBackgroundPreview(preview, this._customBackground);
 				});
-				$list.append($customItem);
+				list.append(customItem);
 			}
 
 			backgrounds
@@ -6432,40 +6418,40 @@ class CharacterSheetBuilder {
 				.sort((a, b) => a.name.localeCompare(b.name))
 				.forEach(bg => {
 					const isSelected = this._selectedBackground?.name === bg.name && !this._selectedBackground?._isCustom;
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
 							<span class="charsheet__builder-list-item-name">${bg.name}</span>
 							<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(bg.source)}</span>
 						</div>
-					`);
+					`});
 
-					$item.on("click", () => {
-						$list.find(".charsheet__builder-list-item").removeClass("active");
-						$item.addClass("active");
+					item.addEventListener("click", () => {
+						[...list.querySelectorAll(".charsheet__builder-list-item")].forEach(_el => _el.classList.remove("active"));
+						item.classList.add("active");
 						this._selectedBackground = bg;
 						// Reset tool and language choices when changing background
 						this._selectedToolProficiencies = [];
 						this._selectedLanguages = [];
-						this._renderBackgroundPreview($preview, bg);
+						this._renderBackgroundPreview(preview, bg);
 					});
 
-					$list.append($item);
+					list.append(item);
 				});
 		};
 
-		$search.on("input", (e) => renderBgList(e.target.value));
+		searchEl.addEventListener("input", (e) => renderBgList(e.target.value));
 		renderBgList();
 
 		if (this._selectedBackground) {
-			this._renderBackgroundPreview($preview, this._selectedBackground);
+			this._renderBackgroundPreview(preview, this._selectedBackground);
 		}
 	}
 
 	/**
 	 * Show the custom background creation form
 	 */
-	_showCustomBackgroundCreator ($preview) {
-		$preview.empty();
+	_showCustomBackgroundCreator (preview) {
+		preview.innerHTML = "";
 
 		// Initialize custom background data
 		if (!this._customBackgroundData) {
@@ -6492,7 +6478,7 @@ class CharacterSheetBuilder {
 		];
 		const allLanguages = this._page.getLanguagesList().map(l => l.name);
 
-		const $content = $(`
+		const content = e_({outer: `
 			<div class="charsheet__custom-bg-creator">
 				<h4>Create Custom Background</h4>
 				<p class="ve-muted ve-small mb-3">Build your own background with custom proficiencies and features.</p>
@@ -6551,28 +6537,28 @@ class CharacterSheetBuilder {
 					<button class="ve-btn ve-btn-primary" id="custom-bg-save">Create Background</button>
 				</div>
 			</div>
-		`);
+		`});
 
-		$preview.append($content);
+		preview.append(content);
 
 		// Populate skill checkboxes
-		const $skillsContainer = $("#custom-bg-skills");
+		const skillsContainer = document.getElementById("custom-bg-skills");
 		allSkills.forEach(skill => {
 			const isSelected = this._customBackgroundData.skills.includes(skill);
-			const $cb = $(`
+			const cb = e_({outer: `
 				<label class="charsheet__builder-skill-checkbox">
 					<input type="checkbox" data-skill="${skill}" ${isSelected ? "checked" : ""}>
 					<span>${skill}</span>
 				</label>
-			`);
-			$cb.find("input").on("change", () => this._updateCustomBgSkills());
-			$skillsContainer.append($cb);
+			`});
+			cb.querySelector("input").addEventListener("change", () => this._updateCustomBgSkills());
+			skillsContainer.append(cb);
 		});
 
 		// Populate tool dropdown
-		const $toolSelect = $("#custom-bg-tool1");
+		const toolSelectEl = document.getElementById("custom-bg-tool1");
 		allTools.forEach(tool => {
-			$toolSelect.append(`<option value="${tool}" ${this._customBackgroundData.tools[0] === tool ? "selected" : ""}>${tool}</option>`);
+			toolSelectEl.append(e_({outer: `<option value="${tool}" ${this._customBackgroundData.tools[0] === tool ? "selected" : ""}>${tool}</option>`}));
 		});
 
 		// Populate language dropdown with grouped options
@@ -6583,74 +6569,74 @@ class CharacterSheetBuilder {
 			homebrew: [],
 		};
 
-		const $langSelect = $("#custom-bg-lang1");
+		const langSelectEl = document.getElementById("custom-bg-lang1");
 		if (langOptions.homebrew.length) {
-			$langSelect.append(`<optgroup label="──── Homebrew Languages ────">`);
+			langSelectEl.append(e_({outer: `<optgroup label="──── Homebrew Languages ────">`}));
 			langOptions.homebrew.forEach(lang => {
-				$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+				langSelectEl.append(e_({outer: `<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`}));
 			});
-			$langSelect.append(`</optgroup>`);
+			langSelectEl.append(e_({outer: `</optgroup>`}));
 		}
-		$langSelect.append(`<optgroup label="──── Standard Languages ────">`);
+		langSelectEl.append(e_({outer: `<optgroup label="──── Standard Languages ────">`}));
 		langOptions.standard.forEach(lang => {
-			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+			langSelectEl.append(e_({outer: `<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`}));
 		});
-		$langSelect.append(`</optgroup>`);
-		$langSelect.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
+		langSelectEl.append(e_({outer: `</optgroup>`}));
+		langSelectEl.append(e_({outer: `<optgroup label="──── Exotic/Rare Languages ────">`}));
 		langOptions.exotic.forEach(lang => {
-			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+			langSelectEl.append(e_({outer: `<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`}));
 		});
-		$langSelect.append(`</optgroup>`);
-		$langSelect.append(`<optgroup label="──── Secret Languages ────">`);
+		langSelectEl.append(e_({outer: `</optgroup>`}));
+		langSelectEl.append(e_({outer: `<optgroup label="──── Secret Languages ────">`}));
 		langOptions.secret.forEach(lang => {
-			$langSelect.append(`<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`);
+			langSelectEl.append(e_({outer: `<option value="${lang}" ${this._customBackgroundData.languages[0] === lang ? "selected" : ""}>${lang}</option>`}));
 		});
-		$langSelect.append(`</optgroup>`);
+		langSelectEl.append(e_({outer: `</optgroup>`}));
 
 		// Populate extra dropdown (combined tools and languages)
-		const $extraToolsGroup = $("#custom-bg-extra-tools");
-		const $extraLangsGroup = $("#custom-bg-extra-langs");
+		const extraToolsGroup = document.getElementById("custom-bg-extra-tools");
+		const extraLangsGroup = document.getElementById("custom-bg-extra-langs");
 		allTools.forEach(tool => {
-			$extraToolsGroup.append(`<option value="tool:${tool}">${tool}</option>`);
+			extraToolsGroup.append(e_({outer: `<option value="tool:${tool}">${tool}</option>`}));
 		});
 		// Add grouped languages to extra dropdown
 		if (langOptions.homebrew.length) {
-			$extraLangsGroup.append(`<optgroup label="Homebrew">`);
+			extraLangsGroup.append(e_({outer: `<optgroup label="Homebrew">`}));
 			langOptions.homebrew.forEach(lang => {
-				$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+				extraLangsGroup.append(e_({outer: `<option value="lang:${lang}">${lang}</option>`}));
 			});
-			$extraLangsGroup.append(`</optgroup>`);
+			extraLangsGroup.append(e_({outer: `</optgroup>`}));
 		}
-		$extraLangsGroup.append(`<optgroup label="Standard">`);
+		extraLangsGroup.append(e_({outer: `<optgroup label="Standard">`}));
 		langOptions.standard.forEach(lang => {
-			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+			extraLangsGroup.append(e_({outer: `<option value="lang:${lang}">${lang}</option>`}));
 		});
-		$extraLangsGroup.append(`</optgroup>`);
-		$extraLangsGroup.append(`<optgroup label="Exotic/Rare">`);
+		extraLangsGroup.append(e_({outer: `</optgroup>`}));
+		extraLangsGroup.append(e_({outer: `<optgroup label="Exotic/Rare">`}));
 		langOptions.exotic.forEach(lang => {
-			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+			extraLangsGroup.append(e_({outer: `<option value="lang:${lang}">${lang}</option>`}));
 		});
-		$extraLangsGroup.append(`</optgroup>`);
-		$extraLangsGroup.append(`<optgroup label="Secret">`);
+		extraLangsGroup.append(e_({outer: `</optgroup>`}));
+		extraLangsGroup.append(e_({outer: `<optgroup label="Secret">`}));
 		langOptions.secret.forEach(lang => {
-			$extraLangsGroup.append(`<option value="lang:${lang}">${lang}</option>`);
+			extraLangsGroup.append(e_({outer: `<option value="lang:${lang}">${lang}</option>`}));
 		});
-		$extraLangsGroup.append(`</optgroup>`);
+		extraLangsGroup.append(e_({outer: `</optgroup>`}));
 
 		// Event handlers
-		$("#custom-bg-name").on("input", (e) => {
+		document.getElementById("custom-bg-name").addEventListener("input", (e) => {
 			this._customBackgroundData.name = e.target.value || "Custom Background";
 		});
 
-		$("#custom-bg-tool1").on("change", (e) => {
+		document.getElementById("custom-bg-tool1").addEventListener("change", (e) => {
 			this._customBackgroundData.tools[0] = e.target.value;
 		});
 
-		$("#custom-bg-lang1").on("change", (e) => {
+		document.getElementById("custom-bg-lang1").addEventListener("change", (e) => {
 			this._customBackgroundData.languages[0] = e.target.value;
 		});
 
-		$("#custom-bg-extra").on("change", (e) => {
+		document.getElementById("custom-bg-extra").addEventListener("change", (e) => {
 			const val = e.target.value;
 			if (val.startsWith("tool:")) {
 				this._customBackgroundData.tools[1] = val.replace("tool:", "");
@@ -6664,23 +6650,23 @@ class CharacterSheetBuilder {
 			}
 		});
 
-		$("#custom-bg-equipment").on("input", (e) => {
+		document.getElementById("custom-bg-equipment").addEventListener("input", (e) => {
 			this._customBackgroundData.equipment = e.target.value;
 		});
 
-		$("#custom-bg-feature").on("input", (e) => {
+		document.getElementById("custom-bg-feature").addEventListener("input", (e) => {
 			this._customBackgroundData.feature = e.target.value;
 		});
 
-		$("#custom-bg-cancel").on("click", () => {
+		document.getElementById("custom-bg-cancel").addEventListener("click", () => {
 			if (this._selectedBackground) {
-				this._renderBackgroundPreview($preview, this._selectedBackground);
+				this._renderBackgroundPreview(preview, this._selectedBackground);
 			} else {
-				$preview.html(`<div class="charsheet__builder-preview-placeholder">Select a background to see details</div>`);
+				preview.innerHTML = `<div class="charsheet__builder-preview-placeholder">Select a background to see details</div>`;
 			}
 		});
 
-		$("#custom-bg-save").on("click", () => {
+		document.getElementById("custom-bg-save").addEventListener("click", () => {
 			// Validate
 			if (this._customBackgroundData.skills.length !== 2) {
 				JqueryUtil.doToast({type: "warning", content: "Please select exactly 2 skill proficiencies."});
@@ -6692,55 +6678,55 @@ class CharacterSheetBuilder {
 			this._selectedBackground = this._customBackground;
 
 			// Re-render the list to show the custom background
-			const $list = $("#builder-bg-list");
-			const $search = $("#builder-bg-search");
-			this._renderBackgroundStep_refreshList($list, $search.val());
+			const list = document.getElementById("builder-bg-list");
+			const searchEl = document.getElementById("builder-bg-search");
+			this._renderBackgroundStep_refreshList(list, searchEl.value);
 
 			// Show the preview
-			this._renderBackgroundPreview($preview, this._customBackground);
+			this._renderBackgroundPreview(preview, this._customBackground);
 		});
 	}
 
 	_updateCustomBgSkills () {
 		const selected = [];
-		$("#custom-bg-skills input:checked").each((i, el) => {
-			selected.push($(el).data("skill"));
+		[...document.querySelectorAll("#custom-bg-skills input:checked")].forEach((el) => {
+			selected.push(el.dataset.skill);
 		});
 
 		// Limit to 2 skills
 		if (selected.length > 2) {
 			// Uncheck the last one
-			const $checkboxes = $("#custom-bg-skills input:checked");
-			$checkboxes.last().prop("checked", false);
+			const allChecked = [...document.querySelectorAll("#custom-bg-skills input:checked")];
+			if (allChecked.length > 2) allChecked.at(-1).checked = false;
 			selected.pop();
 		}
 
 		this._customBackgroundData.skills = selected;
 	}
 
-	_renderBackgroundStep_refreshList ($list, filter = "") {
+	_renderBackgroundStep_refreshList (list, filter = "") {
 		const backgrounds = this._page.filterByAllowedSources(this._page.getBackgrounds());
-		$list.empty();
+		list.innerHTML = "";
 		const filterLower = (filter || "").toLowerCase();
 
 		// Add custom background at top if exists
 		if (this._customBackground) {
 			const isSelected = this._selectedBackground === this._customBackground;
-			const $customItem = $(`
+			const customItem = e_({outer: `
 				<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
 					<span class="charsheet__builder-list-item-name">${this._customBackground.name}</span>
 					<span class="charsheet__builder-list-item-source">Custom</span>
 				</div>
-			`);
-			$customItem.on("click", () => {
-				$list.find(".charsheet__builder-list-item").removeClass("active");
-				$customItem.addClass("active");
+			`});
+			customItem.addEventListener("click", () => {
+				[...list.querySelectorAll(".charsheet__builder-list-item")].forEach(_el => _el.classList.remove("active"));
+				customItem.classList.add("active");
 				this._selectedBackground = this._customBackground;
 				this._selectedToolProficiencies = [];
 				this._selectedLanguages = [];
-				this._renderBackgroundPreview($("#builder-bg-preview"), this._customBackground);
+				this._renderBackgroundPreview(document.getElementById("builder-bg-preview"), this._customBackground);
 			});
-			$list.append($customItem);
+			list.append(customItem);
 		}
 
 		backgrounds
@@ -6748,23 +6734,23 @@ class CharacterSheetBuilder {
 			.sort((a, b) => a.name.localeCompare(b.name))
 			.forEach(bg => {
 				const isSelected = this._selectedBackground?.name === bg.name && !this._selectedBackground?._isCustom;
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="charsheet__builder-list-item ${isSelected ? "active" : ""}">
 						<span class="charsheet__builder-list-item-name">${bg.name}</span>
 						<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(bg.source)}</span>
 					</div>
-				`);
+				`});
 
-				$item.on("click", () => {
-					$list.find(".charsheet__builder-list-item").removeClass("active");
-					$item.addClass("active");
+				item.addEventListener("click", () => {
+					[...list.querySelectorAll(".charsheet__builder-list-item")].forEach(_el => _el.classList.remove("active"));
+					item.classList.add("active");
 					this._selectedBackground = bg;
 					this._selectedToolProficiencies = [];
 					this._selectedLanguages = [];
-					this._renderBackgroundPreview($("#builder-bg-preview"), bg);
+					this._renderBackgroundPreview(document.getElementById("builder-bg-preview"), bg);
 				});
 
-				$list.append($item);
+				list.append(item);
 			});
 	}
 
@@ -6822,15 +6808,15 @@ class CharacterSheetBuilder {
 		};
 	}
 
-	_renderBackgroundPreview ($preview, bg) {
-		$preview.empty();
+	_renderBackgroundPreview (preview, bg) {
+		preview.innerHTML = "";
 
-		const $content = $(`
+		const content = e_({outer: `
 			<div>
 				<h4>${bg.name}</h4>
 				<p class="ve-muted">${Parser.sourceJsonToFull(bg.source)}</p>
 			</div>
-		`);
+		`});
 
 		// Edition mixing detection
 		const raceIs2024 = this._raceUses2024ASI();
@@ -6841,7 +6827,7 @@ class CharacterSheetBuilder {
 		if (this._selectedRace) {
 			if (!raceIs2024 && bgIs2024) {
 				// 2014 race + 2024 background: warn that ASI from background shouldn't apply
-				$content.append(`
+				content.append(`
 					<div class="alert alert-warning ve-small mb-2">
 						<strong>Edition Mixing:</strong> You've selected a 2014 race that provides its own ability score bonuses. 
 						The ASI options from this 2024 background will be ignored. Consider using a 2014 background instead.
@@ -6849,7 +6835,7 @@ class CharacterSheetBuilder {
 				`);
 			} else if (raceIs2024 && !bgHasASI && !bgIs2024) {
 				// 2024 species + 2014 background (no ASI): offer free ASI choice
-				$content.append(`
+				content.append(`
 					<div class="alert alert-info ve-small mb-2">
 						<strong>Note:</strong> You've selected a 2024 species that expects ability score bonuses from your background. 
 						Since this is a 2014 background without ASI, you can choose +2 to one ability and +1 to another below.
@@ -6864,8 +6850,8 @@ class CharacterSheetBuilder {
 		const showFreeASIChoice = (raceIs2024 && !bgHasASI);
 
 		if (showBackgroundASI || showFreeASIChoice) {
-			const $asiSection = $(`<div class="charsheet__section mb-2"></div>`);
-			$asiSection.append(`<p><strong>Ability Score Increases:</strong></p>`);
+			const asiSection = e_({outer: `<div class="charsheet__section mb-2"></div>`});
+			asiSection.append(e_({outer: `<p><strong>Ability Score Increases:</strong></p>`}));
 
 			// Initialize selected ability bonuses if not set
 			if (!this._selectedAbilityBonuses) {
@@ -6874,13 +6860,13 @@ class CharacterSheetBuilder {
 
 			if (showBackgroundASI && bgHasASI) {
 				// Use the background's ASI options
-				this._renderBackgroundASIChoices($asiSection, bg.ability[0]);
+				this._renderBackgroundASIChoices(asiSection, bg.ability[0]);
 			} else if (showFreeASIChoice) {
 				// Free choice: +2 to one, +1 to another from any ability
-				this._renderFreeASIChoices($asiSection);
+				this._renderFreeASIChoices(asiSection);
 			}
 
-			$content.append($asiSection);
+			content.append(asiSection);
 		}
 
 		// Skills - use the built-in summary renderer
@@ -6891,42 +6877,42 @@ class CharacterSheetBuilder {
 				isShort: false,
 			});
 			if (skillSummary) {
-				$content.append(`<p><strong>Skills:</strong> ${Renderer.get().render(skillSummary)}</p>`);
+				content.append(e_({outer: `<p><strong>Skills:</strong> ${Renderer.get().render(skillSummary)}</p>`}));
 			}
 		}
 
 		// Tools - show fixed tools and render choice UI if needed
-		this._renderBackgroundToolProficiencies($content, bg);
+		this._renderBackgroundToolProficiencies(content, bg);
 
 		// Languages - show fixed languages and render choice UI if needed
-		this._renderBackgroundLanguages($content, bg);
+		this._renderBackgroundLanguages(content, bg);
 
 		// Equipment
 		if (bg.startingEquipment) {
-			$content.append(`<p><strong>Equipment:</strong> ${Renderer.get().render({entries: bg.startingEquipment})}</p>`);
+			content.append(e_({outer: `<p><strong>Equipment:</strong> ${Renderer.get().render({entries: bg.startingEquipment})}</p>`}));
 		}
 
 		// Features
 		if (bg.entries) {
-			const $features = $(`<div class="mt-2"></div>`);
+			const features = e_({outer: `<div class="mt-2"></div>`});
 			bg.entries.forEach(entry => {
 				if (typeof entry === "object" && entry.name) {
-					$features.append(`<p><strong>${entry.name}.</strong> ${Renderer.get().render({entries: entry.entries || []})}</p>`);
+					features.append(e_({outer: `<p><strong>${entry.name}.</strong> ${Renderer.get().render({entries: entry.entries || []})}</p>`}));
 				}
 			});
-			$content.append($features);
+			content.append(features);
 		}
 
-		$preview.append($content);
+		preview.append(content);
 	}
 
 	/**
 	 * Render tool proficiencies section with choice UI when needed
 	 */
-	_renderBackgroundToolProficiencies ($content, bg) {
+	_renderBackgroundToolProficiencies (content, bg) {
 		if (!bg.toolProficiencies?.length) return;
 
-		const $toolSection = $(`<div class="charsheet__builder-tool-profs mb-2"></div>`);
+		const toolSection = e_({outer: `<div class="charsheet__builder-tool-profs mb-2"></div>`});
 
 		// Collect fixed tools and choice options
 		const fixedTools = [];
@@ -6956,33 +6942,33 @@ class CharacterSheetBuilder {
 
 		// Show fixed tools
 		if (fixedTools.length) {
-			$toolSection.append(`<p><strong>Tools:</strong> ${fixedTools.map(t => t.toTitleCase()).join(", ")}</p>`);
+			toolSection.append(e_({outer: `<p><strong>Tools:</strong> ${fixedTools.map(t => t.toTitleCase()).join(", ")}</p>`}));
 		}
 
 		// Render choice dropdowns for "choose from" options
 		choiceOptions.forEach((choice, choiceIdx) => {
-			const $choiceSection = $(`<div class="charsheet__builder-tool-choice mt-1"></div>`);
-			$choiceSection.append(`<p class="mb-1"><strong>Choose ${choice.count} tool${choice.count > 1 ? "s" : ""}:</strong></p>`);
+			const choiceSection = e_({outer: `<div class="charsheet__builder-tool-choice mt-1"></div>`});
+			choiceSection.append(e_({outer: `<p class="mb-1"><strong>Choose ${choice.count} tool${choice.count > 1 ? "s" : ""}:</strong></p>`}));
 
 			for (let i = 0; i < choice.count; i++) {
 				const selectId = `bg-tool-choice-${choiceIdx}-${i}`;
-				const $select = $(`
+				const selectEl = e_({outer: `
 					<select class="form-control form-control--minimal mb-1" id="${selectId}">
 						<option value="">-- Select Tool --</option>
 					</select>
-				`);
+				`});
 
 				choice.from.forEach(tool => {
-					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+					selectEl.append(e_({outer: `<option value="${tool}">${tool.toTitleCase()}</option>`}));
 				});
 
 				// Pre-select if already chosen
 				const existingChoice = this._selectedToolProficiencies.find(t => t.choiceIdx === choiceIdx && t.selectIdx === i);
 				if (existingChoice) {
-					$select.val(existingChoice.tool);
+					selectEl.value = existingChoice.tool;
 				}
 
-				$select.on("change", (e) => {
+				selectEl.addEventListener("change", (e) => {
 					// Remove old choice for this select
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
 						t => !(t.choiceIdx === choiceIdx && t.selectIdx === i),
@@ -6997,35 +6983,35 @@ class CharacterSheetBuilder {
 					}
 				});
 
-				$choiceSection.append($select);
+				choiceSection.append(selectEl);
 			}
-			$toolSection.append($choiceSection);
+			toolSection.append(choiceSection);
 		});
 
 		// Render "any tool" selection
 		if (anyToolCount > 0) {
-			const $anySection = $(`<div class="charsheet__builder-tool-any mt-1"></div>`);
-			$anySection.append(`<p class="mb-1"><strong>Choose ${anyToolCount} tool${anyToolCount > 1 ? "s" : ""} (any):</strong></p>`);
+			const anySection = e_({outer: `<div class="charsheet__builder-tool-any mt-1"></div>`});
+			anySection.append(e_({outer: `<p class="mb-1"><strong>Choose ${anyToolCount} tool${anyToolCount > 1 ? "s" : ""} (any):</strong></p>`}));
 
 			const allTools = Renderer.generic.FEATURE__TOOLS_ALL;
 			for (let i = 0; i < anyToolCount; i++) {
 				const selectId = `bg-tool-any-${i}`;
-				const $select = $(`
+				const selectEl = e_({outer: `
 					<select class="form-control form-control--minimal mb-1" id="${selectId}">
 						<option value="">-- Select Tool --</option>
 					</select>
-				`);
+				`});
 
 				allTools.forEach(tool => {
-					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+					selectEl.append(e_({outer: `<option value="${tool}">${tool.toTitleCase()}</option>`}));
 				});
 
 				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && !t.isArtisan);
 				if (existingChoice) {
-					$select.val(existingChoice.tool);
+					selectEl.value = existingChoice.tool;
 				}
 
-				$select.on("change", (e) => {
+				selectEl.addEventListener("change", (e) => {
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
 						t => !(t.anyIdx === i && !t.isArtisan),
 					);
@@ -7038,34 +7024,34 @@ class CharacterSheetBuilder {
 					}
 				});
 
-				$anySection.append($select);
+				anySection.append(selectEl);
 			}
-			$toolSection.append($anySection);
+			toolSection.append(anySection);
 		}
 
 		// When both artisan and musical instrument are present with count=1 each,
 		// render a combined "choose one OR the other" picker (e.g. TGTT backgrounds,
 		// Mulmaster Aristocrat) instead of two independent dropdowns
 		if (anyArtisanCount === 1 && anyMusicalInstrumentCount === 1) {
-			const $orSection = $(`<div class="charsheet__builder-tool-or-choice mt-1"></div>`);
-			$orSection.append(`<p class="mb-1"><strong>Choose one artisan's tool or musical instrument:</strong></p>`);
+			const orSection = e_({outer: `<div class="charsheet__builder-tool-or-choice mt-1"></div>`});
+			orSection.append(e_({outer: `<p class="mb-1"><strong>Choose one artisan's tool or musical instrument:</strong></p>`}));
 
 			const artisanTools = Renderer.generic.FEATURE__TOOLS_ARTISANS;
 			const musicalInstruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS;
 
-			const $categorySelect = $(`
+			const categorySelect = e_({outer: `
 				<select class="form-control form-control--minimal mb-1" id="bg-tool-or-category">
 					<option value="">-- Select Category --</option>
 					<option value="artisan">Artisan's Tools</option>
 					<option value="instrument">Musical Instrument</option>
 				</select>
-			`);
+			`});
 
-			const $toolSelect = $(`
+			const toolSelectEl = e_({outer: `
 				<select class="form-control form-control--minimal mb-1" id="bg-tool-or-specific" style="display: none;">
 					<option value="">-- Select Tool --</option>
 				</select>
-			`);
+			`});
 
 			// Pre-select if already chosen
 			const existingArtisan = this._selectedToolProficiencies.find(t => t.isArtisanOrInstrument && t.isArtisan);
@@ -7073,34 +7059,34 @@ class CharacterSheetBuilder {
 			const existingOrChoice = existingArtisan || existingInstrument;
 
 			const populateToolSelect = (category) => {
-				$toolSelect.empty().append(`<option value="">-- Select ${category === "artisan" ? "Artisan's Tool" : "Musical Instrument"} --</option>`);
+				toolSelectEl.innerHTML = "".append(e_({outer: `<option value="">-- Select ${category === "artisan" ? "Artisan's Tool" : "Musical Instrument"} --</option>`}));
 				const tools = category === "artisan" ? artisanTools : musicalInstruments;
 				tools.forEach(tool => {
-					$toolSelect.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+					toolSelectEl.append(e_({outer: `<option value="${tool}">${tool.toTitleCase()}</option>`}));
 				});
-				$toolSelect.show();
+				toolSelectEl.style.display = "";
 			};
 
 			if (existingOrChoice) {
 				const cat = existingArtisan ? "artisan" : "instrument";
-				$categorySelect.val(cat);
+				categorySelect.value = cat;
 				populateToolSelect(cat);
-				$toolSelect.val(existingOrChoice.tool);
+				toolSelectEl.value = existingOrChoice.tool;
 			}
 
-			$categorySelect.on("change", (e) => {
+			categorySelect.addEventListener("change", (e) => {
 				// Clear previous or-choice
 				this._selectedToolProficiencies = this._selectedToolProficiencies.filter(t => !t.isArtisanOrInstrument);
 				if (e.target.value) {
 					populateToolSelect(e.target.value);
 				} else {
-					$toolSelect.hide();
+					toolSelectEl.style.display = "none";
 				}
 			});
 
-			$toolSelect.on("change", (e) => {
+			toolSelectEl.addEventListener("change", (e) => {
 				this._selectedToolProficiencies = this._selectedToolProficiencies.filter(t => !t.isArtisanOrInstrument);
-				const category = $categorySelect.val();
+				const category = categorySelect.value;
 				if (e.target.value) {
 					this._selectedToolProficiencies.push({
 						anyIdx: 0,
@@ -7112,8 +7098,8 @@ class CharacterSheetBuilder {
 				}
 			});
 
-			$orSection.append($categorySelect, $toolSelect);
-			$toolSection.append($orSection);
+			orSection.append(categorySelect, toolSelectEl);
+			toolSection.append(orSection);
 
 			// Consume both counts so they aren't rendered independently below
 			anyArtisanCount = 0;
@@ -7122,28 +7108,28 @@ class CharacterSheetBuilder {
 
 		// Render "any artisan's tool" selection
 		if (anyArtisanCount > 0) {
-			const $artisanSection = $(`<div class="charsheet__builder-tool-artisan mt-1"></div>`);
-			$artisanSection.append(`<p class="mb-1"><strong>Choose ${anyArtisanCount} artisan's tool${anyArtisanCount > 1 ? "s" : ""}:</strong></p>`);
+			const artisanSection = e_({outer: `<div class="charsheet__builder-tool-artisan mt-1"></div>`});
+			artisanSection.append(e_({outer: `<p class="mb-1"><strong>Choose ${anyArtisanCount} artisan's tool${anyArtisanCount > 1 ? "s" : ""}:</strong></p>`}));
 
 			const artisanTools = Renderer.generic.FEATURE__TOOLS_ARTISANS;
 			for (let i = 0; i < anyArtisanCount; i++) {
 				const selectId = `bg-tool-artisan-${i}`;
-				const $select = $(`
+				const selectEl = e_({outer: `
 					<select class="form-control form-control--minimal mb-1" id="${selectId}">
 						<option value="">-- Select Artisan's Tool --</option>
 					</select>
-				`);
+				`});
 
 				artisanTools.forEach(tool => {
-					$select.append(`<option value="${tool}">${tool.toTitleCase()}</option>`);
+					selectEl.append(e_({outer: `<option value="${tool}">${tool.toTitleCase()}</option>`}));
 				});
 
 				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isArtisan && !t.isArtisanOrInstrument);
 				if (existingChoice) {
-					$select.val(existingChoice.tool);
+					selectEl.value = existingChoice.tool;
 				}
 
-				$select.on("change", (e) => {
+				selectEl.addEventListener("change", (e) => {
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
 						t => !(t.anyIdx === i && t.isArtisan && !t.isArtisanOrInstrument),
 					);
@@ -7156,35 +7142,35 @@ class CharacterSheetBuilder {
 					}
 				});
 
-				$artisanSection.append($select);
+				artisanSection.append(selectEl);
 			}
-			$toolSection.append($artisanSection);
+			toolSection.append(artisanSection);
 		}
 
 		// Render "any musical instrument" selection
 		if (anyMusicalInstrumentCount > 0) {
-			const $instrumentSection = $(`<div class="charsheet__builder-tool-instrument mt-1"></div>`);
-			$instrumentSection.append(`<p class="mb-1"><strong>Choose ${anyMusicalInstrumentCount} musical instrument${anyMusicalInstrumentCount > 1 ? "s" : ""}:</strong></p>`);
+			const instrumentSection = e_({outer: `<div class="charsheet__builder-tool-instrument mt-1"></div>`});
+			instrumentSection.append(e_({outer: `<p class="mb-1"><strong>Choose ${anyMusicalInstrumentCount} musical instrument${anyMusicalInstrumentCount > 1 ? "s" : ""}:</strong></p>`}));
 
 			const musicalInstruments = Renderer.generic.FEATURE__TOOLS_MUSICAL_INSTRUMENTS;
 			for (let i = 0; i < anyMusicalInstrumentCount; i++) {
 				const selectId = `bg-tool-instrument-${i}`;
-				const $select = $(`
+				const selectEl = e_({outer: `
 					<select class="form-control form-control--minimal mb-1" id="${selectId}">
 						<option value="">-- Select Musical Instrument --</option>
 					</select>
-				`);
+				`});
 
 				musicalInstruments.forEach(instrument => {
-					$select.append(`<option value="${instrument}">${instrument.toTitleCase()}</option>`);
+					selectEl.append(e_({outer: `<option value="${instrument}">${instrument.toTitleCase()}</option>`}));
 				});
 
 				const existingChoice = this._selectedToolProficiencies.find(t => t.anyIdx === i && t.isMusicalInstrument && !t.isArtisanOrInstrument);
 				if (existingChoice) {
-					$select.val(existingChoice.tool);
+					selectEl.value = existingChoice.tool;
 				}
 
-				$select.on("change", (e) => {
+				selectEl.addEventListener("change", (e) => {
 					this._selectedToolProficiencies = this._selectedToolProficiencies.filter(
 						t => !(t.anyIdx === i && t.isMusicalInstrument && !t.isArtisanOrInstrument),
 					);
@@ -7197,23 +7183,23 @@ class CharacterSheetBuilder {
 					}
 				});
 
-				$instrumentSection.append($select);
+				instrumentSection.append(selectEl);
 			}
-			$toolSection.append($instrumentSection);
+			toolSection.append(instrumentSection);
 		}
 
 		if (fixedTools.length || choiceOptions.length || anyToolCount || anyArtisanCount || anyMusicalInstrumentCount) {
-			$content.append($toolSection);
+			content.append(toolSection);
 		}
 	}
 
 	/**
 	 * Render language proficiencies section with choice UI when needed
 	 */
-	_renderBackgroundLanguages ($content, bg) {
+	_renderBackgroundLanguages (content, bg) {
 		if (!bg.languageProficiencies?.length) return;
 
-		const $langSection = $(`<div class="charsheet__builder-lang-profs mb-2"></div>`);
+		const langSection = e_({outer: `<div class="charsheet__builder-lang-profs mb-2"></div>`});
 
 		// Collect fixed languages and choice options
 		const fixedLangs = [];
@@ -7234,13 +7220,13 @@ class CharacterSheetBuilder {
 
 		// Show fixed languages
 		if (fixedLangs.length) {
-			$langSection.append(`<p><strong>Languages:</strong> ${fixedLangs.map(l => l.toTitleCase()).join(", ")}</p>`);
+			langSection.append(e_({outer: `<p><strong>Languages:</strong> ${fixedLangs.map(l => l.toTitleCase()).join(", ")}</p>`}));
 		}
 
 		// Render language choice dropdowns
 		const totalLangChoices = anyStandardCount + anyCount;
 		if (totalLangChoices > 0) {
-			const $choiceSection = $(`<div class="charsheet__builder-lang-choice mt-1"></div>`);
+			const choiceSection = e_({outer: `<div class="charsheet__builder-lang-choice mt-1"></div>`});
 
 			// Check setting for allowing exotic languages by default
 			const settings = this._state?.getSettings?.() || {};
@@ -7250,7 +7236,7 @@ class CharacterSheetBuilder {
 			// If only anyStandardCount, check setting - if allowExoticByDefault, still allow all
 			const allowAllLanguages = anyCount > 0 || allowExoticByDefault;
 			const choiceLabel = anyCount > 0 ? "any language" : (allowExoticByDefault ? "any language" : "standard language");
-			$choiceSection.append(`<p class="mb-1"><strong>Choose ${totalLangChoices} ${choiceLabel}${totalLangChoices > 1 ? "s" : ""}:</strong></p>`);
+			choiceSection.append(e_({outer: `<p class="mb-1"><strong>Choose ${totalLangChoices} ${choiceLabel}${totalLangChoices > 1 ? "s" : ""}:</strong></p>`}));
 
 			for (let i = 0; i < totalLangChoices; i++) {
 				// Get grouped languages including homebrew
@@ -7262,47 +7248,47 @@ class CharacterSheetBuilder {
 				};
 
 				const selectId = `bg-lang-choice-${i}`;
-				const $select = $(`
+				const selectEl = e_({outer: `
 					<select class="form-control form-control--minimal mb-1" id="${selectId}">
 						<option value="">-- Select Language --</option>
 					</select>
-				`);
+				`});
 
 				// Add language options grouped by type - homebrew first if available
 				if (langOptions.homebrew.length) {
-					$select.append(`<optgroup label="──── Homebrew Languages ────">`);
+					selectEl.append(e_({outer: `<optgroup label="──── Homebrew Languages ────">`}));
 					langOptions.homebrew.forEach(lang => {
-						$select.append(`<option value="${lang}">${lang}</option>`);
+						selectEl.append(e_({outer: `<option value="${lang}">${lang}</option>`}));
 					});
-					$select.append(`</optgroup>`);
+					selectEl.append(e_({outer: `</optgroup>`}));
 				}
 
-				$select.append(`<optgroup label="──── Standard Languages ────">`);
+				selectEl.append(e_({outer: `<optgroup label="──── Standard Languages ────">`}));
 				langOptions.standard.forEach(lang => {
-					$select.append(`<option value="${lang}">${lang}</option>`);
+					selectEl.append(e_({outer: `<option value="${lang}">${lang}</option>`}));
 				});
-				$select.append(`</optgroup>`);
+				selectEl.append(e_({outer: `</optgroup>`}));
 
 				if (allowAllLanguages) {
-					$select.append(`<optgroup label="──── Exotic/Rare Languages ────">`);
+					selectEl.append(e_({outer: `<optgroup label="──── Exotic/Rare Languages ────">`}));
 					langOptions.exotic.forEach(lang => {
-						$select.append(`<option value="${lang}">${lang}</option>`);
+						selectEl.append(e_({outer: `<option value="${lang}">${lang}</option>`}));
 					});
-					$select.append(`</optgroup>`);
+					selectEl.append(e_({outer: `</optgroup>`}));
 
-					$select.append(`<optgroup label="──── Secret Languages ────">`);
+					selectEl.append(e_({outer: `<optgroup label="──── Secret Languages ────">`}));
 					langOptions.secret.forEach(lang => {
-						$select.append(`<option value="${lang}">${lang}</option>`);
+						selectEl.append(e_({outer: `<option value="${lang}">${lang}</option>`}));
 					});
-					$select.append(`</optgroup>`);
+					selectEl.append(e_({outer: `</optgroup>`}));
 				}
 
 				const existingChoice = this._selectedLanguages.find(l => l.selectIdx === i);
 				if (existingChoice) {
-					$select.val(existingChoice.language);
+					selectEl.value = existingChoice.language;
 				}
 
-				$select.on("change", (e) => {
+				selectEl.addEventListener("change", (e) => {
 					this._selectedLanguages = this._selectedLanguages.filter(l => l.selectIdx !== i);
 					if (e.target.value) {
 						this._selectedLanguages.push({
@@ -7311,29 +7297,29 @@ class CharacterSheetBuilder {
 						});
 					}
 					// Update all dropdowns to disable already-selected languages
-					this._updateLanguageDropdownOptions($choiceSection);
+					this._updateLanguageDropdownOptions(choiceSection);
 				});
 
-				$choiceSection.append($select);
+				choiceSection.append(selectEl);
 			}
-			$langSection.append($choiceSection);
+			langSection.append(choiceSection);
 		}
 
 		if (fixedLangs.length || totalLangChoices > 0) {
-			$content.append($langSection);
+			content.append(langSection);
 		}
 
 		// Initial update of dropdown options
 		if (totalLangChoices > 0) {
-			this._updateLanguageDropdownOptions($langSection.find(".charsheet__builder-lang-choice"));
+			this._updateLanguageDropdownOptions(langSection.querySelector(".charsheet__builder-lang-choice"));
 		}
 	}
 
 	/**
 	 * Update language dropdown options to disable already-selected languages
-	 * @param {jQuery} $container - The container with language select elements
+	 * @param {HTMLElement} container - The container with language select elements
 	 */
-	_updateLanguageDropdownOptions ($container) {
+	_updateLanguageDropdownOptions (container) {
 		// Get all currently selected languages (from this background section and elsewhere)
 		const selectedBgLangs = this._selectedLanguages.map(l => l.language);
 		const selectedClassLangs = this._selectedClassFeatureLanguages || [];
@@ -7345,23 +7331,21 @@ class CharacterSheetBuilder {
 			.map(l => l.toLowerCase());
 
 		// Update each select element
-		$container.find("select").each((idx, select) => {
-			const $select = $(select);
-			const currentVal = $select.val();
+		[...container.querySelectorAll("select")].forEach((selectEl) => {
+			const currentVal = selectEl.value;
 
-			$select.find("option").each((_, opt) => {
-				const $opt = $(opt);
-				const val = $opt.val();
+			[...selectEl.querySelectorAll("option")].forEach((opt) => {
+				const val = opt.value;
 				if (!val) return; // Skip placeholder option
 
 				// Disable if selected elsewhere, but not if it's the current selection
 				const isSelectedElsewhere = allSelectedLangs.includes(val.toLowerCase()) && val !== currentVal;
-				$opt.prop("disabled", isSelectedElsewhere);
+				opt.disabled = isSelectedElsewhere;
 			});
 		});
 	}
 
-	_renderBackgroundASIChoices ($container, abilityChoice) {
+	_renderBackgroundASIChoices (container, abilityChoice) {
 		if (!abilityChoice) return;
 
 		if (abilityChoice.choose) {
@@ -7372,12 +7356,12 @@ class CharacterSheetBuilder {
 			// Handle weighted format (+2 to one, +1 to another)
 			if (choose.weighted) {
 				const weights = choose.weighted.weights || [2, 1];
-				this._renderWeightedASIChoices($container, availableAbilities, weights);
+				this._renderWeightedASIChoices(container, availableAbilities, weights);
 			} else if (choose.count) {
 				// Multiple choices of same amount (e.g., +1/+1/+1)
 				const amount = choose.amount || 1;
 				const count = choose.count;
-				this._renderCountASIChoices($container, availableAbilities, count, amount);
+				this._renderCountASIChoices(container, availableAbilities, count, amount);
 			}
 		} else {
 			// Fixed ability bonuses
@@ -7386,7 +7370,7 @@ class CharacterSheetBuilder {
 				.map(([ab, bonus]) => `${Parser.attAbvToFull(ab)} +${bonus}`)
 				.join(", ");
 			if (bonuses) {
-				$container.append(`<p class="ve-muted">${bonuses}</p>`);
+				container.append(e_({outer: `<p class="ve-muted">${bonuses}</p>`}));
 				// Store fixed bonuses
 				Object.entries(abilityChoice)
 					.filter(([k, v]) => typeof v === "number")
@@ -7398,95 +7382,93 @@ class CharacterSheetBuilder {
 		}
 	}
 
-	_renderFreeASIChoices ($container) {
+	_renderFreeASIChoices (container) {
 		// Free choice for 2024 species + 2014 background: +2 to one ability, +1 to another
 		const abilities = ["str", "dex", "con", "int", "wis", "cha"];
 		const weights = [2, 1];
-		this._renderWeightedASIChoices($container, abilities, weights);
+		this._renderWeightedASIChoices(container, abilities, weights);
 	}
 
-	_renderWeightedASIChoices ($container, availableAbilities, weights) {
-		const $weightedChoices = $(`<div class="charsheet__builder-asi-choices"></div>`);
+	_renderWeightedASIChoices (container, availableAbilities, weights) {
+		const weightedChoices = e_({outer: `<div class="charsheet__builder-asi-choices"></div>`});
 
 		weights.forEach((weight, idx) => {
-			const $row = $(`<div class="ve-flex-v-center mb-1"></div>`);
-			$row.append(`<span class="mr-2">+${weight}:</span>`);
+			const row = e_({outer: `<div class="ve-flex-v-center mb-1"></div>`});
+			row.append(e_({outer: `<span class="mr-2">+${weight}:</span>`}));
 
-			const $select = $(`<select class="form-control form-control--minimal ve-inline-block w-auto" data-asi-idx="${idx}"></select>`);
-			$select.append(`<option value="">-- Select --</option>`);
+			const selectEl = e_({outer: `<select class="form-control form-control--minimal ve-inline-block w-auto" data-asi-idx="${idx}"></select>`});
+			selectEl.append(e_({outer: `<option value="">-- Select --</option>`}));
 
 			availableAbilities.forEach(ab => {
 				const abName = Parser.attAbvToFull(ab);
 				const selected = this._selectedAbilityBonuses[`bg_${idx}`] === ab ? "selected" : "";
-				$select.append(`<option value="${ab}" ${selected}>${abName}</option>`);
+				selectEl.append(e_({outer: `<option value="${ab}" ${selected}>${abName}</option>`}));
 			});
 
-			$select.on("change", (e) => {
+			selectEl.addEventListener("change", (e) => {
 				const val = e.target.value;
 				this._selectedAbilityBonuses[`bg_${idx}`] = val;
 				this._selectedAbilityBonuses[`bg_${idx}_weight`] = weight;
 
 				// Update other selects to disable already-selected options
-				$weightedChoices.find("select").each((i, sel) => {
-					const $sel = $(sel);
-					const selIdx = $sel.data("asi-idx");
+				[...weightedChoices.querySelectorAll("select")].forEach((sel) => {
+					const selIdx = parseInt(sel.dataset.asiIdx);
 					if (selIdx !== idx) {
-						$sel.find("option").each((j, opt) => {
-							const $opt = $(opt);
-							const optVal = $opt.val();
+						[...sel.querySelectorAll("option")].forEach((opt) => {
+							const optVal = opt.value;
 							// Check if this option is selected in another dropdown
 							const isSelectedElsewhere = Object.entries(this._selectedAbilityBonuses)
 								.some(([k, v]) => k.startsWith("bg_") && !k.includes("weight") && k !== `bg_${selIdx}` && v === optVal);
-							$opt.prop("disabled", optVal && isSelectedElsewhere);
+							opt.disabled = optVal && isSelectedElsewhere;
 						});
 					}
 				});
 			});
 
-			$row.append($select);
-			$weightedChoices.append($row);
+			row.append(selectEl);
+			weightedChoices.append(row);
 		});
 
-		$container.append($weightedChoices);
+		container.append(weightedChoices);
 	}
 
-	_renderCountASIChoices ($container, availableAbilities, count, amount) {
-		const $countChoices = $(`<div class="charsheet__builder-asi-choices"></div>`);
+	_renderCountASIChoices (container, availableAbilities, count, amount) {
+		const countChoices = e_({outer: `<div class="charsheet__builder-asi-choices"></div>`});
 
 		for (let i = 0; i < count; i++) {
-			const $row = $(`<div class="ve-flex-v-center mb-1"></div>`);
-			$row.append(`<span class="mr-2">+${amount}:</span>`);
+			const row = e_({outer: `<div class="ve-flex-v-center mb-1"></div>`});
+			row.append(e_({outer: `<span class="mr-2">+${amount}:</span>`}));
 
-			const $select = $(`<select class="form-control form-control--minimal ve-inline-block w-auto" data-asi-idx="${i}"></select>`);
-			$select.append(`<option value="">-- Select --</option>`);
+			const selectEl = e_({outer: `<select class="form-control form-control--minimal ve-inline-block w-auto" data-asi-idx="${i}"></select>`});
+			selectEl.append(e_({outer: `<option value="">-- Select --</option>`}));
 
 			availableAbilities.forEach(ab => {
 				const abName = Parser.attAbvToFull(ab);
 				const selected = this._selectedAbilityBonuses[`bg_${i}`] === ab ? "selected" : "";
-				$select.append(`<option value="${ab}" ${selected}>${abName}</option>`);
+				selectEl.append(e_({outer: `<option value="${ab}" ${selected}>${abName}</option>`}));
 			});
 
-			$select.on("change", (e) => {
+			selectEl.addEventListener("change", (e) => {
 				this._selectedAbilityBonuses[`bg_${i}`] = e.target.value;
 				this._selectedAbilityBonuses[`bg_${i}_weight`] = amount;
 			});
 
-			$row.append($select);
-			$countChoices.append($row);
+			row.append(selectEl);
+			countChoices.append(row);
 		}
 
-		$container.append($countChoices);
+		container.append(countChoices);
 	}
 	// #endregion
 
 	// #region Step 5: Equipment
-	_renderEquipmentStep ($content) {
+	_renderEquipmentStep (content) {
 		// Initialize equipment choices if not already set
 		if (!this._equipmentChoices) {
 			this._equipmentChoices = {};
 		}
 
-		const $container = $(`
+		const container = e_({outer: `
 			<div>
 				<h4>Starting Equipment</h4>
 				<p class="ve-muted">Choose your starting equipment based on your class and background.</p>
@@ -7508,25 +7490,25 @@ class CharacterSheetBuilder {
 					Additional items can be added from the Inventory tab after character creation.
 				</div>
 			</div>
-		`);
+		`});
 
-		$content.append($container);
+		content.append(container);
 
 		// Render class equipment with choices
-		this._renderClassEquipmentChoices($("#builder-class-equipment"));
+		this._renderClassEquipmentChoices(document.getElementById("builder-class-equipment"));
 	}
 
-	_renderClassEquipmentChoices ($container) {
-		$container.empty();
+	_renderClassEquipmentChoices (container) {
+		container.innerHTML = "";
 
 		if (!this._selectedClass) {
-			$container.append("<p class='ve-muted'>Select a class first</p>");
+			container.append("<p class='ve-muted'>Select a class first</p>");
 			return;
 		}
 
 		const startingEquip = this._selectedClass.startingEquipment;
 		if (!startingEquip) {
-			$container.append("<p class='ve-muted'>No starting equipment defined</p>");
+			container.append("<p class='ve-muted'>No starting equipment defined</p>");
 			return;
 		}
 
@@ -7537,16 +7519,16 @@ class CharacterSheetBuilder {
 
 		if (is2024Format) {
 			// 2024 XPHB format - package choices (A, B, C)
-			this._render2024EquipmentChoices($container, startingEquip);
+			this._render2024EquipmentChoices(container, startingEquip);
 		} else if (startingEquip.default) {
 			// Classic format - per-row choices (a, b)
-			this._renderClassicEquipmentChoices($container, startingEquip);
+			this._renderClassicEquipmentChoices(container, startingEquip);
 		} else {
-			$container.append("<p class='ve-muted'>No starting equipment options available</p>");
+			container.append("<p class='ve-muted'>No starting equipment options available</p>");
 		}
 	}
 
-	_render2024EquipmentChoices ($container, startingEquip) {
+	_render2024EquipmentChoices (container, startingEquip) {
 		// 2024 format has complete equipment packages as options A, B, C, etc.
 		const defaultData = startingEquip.defaultData || [];
 		if (!defaultData.length) return;
@@ -7555,17 +7537,17 @@ class CharacterSheetBuilder {
 		const choiceKeys = Object.keys(choiceData).filter(k => /^[A-Z]$/.test(k)).sort();
 
 		if (!choiceKeys.length) {
-			$container.append("<p class='ve-muted'>No equipment options found</p>");
+			container.append("<p class='ve-muted'>No equipment options found</p>");
 			return;
 		}
 
 		// Display human-readable description if available
 		if (startingEquip.entries?.length) {
-			const $desc = $(`<div class="mb-3 ve-muted">${Renderer.get().render({entries: startingEquip.entries})}</div>`);
-			$container.append($desc);
+			const desc = e_({outer: `<div class="mb-3 ve-muted">${Renderer.get().render({entries: startingEquip.entries})}</div>`});
+			container.append(desc);
 		}
 
-		const $choiceGroup = $(`<div class="charsheet__builder-equipment-choice"></div>`);
+		const choiceGroup = e_({outer: `<div class="charsheet__builder-equipment-choice"></div>`});
 
 		// Initialize default choice if not set
 		if (!this._equipmentChoices["2024"]) {
@@ -7591,7 +7573,7 @@ class CharacterSheetBuilder {
 				return "";
 			}).filter(Boolean);
 
-			const $option = $(`
+			const optionEl = e_({outer: `
 				<label class="charsheet__builder-equipment-option ve-flex-v-center mb-2 p-2" style="border: 1px solid var(--rgb-border-grey); border-radius: 4px; cursor: pointer;">
 					<input type="radio" name="equipment-choice-2024" value="${key}" ${isSelected ? "checked" : ""} class="mr-2">
 					<div>
@@ -7599,24 +7581,24 @@ class CharacterSheetBuilder {
 						<div class="ve-small ve-muted">${labelParts.join(", ")}</div>
 					</div>
 				</label>
-			`);
+			`});
 
-			$option.find("input").on("change", () => {
+			optionEl.querySelector("input").addEventListener("change", () => {
 				this._equipmentChoices["2024"] = key;
 			});
 
-			$choiceGroup.append($option);
+			choiceGroup.append(optionEl);
 		});
 
-		$container.append($choiceGroup);
+		container.append(choiceGroup);
 	}
 
-	_renderClassicEquipmentChoices ($container, startingEquip) {
+	_renderClassicEquipmentChoices (container, startingEquip) {
 		const equipmentEntries = startingEquip.default;
 		const defaultData = startingEquip.defaultData || [];
 
 		equipmentEntries.forEach((entry, idx) => {
-			const $row = $(`<div class="charsheet__builder-equipment-row mb-2"></div>`);
+			const row = e_({outer: `<div class="charsheet__builder-equipment-row mb-2"></div>`});
 
 			// Check if this is a choice (contains "or")
 			const isChoice = entry.includes(" or ");
@@ -7627,13 +7609,13 @@ class CharacterSheetBuilder {
 				const choiceKeys = Object.keys(choiceData).filter(k => k !== "_");
 
 				if (choiceKeys.length > 1) {
-					const $choiceGroup = $(`<div class="charsheet__builder-equipment-choice"></div>`);
-					const $pickerContainer = $(`<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`);
+					const choiceGroup = e_({outer: `<div class="charsheet__builder-equipment-choice"></div>`});
+					const pickerContainer = e_({outer: `<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`});
 
 					const renderPickersForKey = (key) => {
-						$pickerContainer.empty();
+						pickerContainer.innerHTML = "";
 						const items = choiceData[key] || [];
-						this._renderEquipmentTypePickers($pickerContainer, items, `${idx}_${key}`);
+						this._renderEquipmentTypePickers(pickerContainer, items, `${idx}_${key}`);
 					};
 
 					choiceKeys.forEach((key, choiceIdx) => {
@@ -7648,72 +7630,72 @@ class CharacterSheetBuilder {
 							renderPickersForKey(key);
 						}
 
-						const $option = $(`
+						const optionEl = e_({outer: `
 							<label class="charsheet__builder-equipment-option ve-flex-v-center mb-1">
 								<input type="radio" name="equipment-choice-${idx}" value="${key}" ${isSelected ? "checked" : ""} class="mr-2">
 								<span>(${key}) ${Renderer.get().render(choiceLabel)}</span>
 							</label>
-						`);
+						`});
 
-						$option.find("input").on("change", () => {
+						optionEl.querySelector("input").addEventListener("change", () => {
 							this._equipmentChoices[idx] = key;
 							renderPickersForKey(key);
 						});
 
-						$choiceGroup.append($option);
+						choiceGroup.append(optionEl);
 					});
 
-					$row.append($choiceGroup);
-					$row.append($pickerContainer);
+					row.append(choiceGroup);
+					row.append(pickerContainer);
 				} else if (choiceData._) {
 					// Fixed equipment (no choice)
 					const label = this._getEquipmentChoiceLabel(choiceData._, "_");
-					$row.append(`<p>${Renderer.get().render(label)}</p>`);
+					row.append(e_({outer: `<p>${Renderer.get().render(label)}</p>`}));
 					// Render equipment type pickers for fixed data items
-					const $fixedPickers = $(`<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`);
-					this._renderEquipmentTypePickers($fixedPickers, choiceData._, `${idx}__`);
-					$row.append($fixedPickers);
+					const fixedPickers = e_({outer: `<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`});
+					this._renderEquipmentTypePickers(fixedPickers, choiceData._, `${idx}__`);
+					row.append(fixedPickers);
 				}
 			} else {
 				// Not a choice, just display the entry
-				$row.append(`<p>${Renderer.get().render(entry)}</p>`);
+				row.append(e_({outer: `<p>${Renderer.get().render(entry)}</p>`}));
 				// If there's defaultData for this idx, check for equipmentType items
 				if (defaultData[idx]?._) {
-					const $nonChoicePickers = $(`<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`);
-					this._renderEquipmentTypePickers($nonChoicePickers, defaultData[idx]._, `${idx}__`);
-					$row.append($nonChoicePickers);
+					const nonChoicePickers = e_({outer: `<div class="charsheet__builder-equipment-type-pickers ml-3 mt-1"></div>`});
+					this._renderEquipmentTypePickers(nonChoicePickers, defaultData[idx]._, `${idx}__`);
+					row.append(nonChoicePickers);
 				}
 			}
 
-			$container.append($row);
+			container.append(row);
 		});
 
 		// Add gold alternative option if available
 		if (this._selectedClass.startingEquipment.goldAlternative) {
-			const $goldOption = $(`
+			const goldOption = e_({outer: `
 				<div class="charsheet__builder-equipment-gold mt-3">
 					<label class="ve-flex-v-center">
 						<input type="checkbox" id="equipment-gold-alt" class="mr-2">
 						<span>Take starting gold instead: ${Renderer.get().render(this._selectedClass.startingEquipment.goldAlternative)}</span>
 					</label>
 				</div>
-			`);
+			`});
 
-			$goldOption.find("input").on("change", (e) => {
+			goldOption.querySelector("input").addEventListener("change", (e) => {
 				this._useGoldAlternative = e.target.checked;
 			});
 
-			$container.append($goldOption);
+			container.append(goldOption);
 		}
 	}
 
 	/**
 	 * Render dropdown pickers for items with equipmentType in an equipment item list.
-	 * @param {jQuery} $container - Container to append pickers to
+	 * @param {HTMLElement} container - Container to append pickers to
 	 * @param {Array} items - Equipment items array (from defaultData)
 	 * @param {string} prefix - Unique prefix for picker keys
 	 */
-	_renderEquipmentTypePickers ($container, items, prefix) {
+	_renderEquipmentTypePickers (container, items, prefix) {
 		if (!Array.isArray(items)) return;
 		if (!this._equipmentTypeChoices) this._equipmentTypeChoices = {};
 
@@ -7732,30 +7714,30 @@ class CharacterSheetBuilder {
 			const quantity = itemEntry.quantity || 1;
 			for (let q = 0; q < quantity; q++) {
 				const selectKey = quantity > 1 ? `${prefix}${pickerKey}_${q}` : `${prefix}${pickerKey}`;
-				const $picker = $(`
+				const picker = e_({outer: `
 					<div class="charsheet__builder-equipment-type-picker mb-1">
 						<label class="ve-small ve-muted">Choose ${label}:</label>
 						<select class="form-control form-control--minimal" style="max-width: 300px;">
 							<option value="">-- Select --</option>
 						</select>
 					</div>
-				`);
+				`});
 
-				const $select = $picker.find("select");
+				const selectEl = picker.querySelector("select");
 				matchingItems.forEach(item => {
-					$select.append(`<option value="${item.name}">${item.name}</option>`);
+					selectEl.append(e_({outer: `<option value="${item.name}">${item.name}</option>`}));
 				});
 
 				// Pre-select if already chosen
 				if (this._equipmentTypeChoices[selectKey]) {
-					$select.val(this._equipmentTypeChoices[selectKey]);
+					selectEl.value = this._equipmentTypeChoices[selectKey];
 				}
 
-				$select.on("change", (e) => {
+				selectEl.addEventListener("change", (e) => {
 					this._equipmentTypeChoices[selectKey] = e.target.value || null;
 				});
 
-				$container.append($picker);
+				container.append(picker);
 			}
 		});
 	}
@@ -7894,31 +7876,31 @@ class CharacterSheetBuilder {
 		};
 	}
 
-	_renderSpellsStep ($content) {
+	_renderSpellsStep (content) {
 		const knownInfo = this._getKnownCasterInfoForBuilder();
 
 		if (!knownInfo) {
 			// Not a known-spell caster — show informational message
-			const $container = $(`<div>
+			const container = e_({outer: `<div>
 				<h4>Spells</h4>
 				<p class="ve-muted">Your class does not require spell selection at level 1. You may choose spells later via Level Up.</p>
-			</div>`);
-			$content.append($container);
+			</div>`});
+			content.append(container);
 			return;
 		}
 
-		const $container = $(`<div>
+		const container = e_({outer: `<div>
 			<h4>Starting Spells</h4>
 			<p class="ve-muted mb-2">Choose your starting spells as a <b>${knownInfo.className}</b>.</p>
 			<div id="builder-spell-picker"></div>
-		</div>`);
+		</div>`});
 
-		$content.append($container);
+		content.append(container);
 
 		if (knownInfo.className === "Sorcerer" && CharacterSheetClassUtils.isDivineSoulSubclass(this._selectedSubclass)) {
 			const affinityOptions = CharacterSheetClassUtils.getDivineSoulAffinityOptions(this._selectedSubclass);
 			const selectedAffinity = CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity);
-			const $affinitySection = $(`
+			const affinitySection = e_({outer: `
 				<div class="charsheet__builder-feat-opt-section mb-3" style="padding: 0.75rem; background: var(--cs-bg-secondary, #f8f9fa); border-radius: 4px;">
 					<label class="ve-flex-col gap-2 mb-0">
 						<span class="ve-bold">Divine Soul Affinity</span>
@@ -7929,18 +7911,18 @@ class CharacterSheetBuilder {
 						<span class="ve-small ve-muted">This affinity grants your extra Divine Soul spell and unlocks Cleric spells while you pick Sorcerer spells.</span>
 					</label>
 				</div>
-			`);
+			`});
 
-			$affinitySection.find("select").on("change", evt => {
+			affinitySection.querySelector("select").addEventListener("change", evt => {
 				this._divineSoulAffinity = affinityOptions.find(opt => opt.key === evt.target.value) || null;
 				this._state.setSubclassChoice(this._selectedClass?.name, this._divineSoulAffinity);
 				this._state.updateLevelChoice?.(1, {
 					subclassChoice: CharacterSheetClassUtils.normalizeDivineSoulAffinity(this._divineSoulAffinity),
 				});
-				this._renderSpellsStep($content.empty());
+				this._renderSpellsStep(content.innerHTML = "");
 			});
 
-			$container.find("#builder-spell-picker").before($affinitySection);
+			container.querySelector("#builder-spell-picker").before(affinitySection);
 		}
 
 		const allSpells = this._page.getSpells() || [];
@@ -7952,7 +7934,7 @@ class CharacterSheetBuilder {
 		// Re-get knownInfo to reflect the current affinity selection
 		const updatedKnownInfo = this._getKnownCasterInfoForBuilder();
 
-		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
+		const section = CharacterSheetSpellPicker.renderKnownSpellPicker({
 			className: updatedKnownInfo.className,
 			classSource: updatedKnownInfo.classSource,
 			spellCount: updatedKnownInfo.spellCount,
@@ -7970,7 +7952,7 @@ class CharacterSheetBuilder {
 			preSelectedCantrips: this._selectedKnownCantrips,
 		});
 
-		$("#builder-spell-picker").append($section);
+		document.getElementById("builder-spell-picker").append(section);
 	}
 
 	_applyBuilderSpellChoices () {
@@ -8005,8 +7987,8 @@ class CharacterSheetBuilder {
 	// #endregion
 
 	// #region Step 7: Details
-	_renderDetailsStep ($content) {
-		const $container = $(`
+	_renderDetailsStep (content) {
+		const container = e_({outer: `
 			<div class="ve-flex">
 				<div class="ve-flex-col" style="flex: 1; padding-right: 1rem;">
 					<div class="charsheet__section">
@@ -8074,20 +8056,20 @@ class CharacterSheetBuilder {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$content.append($container);
+		content.append(container);
 
 		// Save values on change
-		$("#builder-name").on("change", (e) => this._state.setName(e.target.value));
-		$("#builder-personality").on("change", (e) => this._state.setNote("personality", e.target.value));
-		$("#builder-ideals").on("change", (e) => this._state.setNote("ideals", e.target.value));
-		$("#builder-bonds").on("change", (e) => this._state.setNote("bonds", e.target.value));
-		$("#builder-flaws").on("change", (e) => this._state.setNote("flaws", e.target.value));
-		$("#builder-backstory").on("change", (e) => this._state.setNote("backstory", e.target.value));
+		document.getElementById("builder-name").addEventListener("change", (e) => this._state.setName(e.target.value));
+		document.getElementById("builder-personality").addEventListener("change", (e) => this._state.setNote("personality", e.target.value));
+		document.getElementById("builder-ideals").addEventListener("change", (e) => this._state.setNote("ideals", e.target.value));
+		document.getElementById("builder-bonds").addEventListener("change", (e) => this._state.setNote("bonds", e.target.value));
+		document.getElementById("builder-flaws").addEventListener("change", (e) => this._state.setNote("flaws", e.target.value));
+		document.getElementById("builder-backstory").addEventListener("change", (e) => this._state.setNote("backstory", e.target.value));
 
 		["age", "height", "weight", "eyes", "skin", "hair"].forEach(field => {
-			$(`#builder-${field}`).on("change", (e) => this._state.setAppearance(field, e.target.value));
+			document.getElementById(`builder-${field}`).addEventListener("change", (e) => this._state.setAppearance(field, e.target.value));
 		});
 	}
 	// #endregion

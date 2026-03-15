@@ -99,7 +99,7 @@ class CharacterSheetLevelUp {
 	}
 
 	async _pShowLevelUpModal ({classData, classEntry, newLevel, newFeatures, hasAsi, needsSubclass}) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `🎉 Level Up: ${classEntry.name} → Level ${newLevel}`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -250,37 +250,42 @@ class CharacterSheetLevelUp {
 		};
 
 		// ========== BUILD WIZARD LAYOUT ==========
-		const $wizard = $(`<div class="charsheet__levelup-wizard"></div>`).appendTo($modalInner);
+		const wizard = e_({tag: "div", clazz: "charsheet__levelup-wizard"});
+		modalInner.append(wizard);
 
 		// ========== SIDEBAR ==========
-		const $sidebar = $(`<div class="charsheet__levelup-sidebar"></div>`).appendTo($wizard);
+		const sidebar = e_({tag: "div", clazz: "charsheet__levelup-sidebar"});
+		wizard.append(sidebar);
 
 		// Sidebar Header
-		$$`<div class="charsheet__levelup-sidebar-header">
+		sidebar.append(ee`<div class="charsheet__levelup-sidebar-header">
 			<div class="level-badge">${newLevel}</div>
 			<h4>${classEntry.name}</h4>
-		</div>`.appendTo($sidebar);
+		</div>`);
 
 		// Progress Bar
-		const $progress = $(`
+		const progress = e_({outer: `
 			<div class="charsheet__levelup-progress">
 				<div class="charsheet__levelup-progress-bar">
 					<div class="charsheet__levelup-progress-fill" style="width: 0%"></div>
 				</div>
 				<div class="charsheet__levelup-progress-text">0% complete</div>
 			</div>
-		`).appendTo($sidebar);
+		`});
+		sidebar.append(progress);
 
 		// Summary items container
-		const $summaryItems = $(`<div class="charsheet__levelup-summary-items"></div>`).appendTo($sidebar);
+		const summaryItems = e_({tag: "div", clazz: "charsheet__levelup-summary-items"});
+		sidebar.append(summaryItems);
 
 		// ========== MAIN CONTENT ==========
-		const $main = $(`<div class="charsheet__levelup-main"></div>`).appendTo($wizard);
+		const main = e_({tag: "div", clazz: "charsheet__levelup-main"});
+		wizard.append(main);
 
 		// ========== ACCORDION HELPER ==========
 		const accordions = {};
-		const createAccordion = (id, icon, title, $content, {required = false, startExpanded = false} = {}) => {
-			const $accordion = $(`
+		const createAccordion = (id, icon, title, content, {required = false, startExpanded = false} = {}) => {
+			const accordion = e_({outer: `
 				<div class="charsheet__levelup-accordion ${startExpanded ? "expanded" : ""}" data-accordion-id="${id}">
 					<div class="charsheet__levelup-accordion-header">
 						<span class="charsheet__levelup-accordion-icon">${icon}</span>
@@ -292,47 +297,50 @@ class CharacterSheetLevelUp {
 					</div>
 					<div class="charsheet__levelup-accordion-body"></div>
 				</div>
-			`);
+			`});
 
-			$accordion.find(".charsheet__levelup-accordion-body").append($content);
-			$accordion.find(".charsheet__levelup-accordion-header").on("click", () => {
-				const isExpanded = $accordion.hasClass("expanded");
+			accordion.querySelector(".charsheet__levelup-accordion-body").append(content);
+			accordion.querySelector(".charsheet__levelup-accordion-header").addEventListener("click", () => {
+				const isExpanded = accordion.classList.contains("expanded");
 				// Collapse all others
-				$main.find(".charsheet__levelup-accordion").removeClass("expanded");
+				main.querySelectorAll(".charsheet__levelup-accordion").forEach(el => el.classList.remove("expanded"));
 				// Toggle this one
-				if (!isExpanded) $accordion.addClass("expanded");
+				if (!isExpanded) accordion.classList.add("expanded");
 				updateActiveSummary(isExpanded ? null : id);
 			});
 
 			accordions[id] = {
-				$el: $accordion,
+				el: accordion,
 				required,
 				setComplete: (complete, summary = "") => {
-					const $badge = $accordion.find(".charsheet__levelup-accordion-badge");
+					const badge = accordion.querySelector(".charsheet__levelup-accordion-badge");
 					if (complete) {
-						$badge.removeClass("badge-pending badge-info").addClass("badge-complete")
-							.html(`✓ ${summary || "Done"}`);
-						$accordion.addClass("completed");
+						badge.classList.remove("badge-pending", "badge-info");
+						badge.classList.add("badge-complete");
+						badge.innerHTML = `✓ ${summary || "Done"}`;
+						accordion.classList.add("completed");
 					} else if (required) {
-						$badge.removeClass("badge-complete badge-info").addClass("badge-pending")
-							.html("⚠️ Required");
-						$accordion.removeClass("completed");
+						badge.classList.remove("badge-complete", "badge-info");
+						badge.classList.add("badge-pending");
+						badge.innerHTML = "⚠️ Required";
+						accordion.classList.remove("completed");
 					} else {
-						$badge.removeClass("badge-complete badge-pending").addClass("badge-info")
-							.html(`ℹ️ ${summary || "Info"}`);
-						$accordion.removeClass("completed");
+						badge.classList.remove("badge-complete", "badge-pending");
+						badge.classList.add("badge-info");
+						badge.innerHTML = `ℹ️ ${summary || "Info"}`;
+						accordion.classList.remove("completed");
 					}
 					updateProgress();
 				},
 			};
 
-			return $accordion;
+			return accordion;
 		};
 
 		// ========== SUMMARY ITEM HELPER ==========
-		const summaryItems = {};
+		const summaryItemEls = {};
 		const createSummaryItem = (id, icon, label, {required = false} = {}) => {
-			const $item = $(`
+			const item = e_({outer: `
 				<div class="charsheet__levelup-summary-item ${required ? "warning" : ""}" data-summary-id="${id}">
 					<span class="charsheet__levelup-summary-icon ${required ? "status-pending" : "status-info"}">${icon}</span>
 					<div class="charsheet__levelup-summary-content">
@@ -340,69 +348,77 @@ class CharacterSheetLevelUp {
 						<div class="charsheet__levelup-summary-value">Not selected</div>
 					</div>
 				</div>
-			`);
+			`});
 
-			$item.on("click", () => {
+			item.addEventListener("click", () => {
 				// Expand corresponding accordion
-				const $accordion = $main.find(`[data-accordion-id="${id}"]`);
-				if ($accordion.length) {
-					$main.find(".charsheet__levelup-accordion").removeClass("expanded");
-					$accordion.addClass("expanded");
-					$accordion[0].scrollIntoView({behavior: "smooth", block: "start"});
+				const accordion = main.querySelector(`[data-accordion-id="${id}"]`);
+				if (accordion) {
+					main.querySelectorAll(".charsheet__levelup-accordion").forEach(el => el.classList.remove("expanded"));
+					accordion.classList.add("expanded");
+					accordion.scrollIntoView({behavior: "smooth", block: "start"});
 					updateActiveSummary(id);
 				}
 			});
 
-			summaryItems[id] = {
-				$el: $item,
+			summaryItemEls[id] = {
+				el: item,
 				required,
 				setStatus: (complete, value = "") => {
-					const $icon = $item.find(".charsheet__levelup-summary-icon");
-					const $value = $item.find(".charsheet__levelup-summary-value");
+					const iconEl = item.querySelector(".charsheet__levelup-summary-icon");
+					const valueEl = item.querySelector(".charsheet__levelup-summary-value");
 
 					if (complete) {
-						$item.removeClass("warning").addClass("completed");
-						$icon.removeClass("status-pending status-info").addClass("status-complete").text("✓");
-						$value.text(value || "Done");
+						item.classList.remove("warning");
+						item.classList.add("completed");
+						iconEl.classList.remove("status-pending", "status-info");
+						iconEl.classList.add("status-complete");
+						iconEl.textContent = "✓";
+						valueEl.textContent = value || "Done";
 					} else if (required) {
-						$item.removeClass("completed").addClass("warning");
-						$icon.removeClass("status-complete status-info").addClass("status-pending").text("⚠️");
-						$value.text("Not selected");
+						item.classList.remove("completed");
+						item.classList.add("warning");
+						iconEl.classList.remove("status-complete", "status-info");
+						iconEl.classList.add("status-pending");
+						iconEl.textContent = "⚠️";
+						valueEl.textContent = "Not selected";
 					} else {
-						$item.removeClass("completed warning");
-						$icon.removeClass("status-complete status-pending").addClass("status-info").text(icon);
-						$value.text(value || "—");
+						item.classList.remove("completed", "warning");
+						iconEl.classList.remove("status-complete", "status-pending");
+						iconEl.classList.add("status-info");
+						iconEl.textContent = icon;
+						valueEl.textContent = value || "—";
 					}
 				},
 			};
 
-			return $item;
+			return item;
 		};
 
 		const updateActiveSummary = (activeId) => {
-			$summaryItems.find(".charsheet__levelup-summary-item").removeClass("active");
+			summaryItems.querySelectorAll(".charsheet__levelup-summary-item").forEach(el => el.classList.remove("active"));
 			if (activeId) {
-				$summaryItems.find(`[data-summary-id="${activeId}"]`).addClass("active");
+				const activeEl = summaryItems.querySelector(`[data-summary-id="${activeId}"]`);
+				if (activeEl) activeEl.classList.add("active");
 			}
 		};
 
 		const updateProgress = () => {
-			const requiredIds = Object.keys(summaryItems).filter(id => summaryItems[id].required);
-			const completedCount = requiredIds.filter(id => summaryItems[id].$el.hasClass("completed")).length;
+			const requiredIds = Object.keys(summaryItemEls).filter(id => summaryItemEls[id].required);
+			const completedCount = requiredIds.filter(id => summaryItemEls[id].el.classList.contains("completed")).length;
 			const totalRequired = requiredIds.length;
 			const percent = totalRequired > 0 ? Math.round((completedCount / totalRequired) * 100) : 100;
 
-			$progress.find(".charsheet__levelup-progress-fill").css("width", `${percent}%`);
-			$progress.find(".charsheet__levelup-progress-text").text(
-				percent === 100 ? "✓ Ready to level up!" : `${percent}% complete`,
-			);
+			progress.querySelector(".charsheet__levelup-progress-fill").style.width = `${percent}%`;
+			progress.querySelector(".charsheet__levelup-progress-text").textContent =
+				percent === 100 ? "✓ Ready to level up!" : `${percent}% complete`;
 		};
 
 		// ========== 1. SUBCLASS SECTION ==========
 		if (needsSubclass) {
-			$summaryItems.append(createSummaryItem("subclass", "📚", classData.subclassTitle || "Subclass", {required: true}));
+			summaryItems.append(createSummaryItem("subclass", "📚", classData.subclassTitle || "Subclass", {required: true}));
 
-			const $subclassContent = this._renderSubclassSelectionCompact(classData, (subclass) => {
+			const subclassContent = this._renderSubclassSelectionCompact(classData, (subclass) => {
 				selectedSubclass = subclass;
 				currentFeatures = CharacterSheetClassUtils.getLevelFeatures(classData, newLevel, subclass, this._page.getClassFeatures(), this._page.getSubclassFeatures());
 
@@ -413,14 +429,15 @@ class CharacterSheetLevelUp {
 				languageGrants = CharacterSheetClassUtils.getLanguageGrantsForLevel(currentFeatures);
 
 				// Update summary & accordion
-				summaryItems.subclass.setStatus(true, subclass.name);
+				summaryItemEls.subclass.setStatus(true, subclass.name);
 				accordions.subclass.setComplete(true, subclass.shortName || subclass.name);
 
 				// Update features accordion
 				if (accordions.features) {
 					const filtered = filterAsiFeatures(currentFeatures);
-					accordions.features.$el.find(".charsheet__levelup-accordion-body").empty()
-						.append(this._renderFeaturesCompact(filtered));
+					const body = accordions.features.el.querySelector(".charsheet__levelup-accordion-body");
+					body.innerHTML = "";
+					body.append(this._renderFeaturesCompact(filtered));
 					accordions.features.setComplete(true, `${filtered.length} feature${filtered.length !== 1 ? "s" : ""}`);
 				}
 
@@ -428,15 +445,15 @@ class CharacterSheetLevelUp {
 				expandNextIncomplete();
 			});
 
-			$main.append(createAccordion("subclass", "📚", `Choose ${classData.subclassTitle || "Subclass"}`, $subclassContent, {required: true, startExpanded: true}));
+			main.append(createAccordion("subclass", "📚", `Choose ${classData.subclassTitle || "Subclass"}`, subclassContent, {required: true, startExpanded: true}));
 		}
 
 		// ========== 2. ASI / FEAT SECTION ==========
 		if (hasAsi) {
 			const asiLabel = isBothAsiAndFeat ? "ASI + Feat" : isEpicBoonLevel ? "ASI / Epic Boon" : "ASI / Feat";
-			$summaryItems.append(createSummaryItem("asi", "📈", asiLabel, {required: true}));
+			summaryItems.append(createSummaryItem("asi", "📈", asiLabel, {required: true}));
 
-			const $asiContent = this._renderAsiSelectionCompact(
+			const asiContent = this._renderAsiSelectionCompact(
 				(ability, delta) => {
 					asiChoices[ability] = (asiChoices[ability] || 0) + delta;
 					updateAsiStatus();
@@ -473,18 +490,18 @@ class CharacterSheetLevelUp {
 					summary = parts.join(", ");
 				}
 
-				summaryItems.asi.setStatus(complete, summary);
+				summaryItemEls.asi.setStatus(complete, summary);
 				accordions.asi.setComplete(complete, summary);
 			};
 
-			$main.append(createAccordion("asi", "📈", asiLabel, $asiContent, {required: true, startExpanded: !needsSubclass}));
+			main.append(createAccordion("asi", "📈", asiLabel, asiContent, {required: true, startExpanded: !needsSubclass}));
 		}
 
 		// ========== 3. OPTIONAL FEATURES (Metamagic, Invocations, etc.) ==========
 		if (optionalFeatureGains.length) {
-			$summaryItems.append(createSummaryItem("optfeatures", "✨", "Class Options", {required: true}));
+			summaryItems.append(createSummaryItem("optfeatures", "✨", "Class Options", {required: true}));
 
-			const $optContent = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features, meta = null) => {
+			const optContent = this._renderOptionalFeaturesSelection(classData, optionalFeatureGains, (featureType, features, meta = null) => {
 				selectedOptionalFeatures[featureType] = features;
 				if (meta?.combatTraditions?.length) selectedCombatTraditions = [...meta.combatTraditions];
 				updateOptFeaturesStatus();
@@ -504,18 +521,18 @@ class CharacterSheetLevelUp {
 					}
 				}
 
-				summaryItems.optfeatures.setStatus(allComplete, summaries.join(", ") || "Select options");
+				summaryItemEls.optfeatures.setStatus(allComplete, summaries.join(", ") || "Select options");
 				accordions.optfeatures.setComplete(allComplete, summaries.join(", "));
 			};
 
-			$main.append(createAccordion("optfeatures", "✨", "Class Options", $optContent, {required: true}));
+			main.append(createAccordion("optfeatures", "✨", "Class Options", optContent, {required: true}));
 		}
 
 		// ========== 4. FEATURE OPTIONS (Specialties, etc.) ==========
 		if (featureOptionGroups.length) {
-			$summaryItems.append(createSummaryItem("featoptions", "🎯", "Feature Choices", {required: true}));
+			summaryItems.append(createSummaryItem("featoptions", "🎯", "Feature Choices", {required: true}));
 
-			const $featOptContent = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
+			const featOptContent = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
 				selectedFeatureOptions[featureKey] = options;
 				updateFeatOptionsStatus();
 			});
@@ -554,18 +571,18 @@ class CharacterSheetLevelUp {
 					}
 				}
 
-				summaryItems.featoptions.setStatus(allComplete, summaries.join("; ") || "Select options");
+				summaryItemEls.featoptions.setStatus(allComplete, summaries.join("; ") || "Select options");
 				accordions.featoptions.setComplete(allComplete, summaries.length ? `${summaries.length} chosen` : "");
 			};
 
-			$main.append(createAccordion("featoptions", "🎯", "Feature Choices", $featOptContent, {required: true}));
+			main.append(createAccordion("featoptions", "🎯", "Feature Choices", featOptContent, {required: true}));
 		}
 
 		// ========== 5. EXPERTISE ==========
 		if (expertiseGrants.length) {
-			$summaryItems.append(createSummaryItem("expertise", "⭐", "Expertise", {required: true}));
+			summaryItems.append(createSummaryItem("expertise", "⭐", "Expertise", {required: true}));
 
-			const $expertiseContent = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
+			const expertiseContent = this._renderExpertiseSelectionForLevelUp(expertiseGrants, (featureKey, skills) => {
 				selectedExpertise[featureKey] = skills;
 				updateExpertiseStatus();
 			});
@@ -585,21 +602,21 @@ class CharacterSheetLevelUp {
 					allSkills.push(...selected);
 				}
 
-				summaryItems.expertise.setStatus(allComplete, allSkills.join(", ") || "Select skills");
+				summaryItemEls.expertise.setStatus(allComplete, allSkills.join(", ") || "Select skills");
 				accordions.expertise.setComplete(allComplete, allSkills.join(", "));
 			};
 
 			// Run initial status update for any pre-populated fixed skills
 			updateExpertiseStatus();
 
-			$main.append(createAccordion("expertise", "⭐", "Expertise", $expertiseContent, {required: true}));
+			main.append(createAccordion("expertise", "⭐", "Expertise", expertiseContent, {required: true}));
 		}
 
 		// ========== 6. LANGUAGES ==========
 		if (languageGrants.length) {
-			$summaryItems.append(createSummaryItem("languages", "🗣️", "Languages", {required: true}));
+			summaryItems.append(createSummaryItem("languages", "🗣️", "Languages", {required: true}));
 
-			const $langContent = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
+			const langContent = this._renderLanguageSelectionForLevelUp(languageGrants, (featureKey, languages) => {
 				selectedLanguages[featureKey] = languages;
 				updateLanguageStatus();
 			});
@@ -614,35 +631,35 @@ class CharacterSheetLevelUp {
 					allLangs.push(...selected);
 				}
 
-				summaryItems.languages.setStatus(allComplete, allLangs.join(", ") || "Select languages");
+				summaryItemEls.languages.setStatus(allComplete, allLangs.join(", ") || "Select languages");
 				accordions.languages.setComplete(allComplete, allLangs.join(", "));
 			};
 
-			$main.append(createAccordion("languages", "🗣️", "Languages", $langContent, {required: true}));
+			main.append(createAccordion("languages", "🗣️", "Languages", langContent, {required: true}));
 		}
 
 		// ========== 7. SCHOLAR EXPERTISE (Wizard) ==========
 		if (needsScholarChoice) {
-			$summaryItems.append(createSummaryItem("scholar", "📖", "Scholar", {required: true}));
+			summaryItems.append(createSummaryItem("scholar", "📖", "Scholar", {required: true}));
 
-			const $scholarContent = this._renderScholarExpertiseSelection((skill) => {
+			const scholarContent = this._renderScholarExpertiseSelection((skill) => {
 				selectedScholarSkill = skill;
-				summaryItems.scholar.setStatus(true, skill);
+				summaryItemEls.scholar.setStatus(true, skill);
 				accordions.scholar.setComplete(true, skill);
 				expandNextIncomplete();
 			});
 
-			$main.append(createAccordion("scholar", "📖", "Scholar Expertise", $scholarContent, {required: true}));
+			main.append(createAccordion("scholar", "📖", "Scholar Expertise", scholarContent, {required: true}));
 		}
 
 		// ========== 8. WIZARD SPELLBOOK ==========
 		if (isWizard) {
-			$summaryItems.append(createSummaryItem("spellbook", "📕", "Spellbook", {required: true}));
+			summaryItems.append(createSummaryItem("spellbook", "📕", "Spellbook", {required: true}));
 
 			const allSpells = this._page.filterByAllowedSources?.(this._page.getSpells?.() || []) || [];
 			const knownSpellIds = new Set((this._state.getSpells?.() || []).map(s => `${s.name}|${s.source}`));
 
-			const $spellbookContent = CharacterSheetSpellPicker.renderWizardSpellbookPicker({
+			const spellbookContent = CharacterSheetSpellPicker.renderWizardSpellbookPicker({
 				spellCount: wizardSpellCount,
 				maxSpellLevel,
 				allSpells,
@@ -652,18 +669,18 @@ class CharacterSheetLevelUp {
 					selectedSpellbookSpells = spells;
 					const complete = spells.length >= wizardSpellCount;
 					const summary = spells.length > 0 ? spells.map(s => s.name).join(", ") : "Select spells";
-					summaryItems.spellbook.setStatus(complete, summary);
+					summaryItemEls.spellbook.setStatus(complete, summary);
 					accordions.spellbook.setComplete(complete, `${spells.length}/${wizardSpellCount} spells`);
 				},
 			});
 
-			$main.append(createAccordion("spellbook", "📕", `Spellbook (+${wizardSpellCount} Spells)`, $spellbookContent, {required: true}));
+			main.append(createAccordion("spellbook", "📕", `Spellbook (+${wizardSpellCount} Spells)`, spellbookContent, {required: true}));
 		}
 
 		// ========== 8b. KNOWN SPELLS (Sorcerer, Bard, Ranger, Warlock, etc.) ==========
 		if (isKnownCaster && (knownSpellsGain > 0 || knownCantripsGain > 0)) {
 			const totalGain = knownSpellsGain + knownCantripsGain;
-			$summaryItems.append(createSummaryItem("knownspells", "✨", "Spells Known", {required: totalGain > 0}));
+			summaryItems.append(createSummaryItem("knownspells", "✨", "Spells Known", {required: totalGain > 0}));
 
 			const knownAllSpells = this._page.filterByAllowedSources?.(this._page.getSpells?.() || []) || [];
 			const knownExistingIds = new Set([
@@ -671,7 +688,7 @@ class CharacterSheetLevelUp {
 				...(this._state.getCantripsKnown?.() || []),
 			].map(s => `${s.name}|${s.source}`));
 
-			const $knownSpellsContent = CharacterSheetSpellPicker.renderKnownSpellPicker({
+			const knownSpellsContent = CharacterSheetSpellPicker.renderKnownSpellPicker({
 				className: classEntry.name,
 				classSource: classEntry.source,
 				spellCount: knownSpellsGain,
@@ -696,7 +713,7 @@ class CharacterSheetLevelUp {
 					if (knownCantripsGain > 0) parts.push(`${cantrips.length}/${knownCantripsGain} cantrips`);
 					const summary = parts.join(", ") || "Select spells";
 					const allNames = [...cantrips, ...spells].map(s => s.name).join(", ");
-					summaryItems.knownspells.setStatus(complete, allNames || summary);
+					summaryItemEls.knownspells.setStatus(complete, allNames || summary);
 					accordions.knownspells.setComplete(complete, parts.join(", "));
 				},
 			});
@@ -704,13 +721,13 @@ class CharacterSheetLevelUp {
 			const sectionLabel = [];
 			if (knownSpellsGain > 0) sectionLabel.push(`+${knownSpellsGain} Spell${knownSpellsGain !== 1 ? "s" : ""}`);
 			if (knownCantripsGain > 0) sectionLabel.push(`+${knownCantripsGain} Cantrip${knownCantripsGain !== 1 ? "s" : ""}`);
-			$main.append(createAccordion("knownspells", "✨", `Spells Known (${sectionLabel.join(", ")})`, $knownSpellsContent, {required: totalGain > 0}));
+			main.append(createAccordion("knownspells", "✨", `Spells Known (${sectionLabel.join(", ")})`, knownSpellsContent, {required: totalGain > 0}));
 		}
 
 		// ========== 8c. PREPARED SPELLS (XPHB Warlock, etc.) ==========
 		if (isPreparedCaster && (preparedSpellsGain > 0 || preparedCantripsGain > 0)) {
 			const totalGain = preparedSpellsGain + preparedCantripsGain;
-			$summaryItems.append(createSummaryItem("preparedspells", "✨", "Prepared Spells", {required: totalGain > 0}));
+			summaryItems.append(createSummaryItem("preparedspells", "✨", "Prepared Spells", {required: totalGain > 0}));
 
 			const prepAllSpells = this._page.filterByAllowedSources?.(this._page.getSpells?.() || []) || [];
 			const prepExistingIds = new Set([
@@ -719,7 +736,7 @@ class CharacterSheetLevelUp {
 				...(this._state.getPreparedSpells?.() || []),
 			].map(s => `${s.name}|${s.source}`));
 
-			const $preparedContent = CharacterSheetSpellPicker.renderKnownSpellPicker({
+			const preparedContent = CharacterSheetSpellPicker.renderKnownSpellPicker({
 				className: classEntry.name,
 				classSource: classEntry.source,
 				spellCount: preparedSpellsGain,
@@ -739,7 +756,7 @@ class CharacterSheetLevelUp {
 					if (preparedCantripsGain > 0) parts.push(`${cantrips.length}/${preparedCantripsGain} cantrips`);
 					const summary = parts.join(", ") || "Select spells";
 					const allNames = [...cantrips, ...spells].map(s => s.name).join(", ");
-					summaryItems.preparedspells.setStatus(complete, allNames || summary);
+					summaryItemEls.preparedspells.setStatus(complete, allNames || summary);
 					accordions.preparedspells.setComplete(complete, parts.join(", "));
 				},
 			});
@@ -747,29 +764,29 @@ class CharacterSheetLevelUp {
 			const sectionLabel = [];
 			if (preparedSpellsGain > 0) sectionLabel.push(`+${preparedSpellsGain} Spell${preparedSpellsGain !== 1 ? "s" : ""}`);
 			if (preparedCantripsGain > 0) sectionLabel.push(`+${preparedCantripsGain} Cantrip${preparedCantripsGain !== 1 ? "s" : ""}`);
-			$main.append(createAccordion("preparedspells", "✨", `Prepared Spells (${sectionLabel.join(", ")})`, $preparedContent, {required: totalGain > 0}));
+			main.append(createAccordion("preparedspells", "✨", `Prepared Spells (${sectionLabel.join(", ")})`, preparedContent, {required: totalGain > 0}));
 		}
 
 		// ========== 9. NEW FEATURES (Info Only) ==========
 		const filteredFeatures = filterAsiFeatures(currentFeatures);
 		if (filteredFeatures.length) {
-			$summaryItems.append(createSummaryItem("features", "⭐", "New Features", {required: false}));
+			summaryItems.append(createSummaryItem("features", "⭐", "New Features", {required: false}));
 
-			const $featuresContent = this._renderFeaturesCompact(filteredFeatures);
-			$main.append(createAccordion("features", "⭐", `New Features (${filteredFeatures.length})`, $featuresContent, {required: false}));
+			const featuresContent = this._renderFeaturesCompact(filteredFeatures);
+			main.append(createAccordion("features", "⭐", `New Features (${filteredFeatures.length})`, featuresContent, {required: false}));
 
-			summaryItems.features.setStatus(true, `${filteredFeatures.length} feature${filteredFeatures.length !== 1 ? "s" : ""}`);
+			summaryItemEls.features.setStatus(true, `${filteredFeatures.length} feature${filteredFeatures.length !== 1 ? "s" : ""}`);
 			accordions.features.setComplete(true, `${filteredFeatures.length} gained`);
 		}
 
 		// ========== 10. HP ==========
-		$summaryItems.append(createSummaryItem("hp", "❤️", "Hit Points", {required: false}));
+		summaryItems.append(createSummaryItem("hp", "❤️", "Hit Points", {required: false}));
 
 		const hitDie = CharacterSheetClassUtils.getClassHitDie(classData);
 		const conMod = this._state.getAbilityMod("con");
 		const averageHp = Math.ceil(hitDie / 2) + 1 + conMod;
 
-		const $hpContent = $(`
+		const hpContent = e_({outer: `
 			<div class="charsheet__levelup-hp">
 				<label class="ve-flex-v-center">
 					<input type="radio" name="hp-method-wizard" value="average" checked class="mr-2" data-testid="levelup-hp-average">
@@ -780,23 +797,25 @@ class CharacterSheetLevelUp {
 					<span>Roll: 1d${hitDie} + ${conMod} CON</span>
 				</label>
 			</div>
-		`);
+		`});
 
-		$hpContent.find('input[name="hp-method-wizard"]').on("change", function () {
-			hpMethod = $(this).val();
-			summaryItems.hp.setStatus(true, hpMethod === "average" ? `+${averageHp} (avg)` : `1d${hitDie}+${conMod}`);
+		hpContent.querySelectorAll('input[name="hp-method-wizard"]').forEach(radio => {
+			radio.addEventListener("change", function () {
+				hpMethod = this.value;
+				summaryItemEls.hp.setStatus(true, hpMethod === "average" ? `+${averageHp} (avg)` : `1d${hitDie}+${conMod}`);
+			});
 		});
 
-		$main.append(createAccordion("hp", "❤️", "Hit Points", $hpContent, {required: false}));
-		summaryItems.hp.setStatus(true, `+${averageHp} (avg)`);
+		main.append(createAccordion("hp", "❤️", "Hit Points", hpContent, {required: false}));
+		summaryItemEls.hp.setStatus(true, `+${averageHp} (avg)`);
 		accordions.hp.setComplete(true, `+${averageHp}`);
 
 		// ========== EXPAND FIRST INCOMPLETE ==========
 		const expandNextIncomplete = () => {
-			const firstIncomplete = Object.entries(accordions).find(([id, acc]) => acc.required && !acc.$el.hasClass("completed"));
+			const firstIncomplete = Object.entries(accordions).find(([id, acc]) => acc.required && !acc.el.classList.contains("completed"));
 			if (firstIncomplete) {
-				$main.find(".charsheet__levelup-accordion").removeClass("expanded");
-				firstIncomplete[1].$el.addClass("expanded");
+				main.querySelectorAll(".charsheet__levelup-accordion").forEach(el => el.classList.remove("expanded"));
+				firstIncomplete[1].el.classList.add("expanded");
 				updateActiveSummary(firstIncomplete[0]);
 			}
 		};
@@ -806,21 +825,24 @@ class CharacterSheetLevelUp {
 		updateProgress();
 
 		// ========== FOOTER BUTTONS ==========
-		const $footer = $$`
+		const footer = ee`
 			<div class="ve-flex-v-center ve-flex-h-right mt-3 pt-3" style="border-top: 1px solid var(--rgb-border-grey);">
 				<button class="ve-btn ve-btn-default mr-2" data-testid="levelup-cancel">Cancel</button>
 				<button class="ve-btn ve-btn-primary ve-btn-lg" data-testid="levelup-finish">
 					<span class="glyphicon glyphicon-arrow-up"></span> Level Up to ${newLevel}
 				</button>
 			</div>
-		`.appendTo($modalInner);
+		`;
+		modalInner.append(footer);
 
-		$footer.find(".ve-btn-default").on("click", () => doClose(false));
-		$footer.find(".ve-btn-primary").on("click", async () => {
+		footer.querySelector(".ve-btn-default").addEventListener("click", () => doClose(false));
+		footer.querySelector(".ve-btn-primary").addEventListener("click", async () => {
 			// ========== VALIDATION ==========
 			if (needsSubclass && !selectedSubclass) {
 				JqueryUtil.doToast({type: "warning", content: "Please select a subclass."});
-				accordions.subclass.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+				const el = accordions.subclass.el;
+				el.classList.add("expanded");
+				el.scrollIntoView({behavior: "smooth"});
 				return;
 			}
 
@@ -849,17 +871,23 @@ class CharacterSheetLevelUp {
 				if (isBothAsiAndFeat) {
 					if (totalAsi !== 2) {
 						JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points (2 total)."});
-						accordions.asi.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+						const el = accordions.asi.el;
+						el.classList.add("expanded");
+						el.scrollIntoView({behavior: "smooth"});
 						return;
 					}
 					if (!selectedFeat) {
 						JqueryUtil.doToast({type: "warning", content: "Please select a feat (Thelemar: ASI + Feat at level 4)."});
-						accordions.asi.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+						const el = accordions.asi.el;
+						el.classList.add("expanded");
+						el.scrollIntoView({behavior: "smooth"});
 						return;
 					}
 				} else if (!selectedFeat && totalAsi !== 2) {
 					JqueryUtil.doToast({type: "warning", content: "Please allocate all ability score points or select a feat."});
-					accordions.asi.$el.addClass("expanded")[0].scrollIntoView({behavior: "smooth"});
+					const el = accordions.asi.el;
+					el.classList.add("expanded");
+					el.scrollIntoView({behavior: "smooth"});
 					return;
 				}
 			}
@@ -869,7 +897,8 @@ class CharacterSheetLevelUp {
 				const selected = selectedOptionalFeatures[featureKey] || [];
 				if (selected.length < gain.newCount) {
 					JqueryUtil.doToast({type: "warning", content: `Please select ${gain.newCount} ${gain.name}.`});
-					accordions.optfeatures?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					accordions.optfeatures?.el.classList.add("expanded");
+					accordions.optfeatures?.el.scrollIntoView({behavior: "smooth"});
 					return;
 				}
 			}
@@ -899,7 +928,8 @@ class CharacterSheetLevelUp {
 				const requiredCount = Math.min(optGroup.count, availableCount);
 				if (requiredCount > 0 && selected.length < requiredCount) {
 					JqueryUtil.doToast({type: "warning", content: `Please select ${requiredCount} option(s) for ${optGroup.featureName}.`});
-					accordions.featoptions?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					accordions.featoptions?.el.classList.add("expanded");
+					accordions.featoptions?.el.scrollIntoView({behavior: "smooth"});
 					return;
 				}
 			}
@@ -911,7 +941,8 @@ class CharacterSheetLevelUp {
 				const selected = selectedExpertise[grant.featureName] || [];
 				if (selected.length < grant.count) {
 					JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} skill(s) for expertise.`});
-					accordions.expertise?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					accordions.expertise?.el.classList.add("expanded");
+					accordions.expertise?.el.scrollIntoView({behavior: "smooth"});
 					return;
 				}
 			}
@@ -920,44 +951,51 @@ class CharacterSheetLevelUp {
 				const selected = selectedLanguages[grant.featureName] || [];
 				if (selected.length < grant.count) {
 					JqueryUtil.doToast({type: "warning", content: `Please select ${grant.count} language(s).`});
-					accordions.languages?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+					accordions.languages?.el.classList.add("expanded");
+					accordions.languages?.el.scrollIntoView({behavior: "smooth"});
 					return;
 				}
 			}
 
 			if (needsScholarChoice && !selectedScholarSkill) {
 				JqueryUtil.doToast({type: "warning", content: "Please select a skill for Scholar expertise."});
-				accordions.scholar?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				accordions.scholar?.el.classList.add("expanded");
+				accordions.scholar?.el.scrollIntoView({behavior: "smooth"});
 				return;
 			}
 
 			if (isWizard && selectedSpellbookSpells.length < wizardSpellCount) {
 				JqueryUtil.doToast({type: "warning", content: `Please select ${wizardSpellCount} spells for your spellbook.`});
-				accordions.spellbook?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				accordions.spellbook?.el.classList.add("expanded");
+				accordions.spellbook?.el.scrollIntoView({behavior: "smooth"});
 				return;
 			}
 
 			if (isKnownCaster && knownSpellsGain > 0 && selectedKnownSpells.length < knownSpellsGain) {
 				JqueryUtil.doToast({type: "warning", content: `Please select ${knownSpellsGain} spell(s) to learn.`});
-				accordions.knownspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				accordions.knownspells?.el.classList.add("expanded");
+				accordions.knownspells?.el.scrollIntoView({behavior: "smooth"});
 				return;
 			}
 
 			if (isKnownCaster && knownCantripsGain > 0 && selectedKnownCantrips.length < knownCantripsGain) {
 				JqueryUtil.doToast({type: "warning", content: `Please select ${knownCantripsGain} cantrip(s) to learn.`});
-				accordions.knownspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				accordions.knownspells?.el.classList.add("expanded");
+				accordions.knownspells?.el.scrollIntoView({behavior: "smooth"});
 				return;
 			}
 
 			if (isPreparedCaster && preparedSpellsGain > 0 && selectedPreparedSpells.length < preparedSpellsGain) {
 				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedSpellsGain} prepared spell(s).`});
-				accordions.preparedspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				accordions.preparedspells?.el.classList.add("expanded");
+				accordions.preparedspells?.el.scrollIntoView({behavior: "smooth"});
 				return;
 			}
 
 			if (isPreparedCaster && preparedCantripsGain > 0 && selectedPreparedCantrips.length < preparedCantripsGain) {
 				JqueryUtil.doToast({type: "warning", content: `Please select ${preparedCantripsGain} cantrip(s).`});
-				accordions.preparedspells?.$el.addClass("expanded")[0]?.scrollIntoView({behavior: "smooth"});
+				accordions.preparedspells?.el.classList.add("expanded");
+				accordions.preparedspells?.el.scrollIntoView({behavior: "smooth"});
 				return;
 			}
 
@@ -999,7 +1037,7 @@ class CharacterSheetLevelUp {
 		const allSubclasses = this._page.filterByAllowedSources(allSubclassesRaw);
 
 		const subclassTitle = classData.subclassTitle || "Subclass";
-		const $container = $(`<div class="charsheet__levelup-subclasses"></div>`);
+		const container = e_({tag: "div", clazz: "charsheet__levelup-subclasses"});
 
 		// Get class source from classData
 		const classSource = classData.source;
@@ -1027,28 +1065,28 @@ class CharacterSheetLevelUp {
 		let selectedSource = "";
 		let textFilter = "";
 
-		const $filterRow = showFilters ? $(`<div class="ve-flex gap-2 mb-2"></div>`) : null;
-		const $search = showFilters
-			? $(`<input type="text" class="form-control form-control-sm ve-flex-grow" placeholder="Search ${subclassTitle.toLowerCase()}s...">`)
+		const filterRow = showFilters ? e_({tag: "div", clazz: "ve-flex gap-2 mb-2"}) : null;
+		const searchInput = showFilters
+			? e_({outer: `<input type="text" class="form-control form-control-sm ve-flex-grow" placeholder="Search ${subclassTitle.toLowerCase()}s...">`})
 			: null;
-		const $sourceFilter = showFilters && availableSources.length > 1
-			? $(`
+		const sourceFilter = showFilters && availableSources.length > 1
+			? e_({outer: `
 				<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
 					<option value="">All Sources</option>
 					${availableSources.map(src => `<option value="${src}">${Parser.sourceJsonToAbv(src)}</option>`).join("")}
 				</select>
-			`)
+			`})
 			: null;
 
-		if ($filterRow) {
-			$filterRow.append($search);
-			if ($sourceFilter) $filterRow.append($sourceFilter);
+		if (filterRow) {
+			filterRow.append(searchInput);
+			if (sourceFilter) filterRow.append(sourceFilter);
 		}
 
-		const $list = $(`<div style="max-height: 300px; overflow-y: auto;"></div>`);
+		const list = e_({outer: `<div style="max-height: 300px; overflow-y: auto;"></div>`});
 
 		const renderSubclassItem = (subclass) => {
-			const $option = $(`
+			const option = e_({outer: `
 				<div class="charsheet__levelup-option">
 					<div class="charsheet__levelup-option-header">
 						<input type="radio" name="subclass-choice-wizard" value="${subclass.name}">
@@ -1056,18 +1094,21 @@ class CharacterSheetLevelUp {
 						<span class="ve-small ve-muted ml-auto">${Parser.sourceJsonToAbv(subclass.source)}</span>
 					</div>
 				</div>
-			`);
+			`});
 			// Add hoverable subclass link
 			const subclassLink = CharacterSheetPage.getSubclassHoverLink(subclass);
-			$option.find(".subclass-name-link").html(subclassLink);
+			const nameSpan = option.querySelector(".subclass-name-link");
+			if (typeof subclassLink === "string") nameSpan.innerHTML = subclassLink;
+			else nameSpan.append(subclassLink);
 
-			$option.on("click", () => {
-				$list.find(".charsheet__levelup-option").removeClass("selected");
-				$option.addClass("selected").find("input").prop("checked", true);
+			option.addEventListener("click", () => {
+				list.querySelectorAll(".charsheet__levelup-option").forEach(el => el.classList.remove("selected"));
+				option.classList.add("selected");
+				option.querySelector("input").checked = true;
 				onSelect(subclass);
 			});
 
-			return $option;
+			return option;
 		};
 
 		// Track collapse states
@@ -1075,7 +1116,7 @@ class CharacterSheetLevelUp {
 		let secondaryCollapsed = true; // Start collapsed
 
 		const renderList = () => {
-			$list.empty();
+			list.innerHTML = "";
 			const filterLower = textFilter.toLowerCase();
 
 			const filterSubclasses = (scs) => scs.filter(sc => {
@@ -1089,81 +1130,81 @@ class CharacterSheetLevelUp {
 			const filteredSecondary = filterSubclasses(secondarySubclasses);
 
 			if (filteredPrimary.length === 0 && filteredSecondary.length === 0) {
-				$list.append(`<p class="ve-muted text-center py-2">No matching ${subclassTitle.toLowerCase()}s</p>`);
+				list.innerHTML = `<p class="ve-muted text-center py-2">No matching ${subclassTitle.toLowerCase()}s</p>`;
 				return;
 			}
 
 			// Primary subclasses
 			if (filteredPrimary.length > 0) {
-				const $primaryHeader = $(`
+				const primaryHeader = e_({outer: `
 					<div class="ve-flex-v-center py-2 px-3 mb-2 clickable" 
 						style="background: linear-gradient(135deg, rgba(66, 153, 225, 0.15) 0%, rgba(66, 153, 225, 0.05) 100%); border: 1px solid rgba(66, 153, 225, 0.3); border-radius: 6px; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-						<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">▶</span>
-						<span class="ve-bold" style="color: var(--rgb-name-blue);">🎯 ${Parser.sourceJsonToAbv(classSource)} ${subclassTitle}s</span>
+						<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">\u25b6</span>
+						<span class="ve-bold" style="color: var(--rgb-name-blue);">\ud83c\udfaf ${Parser.sourceJsonToAbv(classSource)} ${subclassTitle}s</span>
 						<span class="badge badge-primary ml-auto" style="font-size: 0.75em;">${filteredPrimary.length}</span>
 					</div>
-				`);
-				const $primaryContent = $(`<div class="mb-3 pl-2" style="border-left: 3px solid rgba(66, 153, 225, 0.3);"></div>`);
-				filteredPrimary.forEach(sc => $primaryContent.append(renderSubclassItem(sc)));
+				`});
+				const primaryContent = e_({outer: `<div class="mb-3 pl-2" style="border-left: 3px solid rgba(66, 153, 225, 0.3);"></div>`});
+				filteredPrimary.forEach(sc => primaryContent.append(renderSubclassItem(sc)));
 
-				$primaryHeader.on("click", () => {
+				primaryHeader.addEventListener("click", () => {
 					primaryCollapsed = !primaryCollapsed;
-					$primaryHeader.find("span:first").css("transform", primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-					$primaryContent.toggle(!primaryCollapsed);
+					primaryHeader.querySelector("span").style.transform = primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+					primaryContent.style.display = primaryCollapsed ? "none" : "";
 				});
 
 				// Apply initial state
-				$primaryHeader.find("span:first").css("transform", primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-				$primaryContent.toggle(!primaryCollapsed);
+				primaryHeader.querySelector("span").style.transform = primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+				primaryContent.style.display = primaryCollapsed ? "none" : "";
 
-				$list.append($primaryHeader, $primaryContent);
+				list.append(primaryHeader, primaryContent);
 			}
 
 			// Secondary subclasses
 			if (filteredSecondary.length > 0) {
-				const $secondaryHeader = $(`
+				const secondaryHeader = e_({outer: `
 					<div class="ve-flex-v-center py-2 px-3 mb-2 clickable" 
 						style="background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.03) 100%); border: 1px solid rgba(128, 128, 128, 0.2); border-radius: 6px; user-select: none;">
-						<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">▶</span>
-						<span class="ve-bold ve-muted">📚 Other ${subclassTitle}s</span>
+						<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">\u25b6</span>
+						<span class="ve-bold ve-muted">\ud83d\udcda Other ${subclassTitle}s</span>
 						<span class="badge badge-secondary ml-auto" style="font-size: 0.75em;">${filteredSecondary.length}</span>
 					</div>
-				`);
-				const $secondaryContent = $(`<div class="mb-2 pl-2" style="border-left: 3px solid rgba(128, 128, 128, 0.2);"></div>`);
-				filteredSecondary.forEach(sc => $secondaryContent.append(renderSubclassItem(sc)));
+				`});
+				const secondaryContent = e_({outer: `<div class="mb-2 pl-2" style="border-left: 3px solid rgba(128, 128, 128, 0.2);"></div>`});
+				filteredSecondary.forEach(sc => secondaryContent.append(renderSubclassItem(sc)));
 
-				$secondaryHeader.on("click", () => {
+				secondaryHeader.addEventListener("click", () => {
 					secondaryCollapsed = !secondaryCollapsed;
-					$secondaryHeader.find("span:first").css("transform", secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-					$secondaryContent.toggle(!secondaryCollapsed);
+					secondaryHeader.querySelector("span").style.transform = secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+					secondaryContent.style.display = secondaryCollapsed ? "none" : "";
 				});
 
 				// Apply initial state
-				$secondaryHeader.find("span:first").css("transform", secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-				$secondaryContent.toggle(!secondaryCollapsed);
+				secondaryHeader.querySelector("span").style.transform = secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+				secondaryContent.style.display = secondaryCollapsed ? "none" : "";
 
-				$list.append($secondaryHeader, $secondaryContent);
+				list.append(secondaryHeader, secondaryContent);
 			}
 		};
 
-		if ($search) {
-			$search.on("input", () => {
-				textFilter = $search.val();
+		if (searchInput) {
+			searchInput.addEventListener("input", () => {
+				textFilter = searchInput.value;
 				renderList();
 			});
 		}
-		if ($sourceFilter) {
-			$sourceFilter.on("change", () => {
-				selectedSource = $sourceFilter.val();
+		if (sourceFilter) {
+			sourceFilter.addEventListener("change", () => {
+				selectedSource = sourceFilter.value;
 				renderList();
 			});
 		}
 
-		if ($filterRow) $container.append($filterRow);
+		if (filterRow) container.append(filterRow);
 		renderList();
-		$container.append($list);
+		container.append(list);
 
-		return $container;
+		return container;
 	}
 
 	/**
@@ -1171,27 +1212,27 @@ class CharacterSheetLevelUp {
 	 */
 	_renderAsiSelectionCompact (onAsiChange, onFeatSelect, isBothAsiAndFeat, isEpicBoonLevel) {
 		// Get the full section and extract just the contents
-		const $fullSection = this._renderAsiSelection(onAsiChange, onFeatSelect, isBothAsiAndFeat, isEpicBoonLevel);
+		const fullSection = this._renderAsiSelection(onAsiChange, onFeatSelect, isBothAsiAndFeat, isEpicBoonLevel);
 		// Return all children without the wrapper div
-		return $fullSection.children();
+		return [...fullSection.children];
 	}
 
 	/**
 	 * Render compact features list for wizard layout with hover links
 	 */
 	_renderFeaturesCompact (features) {
-		const $container = $(`<div class="charsheet__levelup-features"></div>`);
+		const container = e_({outer: `<div class="charsheet__levelup-features"></div>`});
 
 		features.forEach(feature => {
-			const $feature = $(`
+			const featureEl = e_({outer: `
 				<div class="charsheet__levelup-feature">
 					<div class="charsheet__levelup-feature-header"></div>
 					${feature.description ? `<div class="charsheet__levelup-feature-description">${feature.description.substring(0, 150)}${feature.description.length > 150 ? "..." : ""}</div>` : ""}
 				</div>
-			`);
+			`});
 
 			// Add feature name with hover link
-			const $header = $feature.find(".charsheet__levelup-feature-header");
+			const header = featureEl.querySelector(".charsheet__levelup-feature-header");
 			try {
 				if (this._page?.getHoverLink && feature.source && feature.className) {
 					// Use same logic as features tab for proper source handling
@@ -1235,7 +1276,7 @@ class CharacterSheetLevelUp {
 						hoverSource,
 						hash,
 					);
-					$header.html(hoverLink);
+					header.innerHTML = hoverLink;
 				} else if (this._page?.getHoverLink && feature.featureType) {
 					// Optional feature
 					const hoverLink = this._page.getHoverLink(
@@ -1243,37 +1284,37 @@ class CharacterSheetLevelUp {
 						feature.name,
 						feature.source || Parser.SRC_XPHB,
 					);
-					$header.html(hoverLink);
+					header.innerHTML = hoverLink;
 				} else {
-					$header.text(feature.name);
+					header.textContent = feature.name;
 				}
 			} catch (e) {
 				console.warn("[LevelUp] Feature hover link error:", e);
-				$header.text(feature.name);
+				header.textContent = feature.name;
 			}
 
-			$container.append($feature);
+			container.append(featureEl);
 		});
 
-		return $container;
+		return container;
 	}
 
 	_renderSubclassSelection (classData, onSelect) {
 		const subclasses = classData.subclasses || [];
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					📚 Choose ${classData.subclassTitle || "Subclass"}
 				</h5>
 				<div class="charsheet__levelup-subclasses"></div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__levelup-subclasses");
+		const container = section.querySelector(".charsheet__levelup-subclasses");
 
 		subclasses.forEach(subclass => {
-			const $option = $(`
+			const option = e_({outer: `
 				<div class="charsheet__levelup-option" data-subclass="${subclass.name}">
 					<div class="charsheet__levelup-option-header">
 						<input type="radio" name="subclass-choice" value="${subclass.name}">
@@ -1284,19 +1325,19 @@ class CharacterSheetLevelUp {
 						${subclass.shortName || ""}
 					</div>
 				</div>
-			`);
+			`});
 
-			$option.on("click", () => {
-				$container.find(".charsheet__levelup-option").removeClass("selected");
-				$option.addClass("selected");
-				$option.find("input").prop("checked", true);
+			option.addEventListener("click", () => {
+				container.querySelectorAll(".charsheet__levelup-option").forEach(el => el.classList.remove("selected"));
+				option.classList.add("selected");
+				option.querySelector("input").checked = true;
 				onSelect(subclass);
 			});
 
-			$container.append($option);
+			container.append(option);
 		});
 
-		return $section;
+		return section;
 	}
 
 	_renderAsiSelection (onAsiChange, onFeatSelect, isBothAsiAndFeat = false, isEpicBoonLevel = false) {
@@ -1307,7 +1348,7 @@ class CharacterSheetLevelUp {
 				? "📈 Ability Score Improvement + Feat (Thelemar)"
 				: "📈 Ability Score Improvement";
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					${sectionTitle}
@@ -1331,29 +1372,29 @@ class CharacterSheetLevelUp {
 				<div id="asi-abilities-container"></div>
 				<div id="asi-feats-container" style="${isBothAsiAndFeat ? "" : "display: none;"}"></div>
 			</div>
-		`);
+		`});
 
-		const $abilitiesContainer = $section.find("#asi-abilities-container");
-		const $featsContainer = $section.find("#asi-feats-container");
+		const abilitiesContainer = section.querySelector("#asi-abilities-container");
+		const featsContainer = section.querySelector("#asi-feats-container");
 
 		// Toggle between ASI and Feat (only if not both)
 		if (!isBothAsiAndFeat) {
-			$section.find("input[name=\"asi-type\"]").on("change", (e) => {
+			section.querySelectorAll("input[name=\"asi-type\"]").forEach(radio => radio.addEventListener("change", (e) => {
 				if (e.target.value === "asi") {
-					$abilitiesContainer.show();
-					$featsContainer.hide();
+					abilitiesContainer.style.display = "";
+					featsContainer.style.display = "none";
 					onFeatSelect(null);
 				} else {
-					$abilitiesContainer.hide();
-					$featsContainer.show();
+					abilitiesContainer.style.display = "none";
+					featsContainer.style.display = "";
 				}
-			});
+			}));
 		}
 
 		// Add section labels when both are shown
 		if (isBothAsiAndFeat) {
-			$abilitiesContainer.prepend(`<h6 class="ve-bold mb-2">📊 Ability Score Increase (+2 points)</h6>`);
-			$featsContainer.prepend(`<h6 class="ve-bold mb-2 mt-3">🎭 Select a Feat</h6>`);
+			abilitiesContainer.insertAdjacentHTML("afterbegin", `<h6 class="ve-bold mb-2">📊 Ability Score Increase (+2 points)</h6>`);
+			featsContainer.insertAdjacentHTML("afterbegin", `<h6 class="ve-bold mb-2 mt-3">🎭 Select a Feat</h6>`);
 		}
 
 		// Ability score selectors
@@ -1361,19 +1402,19 @@ class CharacterSheetLevelUp {
 		const asiValues = {str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0};
 
 		const updatePointsDisplay = () => {
-			$abilitiesContainer.find(".asi-points-remaining").text(pointsRemaining);
+			abilitiesContainer.querySelector(".asi-points-remaining").textContent = pointsRemaining;
 		};
 
-		const $abilitiesGrid = $(`
+		const abilitiesGrid = e_({outer: `
 			<div class="charsheet__levelup-asi-grid">
 				<div class="ve-text-center mb-2">Points remaining: <strong class="asi-points-remaining">${pointsRemaining}</strong></div>
 			</div>
-		`);
+		`});
 
 		Parser.ABIL_ABVS.forEach(abl => {
 			const currentScore = this._state.getAbilityScore(abl);
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__levelup-asi-row">
 					<span class="charsheet__levelup-asi-name">${Parser.attAbvToFull(abl)}</span>
 					<span class="charsheet__levelup-asi-current">${currentScore}</span>
@@ -1382,34 +1423,34 @@ class CharacterSheetLevelUp {
 					<button class="ve-btn ve-btn-xs ve-btn-default asi-plus" data-ability="${abl}">+</button>
 					<span class="charsheet__levelup-asi-new" id="asi-new-${abl}">${currentScore}</span>
 				</div>
-			`);
+			`});
 
-			$row.find(".asi-minus").on("click", () => {
+			row.querySelector(".asi-minus").addEventListener("click", () => {
 				if (asiValues[abl] <= 0) return;
 				asiValues[abl]--;
 				pointsRemaining++;
-				$row.find(`#asi-bonus-${abl}`).text(asiValues[abl] > 0 ? `+${asiValues[abl]}` : "+0");
-				$row.find(`#asi-new-${abl}`).text(currentScore + asiValues[abl]);
+				row.querySelector(`#asi-bonus-${abl}`).textContent = asiValues[abl] > 0 ? `+${asiValues[abl]}` : "+0";
+				row.querySelector(`#asi-new-${abl}`).textContent = currentScore + asiValues[abl];
 				updatePointsDisplay();
 				onAsiChange(abl, -1);
 			});
 
-			$row.find(".asi-plus").on("click", () => {
+			row.querySelector(".asi-plus").addEventListener("click", () => {
 				if (pointsRemaining <= 0) return;
 				if (asiValues[abl] >= 2) return; // Max +2 per ability
 				if (currentScore + asiValues[abl] >= 20) return; // Cap at 20
 				asiValues[abl]++;
 				pointsRemaining--;
-				$row.find(`#asi-bonus-${abl}`).text(`+${asiValues[abl]}`);
-				$row.find(`#asi-new-${abl}`).text(currentScore + asiValues[abl]);
+				row.querySelector(`#asi-bonus-${abl}`).textContent = `+${asiValues[abl]}`;
+				row.querySelector(`#asi-new-${abl}`).textContent = currentScore + asiValues[abl];
 				updatePointsDisplay();
 				onAsiChange(abl, 1);
 			});
 
-			$abilitiesGrid.append($row);
+			abilitiesGrid.append(row);
 		});
 
-		$abilitiesContainer.append($abilitiesGrid);
+		abilitiesContainer.append(abilitiesGrid);
 
 		// Feats list - filtered by allowed sources
 		const feats = this._page.filterByAllowedSources(this._page.getFeats() || []);
@@ -1418,11 +1459,11 @@ class CharacterSheetLevelUp {
 		if (isEpicBoonLevel) {
 			const epicBoons = feats.filter(f => f.category === "EB");
 			if (epicBoons.length) {
-				const $epicSection = $(`<div class="charsheet__levelup-epic-boons mb-3">
+				const epicSection = e_({outer: `<div class="charsheet__levelup-epic-boons mb-3">
 					<h6 class="ve-bold mb-2">🌟 Epic Boons <span class="ve-muted ve-small">(Recommended at level 19)</span></h6>
-				</div>`);
+				</div>`});
 
-				const $epicList = $(`<div class="charsheet__levelup-feats-list" style="max-height: 200px; overflow-y: auto;"></div>`);
+				const epicList = e_({outer: `<div class="charsheet__levelup-feats-list" style="max-height: 200px; overflow-y: auto;"></div>`});
 
 				epicBoons.forEach(boon => {
 					// Ability bonus description
@@ -1443,47 +1484,47 @@ class CharacterSheetLevelUp {
 					const boonChoices = getFeatChoices(boon);
 					const hasChoices = boonChoices.skills || boonChoices.languages || boonChoices.ability || boonChoices.tools || boonChoices.expertise || boonChoices.spells;
 
-					const $boon = $(`
+					const boonEl = e_({outer: `
 						<div class="charsheet__levelup-feat-option" data-feat="${boon.name}">
 							<input type="radio" name="feat-choice" value="${boon.name}">
 							<span class="ve-muted">(${Parser.sourceJsonToAbv(boon.source)})</span>
 							${hasChoices ? ` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>` : ""}
 							${abilityHint ? `<span class="ve-small text-info">${abilityHint}</span>` : ""}
 						</div>
-					`);
+					`});
 
 					// Add hoverable name link (same pattern as regular feats)
 					const boonLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_FEATS, boon.name, boon.source);
-					$boon.find("input").after($(`<strong></strong>`).append(boonLink));
+					boonEl.querySelector("input").after(e_({outer: `<strong></strong>`}).append(boonLink));
 
-					$boon.on("click", () => {
+					boonEl.addEventListener("click", () => {
 						// Deselect from both lists
-						$featsContainer.find(".charsheet__levelup-feat-option").removeClass("selected");
-						$boon.addClass("selected");
-						$boon.find("input").prop("checked", true);
+						featsContainer.querySelectorAll(".charsheet__levelup-feat-option").forEach(el => el.classList.remove("selected"));
+						boonEl.classList.add("selected");
+						boonEl.querySelector("input").checked = true;
 						onFeatSelect(boon);
 
 						// Show ability choice UI if boon has choose
-						this._renderEpicBoonAbilityChoice(boon, $epicSection);
+						this._renderEpicBoonAbilityChoice(boon, epicSection);
 
 						// Show additional choices UI if boon has skill/spell/tool choices
 						if (hasChoices) {
-							this._renderFeatChoicesUI(boon, boonChoices, $featChoicesContainer);
+							this._renderFeatChoicesUI(boon, boonChoices, featChoicesContainer);
 						}
 					});
 
-					$epicList.append($boon);
+					epicList.append(boonEl);
 				});
 
-				$epicSection.append($epicList);
-				$featsContainer.append($epicSection);
-				$featsContainer.append(`<div class="ve-muted ve-text-center mb-2">— or choose another feat —</div>`);
+				epicSection.append(epicList);
+				featsContainer.append(epicSection);
+				featsContainer.insertAdjacentHTML("beforeend", `<div class="ve-muted ve-text-center mb-2">— or choose another feat —</div>`);
 			}
 		}
 
-		const $featSearch = $(`<input type="text" class="form-control mb-2" placeholder="Search feats...">`);
-		const $featList = $(`<div class="charsheet__levelup-feats-list"></div>`);
-		const $featChoicesContainer = $(`<div class="charsheet__levelup-feat-choices"></div>`);
+		const featSearch = e_({outer: `<input type="text" class="form-control mb-2" placeholder="Search feats...">`});
+		const featList = e_({outer: `<div class="charsheet__levelup-feats-list"></div>`});
+		const featChoicesContainer = e_({outer: `<div class="charsheet__levelup-feat-choices"></div>`});
 
 		// Helper to detect if feat has choices
 		const getFeatChoices = (feat) => {
@@ -1630,8 +1671,8 @@ class CharacterSheetLevelUp {
 		};
 
 		const renderFeats = (filter = "") => {
-			$featList.empty();
-			$featChoicesContainer.empty();
+			featList.innerHTML = "";
+			featChoicesContainer.innerHTML = "";
 			const filteredFeats = feats.filter(f =>
 				f.name.toLowerCase().includes(filter.toLowerCase()),
 			).slice(0, 50);
@@ -1640,52 +1681,52 @@ class CharacterSheetLevelUp {
 				const choices = getFeatChoices(feat);
 				const hasChoices = choices.skills || choices.languages || choices.ability || choices.tools || choices.expertise || choices.spells;
 
-				const $feat = $(`<div class="charsheet__levelup-feat-option" data-feat="${feat.name}"></div>`);
-				$feat.append(`<input type="radio" name="feat-choice" value="${feat.name}">`);
+				const featEl = e_({outer: `<div class="charsheet__levelup-feat-option" data-feat="${feat.name}"></div>`});
+				featEl.insertAdjacentHTML("beforeend", `<input type="radio" name="feat-choice" value="${feat.name}">`);
 				const featLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_FEATS, feat.name, feat.source);
-				$feat.append($(`<strong></strong>`).append(featLink));
-				$feat.append(` <span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>`);
+				featEl.append(e_({outer: `<strong></strong>`}).append(featLink));
+				featEl.append(` <span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>`);
 				if (feat.category) {
 					const categoryFull = Parser.featCategoryToFull?.(feat.category) || feat.category;
-					$feat.append(` <span class="badge badge-secondary ml-1" style="font-size: 0.6rem;">${categoryFull}</span>`);
+					featEl.append(` <span class="badge badge-secondary ml-1" style="font-size: 0.6rem;">${categoryFull}</span>`);
 				}
-				if (hasChoices) $feat.append(` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>`);
+				if (hasChoices) featEl.append(` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>`);
 
-				$feat.on("click", () => {
+				featEl.addEventListener("click", () => {
 					// Deselect from all feat lists (including epic boons)
-					$featsContainer.find(".charsheet__levelup-feat-option").removeClass("selected");
-					$feat.addClass("selected");
-					$feat.find("input").prop("checked", true);
+					featsContainer.querySelectorAll(".charsheet__levelup-feat-option").forEach(el => el.classList.remove("selected"));
+					featEl.classList.add("selected");
+					featEl.querySelector("input").checked = true;
 
 					// Initialize feat choices storage
-					if (!feat._featChoices) {
-						feat._featChoices = {skills: [], languages: [], ability: null, tools: [], expertise: [], spellList: null, cantrips: [], spells: []};
+					if (!featEl._featChoices) {
+						featEl._featChoices = {skills: [], languages: [], ability: null, tools: [], expertise: [], spellList: null, cantrips: [], spells: []};
 					}
 
 					// Render feat choices UI if needed
-					this._renderFeatChoicesUI(feat, choices, $featChoicesContainer);
+					this._renderFeatChoicesUI(feat, choices, featChoicesContainer);
 
 					onFeatSelect(feat);
 				});
 
-				$featList.append($feat);
+				featList.append(featEl);
 			});
 		};
 
-		$featSearch.on("input", (e) => renderFeats(e.target.value));
+		featSearch.addEventListener("input", (e) => renderFeats(e.target.value));
 		renderFeats();
 
-		$featsContainer.append($featSearch, $featList, $featChoicesContainer);
+		featsContainer.append(featSearch, featList, featChoicesContainer);
 
-		return $section;
+		return section;
 	}
 
 	/**
 	 * Render ability score choice UI for Epic Boons with { choose: { from: [...] } }
 	 */
-	_renderEpicBoonAbilityChoice (boon, $parentSection) {
+	_renderEpicBoonAbilityChoice (boon, parentSection) {
 		// Remove any existing ability choice UI
-		$parentSection.find(".charsheet__epic-boon-ability-choice").remove();
+		parentSection.querySelector(".charsheet__epic-boon-ability-choice").remove();
 
 		if (!boon.ability?.length) return;
 
@@ -1696,86 +1737,86 @@ class CharacterSheetLevelUp {
 		const amount = ablEntry.choose.amount || 1;
 		const max = ablEntry.max || 20;
 
-		const $choiceContainer = $(`<div class="charsheet__epic-boon-ability-choice mt-2 p-2 rounded" style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b));">
+		const choiceContainer = e_({outer: `<div class="charsheet__epic-boon-ability-choice mt-2 p-2 rounded" style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b));">
 			<span class="ve-small ve-bold">Choose ability to increase by +${amount} (max ${max}):</span>
-		</div>`);
+		</div>`});
 
-		const $select = $(`<select class="form-control form-control-sm mt-1" style="max-width: 200px;"></select>`);
+		const select = e_({outer: `<select class="form-control form-control-sm mt-1" style="max-width: 200px;"></select>`});
 		options.forEach(abl => {
 			const currentScore = this._state.getAbilityScore(abl);
-			$select.append(`<option value="${abl}">${Parser.attAbvToFull(abl)} (currently ${currentScore})</option>`);
+			select.insertAdjacentHTML("beforeend", `<option value="${abl}">${Parser.attAbvToFull(abl)} (currently ${currentScore})</option>`);
 		});
 
 		// Store the choice on the boon object so _applyFeatBonuses can use it
 		boon._epicBoonAbilityChoice = {ability: options[0], amount, max};
-		$select.on("change", (e) => {
+		select.addEventListener("change", (e) => {
 			boon._epicBoonAbilityChoice = {ability: e.target.value, amount, max};
 		});
 
-		$choiceContainer.append($select);
-		$parentSection.append($choiceContainer);
+		choiceContainer.append(select);
+		parentSection.append(choiceContainer);
 	}
 
 	/**
 	 * Render feat choices UI for feats with skill/language/ability/tool/expertise/spell selections.
 	 */
-	_renderFeatChoicesUI (feat, choices, $container) {
-		$container.empty();
+	_renderFeatChoicesUI (feat, choices, container) {
+		container.innerHTML = "";
 
 		const hasChoices = choices.skills || choices.languages || choices.ability || choices.tools || choices.expertise || choices.spells;
 		if (!hasChoices) return;
 
-		$container.append(`<div class="ve-small ve-bold mb-2 mt-2">Additional Choices for ${feat.name}:</div>`);
+		container.insertAdjacentHTML("beforeend", `<div class="ve-small ve-bold mb-2 mt-2">Additional Choices for ${feat.name}:</div>`);
 
 		// Spell list choice (for Magic Initiate-style feats)
 		if (choices.spells?.list) {
-			const $listSection = $(`<div class="mb-2"></div>`);
-			$listSection.append(`<label class="ve-small">Choose spell list:</label>`);
-			const $select = $(`<select class="form-control form-control-sm mt-1"></select>`);
+			const listSection = e_({outer: `<div class="mb-2"></div>`});
+			listSection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose spell list:</label>`);
+			const select = e_({outer: `<select class="form-control form-control-sm mt-1"></select>`});
 			
 			const spellLists = ["Arcane", "Divine", "Primal"];
 			spellLists.forEach(list => {
 				const isSelected = feat._featChoices.spellList === list;
-				$select.append(`<option value="${list}" ${isSelected ? "selected" : ""}>${list}</option>`);
+				select.insertAdjacentHTML("beforeend", `<option value="${list}" ${isSelected ? "selected" : ""}>${list}</option>`);
 			});
 			
-			$select.on("change", () => {
-				feat._featChoices.spellList = $select.val();
+			select.addEventListener("change", () => {
+				feat._featChoices.spellList = select.value;
 			});
 			if (!feat._featChoices.spellList) {
 				feat._featChoices.spellList = spellLists[0];
 			}
 			
-			$listSection.append($select);
-			$container.append($listSection);
+			listSection.append(select);
+			container.append(listSection);
 		}
 
 		// Skill choices
 		if (choices.skills) {
-			const $skillSection = $(`<div class="mb-2"></div>`);
-			$skillSection.append(`<label class="ve-small">Choose ${choices.skills.count} skill${choices.skills.count > 1 ? "s" : ""}:</label>`);
-			const $skillGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			const skillSection = e_({outer: `<div class="mb-2"></div>`});
+			skillSection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose ${choices.skills.count} skill${choices.skills.count > 1 ? "s" : ""}:</label>`);
+			const skillGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 			const availableSkills = choices.skills.from.map(s => s.toLowerCase().replace(/\s+/g, ""));
 			const existingSkills = new Set((this._state.getSkillProficiencies?.() || []).map(s => s.toLowerCase()));
 
 			const renderSkills = () => {
-				$skillGrid.empty();
+				skillGrid.innerHTML = "";
 				availableSkills.forEach(skill => {
 					const isKnown = existingSkills.has(skill);
 					const isSelected = feat._featChoices.skills.includes(skill);
 					const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
 							${isKnown ? "disabled title=\"Already proficient\"" : ""}
 							style="${isKnown ? "opacity: 0.5;" : ""}">
 							${displayName}${isKnown ? " ✓" : ""}
 						</button>
-					`);
+					`});
 
 					if (!isKnown) {
-						$btn.on("click", () => {
+						btn.addEventListener("click", () => {
 							if (isSelected) {
 								feat._featChoices.skills = feat._featChoices.skills.filter(s => s !== skill);
 							} else if (feat._featChoices.skills.length < choices.skills.count) {
@@ -1784,22 +1825,22 @@ class CharacterSheetLevelUp {
 							renderSkills();
 						});
 					}
-					$skillGrid.append($btn);
+					skillGrid.append(btn);
 				});
-				$skillSection.find(".skill-count").text(`${feat._featChoices.skills.length}/${choices.skills.count}`);
+				skillSection.querySelector(".skill-count").textContent = `${feat._featChoices.skills.length}/${choices.skills.count}`;
 			};
 
-			$skillSection.append($skillGrid);
-			$skillSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="skill-count">${feat._featChoices.skills.length}/${choices.skills.count}</span></div>`);
+			skillSection.append(skillGrid);
+			skillSection.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mt-1">Selected: <span class="skill-count">${feat._featChoices.skills.length}/${choices.skills.count}</span></div>`);
 			renderSkills();
-			$container.append($skillSection);
+			container.append(skillSection);
 		}
 
 		// Tool proficiency choices
 		if (choices.tools) {
-			const $toolSection = $(`<div class="mb-2"></div>`);
-			$toolSection.append(`<label class="ve-small">Choose ${choices.tools.count} tool${choices.tools.count > 1 ? "s" : ""}:</label>`);
-			const $toolGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			const toolSection = e_({outer: `<div class="mb-2"></div>`});
+			toolSection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose ${choices.tools.count} tool${choices.tools.count > 1 ? "s" : ""}:</label>`);
+			const toolGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 			// Get tool list - artisan tools, instruments, combined, or from specified list
 			let availableTools = [];
@@ -1833,22 +1874,22 @@ class CharacterSheetLevelUp {
 			const existingTools = new Set((this._state.getToolProficiencies?.() || []).map(t => (typeof t === "string" ? t : t.name || "").toLowerCase()));
 
 			const renderTools = () => {
-				$toolGrid.empty();
+				toolGrid.innerHTML = "";
 				availableTools.forEach(tool => {
 					const toolName = typeof tool === "string" ? tool : tool.name;
 					const isKnown = existingTools.has(toolName.toLowerCase());
 					const isSelected = feat._featChoices.tools.includes(toolName);
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
 							${isKnown ? "disabled title=\"Already proficient\"" : ""}
 							style="${isKnown ? "opacity: 0.5;" : ""}">
 							${toolName}${isKnown ? " ✓" : ""}
 						</button>
-					`);
+					`});
 
 					if (!isKnown) {
-						$btn.on("click", () => {
+						btn.addEventListener("click", () => {
 							if (isSelected) {
 								feat._featChoices.tools = feat._featChoices.tools.filter(t => t !== toolName);
 							} else if (feat._featChoices.tools.length < choices.tools.count) {
@@ -1857,22 +1898,22 @@ class CharacterSheetLevelUp {
 							renderTools();
 						});
 					}
-					$toolGrid.append($btn);
+					toolGrid.append(btn);
 				});
-				$toolSection.find(".tool-count").text(`${feat._featChoices.tools.length}/${choices.tools.count}`);
+				toolSection.querySelector(".tool-count").textContent = `${feat._featChoices.tools.length}/${choices.tools.count}`;
 			};
 
-			$toolSection.append($toolGrid);
-			$toolSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="tool-count">${feat._featChoices.tools.length}/${choices.tools.count}</span></div>`);
+			toolSection.append(toolGrid);
+			toolSection.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mt-1">Selected: <span class="tool-count">${feat._featChoices.tools.length}/${choices.tools.count}</span></div>`);
 			renderTools();
-			$container.append($toolSection);
+			container.append(toolSection);
 		}
 
 		// Expertise choices
 		if (choices.expertise) {
-			const $expertiseSection = $(`<div class="mb-2"></div>`);
-			$expertiseSection.append(`<label class="ve-small">Choose ${choices.expertise.count} skill${choices.expertise.count > 1 ? "s" : ""} for expertise:</label>`);
-			const $expertiseGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			const expertiseSection = e_({outer: `<div class="mb-2"></div>`});
+			expertiseSection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose ${choices.expertise.count} skill${choices.expertise.count > 1 ? "s" : ""} for expertise:</label>`);
+			const expertiseGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 			// Get proficient skills that don't already have expertise
 			const existingProf = Object.keys(this._state.getSkillProficiencies?.() || {});
@@ -1890,18 +1931,18 @@ class CharacterSheetLevelUp {
 			);
 
 			const renderExpertise = () => {
-				$expertiseGrid.empty();
+				expertiseGrid.innerHTML = "";
 				[...availableForExpertise, ...newFeatSkills, ...fixedFeatSkills].forEach(skill => {
 					const isSelected = feat._featChoices.expertise.includes(skill);
 					const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
 							${displayName}
 						</button>
-					`);
+					`});
 
-					$btn.on("click", () => {
+					btn.addEventListener("click", () => {
 						if (isSelected) {
 							feat._featChoices.expertise = feat._featChoices.expertise.filter(s => s !== skill);
 						} else if (feat._featChoices.expertise.length < choices.expertise.count) {
@@ -1909,45 +1950,45 @@ class CharacterSheetLevelUp {
 						}
 						renderExpertise();
 					});
-					$expertiseGrid.append($btn);
+					expertiseGrid.append(btn);
 				});
-				$expertiseSection.find(".expertise-count").text(`${feat._featChoices.expertise.length}/${choices.expertise.count}`);
+				expertiseSection.querySelector(".expertise-count").textContent = `${feat._featChoices.expertise.length}/${choices.expertise.count}`;
 			};
 
-			$expertiseSection.append($expertiseGrid);
-			$expertiseSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="expertise-count">${feat._featChoices.expertise.length}/${choices.expertise.count}</span></div>`);
+			expertiseSection.append(expertiseGrid);
+			expertiseSection.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mt-1">Selected: <span class="expertise-count">${feat._featChoices.expertise.length}/${choices.expertise.count}</span></div>`);
 			renderExpertise();
-			$container.append($expertiseSection);
+			container.append(expertiseSection);
 		}
 
 		// Language choices
 		if (choices.languages) {
-			const $langSection = $(`<div class="mb-2"></div>`);
-			$langSection.append(`<label class="ve-small">Choose ${choices.languages.count} language${choices.languages.count > 1 ? "s" : ""}:</label>`);
+			const langSection = e_({outer: `<div class="mb-2"></div>`});
+			langSection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose ${choices.languages.count} language${choices.languages.count > 1 ? "s" : ""}:</label>`);
 
 			const existingLangs = new Set((this._state.getLanguages?.() || []).map(l => l.toLowerCase()));
 			const standardLangs = ["common", "dwarvish", "elvish", "giant", "gnomish", "goblin", "halfling", "orc"];
 			const exoticLangs = ["abyssal", "celestial", "draconic", "deep speech", "infernal", "primordial", "sylvan", "undercommon"];
 			const availableLangs = choices.languages.type === "standard" ? standardLangs : [...standardLangs, ...exoticLangs];
 
-			const $langGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			const langGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 			const renderLangs = () => {
-				$langGrid.empty();
+				langGrid.innerHTML = "";
 				availableLangs.forEach(lang => {
 					const isKnown = existingLangs.has(lang.toLowerCase());
 					const isSelected = feat._featChoices.languages.includes(lang);
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
 							${isKnown ? "disabled title=\"Already known\"" : ""}
 							style="${isKnown ? "opacity: 0.5;" : ""}">
 							${lang.toTitleCase()}${isKnown ? " ✓" : ""}
 						</button>
-					`);
+					`});
 
 					if (!isKnown) {
-						$btn.on("click", () => {
+						btn.addEventListener("click", () => {
 							if (isSelected) {
 								feat._featChoices.languages = feat._featChoices.languages.filter(l => l !== lang);
 							} else if (feat._featChoices.languages.length < choices.languages.count) {
@@ -1956,66 +1997,66 @@ class CharacterSheetLevelUp {
 							renderLangs();
 						});
 					}
-					$langGrid.append($btn);
+					langGrid.append(btn);
 				});
-				$langSection.find(".lang-count").text(`${feat._featChoices.languages.length}/${choices.languages.count}`);
+				langSection.querySelector(".lang-count").textContent = `${feat._featChoices.languages.length}/${choices.languages.count}`;
 			};
 
-			$langSection.append($langGrid);
-			$langSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="lang-count">${feat._featChoices.languages.length}/${choices.languages.count}</span></div>`);
+			langSection.append(langGrid);
+			langSection.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mt-1">Selected: <span class="lang-count">${feat._featChoices.languages.length}/${choices.languages.count}</span></div>`);
 			renderLangs();
-			$container.append($langSection);
+			container.append(langSection);
 		}
 
 		// Ability score choices
 		if (choices.ability) {
-			const $abilitySection = $(`<div class="mb-2"></div>`);
-			$abilitySection.append(`<label class="ve-small">Choose ability to increase by ${choices.ability.amount}:</label>`);
-			const $abilityGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			const abilitySection = e_({outer: `<div class="mb-2"></div>`});
+			abilitySection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose ability to increase by ${choices.ability.amount}:</label>`);
+			const abilityGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 			choices.ability.from.forEach(abl => {
 				const isSelected = feat._featChoices.ability === abl;
 				const currentScore = this._state.getAbilityScore(abl);
 
-				const $btn = $(`
+				const btn = e_({outer: `
 					<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
 						${Parser.attAbvToFull(abl)} (${currentScore} → ${currentScore + choices.ability.amount})
 					</button>
-				`);
+				`});
 
-				$btn.on("click", () => {
+				btn.addEventListener("click", () => {
 					feat._featChoices.ability = isSelected ? null : abl;
-					$abilityGrid.find(".ve-btn").removeClass("ve-btn-primary").addClass("ve-btn-default");
-					if (!isSelected) $btn.removeClass("ve-btn-default").addClass("ve-btn-primary");
+					abilityGrid.querySelectorAll(".ve-btn").forEach(el => { el.classList.remove("ve-btn-primary"); el.classList.add("ve-btn-default"); });
+					if (!isSelected) { btn.classList.remove("ve-btn-default"); btn.classList.add("ve-btn-primary"); }
 				});
-				$abilityGrid.append($btn);
+				abilityGrid.append(btn);
 			});
 
-			$abilitySection.append($abilityGrid);
-			$container.append($abilitySection);
+			abilitySection.append(abilityGrid);
+			container.append(abilitySection);
 		}
 
 		// Cantrip choices
 		if (choices.spells?.cantrips) {
-			const $cantripSection = $(`<div class="mb-2"></div>`);
-			$cantripSection.append(`<label class="ve-small">Choose ${choices.spells.cantrips.count} cantrip${choices.spells.cantrips.count > 1 ? "s" : ""}:</label>`);
+			const cantripSection = e_({outer: `<div class="mb-2"></div>`});
+			cantripSection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose ${choices.spells.cantrips.count} cantrip${choices.spells.cantrips.count > 1 ? "s" : ""}:</label>`);
 			
-			const $cantripList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			const cantripList = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 			
 			const renderCantrips = () => {
-				$cantripList.empty();
+				cantripList.innerHTML = "";
 				feat._featChoices.cantrips.forEach((cantrip, idx) => {
-					const $badge = $(`<span class="badge badge-primary mr-1">${cantrip.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
-					$badge.find(".clickable").on("click", () => {
+					const badge = e_({outer: `<span class="badge badge-primary mr-1">${cantrip.name} <span class="clickable" style="cursor: pointer;">×</span></span>`});
+					badge.querySelector(".clickable").addEventListener("click", () => {
 						feat._featChoices.cantrips.splice(idx, 1);
 						renderCantrips();
 					});
-					$cantripList.append($badge);
+					cantripList.append(badge);
 				});
 
 				if (feat._featChoices.cantrips.length < choices.spells.cantrips.count) {
-					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Cantrip</button>`);
-					$addBtn.on("click", async () => {
+					const addBtn = e_({outer: `<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Cantrip</button>`});
+					addBtn.addEventListener("click", async () => {
 						await this._showSpellPicker(choices.spells.cantrips.filter, true, (spell) => {
 							if (!feat._featChoices.cantrips.find(s => s.name === spell.name && s.source === spell.source)) {
 								feat._featChoices.cantrips.push({name: spell.name, source: spell.source, level: 0});
@@ -2023,39 +2064,39 @@ class CharacterSheetLevelUp {
 							}
 						});
 					});
-					$cantripList.append($addBtn);
+					cantripList.append(addBtn);
 				}
-				$cantripSection.find(".cantrip-count").text(`${feat._featChoices.cantrips.length}/${choices.spells.cantrips.count}`);
+				cantripSection.querySelector(".cantrip-count").textContent = `${feat._featChoices.cantrips.length}/${choices.spells.cantrips.count}`;
 			};
 
-			$cantripSection.append($cantripList);
-			$cantripSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="cantrip-count">${feat._featChoices.cantrips.length}/${choices.spells.cantrips.count}</span></div>`);
+			cantripSection.append(cantripList);
+			cantripSection.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mt-1">Selected: <span class="cantrip-count">${feat._featChoices.cantrips.length}/${choices.spells.cantrips.count}</span></div>`);
 			renderCantrips();
-			$container.append($cantripSection);
+			container.append(cantripSection);
 		}
 
 		// Spell choices
 		if (choices.spells?.spells) {
-			const $spellSection = $(`<div class="mb-2"></div>`);
+			const spellSection = e_({outer: `<div class="mb-2"></div>`});
 			const spellType = choices.spells.spells.innate ? "innate spell" : "spell";
-			$spellSection.append(`<label class="ve-small">Choose ${choices.spells.spells.count} ${spellType}${choices.spells.spells.count > 1 ? "s" : ""}:</label>`);
+			spellSection.insertAdjacentHTML("beforeend", `<label class="ve-small">Choose ${choices.spells.spells.count} ${spellType}${choices.spells.spells.count > 1 ? "s" : ""}:</label>`);
 			
-			const $spellList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+			const spellList = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 			
 			const renderSpells = () => {
-				$spellList.empty();
+				spellList.innerHTML = "";
 				feat._featChoices.spells.forEach((spell, idx) => {
-					const $badge = $(`<span class="badge badge-primary mr-1">${spell.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
-					$badge.find(".clickable").on("click", () => {
+					const badge = e_({outer: `<span class="badge badge-primary mr-1">${spell.name} <span class="clickable" style="cursor: pointer;">×</span></span>`});
+					badge.querySelector(".clickable").addEventListener("click", () => {
 						feat._featChoices.spells.splice(idx, 1);
 						renderSpells();
 					});
-					$spellList.append($badge);
+					spellList.append(badge);
 				});
 
 				if (feat._featChoices.spells.length < choices.spells.spells.count) {
-					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Spell</button>`);
-					$addBtn.on("click", async () => {
+					const addBtn = e_({outer: `<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Spell</button>`});
+					addBtn.addEventListener("click", async () => {
 						await this._showSpellPicker(choices.spells.spells.filter, false, (spell) => {
 							if (!feat._featChoices.spells.find(s => s.name === spell.name && s.source === spell.source)) {
 								feat._featChoices.spells.push({
@@ -2069,15 +2110,15 @@ class CharacterSheetLevelUp {
 							}
 						});
 					});
-					$spellList.append($addBtn);
+					spellList.append(addBtn);
 				}
-				$spellSection.find(".spell-count").text(`${feat._featChoices.spells.length}/${choices.spells.spells.count}`);
+				spellSection.querySelector(".spell-count").textContent = `${feat._featChoices.spells.length}/${choices.spells.spells.count}`;
 			};
 
-			$spellSection.append($spellList);
-			$spellSection.append(`<div class="ve-small ve-muted mt-1">Selected: <span class="spell-count">${feat._featChoices.spells.length}/${choices.spells.spells.count}</span></div>`);
+			spellSection.append(spellList);
+			spellSection.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mt-1">Selected: <span class="spell-count">${feat._featChoices.spells.length}/${choices.spells.spells.count}</span></div>`);
 			renderSpells();
-			$container.append($spellSection);
+			container.append(spellSection);
 		}
 	}
 
@@ -2102,19 +2143,19 @@ class CharacterSheetLevelUp {
 	}
 
 	_renderNewFeatures (features) {
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					⭐ New Features
 				</h5>
 				<div class="charsheet__levelup-features"></div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__levelup-features");
+		const container = section.querySelector(".charsheet__levelup-features");
 
 		features.forEach(feature => {
-			const $feature = $(`
+			const featureEl = e_({outer: `
 				<div class="charsheet__levelup-feature">
 					<div class="charsheet__levelup-feature-header">
 						<strong>${feature.name}</strong>
@@ -2123,11 +2164,11 @@ class CharacterSheetLevelUp {
 						${Renderer.get().render({entries: feature.entries || []})}
 					</div>
 				</div>
-			`);
-			$container.append($feature);
+			`});
+			container.append(featureEl);
 		});
 
-		return $section;
+		return section;
 	}
 
 	_renderHpIncrease (classData, newLevel, onMethodChange) {
@@ -2135,30 +2176,30 @@ class CharacterSheetLevelUp {
 		const conMod = this._state.getAbilityMod("con");
 		const averageHp = Math.ceil(hitDie / 2) + 1 + conMod;
 
-		const $radioAverage = $(`<input type="radio" name="hp-method" value="average" checked class="mr-2">`)
-			.on("change", () => onMethodChange?.("average"));
-		const $radioRoll = $(`<input type="radio" name="hp-method" value="roll" class="mr-2">`)
-			.on("change", () => onMethodChange?.("roll"));
+		const radioAverage = e_({outer: `<input type="radio" name="hp-method" value="average" checked class="mr-2">`})
+			.addEventListener("change", () => onMethodChange?.("average"));
+		const radioRoll = e_({outer: `<input type="radio" name="hp-method" value="roll" class="mr-2">`})
+			.addEventListener("change", () => onMethodChange?.("roll"));
 
-		const $section = $$`
+		const section = ee`
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					❤️ Hit Points
 				</h5>
 				<div class="charsheet__levelup-hp">
 					<label class="ve-flex-v-center mb-2">
-						${$radioAverage}
+						${radioAverage}
 						<span>Take average: <strong>${averageHp}</strong> HP (${Math.ceil(hitDie / 2) + 1} + ${conMod} CON)</span>
 					</label>
 					<label class="ve-flex-v-center">
-						${$radioRoll}
+						${radioRoll}
 						<span>Roll: 1d${hitDie} + ${conMod} CON</span>
 					</label>
 				</div>
 			</div>
 		`;
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -2174,16 +2215,16 @@ class CharacterSheetLevelUp {
 		const allOptFeatures = CharacterSheetClassUtils.filterOptFeaturesByEdition(allOptFeaturesRaw, classData.source);
 		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-list-alt"></span> Choose Features
 				</h5>
 				<div class="charsheet__levelup-opt-features"></div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__levelup-opt-features");
+		const container = section.querySelector(".charsheet__levelup-opt-features");
 
 		gains.forEach(gain => {
 			const featureKey = gain.featureTypes.join("_");
@@ -2191,20 +2232,20 @@ class CharacterSheetLevelUp {
 
 			if (isCombatMethods) {
 				// Use special Combat Methods rendering with tradition filtering
-				this._renderCombatMethodsLevelUp($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey);
+				this._renderCombatMethodsLevelUp(container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey);
 			} else {
 				// Standard optional feature rendering
-				this._renderStandardOptionalFeaturesLevelUp($container, gain, allOptFeatures, existingOptFeatures, onSelect, featureKey);
+				this._renderStandardOptionalFeaturesLevelUp(container, gain, allOptFeatures, existingOptFeatures, onSelect, featureKey);
 			}
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
 	 * Render Combat Methods selection during level-up with tradition filtering
 	 */
-	_renderCombatMethodsLevelUp ($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
+	_renderCombatMethodsLevelUp (container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
 		const selectedForType = [];
 
 		// Get character's known traditions from existing Combat Methods or state
@@ -2227,7 +2268,7 @@ class CharacterSheetLevelUp {
 			const classAllowedTypes = gain.featureTypes || [];
 			const availableTraditions = CharacterSheetClassUtils.getAvailableTraditionsForClass(allOptFeatures, classAllowedTypes, classData?.name, classFeatures);
 
-			const $section = $(`
+			const section = e_({outer: `
 				<div class="charsheet__levelup-opt-gain mb-3">
 					<p><strong>${gain.name}:</strong></p>
 					<div class="charsheet__levelup-traditions mb-3">
@@ -2237,21 +2278,21 @@ class CharacterSheetLevelUp {
 					</div>
 					<div class="charsheet__levelup-methods-container"></div>
 				</div>
-			`);
+			`});
 
-			const $traditionList = $section.find(".charsheet__levelup-tradition-list");
-			const $methodsContainer = $section.find(".charsheet__levelup-methods-container");
+			const traditionList = section.querySelector(".charsheet__levelup-tradition-list");
+			const methodsContainer = section.querySelector(".charsheet__levelup-methods-container");
 
 			availableTraditions.forEach(trad => {
-				const $item = $(`
+				const item = e_({outer: `
 					<label class="charsheet__builder-tradition-item d-block mb-1" style="cursor: pointer;">
 						<input type="checkbox" class="mr-2">
 						<strong>${trad.name}</strong>
 						<span class="ve-muted ve-small ml-1">(${trad.code})</span>
 					</label>
-				`);
+				`});
 
-				$item.find("input").on("change", (e) => {
+				item.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (tempSelectedTraditions.length < traditionCount) {
 							tempSelectedTraditions.push(trad.code);
@@ -2263,31 +2304,31 @@ class CharacterSheetLevelUp {
 					} else {
 						tempSelectedTraditions = tempSelectedTraditions.filter(t => t !== trad.code);
 					}
-					$section.find(".tradition-count").text(tempSelectedTraditions.length);
+					section.querySelector(".tradition-count").textContent = tempSelectedTraditions.length;
 					onSelect(featureKey, [...selectedForType], {combatTraditions: [...tempSelectedTraditions]});
 					// Re-render methods when traditions change
-					this._renderMethodsForLevelUp($methodsContainer, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, tempSelectedTraditions, maxDegree, selectedForType);
+					this._renderMethodsForLevelUp(methodsContainer, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, tempSelectedTraditions, maxDegree, selectedForType);
 				});
 
-				$traditionList.append($item);
+				traditionList.append(item);
 			});
 
-			$container.append($section);
+			container.append(section);
 			return;
 		}
 
 		// Normal flow: has traditions, render methods directly
-		this._renderMethodsForLevelUp($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, knownTraditions, maxDegree, selectedForType);
+		this._renderMethodsForLevelUp(container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, knownTraditions, maxDegree, selectedForType);
 	}
 
 	/**
 	 * Render the actual method selection list (used by both flows)
 	 */
-	_renderMethodsForLevelUp ($container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, knownTraditions, maxDegree, selectedForType) {
-		$container.empty();
+	_renderMethodsForLevelUp (container, classData, gain, newLevel, allOptFeatures, existingOptFeatures, onSelect, featureKey, knownTraditions, maxDegree, selectedForType) {
+		container.innerHTML = "";
 
 		if (knownTraditions.length === 0) {
-			$container.append(`<p class="ve-muted ve-small">Select traditions above to see available methods.</p>`);
+			container.insertAdjacentHTML("beforeend", `<p class="ve-muted ve-small">Select traditions above to see available methods.</p>`);
 			return;
 		}
 
@@ -2320,16 +2361,16 @@ class CharacterSheetLevelUp {
 			};
 		});
 
-		const $gainSection = $(`
+		const gainSection = e_({outer: `
 			<div class="charsheet__levelup-opt-gain mb-3">
 				<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new method${gain.newCount > 1 ? "s" : ""}</p>
 				<p class="ve-small ve-muted">Max degree available: ${maxDegree}${CharacterSheetClassUtils.getOrdinalSuffix(maxDegree)} | Traditions: ${knownTraditions.map(t => CharacterSheetClassUtils.getTraditionName(t)).join(", ")}</p>
 				<div class="charsheet__levelup-opt-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
 			</div>
-		`);
+		`});
 
-		const $list = $gainSection.find(".charsheet__levelup-opt-list");
+		const list = gainSection.querySelector(".charsheet__levelup-opt-list");
 
 		// Group by tradition
 		const methodsByTradition = new Map();
@@ -2346,27 +2387,27 @@ class CharacterSheetLevelUp {
 			const methods = methodsByTradition.get(tradCode) || [];
 			if (methods.length === 0) continue;
 
-			const $tradGroup = $(`
+			const tradGroup = e_({outer: `
 				<div class="charsheet__levelup-method-group mb-2">
 					<p class="ve-small mb-1"><strong>${CharacterSheetClassUtils.getTraditionName(tradCode)}</strong></p>
 				</div>
-			`);
+			`});
 
 			methods.sort((a, b) => a._degree - b._degree || a.name.localeCompare(b.name)).forEach(method => {
 				const isDisabled = !method._selectable;
 				const knownBadge = method._alreadyKnown ? `<span class="badge badge-secondary ml-1">Known</span>` : "";
 
-				const $item = $(`
+				const item = e_({outer: `
 					<label class="charsheet__levelup-opt-item d-block mb-1 ml-2${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.25rem; border-radius: 4px;${isDisabled ? " opacity: 0.6;" : ""}">
 						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
 						<span class="opt-name"></span>
 						${knownBadge}
 						<span class="ve-muted ve-small ml-1">(${method._degree}${CharacterSheetClassUtils.getOrdinalSuffix(method._degree)} degree)</span>
 					</label>
-				`);
+				`});
 
 				// Create hoverable link for the method name
-				const $methodName = $item.find(".opt-name");
+				const methodName = item.querySelector(".opt-name");
 				try {
 					const resolvedSource = this._page.resolveOptionalFeatureSource(method.name, [
 						method.source,
@@ -2374,16 +2415,16 @@ class CharacterSheetLevelUp {
 						Parser.SRC_XPHB,
 						Parser.SRC_PHB,
 					]);
-					$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, resolvedSource));
+					methodName.innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, method.name, resolvedSource);
 				} catch (e) {
-					$methodName.html(`<strong>${method.name}</strong>`);
+					methodName.innerHTML = `<strong>${method.name}</strong>`;
 				}
 
-				$item.find("input").on("change", (e) => {
+				item.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (selectedForType.length < gain.newCount) {
 							selectedForType.push(method);
-							$item.css("background", "var(--rgb-link-opacity-10)");
+							item.style.background = "var(--rgb-link-opacity-10)";
 						} else {
 							e.target.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only choose ${gain.newCount} methods.`});
@@ -2391,29 +2432,29 @@ class CharacterSheetLevelUp {
 					} else {
 						const idx = selectedForType.findIndex(s => s.name === method.name && s.source === method.source);
 						if (idx >= 0) selectedForType.splice(idx, 1);
-						$item.css("background", "");
+						item.style.background = "";
 					}
-					$gainSection.find(".opt-count").text(selectedForType.length);
+					gainSection.querySelector(".opt-count").textContent = selectedForType.length;
 					onSelect(featureKey, [...selectedForType], {combatTraditions: [...knownTraditions]});
 				});
 
-				$tradGroup.append($item);
+				tradGroup.append(item);
 			});
 
-			$list.append($tradGroup);
+			list.append(tradGroup);
 		}
 
-		if ($list.children().length === 0) {
-			$list.append(`<div class="ve-muted">No new methods available at this level.</div>`);
+		if ([...list.children].length === 0) {
+			list.insertAdjacentHTML("beforeend", `<div class="ve-muted">No new methods available at this level.</div>`);
 		}
 
-		$container.append($gainSection);
+		container.append(gainSection);
 	}
 
 	/**
 	 * Render standard optional features (non-Combat Methods) during level-up
 	 */
-	_renderStandardOptionalFeaturesLevelUp ($container, gain, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
+	_renderStandardOptionalFeaturesLevelUp (container, gain, allOptFeatures, existingOptFeatures, onSelect, featureKey) {
 		const selectedForType = [];
 
 		// Check if a feature is repeatable
@@ -2478,24 +2519,24 @@ class CharacterSheetLevelUp {
 			};
 		});
 
-		const $gainSection = $(`
+		const gainSection = e_({outer: `
 			<div class="charsheet__levelup-opt-gain mb-3">
 				<p><strong>${gain.name}:</strong> Choose ${gain.newCount} new option${gain.newCount > 1 ? "s" : ""}</p>
 				<div class="charsheet__levelup-opt-list" style="max-height: 60vh; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
 				<div class="ve-small ve-muted mt-1">Selected: <span class="opt-count">0</span>/${gain.newCount}</div>
 			</div>
-		`);
+		`});
 
-		const $list = $gainSection.find(".charsheet__levelup-opt-list");
+		const list = gainSection.querySelector(".charsheet__levelup-opt-list");
 
 		const selectableOptions = availableOptions.filter(opt => opt._selectable);
 		if (!selectableOptions.length && !availableOptions.some(opt => opt._alreadyKnown)) {
-			$list.append(`<div class="ve-muted">No options available at this level.</div>`);
+			list.insertAdjacentHTML("beforeend", `<div class="ve-muted">No options available at this level.</div>`);
 		} else {
 			// Add legend for badges
 			const hasKnownOptions = availableOptions.some(opt => opt._alreadyKnown);
 			if (hasKnownOptions) {
-				$list.prepend(`
+				list.prepend(`
 					<div class="ve-small ve-muted mb-2 pb-2" style="border-bottom: 1px solid var(--rgb-border-grey);">
 						<span class="badge badge-success mr-1">✓ Known</span> = Already selected
 						<span class="badge badge-info ml-2 mr-1">↺ Repeatable</span> = Can be taken again
@@ -2520,17 +2561,17 @@ class CharacterSheetLevelUp {
 					? `<span class="badge badge-info ml-1" title="Can be taken multiple times">↺ Repeatable</span>`
 					: "";
 
-				const $item = $(`
+				const item = e_({outer: `
 					<label class="charsheet__levelup-opt-item d-block mb-1${isDisabled ? " charsheet__levelup-opt-item--disabled" : ""}${opt._alreadyKnown ? " charsheet__levelup-opt-item--known" : ""}" style="cursor: ${isDisabled ? "not-allowed" : "pointer"}; padding: 0.5rem; border-radius: 4px;${isDisabled ? " opacity: 0.5;" : ""}${opt._alreadyKnown && opt._selectable ? " background: rgba(var(--rgb-success-rgb), 0.1); border-left: 3px solid var(--rgb-success);" : ""}${opt._alreadyKnown && !opt._selectable ? " background: rgba(128, 128, 128, 0.1);" : ""}">
 						<input type="checkbox" class="mr-2"${isDisabled ? " disabled" : ""}>
 						<span class="opt-name"></span>
 						${knownBadge}${repeatableBadge}
 						<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 					</label>
-				`);
+				`});
 
 				// Create hoverable link for the optional feature name
-				const $optName = $item.find(".opt-name");
+				const optName = item.querySelector(".opt-name");
 				try {
 					const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
 						opt.source,
@@ -2538,16 +2579,16 @@ class CharacterSheetLevelUp {
 						Parser.SRC_XPHB,
 						Parser.SRC_PHB,
 					]);
-					$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+					optName.innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource);
 				} catch (e) {
-					$optName.html(`<strong>${opt.name}</strong>`);
+					optName.innerHTML = `<strong>${opt.name}</strong>`;
 				}
 
-				$item.find("input").on("change", (e) => {
+				item.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (selectedForType.length < gain.newCount) {
 							selectedForType.push(opt);
-							$item.css("background", "var(--rgb-link-opacity-10)");
+							item.style.background = "var(--rgb-link-opacity-10)";
 						} else {
 							e.target.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only choose ${gain.newCount} ${gain.name}.`});
@@ -2555,17 +2596,17 @@ class CharacterSheetLevelUp {
 					} else {
 						const idx = selectedForType.findIndex(s => s.name === opt.name && s.source === opt.source);
 						if (idx >= 0) selectedForType.splice(idx, 1);
-						$item.css("background", "");
+						item.style.background = "";
 					}
-					$gainSection.find(".opt-count").text(selectedForType.length);
+					gainSection.querySelector(".opt-count").textContent = selectedForType.length;
 					onSelect(featureKey, [...selectedForType]);
 				});
 
-				$list.append($item);
+				list.append(item);
 			});
 		}
 
-		$container.append($gainSection);
+		container.append(gainSection);
 	}
 
 	/**
@@ -2624,26 +2665,26 @@ class CharacterSheetLevelUp {
 			this._selectedFeatureSkillChoices[choiceKey] = [];
 		}
 
-		const $wrapper = $(`
+		const wrapper = e_({outer: `
 			<div class="charsheet__levelup-feat-skill-sub-choice ml-4 mt-1 mb-1 pl-2" style="border-left: 2px solid var(--rgb-border-grey, #888);">
 				<div class="ve-small"><em>Choose ${choice.count} skill${choice.count > 1 ? "s" : ""} for ${typeLabel}:</em></div>
 				<div class="charsheet__levelup-feat-skill-checkboxes"></div>
 				<div class="ve-small ve-muted">Selected: <span class="feat-skill-count">${this._selectedFeatureSkillChoices[choiceKey].length}</span>/${choice.count}</div>
 			</div>
-		`);
+		`});
 
-		const $checkboxes = $wrapper.find(".charsheet__levelup-feat-skill-checkboxes");
+		const checkboxes = wrapper.querySelector(".charsheet__levelup-feat-skill-checkboxes");
 
 		for (const skill of availableSkills) {
 			const isSelected = this._selectedFeatureSkillChoices[choiceKey].includes(skill);
-			const $label = $(`
+			const label = e_({outer: `
 				<label class="mr-2 mb-1" style="display: inline-block; cursor: pointer;">
 					<input type="checkbox" value="${skill}" ${isSelected ? "checked" : ""}>
 					<span class="ve-small">${skill}</span>
 				</label>
-			`);
+			`});
 
-			$label.find("input").on("change", (e) => {
+			label.querySelector("input").addEventListener("change", (e) => {
 				if (e.target.checked) {
 					if (this._selectedFeatureSkillChoices[choiceKey].length < choice.count) {
 						this._selectedFeatureSkillChoices[choiceKey].push(skill);
@@ -2654,47 +2695,47 @@ class CharacterSheetLevelUp {
 				} else {
 					this._selectedFeatureSkillChoices[choiceKey] = this._selectedFeatureSkillChoices[choiceKey].filter(s => s !== skill);
 				}
-				$wrapper.find(".feat-skill-count").text(this._selectedFeatureSkillChoices[choiceKey].length);
+				wrapper.querySelector(".feat-skill-count").textContent = this._selectedFeatureSkillChoices[choiceKey].length;
 			});
 
-			$checkboxes.append($label);
+			checkboxes.append(label);
 		}
 
-		return $wrapper;
+		return wrapper;
 	}
 
 	_renderFeatureOptionsSelection (optionGroups, onSelect) {
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-star"></span> Feature Choices
 				</h5>
 				<div class="charsheet__levelup-feat-options"></div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__levelup-feat-options");
+		const container = section.querySelector(".charsheet__levelup-feat-options");
 
 		optionGroups.forEach(optGroup => {
 			const featureKey = `${optGroup.featureName}_${optGroup.featureSource || ""}`;
 			const selectedForGroup = [];
 
-			const $groupSection = $(`
+			const groupSection = e_({outer: `
 				<div class="charsheet__levelup-feat-opt-group mb-3">
 					<p><strong>${optGroup.featureName}:</strong> Choose ${optGroup.count}</p>
 					<div class="charsheet__levelup-feat-opt-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px; padding: 0.5rem;"></div>
 					<div class="ve-small ve-muted mt-1">Selected: <span class="feat-opt-count">0</span>/${optGroup.count}</div>
 				</div>
-			`);
+			`});
 
-			const $list = $groupSection.find(".charsheet__levelup-feat-opt-list");
+			const list = groupSection.querySelector(".charsheet__levelup-feat-opt-list");
 
 			// Get already-chosen features to filter out duplicates
 			const existingFeatures = this._state.getFeatures?.() || [];
 			const existingFeatureNames = new Set(existingFeatures.map(f => f.name));
 
 			if (!optGroup.options.length) {
-				$list.append(`<div class="ve-muted">No options available.</div>`);
+				list.insertAdjacentHTML("beforeend", `<div class="ve-muted">No options available.</div>`);
 			} else {
 				let renderedCount = 0;
 				optGroup.options.forEach(opt => {
@@ -2721,16 +2762,16 @@ class CharacterSheetLevelUp {
 					if (isAlreadyChosen && !canRepeat) return;
 
 					renderedCount++;
-					const $item = $(`
+					const item = e_({outer: `
 						<label class="charsheet__levelup-feat-opt-item d-block mb-1" style="cursor: pointer; padding: 0.25rem; border-radius: 4px;">
 							<input type="checkbox" class="mr-2">
 							<span class="feat-opt-name"></span>
 							${opt.source ? `<span class="ve-muted ve-small ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 						</label>
-					`);
+					`});
 
 					// Create hoverable link for the option name
-					const $nameSpan = $item.find(".feat-opt-name");
+					const nameSpan = item.querySelector(".feat-opt-name");
 					if (opt.type === "classFeature" && opt.ref) {
 						const parts = opt.ref.split("|");
 						// Hash format: name, className, classSource, level, featureSource
@@ -2738,9 +2779,9 @@ class CharacterSheetLevelUp {
 						const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
 						try {
 							const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
-							$nameSpan.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`);
+							nameSpan.innerHTML = `<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`;
 						} catch (e) {
-							$nameSpan.text(opt.name);
+							nameSpan.textContent = opt.name;
 						}
 					} else if (opt.type === "optionalfeature" && opt.ref) {
 						const refParts = opt.ref.split("|");
@@ -2752,26 +2793,26 @@ class CharacterSheetLevelUp {
 							Parser.SRC_PHB,
 						]);
 						try {
-							$nameSpan.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
+							nameSpan.innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource);
 						} catch (e) {
-							$nameSpan.text(opt.name);
+							nameSpan.textContent = opt.name;
 						}
 					} else {
-						$nameSpan.text(opt.name);
+						nameSpan.textContent = opt.name;
 					}
 
-					$item.find("input").on("change", (e) => {
+					item.querySelector("input").addEventListener("change", (e) => {
 						if (e.target.checked) {
 							if (selectedForGroup.length < optGroup.count) {
 								selectedForGroup.push(opt);
-								$item.css("background", "var(--rgb-link-opacity-10)");
+								item.style.background = "var(--rgb-link-opacity-10)";
 
 								// Check if this option requires a skill sub-choice
 								const skillChoice = this._parseFeatureSkillChoice(opt);
 								if (skillChoice) {
 									const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
-									const $subChoice = this._renderFeatureSkillSubChoice(skillChoice, choiceKey);
-									$item.after($subChoice);
+									const subChoice = this._renderFeatureSkillSubChoice(skillChoice, choiceKey);
+									item.after(subChoice);
 								}
 							} else {
 								e.target.checked = false;
@@ -2780,30 +2821,30 @@ class CharacterSheetLevelUp {
 						} else {
 							const idx = selectedForGroup.findIndex(s => s.name === opt.name && s.ref === opt.ref);
 							if (idx >= 0) selectedForGroup.splice(idx, 1);
-							$item.css("background", "");
+							item.style.background = "";
 
 							// Remove skill sub-choice UI
 							const choiceKey = `${featureKey}__${opt.name}__${opt.ref || ""}`;
 							delete this._selectedFeatureSkillChoices[choiceKey];
-							$item.next(".charsheet__levelup-feat-skill-sub-choice").remove();
+							item.nextElementSibling?.classList.contains("charsheet__levelup-feat-skill-sub-choice") && item.nextElementSibling.remove();
 						}
-						$groupSection.find(".feat-opt-count").text(selectedForGroup.length);
+						groupSection.querySelector(".feat-opt-count").textContent = selectedForGroup.length;
 						onSelect(featureKey, [...selectedForGroup]);
 					});
 
-					$list.append($item);
+					list.append(item);
 				});
 
 				// If all options were filtered out, show a message
 				if (renderedCount === 0) {
-					$list.append(`<div class="ve-muted">All available options have already been chosen.</div>`);
+					list.insertAdjacentHTML("beforeend", `<div class="ve-muted">All available options have already been chosen.</div>`);
 				}
 			}
 
-			$container.append($groupSection);
+			container.append(groupSection);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -2813,16 +2854,16 @@ class CharacterSheetLevelUp {
 	 * @returns {jQuery} The section element
 	 */
 	_renderExpertiseSelectionForLevelUp (expertiseGrants, onSelect) {
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-star-empty"></span> Expertise
 				</h5>
 				<div class="charsheet__levelup-expertise-grants"></div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__levelup-expertise-grants");
+		const container = section.querySelector(".charsheet__levelup-expertise-grants");
 
 		// Get character's current skill proficiencies
 		const skillProficiencies = this._state.getSkillProficiencies();
@@ -2833,7 +2874,7 @@ class CharacterSheetLevelUp {
 
 			// Handle fixed expertise (e.g., "expertise in the Performance skill")
 			if (grant.fixedSkills?.length > 0) {
-				const $grantSection = $(`
+				const grantSection = e_({outer: `
 					<div class="charsheet__levelup-expertise-grant mb-3">
 						<p><strong>${grant.featureName}:</strong> Grants expertise in specific skills:</p>
 						<div class="charsheet__levelup-expertise-checkboxes">
@@ -2841,8 +2882,8 @@ class CharacterSheetLevelUp {
 						</div>
 						<div class="ve-small ve-muted mt-1"><span class="glyphicon glyphicon-ok"></span> Auto-applied</div>
 					</div>
-				`);
-				$container.append($grantSection);
+				`});
+				container.append(grantSection);
 				// Immediately report selection
 				onSelect(featureKey, [...grant.fixedSkills]);
 				return;
@@ -2850,16 +2891,16 @@ class CharacterSheetLevelUp {
 
 			const selectedForGrant = [];
 
-			const $grantSection = $(`
+			const grantSection = e_({outer: `
 				<div class="charsheet__levelup-expertise-grant mb-3">
 					<p><strong>${grant.featureName}:</strong> Choose ${grant.count} skill${grant.count > 1 ? "s" : ""} for expertise:</p>
 					${grant.allowTools && grant.toolName ? `<p class="ve-small ve-muted">You may also choose ${grant.toolName} if you're proficient with it.</p>` : ""}
 					<div class="charsheet__levelup-expertise-checkboxes"></div>
 					<div class="ve-small ve-muted mt-1">Selected: <span class="expertise-count">0</span>/${grant.count}</div>
 				</div>
-			`);
+			`});
 
-			const $checkboxes = $grantSection.find(".charsheet__levelup-expertise-checkboxes");
+			const checkboxes = grantSection.querySelector(".charsheet__levelup-expertise-checkboxes");
 
 			// Get eligible skills (proficient but not already expertise)
 			// Normalize case for comparison - existingExpertise may be title case
@@ -2880,17 +2921,17 @@ class CharacterSheetLevelUp {
 			}
 
 			if (eligibleSkills.length === 0) {
-				$checkboxes.append(`<p class="ve-muted">No eligible skills available (already have expertise in all proficient skills).</p>`);
+				checkboxes.insertAdjacentHTML("beforeend", `<p class="ve-muted">No eligible skills available (already have expertise in all proficient skills).</p>`);
 			} else {
 				eligibleSkills.forEach(skill => {
-					const $label = $(`
+					const label = e_({outer: `
 						<label class="charsheet__levelup-skill-checkbox mr-3 mb-1 d-inline-block" style="cursor: pointer;">
 							<input type="checkbox" class="mr-1" value="${skill}">
 							${skill}
 						</label>
-					`);
+					`});
 
-					$label.find("input").on("change", (e) => {
+					label.querySelector("input").addEventListener("change", (e) => {
 						if (e.target.checked) {
 							if (selectedForGrant.length < grant.count) {
 								selectedForGrant.push(skill);
@@ -2902,18 +2943,18 @@ class CharacterSheetLevelUp {
 							const idx = selectedForGrant.indexOf(skill);
 							if (idx >= 0) selectedForGrant.splice(idx, 1);
 						}
-						$grantSection.find(".expertise-count").text(selectedForGrant.length);
+						grantSection.querySelector(".expertise-count").textContent = selectedForGrant.length;
 						onSelect(featureKey, [...selectedForGrant]);
 					});
 
-					$checkboxes.append($label);
+					checkboxes.append(label);
 				});
 			}
 
-			$container.append($grantSection);
+			container.append(grantSection);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -2923,62 +2964,63 @@ class CharacterSheetLevelUp {
 	 * @returns {jQuery} The section element
 	 */
 	_renderLanguageSelectionForLevelUp (languageGrants, onSelect) {
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-comment"></span> Languages
 				</h5>
 				<div class="charsheet__levelup-language-grants"></div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__levelup-language-grants");
+		const container = section.querySelector(".charsheet__levelup-language-grants");
 
 		languageGrants.forEach(grant => {
 			const featureKey = grant.featureName;
 			const selectedForGrant = [];
 
-			const $grantSection = $(`
+			const grantSection = e_({outer: `
 				<div class="charsheet__levelup-language-grant mb-3">
 					<p><strong>${grant.featureName}:</strong> Choose ${grant.count} language${grant.count > 1 ? "s" : ""}:</p>
 					<div class="charsheet__levelup-language-selection"></div>
 					<div class="ve-small ve-muted mt-1">Selected: <span class="lang-count">0</span>/${grant.count}</div>
 				</div>
-			`);
+			`});
 
-			const $selection = $grantSection.find(".charsheet__levelup-language-selection");
+			const selection = grantSection.querySelector(".charsheet__levelup-language-selection");
 
 			// Display selected languages and add button
-			const $selectedDisplay = $(`<div class="ve-flex ve-flex-wrap" style="gap: 8px;"></div>`).appendTo($selection);
-			const $addBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary" style="display: inline-flex; align-items: center; gap: 4px;">
+			const selectedDisplay = e_({outer: `<div class="ve-flex ve-flex-wrap" style="gap: 8px;"></div>`});
+			selection.append(selectedDisplay);
+			const addBtn = e_({outer: `<button class="ve-btn ve-btn-sm ve-btn-primary" style="display: inline-flex; align-items: center; gap: 4px;">
 				<span class="glyphicon glyphicon-plus"></span> Choose Language
-			</button>`);
+			</button>`});
 
 			const renderSelected = () => {
-				$selectedDisplay.empty();
+				selectedDisplay.innerHTML = "";
 				selectedForGrant.forEach((lang, idx) => {
-					const $tag = $(`
+					const tag = e_({outer: `
 						<span class="badge" style="background: rgba(var(--rgb-link-rgb), 0.15); color: var(--rgb-link); display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 0.9em;">
 							🗣️ ${lang}
 							<span class="clickable" style="cursor: pointer; opacity: 0.7;" title="Remove">&times;</span>
 						</span>
-					`);
-					$tag.find(".clickable").on("click", () => {
+					`});
+					tag.querySelector(".clickable").addEventListener("click", () => {
 						selectedForGrant.splice(idx, 1);
 						renderSelected();
-						$grantSection.find(".lang-count").text(selectedForGrant.length);
+						grantSection.querySelector(".lang-count").textContent = selectedForGrant.length;
 						onSelect(featureKey, [...selectedForGrant]);
 					});
-					$selectedDisplay.append($tag);
+					selectedDisplay.append(tag);
 				});
 
 				// Show add button if more languages can be selected
 				if (selectedForGrant.length < grant.count) {
-					$selectedDisplay.append($addBtn);
+					selectedDisplay.append(addBtn);
 				}
 			};
 
-			$addBtn.on("click", async () => {
+			addBtn.addEventListener("click", async () => {
 				const result = await this._page.showLanguagePicker?.({
 					exclude: selectedForGrant,
 					title: grant.featureName,
@@ -2987,16 +3029,16 @@ class CharacterSheetLevelUp {
 				if (result?.length) {
 					selectedForGrant.push(...result);
 					renderSelected();
-					$grantSection.find(".lang-count").text(selectedForGrant.length);
+					grantSection.querySelector(".lang-count").textContent = selectedForGrant.length;
 					onSelect(featureKey, [...selectedForGrant]);
 				}
 			});
 
 			renderSelected();
-			$container.append($grantSection);
+			container.append(grantSection);
 		});
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -3005,7 +3047,7 @@ class CharacterSheetLevelUp {
 	 * @returns {jQuery} The section element
 	 */
 	_renderScholarExpertiseSelection (onSelect) {
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-education"></span> Scholar Expertise
@@ -3013,9 +3055,9 @@ class CharacterSheetLevelUp {
 				<p class="ve-small">Choose one skill from the Scholar list to gain expertise (double proficiency bonus):</p>
 				<div class="charsheet__levelup-scholar-skills"></div>
 			</div>
-		`);
+		`});
 
-		const $container = $section.find(".charsheet__levelup-scholar-skills");
+		const container = section.querySelector(".charsheet__levelup-scholar-skills");
 
 		// Scholar skill options
 		const scholarSkills = ["arcana", "history", "investigation", "medicine", "nature", "religion"];
@@ -3032,31 +3074,31 @@ class CharacterSheetLevelUp {
 		});
 
 		if (eligibleSkills.length === 0) {
-			$container.append(`<p class="ve-muted">No eligible skills. You must be proficient in a Scholar skill (Arcana, History, Investigation, Medicine, Nature, or Religion) without already having expertise in it.</p>`);
+			container.insertAdjacentHTML("beforeend", `<p class="ve-muted">No eligible skills. You must be proficient in a Scholar skill (Arcana, History, Investigation, Medicine, Nature, or Religion) without already having expertise in it.</p>`);
 		} else {
 			let selectedSkill = null;
 
 			eligibleSkills.forEach(skill => {
 				const skillName = skill.toTitleCase();
-				const $radio = $(`
+				const radio = e_({outer: `
 					<label class="charsheet__levelup-skill-radio mr-3 mb-1 d-inline-block" style="cursor: pointer;">
 						<input type="radio" name="scholar-expertise" class="mr-1" value="${skill}">
 						${skillName}
 					</label>
-				`);
+				`});
 
-				$radio.find("input").on("change", (e) => {
+				radio.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						selectedSkill = skill;
 						onSelect(skill);
 					}
 				});
 
-				$container.append($radio);
+				container.append(radio);
 			});
 		}
 
-		return $section;
+		return section;
 	}
 
 	async _applyLevelUp ({classEntry, newLevel, asiChoices, selectedFeat, selectedSubclass, selectedSubclassChoice, selectedOptionalFeatures, selectedCombatTraditions, selectedFeatureOptions, selectedExpertise, selectedLanguages, languageGrants, selectedScholarSkill, selectedSpellbookSpells, selectedKnownSpells, selectedKnownCantrips, selectedPreparedSpells, selectedPreparedCantrips, newFeatures, hpMethod, classData}) {
@@ -3710,7 +3752,7 @@ class CharacterSheetLevelUp {
 			});
 		};
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "📚 Add New Class (Multiclass)",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -3719,27 +3761,27 @@ class CharacterSheetLevelUp {
 		let selectedClass = null;
 		let updateConfirmButton = null; // Will be assigned after button is created
 
-		const $search = $(`<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search classes...">`);
-		const $list = $(`<div class="charsheet__levelup-subclasses" style="max-height: 350px;"></div>`);
+		const search = e_({outer: `<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search classes...">`});
+		const list = e_({outer: `<div class="charsheet__levelup-subclasses" style="max-height: 350px;"></div>`});
 
 		// Selection display showing which class is chosen
-		const $selectionDisplay = $(`
+		const selectionDisplay = e_({outer: `
 			<div class="charsheet__multiclass-selection" style="display: none;">
 				<span class="charsheet__multiclass-selection-icon">✅</span>
 				<strong>Selected:</strong> <span class="charsheet__multiclass-selection-name"></span>
 				<div class="charsheet__multiclass-prereq-status"></div>
 			</div>
-		`);
+		`});
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 
 			const filtered = availableClasses.filter(c =>
 				c.name.toLowerCase().includes(filter.toLowerCase()),
 			);
 
 			if (filtered.length === 0) {
-				$list.append(`<div class="ve-muted p-2 text-center">No matching classes found</div>`);
+				list.insertAdjacentHTML("beforeend", `<div class="ve-muted p-2 text-center">No matching classes found</div>`);
 				return;
 			}
 
@@ -3765,7 +3807,7 @@ class CharacterSheetLevelUp {
 					prereqHtml = `<div class="charsheet__multiclass-prereq ve-small ve-muted">📋 Prerequisite: ${prereqParts.join(", ")}</div>`;
 				}
 
-				const $item = $$`
+				const item = ee`
 					<div class="charsheet__levelup-option" data-class-name="${cls.name}">
 						<div class="charsheet__levelup-option-header">
 							<input type="radio" name="multiclass-choice" value="${cls.name}">
@@ -3780,38 +3822,38 @@ class CharacterSheetLevelUp {
 					</div>
 				`;
 
-				$item.on("click", () => {
-					$list.find(".charsheet__levelup-option").removeClass("selected");
-					$list.find("input[type='radio']").prop("checked", false);
-					$item.addClass("selected");
-					$item.find("input[type='radio']").prop("checked", true);
+				item.addEventListener("click", () => {
+					list.querySelectorAll(".charsheet__levelup-option").forEach(el => el.classList.remove("selected"));
+					list.querySelectorAll("input[type='radio']").forEach(el => el.checked = false);
+					item.classList.add("selected");
+					item.querySelector("input[type='radio']").checked = true;
 					selectedClass = cls;
 
 					// Update selection display
-					$selectionDisplay.find(".charsheet__multiclass-selection-name").text(cls.name);
+					selectionDisplay.querySelector(".charsheet__multiclass-selection-name").textContent = cls.name;
 
 					// Check and display prerequisite status
 					const prereqCheck = checkPrerequisites(cls);
-					const $prereqStatus = $selectionDisplay.find(".charsheet__multiclass-prereq-status");
+					const prereqStatus = selectionDisplay.querySelector(".charsheet__multiclass-prereq-status");
 					if (prereqCheck.met) {
-						$prereqStatus.html(`<span class="text-success">✅ Prerequisites met</span>`);
+						prereqStatus.innerHTML = `<span class="text-success">✅ Prerequisites met</span>`;
 					} else {
-						$prereqStatus.html(`<span class="text-danger">❌ ${prereqCheck.failedAbilities.join("; ")}</span>`);
+						prereqStatus.innerHTML = `<span class="text-danger">❌ ${prereqCheck.failedAbilities.join("; ")}</span>`;
 					}
-					$selectionDisplay.show();
+					selectionDisplay.style.display = "";
 
 					// Update confirm button (will be set after button is created)
 					if (typeof updateConfirmButton === "function") updateConfirmButton(cls, prereqCheck);
 				});
 
-				$list.append($item);
+				list.append(item);
 			});
 		};
 
-		$search.on("input", (e) => renderList(e.target.value));
+		search.addEventListener("input", (e) => renderList(e.target.value));
 		renderList();
 
-		$$`<div class="charsheet__multiclass-body">
+		ee`<div class="charsheet__multiclass-body">
 			<div class="charsheet__modal-info-banner charsheet__modal-info-banner--info">
 				<div class="charsheet__modal-info-banner-icon">📚</div>
 				<div class="charsheet__modal-info-banner-content">
@@ -3821,17 +3863,18 @@ class CharacterSheetLevelUp {
 				</div>
 			</div>
 			<div class="charsheet__modal-search-wrapper">
-				${$search}
+				${search}
 				<span class="charsheet__modal-search-count">${availableClasses.length} classes</span>
 			</div>
-			${$list}
-			${$selectionDisplay}
-		</div>`.appendTo($modalInner);
+			${list}
+			${selectionDisplay}
+		</div>`;
+		modalInner.append(mainContent);
 
 		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose(false));
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select a Class</span></button>`);
+		const btnCancel = e_({outer: `<button class="ve-btn ve-btn-default">Cancel</button>`});
+		btnCancel.addEventListener("click", () => doClose(false));
+		const btnConfirm = e_({outer: `<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select a Class</span></button>`});
 
 		let currentPrereqCheck = null;
 
@@ -3841,21 +3884,21 @@ class CharacterSheetLevelUp {
 			if (cls) {
 				const prereqsMet = prereqCheck?.met !== false;
 				if (prereqsMet) {
-					$btnConfirm.find(".btn-text").text(`Add ${cls.name} (Level 1)`);
-					$btnConfirm.removeClass("ve-btn-warning").addClass("ve-btn-primary");
+					btnConfirm.querySelector(".btn-text").textContent = `Add ${cls.name} (Level 1)`;
+					btnConfirm.classList.remove("ve-btn-warning"); btnConfirm.classList.add("ve-btn-primary");
 				} else {
-					$btnConfirm.find(".btn-text").text(`Add ${cls.name} Anyway`);
-					$btnConfirm.removeClass("ve-btn-primary").addClass("ve-btn-warning");
+					btnConfirm.querySelector(".btn-text").textContent = `Add ${cls.name} Anyway`;
+					btnConfirm.classList.remove("ve-btn-primary"); btnConfirm.classList.add("ve-btn-warning");
 				}
-				$btnConfirm.prop("disabled", false);
+				btnConfirm.disabled = false;
 			} else {
-				$btnConfirm.find(".btn-text").text("Select a Class");
-				$btnConfirm.removeClass("ve-btn-warning").addClass("ve-btn-primary");
-				$btnConfirm.prop("disabled", true);
+				btnConfirm.querySelector(".btn-text").textContent = "Select a Class";
+				btnConfirm.classList.remove("ve-btn-warning"); btnConfirm.classList.add("ve-btn-primary");
+				btnConfirm.disabled = true;
 			}
 		};
 
-		$btnConfirm.on("click", async () => {
+		btnConfirm.addEventListener("click", async () => {
 			if (!selectedClass) return;
 
 			// Warn if prerequisites not met
@@ -3881,10 +3924,10 @@ class CharacterSheetLevelUp {
 			}
 		});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			${$btnCancel}
-			${$btnConfirm}
-		</div>`.appendTo($modalInner);
+		modalInner.append(ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			${btnCancel}
+			${btnConfirm}
+		</div>`);
 	}
 
 	/**
@@ -3919,7 +3962,7 @@ class CharacterSheetLevelUp {
 		}
 
 		// Show choices modal
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `${selectedClass.name} - Level 1 Choices`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -3929,7 +3972,7 @@ class CharacterSheetLevelUp {
 		let selectedFeatureOptions = {};
 		let selectedSkills = [];
 
-		const $content = $(`<div></div>`);
+		const content = e_({outer: `<div></div>`});
 
 		// Info about what choices need to be made
 		const choicesList = [];
@@ -3943,7 +3986,7 @@ class CharacterSheetLevelUp {
 			choicesList.push(`${skillGrant.count} skill proficiency`);
 		}
 
-		$content.append(`
+		content.append(`
 			<div class="alert alert-info mb-3">
 				<strong>🎯 Make Your Choices</strong><br>
 				<span class="ve-small">As a level 1 ${selectedClass.name}, you need to select: ${choicesList.join(", ")}</span>
@@ -3955,29 +3998,29 @@ class CharacterSheetLevelUp {
 			const currentSkills = this._state.getSkillProficiencies();
 			const availableSkills = skillGrant.from.filter(s => !currentSkills.includes(s));
 
-			const $skillSection = $(`<div class="charsheet__levelup-section mb-3">
+			const skillSection = e_({outer: `<div class="charsheet__levelup-section mb-3">
 				<h5>🎓 Skill Proficiency</h5>
 				<p class="ve-small ve-muted">Select ${skillGrant.count} skill${skillGrant.count > 1 ? "s" : ""} to gain proficiency in:</p>
 				<div class="charsheet__skill-choice-list"></div>
-			</div>`);
+			</div>`});
 
-			const $skillList = $skillSection.find(".charsheet__skill-choice-list");
+			const skillList = skillSection.querySelector(".charsheet__skill-choice-list");
 			availableSkills.forEach(skill => {
 				const skillName = skill.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-				const $checkbox = $(`<label class="charsheet__skill-choice-item">
+				const checkbox = e_({outer: `<label class="charsheet__skill-choice-item">
 					<input type="checkbox" value="${skill}">
 					<span>${skillName}</span>
-				</label>`);
+				</label>`});
 
-				$checkbox.find("input").on("change", function () {
-					const isChecked = $(this).is(":checked");
-					const value = $(this).val();
+				checkbox.querySelector("input").addEventListener("change", function () {
+					const isChecked = this.checked;
+					const value = this.value;
 
 					if (isChecked) {
 						if (selectedSkills.length < skillGrant.count) {
 							selectedSkills.push(value);
 						} else {
-							$(this).prop("checked", false);
+							this.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only select ${skillGrant.count} skill${skillGrant.count > 1 ? "s" : ""}.`});
 						}
 					} else {
@@ -3985,35 +4028,35 @@ class CharacterSheetLevelUp {
 					}
 				});
 
-				$skillList.append($checkbox);
+				skillList.append(checkbox);
 			});
 
-			$content.append($skillSection);
+			content.append(skillSection);
 		}
 
 		// Render optional features selection (Fighting Style, etc.)
 		if (optionalFeatureGains.length) {
-			const $optSection = this._renderOptionalFeaturesSelection(selectedClass, optionalFeatureGains, (featureType, featuresList) => {
+			const optSection = this._renderOptionalFeaturesSelection(selectedClass, optionalFeatureGains, (featureType, featuresList) => {
 				selectedOptionalFeatures[featureType] = featuresList;
 			}, 1);
-			$content.append($optSection);
+			content.append(optSection);
 		}
 
 		// Render feature options selection
 		if (featureOptionGroups.length) {
-			const $featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
+			const featOptSection = this._renderFeatureOptionsSelection(featureOptionGroups, (featureKey, options) => {
 				selectedFeatureOptions[featureKey] = options;
 			});
-			$content.append($featOptSection);
+			content.append(featOptSection);
 		}
 
-		$content.appendTo($modalInner);
+		modalInner.append(content);
 
 		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose(false));
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">Confirm & Add ${selectedClass.name}</button>`)
-			.on("click", async () => {
+		const btnCancel = e_({outer: `<button class="ve-btn ve-btn-default">Cancel</button>`});
+		btnCancel.addEventListener("click", () => doClose(false));
+		const btnConfirm = e_({outer: `<button class="ve-btn ve-btn-primary">Confirm & Add ${selectedClass.name}</button>`});
+		btnConfirm.addEventListener("click", async () => {
 				// Validate optional features
 				for (const gain of optionalFeatureGains) {
 					const featureKey = gain.featureTypes.join("_");
@@ -4046,15 +4089,15 @@ class CharacterSheetLevelUp {
 				doClose(true);
 			});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			${$btnCancel}
-			${$btnConfirm}
-		</div>`.appendTo($modalInner);
+		modalInner.append(ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			${btnCancel}
+			${btnConfirm}
+		</div>`);
 
 		// Wait for modal to close and return result
 		return new Promise(resolve => {
 			const checkClosed = setInterval(() => {
-				if (!$modalInner.is(":visible")) {
+				if (!modalInner.offsetParent) {
 					clearInterval(checkClosed);
 					// Check if class was added by looking for it
 					const wasAdded = this._state.getClasses().some(c => c.name === selectedClass.name);

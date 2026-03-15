@@ -43,11 +43,12 @@ export class CharacterSheetNotes {
 
 	_initEventListeners () {
 		// Add sticky note button - from toolbar
-		$(document).on("click", "#charsheet-add-sticky-note", () => this._showAddStickyNoteModal());
+		document.getElementById("charsheet-add-sticky-note")?.addEventListener("click", () => this._showAddStickyNoteModal());
 
 		// Tab change listener - handle both Bootstrap events and direct clicks
-		$(document).on("shown.bs.tab", 'a[data-toggle="tab"]', (e) => {
-			const href = $(e.target).attr("href");
+		document.addEventListener("shown.bs.tab", (e) => {
+			if (!e.target.matches('a[data-toggle="tab"]')) return;
+			const href = e.target.getAttribute("href");
 			if (href) {
 				const tabId = href.replace("#", "");
 				this._activeTab = this._tabMap[tabId] || null;
@@ -56,8 +57,10 @@ export class CharacterSheetNotes {
 		});
 
 		// Also listen for click events on tabs (backup)
-		$(document).on("click", '.ve-nav-tabs a[data-toggle="tab"]', (e) => {
-			const href = $(e.currentTarget).attr("href");
+		document.addEventListener("click", (e) => {
+			const tabLink = e.target.closest('.ve-nav-tabs a[data-toggle="tab"]');
+			if (!tabLink) return;
+			const href = tabLink.getAttribute("href");
 			if (href) {
 				const tabId = href.replace("#", "");
 				this._activeTab = this._tabMap[tabId] || null;
@@ -72,17 +75,17 @@ export class CharacterSheetNotes {
 	 */
 	_detectCurrentTab () {
 		// Try to get active tab from visible tab pane
-		const $activePane = $(".tab-pane.active, .tab-pane.in");
-		if ($activePane.length) {
-			const tabId = $activePane.attr("id");
+		const activePane = document.querySelector(".tab-pane.active") || document.querySelector(".tab-pane.in");
+		if (activePane) {
+			const tabId = activePane.id;
 			this._activeTab = this._tabMap[tabId] || null;
 			return;
 		}
 
 		// Fallback: check active tab link
-		const $activeTab = $(".ve-nav-tabs li.active a[data-toggle='tab']");
-		if ($activeTab.length) {
-			const href = $activeTab.attr("href");
+		const activeTab = document.querySelector(".ve-nav-tabs li.active a[data-toggle='tab']");
+		if (activeTab) {
+			const href = activeTab.getAttribute("href");
 			if (href) {
 				const tabId = href.replace("#", "");
 				this._activeTab = this._tabMap[tabId] || null;
@@ -99,7 +102,7 @@ export class CharacterSheetNotes {
 	 */
 	_renderStickyNotes () {
 		// Clear all sticky note containers first
-		$(".charsheet__sticky-notes-container").empty();
+		document.querySelectorAll(".charsheet__sticky-notes-container").forEach(el => { el.innerHTML = ""; });
 
 		const allNotes = this._state.getStickyNotes();
 
@@ -119,12 +122,12 @@ export class CharacterSheetNotes {
 
 		if (currentTabNotes.length === 0) return;
 
-		const $container = this._getOrCreateStickyNoteContainer();
-		if (!$container.length) return;
+		const container = this._getOrCreateStickyNoteContainer();
+		if (!container) return;
 
 		currentTabNotes.forEach(note => {
-			const $note = this._buildStickyNote(note);
-			$container.append($note);
+			const noteEl = this._buildStickyNote(note);
+			container.append(noteEl);
 		});
 	}
 
@@ -133,29 +136,21 @@ export class CharacterSheetNotes {
 	 */
 	_getOrCreateStickyNoteContainer () {
 		// Find the currently active tab pane
-		let $tabPane = $(".tab-pane.active");
-		if (!$tabPane.length) {
-			$tabPane = $(".tab-pane.in");
-		}
-		if (!$tabPane.length) {
-			// Fallback to any visible tab pane
-			$tabPane = $(".tab-pane:visible").first();
-		}
-		if (!$tabPane.length) {
-			// Last resort: overview tab
-			$tabPane = $("#charsheet-tab-overview");
-		}
+		let tabPane = document.querySelector(".tab-pane.active")
+			|| document.querySelector(".tab-pane.in")
+			|| document.querySelector(".tab-pane:not([style*='display: none'])")
+			|| document.getElementById("charsheet-tab-overview");
 
-		if (!$tabPane.length) return $();
+		if (!tabPane) return null;
 
 		// Look for existing container in this tab
-		let $container = $tabPane.find("> .charsheet__sticky-notes-container");
-		if (!$container.length) {
+		let container = tabPane.querySelector(":scope > .charsheet__sticky-notes-container");
+		if (!container) {
 			// Create container at the top of the tab
-			$container = $(`<div class="charsheet__sticky-notes-container"></div>`);
-			$tabPane.prepend($container);
+			container = e_({tag: "div", clazz: "charsheet__sticky-notes-container"});
+			tabPane.prepend(container);
 		}
-		return $container;
+		return container;
 	}
 
 	/**
@@ -170,7 +165,7 @@ export class CharacterSheetNotes {
 		// Tab indicator
 		const tabLabel = note.tab ? this._getTabLabel(note.tab) : "All Tabs";
 
-		const $note = $(`
+		const noteEl = e_({outer: `
 			<div class="charsheet__sticky-note ${note.collapsed ? "charsheet__sticky-note--collapsed" : ""}" 
 				 data-note-id="${note.id}"
 				 style="--note-bg: ${colorConfig.bg}; --note-border: ${colorConfig.border}; --note-text: ${colorConfig.text}; --note-header-bg: ${colorConfig.headerBg};">
@@ -201,40 +196,40 @@ export class CharacterSheetNotes {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 
 		// Make draggable if positioned
 		if (note.position) {
-			$note.css({
+			Object.assign(noteEl.style, {
 				position: "absolute",
 				left: `${note.position.x}px`,
 				top: `${note.position.y}px`,
 			});
-			this._makeDraggable($note, note.id);
+			this._makeDraggable(noteEl, note.id);
 		}
 
 		// Event handlers
-		$note.find(".charsheet__sticky-note-btn-collapse").on("click", (e) => {
+		noteEl.querySelector(".charsheet__sticky-note-btn-collapse").addEventListener("click", (e) => {
 			e.stopPropagation();
 			this._toggleNoteCollapse(note.id);
 		});
 
-		$note.find(".charsheet__sticky-note-btn-edit").on("click", (e) => {
+		noteEl.querySelector(".charsheet__sticky-note-btn-edit").addEventListener("click", (e) => {
 			e.stopPropagation();
 			this._showEditStickyNoteModal(note.id);
 		});
 
-		$note.find(".charsheet__sticky-note-btn-delete").on("click", (e) => {
+		noteEl.querySelector(".charsheet__sticky-note-btn-delete").addEventListener("click", (e) => {
 			e.stopPropagation();
 			this._deleteStickyNote(note.id);
 		});
 
 		// Double-click title to edit
-		$note.find(".charsheet__sticky-note-title").on("dblclick", () => {
+		noteEl.querySelector(".charsheet__sticky-note-title").addEventListener("dblclick", () => {
 			this._showEditStickyNoteModal(note.id);
 		});
 
-		return $note;
+		return noteEl;
 	}
 
 	/**
@@ -357,52 +352,53 @@ export class CharacterSheetNotes {
 	/**
 	 * Make a sticky note draggable
 	 */
-	_makeDraggable ($note, noteId) {
+	_makeDraggable (noteEl, noteId) {
 		let isDragging = false;
 		let startX, startY, startLeft, startTop;
 
-		const $header = $note.find(".charsheet__sticky-note-header");
+		const header = noteEl.querySelector(".charsheet__sticky-note-header");
 
-		$header.css("cursor", "move");
+		header.style.cursor = "move";
 
-		$header.on("mousedown", (e) => {
-			if ($(e.target).closest("button").length) return; // Don't drag when clicking buttons
+		header.addEventListener("mousedown", (e) => {
+			if (e.target.closest("button")) return; // Don't drag when clicking buttons
 
 			isDragging = true;
 			startX = e.clientX;
 			startY = e.clientY;
-			startLeft = parseInt($note.css("left")) || 0;
-			startTop = parseInt($note.css("top")) || 0;
+			startLeft = parseInt(noteEl.style.left) || 0;
+			startTop = parseInt(noteEl.style.top) || 0;
 
-			$note.addClass("charsheet__sticky-note--dragging");
+			noteEl.classList.add("charsheet__sticky-note--dragging");
 			e.preventDefault();
 		});
 
-		$(document).on("mousemove.stickynote" + noteId, (e) => {
+		const onMouseMove = (e) => {
 			if (!isDragging) return;
 
 			const dx = e.clientX - startX;
 			const dy = e.clientY - startY;
 
-			$note.css({
-				left: Math.max(0, startLeft + dx) + "px",
-				top: Math.max(0, startTop + dy) + "px",
-			});
-		});
+			noteEl.style.left = Math.max(0, startLeft + dx) + "px";
+			noteEl.style.top = Math.max(0, startTop + dy) + "px";
+		};
 
-		$(document).on("mouseup.stickynote" + noteId, () => {
+		const onMouseUp = () => {
 			if (!isDragging) return;
 			isDragging = false;
-			$note.removeClass("charsheet__sticky-note--dragging");
+			noteEl.classList.remove("charsheet__sticky-note--dragging");
 
 			// Save new position
 			const newPosition = {
-				x: parseInt($note.css("left")) || 0,
-				y: parseInt($note.css("top")) || 0,
+				x: parseInt(noteEl.style.left) || 0,
+				y: parseInt(noteEl.style.top) || 0,
 			};
 			this._state.updateStickyNote(noteId, {position: newPosition});
 			this._page.saveCharacter();
-		});
+		};
+
+		document.addEventListener("mousemove", onMouseMove);
+		document.addEventListener("mouseup", onMouseUp);
 	}
 
 	/**
@@ -451,8 +447,8 @@ export class CharacterSheetNotes {
 		const existingNote = noteId ? this._state.getStickyNote(noteId) : null;
 		const isNew = !existingNote;
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
-			title: isNew ? "� Add Sticky Note" : "📌 Edit Sticky Note",
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
+			title: isNew ? "📋 Add Sticky Note" : "📌 Edit Sticky Note",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
@@ -470,127 +466,138 @@ export class CharacterSheetNotes {
 		];
 
 		// Build form
-		const $form = $(`<div class="charsheet__note-edit-form"></div>`);
+		const form = e_({tag: "div", clazz: "charsheet__note-edit-form"});
 
 		// Title
-		const $title = $(`<input type="text" class="form-control mb-2" placeholder="Note title..." value="${existingNote?.title || ""}">`);
-		$form.append(`<label class="ve-small ve-muted">Title</label>`);
-		$form.append($title);
+		const titleInput = e_({tag: "input", clazz: "form-control mb-2"});
+		titleInput.type = "text";
+		titleInput.placeholder = "Note title...";
+		titleInput.value = existingNote?.title || "";
+		form.append(e_({outer: `<label class="ve-small ve-muted">Title</label>`}));
+		form.append(titleInput);
 
 		// Content with markdown hint
-		const $content = $(`<textarea class="form-control mb-2" rows="6" placeholder="Note content...&#10;&#10;Supports: **bold**, *italic*, \`code\`, and 5etools tags like {@spell fireball}">${existingNote?.content || ""}</textarea>`);
-		$form.append(`<label class="ve-small ve-muted mt-2">Content <span class="text-info">(Markdown & 5etools tags supported)</span></label>`);
-		$form.append($content);
+		const contentArea = e_({tag: "textarea", clazz: "form-control mb-2"});
+		contentArea.rows = 6;
+		contentArea.placeholder = "Note content...\n\nSupports: **bold**, *italic*, `code`, and 5etools tags like {@spell fireball}";
+		contentArea.value = existingNote?.content || "";
+		form.append(e_({outer: `<label class="ve-small ve-muted mt-2">Content <span class="text-info">(Markdown & 5etools tags supported)</span></label>`}));
+		form.append(contentArea);
 
 		// Tab selection - default to current tab for new notes
 		const defaultTab = isNew ? (this._activeTab || "") : (existingNote?.tab || "");
-		const $tabSelect = $(`<select class="form-control mb-2"></select>`);
+		const tabSelect = e_({tag: "select", clazz: "form-control mb-2"});
 		tabOptions.forEach(opt => {
-			const selected = opt.value === defaultTab;
-			$tabSelect.append(`<option value="${opt.value}" ${selected ? "selected" : ""}>${opt.label}</option>`);
+			const option = e_({tag: "option", txt: opt.label});
+			option.value = opt.value;
+			if (opt.value === defaultTab) option.selected = true;
+			tabSelect.append(option);
 		});
-		$form.append(`<label class="ve-small ve-muted mt-2">Show on Tab</label>`);
-		$form.append($tabSelect);
+		form.append(e_({outer: `<label class="ve-small ve-muted mt-2">Show on Tab</label>`}));
+		form.append(tabSelect);
 
 		// Color selection
-		const $colorRow = $(`<div class="ve-flex ve-flex-wrap mb-2" style="gap: 8px;"></div>`);
-		$form.append(`<label class="ve-small ve-muted mt-2">Color</label>`);
-		$form.append($colorRow);
+		const colorRow = e_({tag: "div", clazz: "ve-flex ve-flex-wrap mb-2", style: "gap: 8px;"});
+		form.append(e_({outer: `<label class="ve-small ve-muted mt-2">Color</label>`}));
+		form.append(colorRow);
 
 		let selectedColor = existingNote?.color || "yellow";
 		Object.entries(this._colors).forEach(([colorName, colorConfig]) => {
 			const isSelected = selectedColor === colorName;
-			const $colorBtn = $(`
-				<button type="button" class="charsheet__note-color-btn ${isSelected ? "charsheet__note-color-btn--selected" : ""}" 
-						style="background: ${colorConfig.bg}; border-color: ${colorConfig.border}; color: ${colorConfig.text};"
-						data-color="${colorName}">
-					${isSelected ? "✓ " : ""}${colorName.charAt(0).toUpperCase() + colorName.slice(1)}
-				</button>
-			`);
-			$colorBtn.on("click", (e) => {
+			const colorBtn = e_({tag: "button", clazz: `charsheet__note-color-btn ${isSelected ? "charsheet__note-color-btn--selected" : ""}`});
+			colorBtn.type = "button";
+			Object.assign(colorBtn.style, {background: colorConfig.bg, borderColor: colorConfig.border, color: colorConfig.text});
+			colorBtn.dataset.color = colorName;
+			colorBtn.textContent = (isSelected ? "✓ " : "") + colorName.charAt(0).toUpperCase() + colorName.slice(1);
+
+			colorBtn.addEventListener("click", (e) => {
 				e.preventDefault();
 				selectedColor = colorName;
-				$colorRow.find("button").removeClass("charsheet__note-color-btn--selected").each(function () {
-					$(this).text($(this).data("color").charAt(0).toUpperCase() + $(this).data("color").slice(1));
+				colorRow.querySelectorAll("button").forEach(btn => {
+					btn.classList.remove("charsheet__note-color-btn--selected");
+					btn.textContent = btn.dataset.color.charAt(0).toUpperCase() + btn.dataset.color.slice(1);
 				});
-				$colorBtn.addClass("charsheet__note-color-btn--selected").text("✓ " + colorName.charAt(0).toUpperCase() + colorName.slice(1));
+				colorBtn.classList.add("charsheet__note-color-btn--selected");
+				colorBtn.textContent = "✓ " + colorName.charAt(0).toUpperCase() + colorName.slice(1);
 			});
-			$colorRow.append($colorBtn);
+			colorRow.append(colorBtn);
 		});
 
 		// Position toggle
 		const isPositioned = existingNote?.position != null;
-		const $positionCb = $(`<input type="checkbox" id="note-position-cb" ${isPositioned ? "checked" : ""}>`);
-		const $positionLabel = $(`
+		const positionCb = e_({tag: "input"});
+		positionCb.type = "checkbox";
+		positionCb.id = "note-position-cb";
+		if (isPositioned) positionCb.checked = true;
+
+		const positionLabel = e_({outer: `
 			<div class="ve-flex ve-flex-v-center mt-2" style="gap: 8px;">
 				<label for="note-position-cb" class="ve-flex ve-flex-v-center m-0" style="gap: 8px; cursor: pointer;">
 					<span class="ve-small">📍 Free positioning (drag to move)</span>
 				</label>
 			</div>
-		`);
-		$positionLabel.prepend($positionCb);
-		$form.append($positionLabel);
+		`});
+		positionLabel.prepend(positionCb);
+		form.append(positionLabel);
 
-		$modalInner.append($form);
+		modalInner.append(form);
 
 		// Button row
-		const $btnRow = $(`<div class="ve-flex ve-flex-h-right mt-3" style="gap: 8px;"></div>`).appendTo($modalInner);
+		const btnRow = e_({tag: "div", clazz: "ve-flex ve-flex-h-right mt-3", style: "gap: 8px;"});
+		modalInner.append(btnRow);
 
-		$(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose())
-			.appendTo($btnRow);
+		e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel", click: () => doClose()}).appendTo(btnRow);
 
-		$(`<button class="ve-btn ve-btn-primary">${isNew ? "Add Note" : "Save Changes"}</button>`)
-			.on("click", () => {
-				const title = $title.val().trim() || "Note";
-				const content = $content.val();
-				const tab = $tabSelect.val() || null;
-				const usePosition = $positionCb.is(":checked");
-				const position = usePosition ? (existingNote?.position || {x: 20, y: 60}) : null;
+		e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: isNew ? "Add Note" : "Save Changes", click: () => {
+			const title = titleInput.value.trim() || "Note";
+			const content = contentArea.value;
+			const tab = tabSelect.value || null;
+			const usePosition = positionCb.checked;
+			const position = usePosition ? (existingNote?.position || {x: 20, y: 60}) : null;
 
-				if (isNew) {
-					this._state.addStickyNote({
-						title,
-						content,
-						tab,
-						position,
-						color: selectedColor,
-					});
-					JqueryUtil.doToast({type: "success", content: "Sticky note added!"});
-				} else {
-					this._state.updateStickyNote(noteId, {
-						title,
-						content,
-						tab,
-						position,
-						color: selectedColor,
-					});
-					JqueryUtil.doToast({type: "success", content: "Note updated!"});
-				}
+			if (isNew) {
+				this._state.addStickyNote({
+					title,
+					content,
+					tab,
+					position,
+					color: selectedColor,
+				});
+				JqueryUtil.doToast({type: "success", content: "Sticky note added!"});
+			} else {
+				this._state.updateStickyNote(noteId, {
+					title,
+					content,
+					tab,
+					position,
+					color: selectedColor,
+				});
+				JqueryUtil.doToast({type: "success", content: "Note updated!"});
+			}
 
-				this._page.saveCharacter();
-				this._renderStickyNotes();
-				doClose();
-			})
-			.appendTo($btnRow);
+			this._page.saveCharacter();
+			this._renderStickyNotes();
+			doClose();
+		}}).appendTo(btnRow);
 
-		$title.focus();
+		titleInput.focus();
 	}
 
 	/**
 	 * Show inline note editor for an entity
-	 * @param {jQuery} $container - The container to append editor to
+	 * @param {HTMLElement} container - The container to append editor to
 	 * @param {string} entityType - "item", "spell", "feature", "feat", etc.
 	 * @param {string} entityId - The entity ID
 	 * @param {Function} [onSave] - Optional callback after save
 	 */
-	showInlineNoteEditor ($container, entityType, entityId, onSave) {
+	showInlineNoteEditor (container, entityType, entityId, onSave) {
 		// Remove any existing editor
-		$container.find(".charsheet__inline-note-editor").remove();
+		const existing = container.querySelector(".charsheet__inline-note-editor");
+		if (existing) existing.remove();
 
 		const currentNote = this._state.getEntityNote(entityType, entityId);
 
-		const $editor = $(`
+		const editor = e_({outer: `
 			<div class="charsheet__inline-note-editor">
 				<textarea class="form-control form-control-sm" rows="2" placeholder="Add a note...">${currentNote}</textarea>
 				<div class="ve-flex ve-flex-h-right mt-1" style="gap: 4px;">
@@ -598,25 +605,25 @@ export class CharacterSheetNotes {
 					<button class="ve-btn ve-btn-xs ve-btn-primary charsheet__inline-note-save">Save</button>
 				</div>
 			</div>
-		`);
+		`});
 
-		const $textarea = $editor.find("textarea");
+		const textarea = editor.querySelector("textarea");
 
-		$editor.find(".charsheet__inline-note-cancel").on("click", () => {
-			$editor.remove();
+		editor.querySelector(".charsheet__inline-note-cancel").addEventListener("click", () => {
+			editor.remove();
 		});
 
-		$editor.find(".charsheet__inline-note-save").on("click", () => {
-			const note = $textarea.val();
+		editor.querySelector(".charsheet__inline-note-save").addEventListener("click", () => {
+			const note = textarea.value;
 			this._state.updateEntityNote(entityType, entityId, note);
 			this._page.saveCharacter();
-			$editor.remove();
+			editor.remove();
 			if (onSave) onSave(note);
 			JqueryUtil.doToast({type: "success", content: note ? "Note saved!" : "Note cleared."});
 		});
 
-		$container.append($editor);
-		$textarea.focus();
+		container.append(editor);
+		textarea.focus();
 	}
 
 	/**
@@ -629,44 +636,42 @@ export class CharacterSheetNotes {
 	async showNoteModal (entityType, entityId, entityName, onSave) {
 		const currentNote = this._state.getEntityNote(entityType, entityId);
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `📝 Note: ${entityName}`,
 			isMinHeight0: true,
 		});
 
-		const $textarea = $(`<textarea class="form-control" rows="6" placeholder="Add notes about this ${entityType}...">${currentNote}</textarea>`);
-		$modalInner.append($textarea);
+		const textarea = e_({tag: "textarea", clazz: "form-control"});
+		textarea.rows = 6;
+		textarea.placeholder = `Add notes about this ${entityType}...`;
+		textarea.value = currentNote;
+		modalInner.append(textarea);
 
-		const $btnRow = $(`<div class="ve-flex ve-flex-h-right mt-3" style="gap: 8px;"></div>`).appendTo($modalInner);
+		const btnRow = e_({tag: "div", clazz: "ve-flex ve-flex-h-right mt-3", style: "gap: 8px;"});
+		modalInner.append(btnRow);
 
 		if (currentNote) {
-			$(`<button class="ve-btn ve-btn-danger">Clear Note</button>`)
-				.on("click", () => {
-					this._state.updateEntityNote(entityType, entityId, "");
-					this._page.saveCharacter();
-					if (onSave) onSave("");
-					JqueryUtil.doToast({type: "info", content: "Note cleared."});
-					doClose();
-				})
-				.appendTo($btnRow);
+			e_({tag: "button", clazz: "ve-btn ve-btn-danger", txt: "Clear Note", click: () => {
+				this._state.updateEntityNote(entityType, entityId, "");
+				this._page.saveCharacter();
+				if (onSave) onSave("");
+				JqueryUtil.doToast({type: "info", content: "Note cleared."});
+				doClose();
+			}}).appendTo(btnRow);
 		}
 
-		$(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose())
-			.appendTo($btnRow);
+		e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel", click: () => doClose()}).appendTo(btnRow);
 
-		$(`<button class="ve-btn ve-btn-primary">Save Note</button>`)
-			.on("click", () => {
-				const note = $textarea.val();
-				this._state.updateEntityNote(entityType, entityId, note);
-				this._page.saveCharacter();
-				if (onSave) onSave(note);
-				JqueryUtil.doToast({type: "success", content: "Note saved!"});
-				doClose();
-			})
-			.appendTo($btnRow);
+		e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "Save Note", click: () => {
+			const note = textarea.value;
+			this._state.updateEntityNote(entityType, entityId, note);
+			this._page.saveCharacter();
+			if (onSave) onSave(note);
+			JqueryUtil.doToast({type: "success", content: "Note saved!"});
+			doClose();
+		}}).appendTo(btnRow);
 
-		$textarea.focus();
+		textarea.focus();
 	}
 
 	/**
@@ -674,34 +679,34 @@ export class CharacterSheetNotes {
 	 * @param {string} entityType - "item", "spell", "feature", "feat", etc.
 	 * @param {string} entityId - The entity ID
 	 * @param {string} entityName - Display name for the entity
-	 * @returns {jQuery} The note button element
+	 * @returns {HTMLElement} The note button element
 	 */
 	buildNoteIndicator (entityType, entityId, entityName) {
 		const hasNote = !!this._state.getEntityNote(entityType, entityId);
 
-		const $btn = $(`
+		const btn = e_({outer: `
 			<button class="ve-btn ve-btn-xxs ${hasNote ? "ve-btn-primary" : "ve-btn-default"} charsheet__note-indicator" 
 					title="${hasNote ? "View/Edit Note" : "Add Note"}"
 					data-entity-type="${entityType}"
 					data-entity-id="${entityId}">
 				<span class="glyphicon glyphicon-${hasNote ? "sticky-note" : "file"}"></span>
 			</button>
-		`);
+		`});
 
-		$btn.on("click", (e) => {
+		btn.addEventListener("click", (e) => {
 			e.stopPropagation();
 			this.showNoteModal(entityType, entityId, entityName, (note) => {
 				// Update button appearance
-				$btn.toggleClass("ve-btn-primary", !!note)
-					.toggleClass("ve-btn-default", !note)
-					.attr("title", note ? "View/Edit Note" : "Add Note")
-					.find(".glyphicon")
-					.toggleClass("glyphicon-sticky-note", !!note)
-					.toggleClass("glyphicon-file", !note);
+				btn.classList.toggle("ve-btn-primary", !!note);
+				btn.classList.toggle("ve-btn-default", !note);
+				btn.title = note ? "View/Edit Note" : "Add Note";
+				const icon = btn.querySelector(".glyphicon");
+				icon.classList.toggle("glyphicon-sticky-note", !!note);
+				icon.classList.toggle("glyphicon-file", !note);
 			});
 		});
 
-		return $btn;
+		return btn;
 	}
 
 	/**

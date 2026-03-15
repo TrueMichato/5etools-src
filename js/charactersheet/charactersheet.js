@@ -35,7 +35,7 @@ class CharacterSheetPage {
 		this._customAbilities = null;
 		this._quickBuild = null;
 
-		this._$selCharacter = null;
+		this._selCharacter = null;
 		this._currentCharacterId = null;
 		this._isLevelUpBannerDismissed = false;
 
@@ -482,7 +482,7 @@ class CharacterSheetPage {
 	}
 
 	_initUi () {
-		this._$selCharacter = $("#charsheet-sel-character");
+		this._selCharacter = document.getElementById("charsheet-sel-character");
 		this._renderAbilities();
 		this._renderSavingThrows();
 		this._renderSkills();
@@ -494,24 +494,23 @@ class CharacterSheetPage {
 	 * Initialize manual tab switching since Bootstrap JS is not loaded
 	 */
 	_initTabs () {
-		const $tabs = $('#charsheet-tabs');
-		const $tabContent = $('.tab-content');
+		const tabs = document.getElementById("charsheet-tabs");
+		const tabContent = document.querySelector(".tab-content");
 
+		for (const link of tabs.querySelectorAll('a[data-toggle="tab"]')) {
+			link.addEventListener("click", (e) => {
+				e.preventDefault();
+				const targetId = e.currentTarget.getAttribute("href");
 
-		$tabs.find('a[data-toggle="tab"]').on("click", (e) => {
-			e.preventDefault();
-			const $link = $(e.currentTarget);
-			const targetId = $link.attr("href");
+				// Update tab nav
+				for (const li of tabs.querySelectorAll("li")) li.classList.remove("active");
+				e.currentTarget.parentElement.classList.add("active");
 
-
-			// Update tab nav
-			$tabs.find("li").removeClass("active");
-			$link.parent("li").addClass("active");
-
-			// Update tab content
-			$tabContent.find(".tab-pane").removeClass("active in");
-			$(targetId).addClass("active in");
-		});
+				// Update tab content
+				for (const pane of tabContent.querySelectorAll(".tab-pane")) pane.classList.remove("active", "in");
+				document.querySelector(targetId).classList.add("active", "in");
+			});
+		}
 	}
 
 	/**
@@ -520,10 +519,12 @@ class CharacterSheetPage {
 	 * This catches direct usages that don't go through getHoverLink/getSubclassHoverLink.
 	 */
 	_initHoverLinkSafetyNet () {
-		$(document).on("click", "a[data-vet-page]", function (e) {
-			if (!this.target) {
-				this.target = "_blank";
-				this.rel = "noopener noreferrer";
+		document.addEventListener("click", (e) => {
+			const target = e.target.closest("a[data-vet-page]");
+			if (!target) return;
+			if (!target.target) {
+				target.target = "_blank";
+				target.rel = "noopener noreferrer";
 			}
 		});
 	}
@@ -533,19 +534,19 @@ class CharacterSheetPage {
 	 * @param {string} tabId - The tab ID (e.g., "#charsheet-tab-builder")
 	 */
 	switchToTab (tabId) {
-		const $tabs = $('#charsheet-tabs');
-		const $tabContent = $('.tab-content');
-		const $link = $tabs.find(`a[href="${tabId}"]`);
+		const tabs = document.getElementById("charsheet-tabs");
+		const tabContent = document.querySelector(".tab-content");
+		const link = tabs.querySelector(`a[href="${tabId}"]`);
 
-		if (!$link.length) return;
+		if (!link) return;
 
 		// Update tab nav
-		$tabs.find("li").removeClass("active");
-		$link.parent("li").addClass("active");
+		for (const li of tabs.querySelectorAll("li")) li.classList.remove("active");
+		link.parentElement.classList.add("active");
 
 		// Update tab content
-		$tabContent.find(".tab-pane").removeClass("active in");
-		$(tabId).addClass("active in");
+		for (const pane of tabContent.querySelectorAll(".tab-pane")) pane.classList.remove("active", "in");
+		document.querySelector(tabId).classList.add("active", "in");
 	}
 
 	/**
@@ -553,8 +554,8 @@ class CharacterSheetPage {
 	 * @param {string} tabId - The tab ID (e.g., "#charsheet-tab-builder")
 	 */
 	_hideTab (tabId) {
-		const $tab = $(`#charsheet-tabs a[href="${tabId}"]`).parent("li");
-		$tab.addClass("ve-hidden");
+		const tab = document.querySelector(`#charsheet-tabs a[href="${tabId}"]`)?.parentElement;
+		if (tab) tab.classList.add("ve-hidden");
 	}
 
 	/**
@@ -562,8 +563,8 @@ class CharacterSheetPage {
 	 * @param {string} tabId - The tab ID (e.g., "#charsheet-tab-builder")
 	 */
 	_showTab (tabId) {
-		const $tab = $(`#charsheet-tabs a[href="${tabId}"]`).parent("li");
-		$tab.removeClass("ve-hidden");
+		const tab = document.querySelector(`#charsheet-tabs a[href="${tabId}"]`)?.parentElement;
+		if (tab) tab.classList.remove("ve-hidden");
 	}
 
 	/**
@@ -592,70 +593,70 @@ class CharacterSheetPage {
 
 	_initEventListeners () {
 		// Character selection
-		this._$selCharacter.on("change", () => this._onCharacterSelect());
+		this._selCharacter.addEventListener("change", () => this._onCharacterSelect());
 
 		// Header buttons
-		$("#charsheet-btn-new").on("click", () => this._onNewCharacter());
-		$("#charsheet-btn-duplicate").on("click", () => this._onDuplicateCharacter());
-		$("#charsheet-btn-delete").on("click", () => this._onDeleteCharacter());
-		$("#charsheet-btn-modifiers").on("click", () => this._showCustomModifiersModal());
-		$("#charsheet-btn-settings").on("click", () => this._showSettingsModal());
+		document.getElementById("charsheet-btn-new").addEventListener("click", () => this._onNewCharacter());
+		document.getElementById("charsheet-btn-duplicate").addEventListener("click", () => this._onDuplicateCharacter());
+		document.getElementById("charsheet-btn-delete").addEventListener("click", () => this._onDeleteCharacter());
+		document.getElementById("charsheet-btn-modifiers").addEventListener("click", () => this._showCustomModifiersModal());
+		document.getElementById("charsheet-btn-settings").addEventListener("click", () => this._showSettingsModal());
 		// Import/Export/Print handled by CharacterSheetExport module
-		$("#charsheet-btn-levelup").on("click", () => this._levelUp?.showLevelUp());
-		$("#charsheet-btn-multiclass").on("click", () => this._levelUp?.showMulticlass());
-		$("#charsheet-btn-quickbuild").on("click", () => this._quickBuild?.showQuickBuild());
-		$("#charsheet-btn-xp-add").on("click", () => this._onXpAdd());
-		$("#charsheet-ipt-xp-add").on("keydown", (e) => {
+		document.getElementById("charsheet-btn-levelup").addEventListener("click", () => this._levelUp?.showLevelUp());
+		document.getElementById("charsheet-btn-multiclass").addEventListener("click", () => this._levelUp?.showMulticlass());
+		document.getElementById("charsheet-btn-quickbuild").addEventListener("click", () => this._quickBuild?.showQuickBuild());
+		document.getElementById("charsheet-btn-xp-add").addEventListener("click", () => this._onXpAdd());
+		document.getElementById("charsheet-ipt-xp-add").addEventListener("keydown", (e) => {
 			if (e.key !== "Enter") return;
 			e.preventDefault();
 			this._onXpAdd();
 		});
-		$("#charsheet-levelup-banner-btn-now").on("click", () => this._onLevelUpBannerNow());
-		$("#charsheet-levelup-banner-btn-later").on("click", () => this._onLevelUpBannerLater());
+		document.getElementById("charsheet-levelup-banner-btn-now").addEventListener("click", () => this._onLevelUpBannerNow());
+		document.getElementById("charsheet-levelup-banner-btn-later").addEventListener("click", () => this._onLevelUpBannerLater());
 
 		// Character name
-		$("#charsheet-ipt-name").on("change", (e) => {
+		document.getElementById("charsheet-ipt-name").addEventListener("change", (e) => {
 			this._state.setName(e.target.value);
 			this._saveCurrentCharacter();
 			this._updateCharacterDropdown();
 		});
 
 		// HP controls
-		$("#charsheet-ipt-hp-current").on("change", (e) => {
+		document.getElementById("charsheet-ipt-hp-current").addEventListener("change", (e) => {
 			this._state.setCurrentHp(parseInt(e.target.value) || 0);
 			this._saveCurrentCharacter();
 			this._renderHp(); // Update HP bar
 			this._renderConditions(); // Update bloodied condition display
 		});
 
-		$("#charsheet-ipt-hp-temp").on("change", (e) => {
+		document.getElementById("charsheet-ipt-hp-temp").addEventListener("change", (e) => {
 			this._state.setTempHp(parseInt(e.target.value) || 0);
 			this._saveCurrentCharacter();
 			this._renderHp(); // Update HP bar
 		});
 
-		$("#charsheet-btn-heal").on("click", () => this._onHeal());
-		$("#charsheet-btn-damage").on("click", () => this._onDamage());
+		document.getElementById("charsheet-btn-heal").addEventListener("click", () => this._onHeal());
+		document.getElementById("charsheet-btn-damage").addEventListener("click", () => this._onDamage());
 
 		// Combat
-		$("#charsheet-box-ac").on("click", () => this._showAcBreakdownModal());
-		$("#charsheet-box-speed").on("click", () => this._showSpeedBreakdownModal());
-		$("#charsheet-box-initiative").on("click", (e) => this._rollInitiative(e));
-		$("#charsheet-btn-use-hitdie").on("click", () => this._onUseHitDie());
-		$("#charsheet-btn-deathsave").on("click", () => this._onDeathSave());
+		document.getElementById("charsheet-box-ac").addEventListener("click", () => this._showAcBreakdownModal());
+		document.getElementById("charsheet-box-speed").addEventListener("click", () => this._showSpeedBreakdownModal());
+		document.getElementById("charsheet-box-initiative").addEventListener("click", (e) => this._rollInitiative(e));
+		document.getElementById("charsheet-btn-use-hitdie").addEventListener("click", () => this._onUseHitDie());
+		document.getElementById("charsheet-btn-deathsave").addEventListener("click", () => this._onDeathSave());
 
 		// Rest - handled by CharacterSheetRest module
 
 		// Inspiration
-		$("#charsheet-box-inspiration").on("click", () => this._toggleInspiration());
+		document.getElementById("charsheet-box-inspiration").addEventListener("click", () => this._toggleInspiration());
 
 		// Help toggle
-		$("#charsheet-help-toggle").on("click", () => this._toggleHelpTips());
+		document.getElementById("charsheet-help-toggle").addEventListener("click", () => this._toggleHelpTips());
 
 		// Layout editing
-		$("#charsheet-btn-layout").on("click", () => this._toggleLayoutEditMode());
-		$("#charsheet-btn-reset-layout").on("click", () => this._resetLayout());
-		$("#charsheet-btn-default-layout").on("click", () => this._resetToDefaultLayout());
+		document.getElementById("charsheet-btn-layout").addEventListener("click", () => this._toggleLayoutEditMode());
+		document.getElementById("charsheet-btn-reset-layout").addEventListener("click", () => this._resetLayout());
+		document.getElementById("charsheet-btn-default-layout").addEventListener("click", () => this._resetToDefaultLayout());
 
 		// Theme picker
 		this._initThemePicker();
@@ -670,19 +671,19 @@ class CharacterSheetPage {
 		this._initDicePicker();
 
 		// Conditions
-		$("#charsheet-btn-add-condition").on("click", () => this._onAddCondition());
+		document.getElementById("charsheet-btn-add-condition").addEventListener("click", () => this._onAddCondition());
 
 		// Exhaustion
-		$("#charsheet-btn-exhaustion-add").on("click", () => this._addExhaustion());
-		$("#charsheet-btn-exhaustion-remove").on("click", () => this._removeExhaustion());
+		document.getElementById("charsheet-btn-exhaustion-add").addEventListener("click", () => this._addExhaustion());
+		document.getElementById("charsheet-btn-exhaustion-remove").addEventListener("click", () => this._removeExhaustion());
 
 		// Companions - Buttons rendered dynamically via _renderCompanionButtons()
 		// New Round button (resets action economy)
-		$("#charsheet-btn-new-round").on("click", () => this._resetAllCompanionActions());
+		document.getElementById("charsheet-btn-new-round").addEventListener("click", () => this._resetAllCompanionActions());
 
 		// Currency
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
-			$(`#charsheet-ipt-${currency}`).on("change", (e) => {
+			document.getElementById(`charsheet-ipt-${currency}`).addEventListener("change", (e) => {
 				this._state.setCurrency(currency, parseInt(e.target.value) || 0);
 				this._saveCurrentCharacter();
 				this._renderCurrency(); // Update total
@@ -690,11 +691,11 @@ class CharacterSheetPage {
 		});
 		
 		// Currency conversion button
-		$("#charsheet-btn-convert-currency").on("click", () => this._convertCurrencyToGold());
+		document.getElementById("charsheet-btn-convert-currency").addEventListener("click", () => this._convertCurrencyToGold());
 
 		// Notes
 		["personality", "ideals", "bonds", "flaws", "backstory", "notes"].forEach(field => {
-			$(`#charsheet-txt-${field}`).on("change", (e) => {
+			document.getElementById(`charsheet-txt-${field}`).addEventListener("change", (e) => {
 				this._state.setNote(field, e.target.value);
 				this._saveCurrentCharacter();
 			});
@@ -702,7 +703,7 @@ class CharacterSheetPage {
 
 		// Appearance
 		["age", "height", "weight", "eyes", "skin", "hair"].forEach(field => {
-			$(`#charsheet-ipt-${field}`).on("change", (e) => {
+			document.getElementById(`charsheet-ipt-${field}`).addEventListener("change", (e) => {
 				this._state.setAppearance(field, e.target.value);
 				this._saveCurrentCharacter();
 			});
@@ -712,16 +713,19 @@ class CharacterSheetPage {
 		this._initPortraitHandlers();
 
 		// Death saves
-		$("#charsheet-deathsaves-success, #charsheet-deathsaves-failure").on("change", "input", () => {
-			this._updateDeathSaves();
-			this._saveCurrentCharacter();
-		});
+		for (const container of document.querySelectorAll("#charsheet-deathsaves-success, #charsheet-deathsaves-failure")) {
+			container.addEventListener("change", (e) => {
+				if (!e.target.matches("input")) return;
+				this._updateDeathSaves();
+				this._saveCurrentCharacter();
+			});
+		}
 
 		// Edit proficiencies
-		$("#charsheet-edit-proficiencies").on("click", () => this._showEditProficienciesModal());
+		document.getElementById("charsheet-edit-proficiencies").addEventListener("click", () => this._showEditProficienciesModal());
 
 		// Edit weapon masteries
-		$("#charsheet-edit-masteries").on("click", () => this._showEditWeaponMasteriesModal());
+		document.getElementById("charsheet-edit-masteries").addEventListener("click", () => this._showEditWeaponMasteriesModal());
 	}
 
 	// #region Character Management
@@ -735,11 +739,11 @@ class CharacterSheetPage {
 			characters = this._state.getAllCharacters();
 		}
 
-		this._$selCharacter.empty();
-		this._$selCharacter.append(`<option value="">➕ Create New Character</option>`);
+		this._selCharacter.innerHTML = "";
+		this._selCharacter.insertAdjacentHTML("beforeend", `<option value="">➕ Create New Character</option>`);
 
 		if (characters.length) {
-			this._$selCharacter.append(`<option disabled>────── Saved Characters ──────</option>`);
+			this._selCharacter.insertAdjacentHTML("beforeend", `<option disabled>────── Saved Characters ──────</option>`);
 		}
 
 		characters.forEach(char => {
@@ -749,16 +753,16 @@ class CharacterSheetPage {
 			const classNames = char.classes?.map(c => c.name).join("/") || "";
 			const classInfo = classNames ? `${classNames} ${totalLevel}` : "";
 			const label = classInfo ? `${name} — ${classInfo}` : name;
-			this._$selCharacter.append(`<option value="${char.id}">${label}</option>`);
+			this._selCharacter.insertAdjacentHTML("beforeend", `<option value="${char.id}">${label}</option>`);
 		});
 
 		if (this._currentCharacterId) {
-			this._$selCharacter.val(this._currentCharacterId);
+			this._selCharacter.value = this._currentCharacterId;
 		}
 	}
 
 	async _onCharacterSelect () {
-		const charId = this._$selCharacter.val();
+		const charId = this._selCharacter.value;
 
 		// Save current character before switching to prevent data loss
 		if (this._currentCharacterId) {
@@ -818,7 +822,7 @@ class CharacterSheetPage {
 		}
 
 		this._createNewCharacter();
-		this._$selCharacter.val("");
+		this._selCharacter.value = "";
 
 		// Show builder tab (may be hidden after previous character)
 		this._showTab("#charsheet-tab-builder");
@@ -843,7 +847,7 @@ class CharacterSheetPage {
 		this._state.loadFromJson(charData);
 		await this._saveCurrentCharacter();
 		await this._pLoadCharacters();
-		this._$selCharacter.val(newId);
+		this._selCharacter.value = newId;
 	}
 
 	/**
@@ -864,16 +868,17 @@ class CharacterSheetPage {
 		this._isLevelUpBannerDismissed = false;
 		this._state.loadFromJson(charData);
 		await this._pLoadCharacters();
-		this._$selCharacter.val(newId);
+		this._selCharacter.value = newId;
 	}
 
 	_onXpAdd () {
-		const rawXpToAdd = $("#charsheet-ipt-xp-add").val();
+		const iptXpAdd = document.getElementById("charsheet-ipt-xp-add");
+		const rawXpToAdd = iptXpAdd.value;
 		const xpToAdd = Math.max(0, Math.floor(Number(rawXpToAdd) || 0));
 		if (!xpToAdd) return;
 
 		this._state.addXp(xpToAdd);
-		$("#charsheet-ipt-xp-add").val(0);
+		iptXpAdd.value = 0;
 		this._saveCurrentCharacter();
 		this._renderXpTracking();
 		this._renderLevelUpBanner();
@@ -907,7 +912,7 @@ class CharacterSheetPage {
 
 		this._createNewCharacter();
 		await this._pLoadCharacters();
-		this._$selCharacter.val("");
+		this._selCharacter.value = "";
 	}
 
 	async _onSummonFamiliar () {
@@ -923,10 +928,10 @@ class CharacterSheetPage {
 	 * Render dynamic companion summon buttons based on character features
 	 */
 	_renderCompanionButtons () {
-		const $container = $("#charsheet-companion-buttons");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-companion-buttons");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const calculations = this._state.getFeatureCalculations?.() || {};
 		const spells = this._state.getSpells?.() || [];
@@ -940,58 +945,58 @@ class CharacterSheetPage {
 
 		// Always show summon familiar if they have the spell, are a warlock, or have animal accomplice
 		if (hasFindFamiliar || isWarlock || hasAnimalAccomplice) {
-			const $btn = $(`<button class="ve-btn ve-btn-primary" style="white-space: nowrap;">
+			const btn = e_({outer: `<button class="ve-btn ve-btn-primary" style="white-space: nowrap;">
 				<span class="glyphicon glyphicon-plus mr-1"></span>🦉 Summon Familiar
-			</button>`);
-			$btn.on("click", () => this._onSummonFamiliar());
-			$container.append($btn);
+			</button>`});
+			btn.addEventListener("click", () => this._onSummonFamiliar());
+			container.append(btn);
 		}
 
 		// Beast Master Ranger - Beast Companion
 		if (calculations.hasBeastCompanion) {
-			const $btn = $(`<button class="ve-btn ve-btn-success" style="white-space: nowrap;">
+			const btn = e_({outer: `<button class="ve-btn ve-btn-success" style="white-space: nowrap;">
 				<span class="glyphicon glyphicon-plus mr-1"></span>🐺 Beast Companion
-			</button>`);
-			$btn.on("click", () => this._onSummonBeastCompanion());
-			$container.append($btn);
+			</button>`});
+			btn.addEventListener("click", () => this._onSummonBeastCompanion());
+			container.append(btn);
 		}
 
 		// Drakewarden Ranger - Drake Companion
 		if (calculations.hasDrakeCompanion) {
-			const $btn = $(`<button class="ve-btn ve-btn-danger" style="white-space: nowrap;">
+			const btn = e_({outer: `<button class="ve-btn ve-btn-danger" style="white-space: nowrap;">
 				<span class="glyphicon glyphicon-plus mr-1"></span>🐉 Summon Drake
-			</button>`);
-			$btn.on("click", () => this._onSummonDrake());
-			$container.append($btn);
+			</button>`});
+			btn.addEventListener("click", () => this._onSummonDrake());
+			container.append(btn);
 		}
 
 		// Battle Smith Artificer - Steel Defender
 		if (calculations.hasSteelDefender) {
-			const $btn = $(`<button class="ve-btn ve-btn-info" style="white-space: nowrap;">
+			const btn = e_({outer: `<button class="ve-btn ve-btn-info" style="white-space: nowrap;">
 				<span class="glyphicon glyphicon-plus mr-1"></span>⚙️ Create Steel Defender
-			</button>`);
-			$btn.on("click", () => this._onSummonSteelDefender());
-			$container.append($btn);
+			</button>`});
+			btn.addEventListener("click", () => this._onSummonSteelDefender());
+			container.append(btn);
 		}
 
 		// Druid - Wild Shape
 		if (calculations.wildShapeUses > 0) {
 			const uses = calculations.wildShapeUses === Infinity ? "∞" : calculations.wildShapeUses;
-			const $btn = $(`<button class="ve-btn ve-btn-warning" style="white-space: nowrap;">
+			const btn = e_({outer: `<button class="ve-btn ve-btn-warning" style="white-space: nowrap;">
 				<span class="glyphicon glyphicon-refresh mr-1"></span>🐻 Wild Shape (${uses})
-			</button>`);
-			$btn.on("click", () => this._onWildShape());
-			$container.append($btn);
+			</button>`});
+			btn.addEventListener("click", () => this._onWildShape());
+			container.append(btn);
 		}
 
 		// Druid - Wild Companion (Fey familiar via Wild Shape use)
 		if (calculations.hasWildCompanion) {
 			const duration = calculations.wildCompanionDuration || "";
-			const $btn = $(`<button class="ve-btn ve-btn-info" style="white-space: nowrap;" title="Summon a Fey familiar for ${duration}">
+			const btn = e_({outer: `<button class="ve-btn ve-btn-info" style="white-space: nowrap;" title="Summon a Fey familiar for ${duration}">
 				<span class="glyphicon glyphicon-plus mr-1"></span>🧚 Wild Companion
-			</button>`);
-			$btn.on("click", () => this._onWildCompanion());
-			$container.append($btn);
+			</button>`});
+			btn.addEventListener("click", () => this._onWildCompanion());
+			container.append(btn);
 		}
 
 		// Find Steed / Find Greater Steed (Paladin)
@@ -999,19 +1004,19 @@ class CharacterSheetPage {
 		const hasFindGreaterSteed = spells.some(s => s.name?.toLowerCase() === "find greater steed");
 		if (hasFindSteed || hasFindGreaterSteed) {
 			const steedType = hasFindGreaterSteed ? "Greater Steed" : "Steed";
-			const $btn = $(`<button class="ve-btn ve-btn-default" style="white-space: nowrap;">
+			const btn = e_({outer: `<button class="ve-btn ve-btn-default" style="white-space: nowrap;">
 				<span class="glyphicon glyphicon-plus mr-1"></span>🐎 Find ${steedType}
-			</button>`);
-			$btn.on("click", () => this._onFindSteed(hasFindGreaterSteed));
-			$container.append($btn);
+			</button>`});
+			btn.addEventListener("click", () => this._onFindSteed(hasFindGreaterSteed));
+			container.append(btn);
 		}
 
 		// Always show "Add Custom" button
-		const $customBtn = $(`<button class="ve-btn ve-btn-default" style="white-space: nowrap;" title="Add a custom companion manually">
+		const customBtn = e_({outer: `<button class="ve-btn ve-btn-default" style="white-space: nowrap;" title="Add a custom companion manually">
 			<span class="glyphicon glyphicon-plus mr-1"></span>➕ Custom
-		</button>`);
-		$customBtn.on("click", () => this._onAddCustomCompanion());
-		$container.append($customBtn);
+		</button>`});
+		customBtn.addEventListener("click", () => this._onAddCustomCompanion());
+		container.append(customBtn);
 	}
 
 	/**
@@ -1493,7 +1498,7 @@ class CharacterSheetPage {
 	 * Add custom companion manually
 	 */
 	async _onAddCustomCompanion () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "➕ Add Custom Companion",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -1505,7 +1510,7 @@ class CharacterSheetPage {
 		let speed = 30;
 		let creatureType = "beast";
 
-		$modalInner.append(`
+		modalInner.innerHTML = `
 			<div style="display: flex; flex-direction: column; gap: 12px;">
 				<div>
 					<label class="ve-small ve-muted">Name *</label>
@@ -1545,15 +1550,15 @@ class CharacterSheetPage {
 					</button>
 				</div>
 			</div>
-		`);
+		`;
 
-		$modalInner.find("#custom-comp-cancel").on("click", doClose);
-		$modalInner.find("#custom-comp-add").on("click", () => {
-			name = $modalInner.find("#custom-comp-name").val()?.trim();
-			hp = parseInt($modalInner.find("#custom-comp-hp").val()) || 10;
-			ac = parseInt($modalInner.find("#custom-comp-ac").val()) || 10;
-			speed = parseInt($modalInner.find("#custom-comp-speed").val()) || 30;
-			creatureType = $modalInner.find("#custom-comp-type").val() || "beast";
+		modalInner.querySelector("#custom-comp-cancel").addEventListener("click", doClose);
+		modalInner.querySelector("#custom-comp-add").addEventListener("click", () => {
+			name = modalInner.querySelector("#custom-comp-name").value?.trim();
+			hp = parseInt(modalInner.querySelector("#custom-comp-hp").value) || 10;
+			ac = parseInt(modalInner.querySelector("#custom-comp-ac").value) || 10;
+			speed = parseInt(modalInner.querySelector("#custom-comp-speed").value) || 30;
+			creatureType = modalInner.querySelector("#custom-comp-type").value || "beast";
 
 			if (!name) {
 				JqueryUtil.doToast({type: "warning", content: "Please enter a name."});
@@ -1611,25 +1616,25 @@ class CharacterSheetPage {
 	 * @param {"saving"|"saved"|"error"} status
 	 */
 	_updateSaveIndicator (status) {
-		const $indicator = $("#charsheet-save-indicator");
-		if (!$indicator.length) return;
+		const indicator = document.getElementById("charsheet-save-indicator");
+		if (!indicator) return;
 
-		$indicator.removeClass("charsheet__save-indicator--saving charsheet__save-indicator--error");
+		indicator.classList.remove("charsheet__save-indicator--saving", "charsheet__save-indicator--error");
 
 		switch (status) {
 			case "saving":
-				$indicator.addClass("charsheet__save-indicator--saving");
-				$indicator.find(".charsheet__save-icon").text("⟳");
-				$indicator.find(".charsheet__save-text").text("Saving...");
+				indicator.classList.add("charsheet__save-indicator--saving");
+				if (indicator.querySelector(".charsheet__save-icon")) indicator.querySelector(".charsheet__save-icon").textContent = "⟳";
+				if (indicator.querySelector(".charsheet__save-text")) indicator.querySelector(".charsheet__save-text").textContent = "Saving...";
 				break;
 			case "saved":
-				$indicator.find(".charsheet__save-icon").text("✓");
-				$indicator.find(".charsheet__save-text").text("Saved");
+				if (indicator.querySelector(".charsheet__save-icon")) indicator.querySelector(".charsheet__save-icon").textContent = "✓";
+				if (indicator.querySelector(".charsheet__save-text")) indicator.querySelector(".charsheet__save-text").textContent = "Saved";
 				break;
 			case "error":
-				$indicator.addClass("charsheet__save-indicator--error");
-				$indicator.find(".charsheet__save-icon").text("✗");
-				$indicator.find(".charsheet__save-text").text("Error");
+				indicator.classList.add("charsheet__save-indicator--error");
+				if (indicator.querySelector(".charsheet__save-icon")) indicator.querySelector(".charsheet__save-icon").textContent = "✗";
+				if (indicator.querySelector(".charsheet__save-text")) indicator.querySelector(".charsheet__save-text").textContent = "Error";
 				break;
 		}
 	}
@@ -1657,7 +1662,7 @@ class CharacterSheetPage {
 		this._state.loadFromJson(json);
 		await this._saveCurrentCharacter();
 		await this._pLoadCharacters();
-		this._$selCharacter.val(json.id);
+		this._selCharacter.value = json.id;
 		this._renderCharacter();
 
 		JqueryUtil.doToast({type: "success", content: `Imported character: ${json.name || "Unnamed"}`});
@@ -1718,7 +1723,7 @@ class CharacterSheetPage {
 	}
 
 	_renderBasicInfo () {
-		$("#charsheet-ipt-name").val(this._state.getName());
+		document.getElementById("charsheet-ipt-name").value = this._state.getName();
 		this._renderXpTracking();
 		
 		// Render race with hover link
@@ -1727,12 +1732,12 @@ class CharacterSheetPage {
 			try {
 				const raceName = this._state.getRaceName();
 				const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_RACES]({name: race.name, source: race.source});
-				$("#charsheet-disp-race").html(CharacterSheetPage.getHoverLink(UrlUtil.PG_RACES, raceName, race.source, hash));
+				document.getElementById("charsheet-disp-race").innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_RACES, raceName, race.source, hash);
 			} catch (e) {
-				$("#charsheet-disp-race").text(this._state.getRaceName() || "—");
+				document.getElementById("charsheet-disp-race").textContent = this._state.getRaceName() || "—";
 			}
 		} else {
-			$("#charsheet-disp-race").text("—");
+			document.getElementById("charsheet-disp-race").textContent = "—";
 		}
 		
 		// Render class with hover links
@@ -1746,51 +1751,51 @@ class CharacterSheetPage {
 					return `${c.name} ${c.level}`;
 				}
 			});
-			$("#charsheet-disp-class").html(classLinks.join(" / "));
+			document.getElementById("charsheet-disp-class").innerHTML = classLinks.join(" / ");
 		} else {
-			$("#charsheet-disp-class").text("—");
+			document.getElementById("charsheet-disp-class").textContent = "—";
 		}
 		
-		$("#charsheet-disp-level").text(this._state.getTotalLevel());
+		document.getElementById("charsheet-disp-level").textContent = this._state.getTotalLevel();
 		
 		// Render background with hover link
 		const background = this._state.getBackground();
 		if (background?.name) {
 			// Don't create hover links for custom backgrounds (source="Custom")
 			if (background.source === "Custom") {
-				$("#charsheet-disp-background").text(background.name);
+				document.getElementById("charsheet-disp-background").textContent = background.name;
 			} else {
 				try {
 					const hash = UrlUtil.URL_TO_HASH_BUILDER[UrlUtil.PG_BACKGROUNDS]({name: background.name, source: background.source});
-					$("#charsheet-disp-background").html(CharacterSheetPage.getHoverLink(UrlUtil.PG_BACKGROUNDS, background.name, background.source, hash));
+					document.getElementById("charsheet-disp-background").innerHTML = CharacterSheetPage.getHoverLink(UrlUtil.PG_BACKGROUNDS, background.name, background.source, hash);
 				} catch (e) {
-					$("#charsheet-disp-background").text(this._state.getBackgroundName() || "—");
+					document.getElementById("charsheet-disp-background").textContent = this._state.getBackgroundName() || "—";
 				}
 			}
 		} else {
-			$("#charsheet-disp-background").text("—");
+			document.getElementById("charsheet-disp-background").textContent = "—";
 		}
 		
 		// Render size and reach chips
 		this._renderSizeChip();
 		this._renderReachChip();
 		
-		$("#charsheet-disp-proficiency").text(`+${this._state.getProficiencyBonus()}`);
+		document.getElementById("charsheet-disp-proficiency").textContent = `+${this._state.getProficiencyBonus()}`;
 		this._renderLevelUpBanner();
 	}
 
 	_renderXpTracking () {
 		const currentXp = this._state.getXp();
-		$("#charsheet-disp-xp-current").text(currentXp.toLocaleString());
+		document.getElementById("charsheet-disp-xp-current").textContent = currentXp.toLocaleString();
 
 		const totalLevel = this._state.getTotalLevel();
 		if (totalLevel <= 0) {
-			$("#charsheet-disp-xp-progress").text("Add a class to track level progression.");
+			document.getElementById("charsheet-disp-xp-progress").textContent = "Add a class to track level progression.";
 			return;
 		}
 
 		if (totalLevel >= 20) {
-			$("#charsheet-disp-xp-progress").text("Maximum level reached.");
+			document.getElementById("charsheet-disp-xp-progress").textContent = "Maximum level reached.";
 			return;
 		}
 
@@ -1798,42 +1803,42 @@ class CharacterSheetPage {
 		const xpToNext = this._state.getXpToNextLevel();
 		const xpRequired = this._state.getXpRequiredForNextLevel();
 		if (xpToNext <= 0) {
-			$("#charsheet-disp-xp-progress").text(`Ready for level ${nextLevel} (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`);
+			document.getElementById("charsheet-disp-xp-progress").textContent = `Ready for level ${nextLevel} (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`;
 			return;
 		}
 
-		$("#charsheet-disp-xp-progress").text(`${xpToNext.toLocaleString()} XP to level ${nextLevel} (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`);
+		document.getElementById("charsheet-disp-xp-progress").textContent = `${xpToNext.toLocaleString()} XP to level ${nextLevel} (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`;
 	}
 
 	_renderLevelUpBanner () {
-		const $banner = $("#charsheet-levelup-banner");
-		const $text = $("#charsheet-levelup-banner-text");
-		if (!$banner.length || !$text.length) return;
+		const banner = document.getElementById("charsheet-levelup-banner");
+		const text = document.getElementById("charsheet-levelup-banner-text");
+		if (!banner || !text) return;
 
 		const totalLevel = this._state.getTotalLevel();
 		if (this._isLevelUpBannerDismissed || totalLevel <= 0 || totalLevel >= 20) {
-			$banner.addClass("ve-hidden");
+			banner.classList.add("ve-hidden");
 			return;
 		}
 
 		if (!this._state.canLevelUpFromXp()) {
-			$banner.addClass("ve-hidden");
+			banner.classList.add("ve-hidden");
 			return;
 		}
 
 		const nextLevel = totalLevel + 1;
 		const xpRequired = this._state.getXpRequiredForNextLevel();
 		const currentXp = this._state.getXp();
-		$text.text(`You can level up to ${nextLevel} now (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`);
-		$banner.removeClass("ve-hidden");
+		text.textContent = `You can level up to ${nextLevel} now (${currentXp.toLocaleString()}/${xpRequired.toLocaleString()} XP).`;
+		banner.classList.remove("ve-hidden");
 	}
 
 	/**
 	 * Render the size chip - always visible to show current size
 	 */
 	_renderSizeChip () {
-		const $chip = $("#charsheet-size-chip");
-		const $value = $("#charsheet-disp-size");
+		const chip = document.getElementById("charsheet-size-chip");
+		const value = document.getElementById("charsheet-disp-size");
 		
 		const baseSize = this._state.getBaseSize();
 		const currentSize = this._state.getSize();
@@ -1841,11 +1846,11 @@ class CharacterSheetPage {
 		const sizeChanged = currentSize !== baseSize;
 		
 		// Always show the chip
-		$chip.removeClass("ve-hidden");
+		chip.classList.remove("ve-hidden");
 		
 		// Build the display text
 		const sizeText = currentSize.charAt(0).toUpperCase() + currentSize.slice(1);
-		$value.text(sizeText);
+		value.textContent = sizeText;
 		
 		// Build tooltip
 		const tooltipParts = [`Size: ${sizeText}`];
@@ -1855,15 +1860,15 @@ class CharacterSheetPage {
 		}
 		tooltipParts.push(`Carry Capacity: ×${this._state.getSizeCarryMultiplier()}`);
 		
-		$chip.attr("title", tooltipParts.join("\n"));
+		chip.setAttribute("title", tooltipParts.join("\n"));
 		
 		// Add visual indicator if size is modified
 		if (sizeChanged) {
 			const direction = this._state.getSizeIncreaseFromStates() > this._state.getSizeDecreaseFromStates() ? "increased" : "decreased";
-			$chip.addClass(`charsheet__info-chip--size-${direction}`);
-			$chip.removeClass(direction === "increased" ? "charsheet__info-chip--size-decreased" : "charsheet__info-chip--size-increased");
+			chip.classList.add(`charsheet__info-chip--size-${direction}`);
+			chip.classList.remove(direction === "increased" ? "charsheet__info-chip--size-decreased" : "charsheet__info-chip--size-increased");
 		} else {
-			$chip.removeClass("charsheet__info-chip--size-increased charsheet__info-chip--size-decreased");
+			chip.classList.remove("charsheet__info-chip--size-increased", "charsheet__info-chip--size-decreased");
 		}
 	}
 
@@ -1871,8 +1876,8 @@ class CharacterSheetPage {
 	 * Render the reach chip - always visible to show current melee reach
 	 */
 	_renderReachChip () {
-		const $chip = $("#charsheet-reach-chip");
-		const $value = $("#charsheet-disp-reach");
+		const chip = document.getElementById("charsheet-reach-chip");
+		const value = document.getElementById("charsheet-disp-reach");
 		
 		const baseReach = 5; // Standard reach for Medium/Small creatures
 		const reachBonus = this._state.getReachBonus();
@@ -1881,7 +1886,7 @@ class CharacterSheetPage {
 		const hasReachModifier = reachBonus !== 0;
 		
 		// Build the display text
-		$value.text(`${meleeReach} ft`);
+		value.textContent = `${meleeReach} ft`;
 		
 		// Build tooltip
 		const tooltipParts = [`Melee Reach: ${meleeReach} ft`];
@@ -1891,35 +1896,35 @@ class CharacterSheetPage {
 			tooltipParts.push(`Modifier: ${sign}${reachBonus} ft`);
 		}
 		
-		$chip.attr("title", tooltipParts.join("\n"));
+		chip.setAttribute("title", tooltipParts.join("\n"));
 		
 		// Add visual indicator if reach is modified
 		if (reachBonus > 0) {
-			$chip.addClass("charsheet__info-chip--reach-bonus");
-			$chip.removeClass("charsheet__info-chip--reach-penalty");
+			chip.classList.add("charsheet__info-chip--reach-bonus");
+			chip.classList.remove("charsheet__info-chip--reach-penalty");
 		} else if (reachBonus < 0) {
-			$chip.addClass("charsheet__info-chip--reach-penalty");
-			$chip.removeClass("charsheet__info-chip--reach-bonus");
+			chip.classList.add("charsheet__info-chip--reach-penalty");
+			chip.classList.remove("charsheet__info-chip--reach-bonus");
 		} else {
-			$chip.removeClass("charsheet__info-chip--reach-bonus charsheet__info-chip--reach-penalty");
+			chip.classList.remove("charsheet__info-chip--reach-bonus", "charsheet__info-chip--reach-penalty");
 		}
 	}
 
 	_renderAbilities () {
-		const $container = $("#charsheet-abilities");
-		$container.empty();
+		const container = document.getElementById("charsheet-abilities");
+		container.innerHTML = "";
 
 		Parser.ABIL_ABVS.forEach(abl => {
-			const $ability = $(`
+			const ability = e_({outer: `
 				<div class="charsheet__ability" data-ability="${abl}" title="Click to roll ${Parser.attAbvToFull(abl)} (Shift=Adv, Ctrl=Dis)">
 					<div class="charsheet__ability-name">${abl.toUpperCase()}</div>
 					<div class="charsheet__ability-score" id="charsheet-ability-${abl}-score">10</div>
 					<div class="charsheet__ability-mod" id="charsheet-ability-${abl}-mod">+0</div>
 				</div>
-			`);
+			`});
 
-			$ability.on("click", (e) => this._rollAbilityCheck(abl, e));
-			$container.append($ability);
+			ability.addEventListener("click", (e) => this._rollAbilityCheck(abl, e));
+			container.append(ability);
 		});
 	}
 
@@ -1927,8 +1932,8 @@ class CharacterSheetPage {
 		Parser.ABIL_ABVS.forEach(abl => {
 			const score = this._state.getAbilityScore(abl);
 			const mod = this._state.getAbilityMod(abl);
-			$(`#charsheet-ability-${abl}-score`).text(score);
-			$(`#charsheet-ability-${abl}-mod`).text(mod >= 0 ? `+${mod}` : mod);
+			document.getElementById(`charsheet-ability-${abl}-score`).textContent = score;
+			document.getElementById(`charsheet-ability-${abl}-mod`).textContent = mod >= 0 ? `+${mod}` : mod;
 		});
 
 		// Update prominent passive scores display
@@ -1941,14 +1946,14 @@ class CharacterSheetPage {
 		const investigationMod = this._state.getSkillMod("investigation");
 		const insightMod = this._state.getSkillMod("insight");
 
-		$("#charsheet-passive-perception").text(10 + perceptionMod);
-		$("#charsheet-passive-investigation").text(10 + investigationMod);
-		$("#charsheet-passive-insight").text(10 + insightMod);
+		document.getElementById("charsheet-passive-perception").textContent = 10 + perceptionMod;
+		document.getElementById("charsheet-passive-investigation").textContent = 10 + investigationMod;
+		document.getElementById("charsheet-passive-insight").textContent = 10 + insightMod;
 	}
 
 	_renderSavingThrows () {
-		const $container = $("#charsheet-saves");
-		$container.empty();
+		const container = document.getElementById("charsheet-saves");
+		container.innerHTML = "";
 
 		Parser.ABIL_ABVS.forEach(abl => {
 			const isProficient = this._state.hasSaveProficiency(abl);
@@ -1959,25 +1964,25 @@ class CharacterSheetPage {
 			tooltipLines.push(`─────────\n🎯 Total: ${modStr}`);
 			const tooltip = tooltipLines.join("\n");
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__save-row" data-save="${abl}" title="${tooltip.replace(/"/g, "&quot;")}">
 					<span class="charsheet__prof-indicator ${isProficient ? "charsheet__prof-indicator--proficient" : ""}"></span>
 					<span class="charsheet__save-name">${Parser.attAbvToFull(abl)}</span>
 					<span class="charsheet__save-mod">${modStr}</span>
 				</div>
-			`);
+			`});
 
-			$row.on("click", (e) => this._rollSavingThrow(abl, e));
-			$container.append($row);
+			row.addEventListener("click", (e) => this._rollSavingThrow(abl, e));
+			container.append(row);
 		});
 	}
 
 	_renderSkills () {
-		const $container = $("#charsheet-skills");
-		$container.empty();
+		const container = document.getElementById("charsheet-skills");
+		container.innerHTML = "";
 
 		// Add header row with column labels
-		$container.append(`
+		container.append(e_({outer: `
 			<div class="charsheet__skills-header">
 				<span class="charsheet__skills-header-prof" title="Proficiency level: Click dots to cycle">Prof</span>
 				<span class="charsheet__skills-header-name">Skill</span>
@@ -1985,7 +1990,7 @@ class CharacterSheetPage {
 				<span class="charsheet__skills-header-mod">Mod</span>
 				<span class="charsheet__skills-header-passive" title="Passive score = 10 + modifier">Passive</span>
 			</div>
-		`);
+		`}));
 
 		// Get skills from loaded data (dynamic, supports homebrew)
 		const skills = this.getSkillsList();
@@ -2025,7 +2030,7 @@ class CharacterSheetPage {
 			tooltipLines.push(`─────────\n🎯 Total: ${modStr}`);
 			const skillTooltip = tooltipLines.join("\n");
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__skill-row${customClass}" data-skill="${skillKey}" data-default-ability="${defaultAbility}" title="${skillTooltip.replace(/"/g, "&quot;")}">
 					<span class="charsheet__prof-indicator charsheet__prof-indicator--clickable ${profClass}" title="${profTitle}" data-skill="${skillKey}"></span>
 					<span class="charsheet__skill-name">${skill.name}${skill.isCustom ? " ✦" : ""}</span>
@@ -2034,24 +2039,24 @@ class CharacterSheetPage {
 					<span class="charsheet__skill-passive" title="Passive ${skill.name}: 10 + modifier = ${passiveScore}">${passiveScore}</span>
 					${skill.isCustom ? `<span class="charsheet__skill-delete" title="Remove custom skill">×</span>` : ""}
 				</div>
-			`);
+			`});
 
 			// Proficiency toggle click handler
-			$row.find(".charsheet__prof-indicator").on("click", (e) => {
+			row.querySelector(".charsheet__prof-indicator").addEventListener("click", (e) => {
 				e.stopPropagation();
 				this._cycleSkillProficiency(skillKey);
 			});
 
-			$row.on("click", (e) => {
+			row.addEventListener("click", (e) => {
 				// Don't roll if clicking delete button or prof indicator
-				if ($(e.target).hasClass("charsheet__skill-delete")) return;
-				if ($(e.target).hasClass("charsheet__prof-indicator")) return;
+				if (e.target.classList.contains("charsheet__skill-delete")) return;
+				if (e.target.classList.contains("charsheet__prof-indicator")) return;
 				this._rollSkillCheck(skillKey, skill.name, e);
 			});
-			$row.on("contextmenu", (e) => this._showSkillAbilityMenu(e, skillKey, skill.name, skill.ability));
+			row.addEventListener("contextmenu", (e) => this._showSkillAbilityMenu(e, skillKey, skill.name, skill.ability));
 
 			if (skill.isCustom) {
-				$row.find(".charsheet__skill-delete").on("click", (e) => {
+				row.querySelector(".charsheet__skill-delete").addEventListener("click", (e) => {
 					e.stopPropagation();
 					this._state.removeCustomSkill(skill.name);
 					this._renderSkills();
@@ -2059,18 +2064,18 @@ class CharacterSheetPage {
 				});
 			}
 
-			$container.append($row);
+			container.append(row);
 		});
 
 		// Add "Add Custom Skill" button
-		const $addBtn = $(`
+		const addBtn = e_({outer: `
 			<div class="charsheet__skill-add" title="Add a custom skill">
 				<span class="charsheet__skill-add-icon">+</span>
 				<span class="charsheet__skill-add-text">Add Custom Skill</span>
 			</div>
-		`);
-		$addBtn.on("click", () => this._showAddCustomSkillModal());
-		$container.append($addBtn);
+		`});
+		addBtn.addEventListener("click", () => this._showAddCustomSkillModal());
+		container.append(addBtn);
 	}
 
 	_renderHp () {
@@ -2078,9 +2083,9 @@ class CharacterSheetPage {
 		const maxHp = this._state.getMaxHp();
 		const tempHp = this._state.getTempHp();
 
-		$("#charsheet-ipt-hp-current").val(currentHp);
-		$("#charsheet-disp-hp-max").text(maxHp);
-		$("#charsheet-ipt-hp-temp").val(tempHp);
+		document.getElementById("charsheet-ipt-hp-current").value = currentHp;
+		document.getElementById("charsheet-disp-hp-max").textContent = maxHp;
+		document.getElementById("charsheet-ipt-hp-temp").value = tempHp;
 
 		// Update HP bar fill width and color
 		const hpPercent = maxHp > 0 ? Math.max(0, Math.min(100, (currentHp / maxHp) * 100)) : 0;
@@ -2094,29 +2099,29 @@ class CharacterSheetPage {
 			barColor = "#ffc107"; // Yellow (bloodied)
 		}
 
-		$("#charsheet-hp-bar-fill").css({
+		Object.assign(document.getElementById("charsheet-hp-bar-fill").style, {
 			"width": `${hpPercent}%`,
 			"background": barColor, // Use 'background' to override CSS gradient
 		});
 
 		// Temp HP bar (cyan/blue, positioned after regular HP)
-		$("#charsheet-hp-bar-temp").css({
+		Object.assign(document.getElementById("charsheet-hp-bar-temp").style, {
 			"width": `${tempPercent}%`,
 			"left": `${hpPercent}%`,
 			"background": "#17a2b8",
 		});
 
 		// Update HP percentage text
-		$("#charsheet-hp-percent").text(`${Math.round(hpPercent)}%`);
+		document.getElementById("charsheet-hp-percent").textContent = `${Math.round(hpPercent)}%`;
 	}
 
 	_renderCombatStats () {
 		// AC with breakdown
 		const acBreakdown = this._state.getAcBreakdown();
-		$("#charsheet-disp-ac").text(acBreakdown.total);
+		document.getElementById("charsheet-disp-ac").textContent = acBreakdown.total;
 		this._renderAcBreakdown(acBreakdown);
 
-		$("#charsheet-disp-initiative").text(this._formatMod(this._state.getInitiative()));
+		document.getElementById("charsheet-disp-initiative").textContent = this._formatMod(this._state.getInitiative());
 		this._renderStatBreakdown("#charsheet-initiative-breakdown", this._state.getInitiativeBreakdown());
 
 		// Calculate speed with exhaustion penalty
@@ -2149,7 +2154,7 @@ class CharacterSheetPage {
 			// Thelemar rules: no speed penalty
 		}
 		
-		$("#charsheet-disp-speed").text(speedDisplay);
+		document.getElementById("charsheet-disp-speed").textContent = speedDisplay;
 		this._renderStatBreakdown("#charsheet-speed-breakdown", this._state.getSpeedBreakdown("walk"));
 
 		// Jump distances
@@ -2176,25 +2181,25 @@ class CharacterSheetPage {
 		const longJumpStanding = Math.floor(longJumpRunning / 2); // Standing = half of running
 		const highJumpStanding = Math.floor(Math.max(0, highJumpRunning) / 2); // Standing = half of running
 
-		$("#charsheet-disp-jump-long-run").text(`${longJumpRunning}`);
-		$("#charsheet-disp-jump-long-stand").text(`${longJumpStanding}`);
-		$("#charsheet-disp-jump-high-run").text(`${Math.max(0, highJumpRunning)}`);
-		$("#charsheet-disp-jump-high-stand").text(`${highJumpStanding}`);
+		document.getElementById("charsheet-disp-jump-long-run").textContent = `${longJumpRunning}`;
+		document.getElementById("charsheet-disp-jump-long-stand").textContent = `${longJumpStanding}`;
+		document.getElementById("charsheet-disp-jump-high-run").textContent = `${Math.max(0, highJumpRunning)}`;
+		document.getElementById("charsheet-disp-jump-high-stand").textContent = `${highJumpStanding}`;
 
 		// Update tooltips based on rules being used
 		if (useThelemarJumping) {
 			const athleticsMod = this._state.getSkillMod("athletics");
 			const longTooltip = `Long Jump (Thelemar): 8 + Athletics (${athleticsMod >= 0 ? "+" : ""}${athleticsMod}) = ${longJumpRunning} ft. running, ${longJumpStanding} ft. standing`;
 			const highTooltip = `High Jump (Thelemar): 2 + Athletics × 0.5 = ${Math.max(0, highJumpRunning)} ft. running, ${highJumpStanding} ft. standing`;
-			$(".charsheet__physical-stat-item[title*='Long Jump']").attr("title", longTooltip);
-			$(".charsheet__physical-stat-item[title*='High Jump']").attr("title", highTooltip);
+			document.querySelector(".charsheet__physical-stat-item[title*='Long Jump']").setAttribute("title", longTooltip);
+			document.querySelector(".charsheet__physical-stat-item[title*='High Jump']").setAttribute("title", highTooltip);
 		} else {
 			const strScore = this._state.getAbilityScore("str");
 			const strMod = this._state.getAbilityMod("str");
 			const longTooltip = `Long Jump: STR score (${strScore}) = ${longJumpRunning} ft. running, ${longJumpStanding} ft. standing`;
 			const highTooltip = `High Jump: 3 + STR mod (${strMod >= 0 ? "+" : ""}${strMod}) = ${Math.max(0, highJumpRunning)} ft. running, ${highJumpStanding} ft. standing`;
-			$(".charsheet__physical-stat-item[title*='Long Jump']").attr("title", longTooltip);
-			$(".charsheet__physical-stat-item[title*='High Jump']").attr("title", highTooltip);
+			document.querySelector(".charsheet__physical-stat-item[title*='Long Jump']").setAttribute("title", longTooltip);
+			document.querySelector(".charsheet__physical-stat-item[title*='High Jump']").setAttribute("title", highTooltip);
 		}
 
 		// Carrying capacity (uses state method which respects Thelemar homebrew rules)
@@ -2203,34 +2208,34 @@ class CharacterSheetPage {
 		const items = this._state.getItems();
 		const currentWeight = items.reduce((sum, item) => sum + (item.weight || 0) * item.quantity, 0);
 
-		$("#charsheet-disp-weight").text(currentWeight.toFixed(1));
-		$("#charsheet-disp-carry").text(carryCapacity);
-		$("#charsheet-disp-push").text(pushDragLift);
+		document.getElementById("charsheet-disp-weight").textContent = currentWeight.toFixed(1);
+		document.getElementById("charsheet-disp-carry").textContent = carryCapacity;
+		document.getElementById("charsheet-disp-push").textContent = pushDragLift;
 
 		// Update carrying capacity tooltip based on rules
 		const useThelemarCarry = this._state.getSettings()?.thelemar_carryWeight;
 		if (useThelemarCarry) {
 			const mightMod = this._state.getSkillMod("might");
 			const carryTooltip = `Carry Capacity (Thelemar): 50 + 25 × Might mod (${mightMod >= 0 ? "+" : ""}${mightMod}) = ${carryCapacity} lb.\nPush/Drag/Lift: ${pushDragLift} lb.`;
-			$(".charsheet__physical-stat-group--carry").attr("title", carryTooltip);
+			document.querySelector(".charsheet__physical-stat-group--carry").setAttribute("title", carryTooltip);
 		} else {
 			const strScore = this._state.getAbilityScore("str");
 			const carryTooltip = `Carry Capacity: STR (${strScore}) × 15 = ${carryCapacity} lb.\nPush/Drag/Lift: ${pushDragLift} lb.`;
-			$(".charsheet__physical-stat-group--carry").attr("title", carryTooltip);
+			document.querySelector(".charsheet__physical-stat-group--carry").setAttribute("title", carryTooltip);
 		}
 
 		// Update carry bar visualization
 		const carryPercent = carryCapacity > 0 ? Math.min(100, (currentWeight / carryCapacity) * 100) : 0;
-		const $carryFill = $("#charsheet-carry-bar-fill");
-		$carryFill.css("width", `${carryPercent}%`);
+		const carryFill = document.getElementById("charsheet-carry-bar-fill");
+		carryFill.style["width"] = `${carryPercent}%`;
 
 		// Color coding based on encumbrance
 		if (carryPercent >= 100) {
-			$carryFill.css("background", "var(--color-danger, #dc3545)"); // Encumbered
+			carryFill.style["background"] = "var(--color-danger, #dc3545)"; // Encumbered
 		} else if (carryPercent >= 66) {
-			$carryFill.css("background", "var(--color-warning, #ffc107)"); // Heavy load
+			carryFill.style["background"] = "var(--color-warning, #ffc107)"; // Heavy load
 		} else {
-			$carryFill.css("background", "var(--color-success, #28a745)"); // Light load
+			carryFill.style["background"] = "var(--color-success, #28a745)"; // Light load
 		}
 
 		// Render senses
@@ -2238,8 +2243,8 @@ class CharacterSheetPage {
 	}
 
 	_renderSenses () {
-		const $section = $("#charsheet-senses-section");
-		const $container = $("#charsheet-senses");
+		const section = document.getElementById("charsheet-senses-section");
+		const container = document.getElementById("charsheet-senses");
 
 		// Get senses from features (like Darkvision)
 		const features = this._state.getFeatures();
@@ -2274,20 +2279,20 @@ class CharacterSheetPage {
 		});
 
 		if (senses.length === 0) {
-			$section.hide();
+			section.style.display = "none";
 			return;
 		}
 
-		$section.show();
-		$container.empty();
+		section.style.display = "";
+		container.innerHTML = "";
 
 		senses.forEach(sense => {
-			$container.append(`
+			container.append(e_({outer: `
 				<div class="charsheet__sense-item">
 					<span class="charsheet__sense-name">${sense.name}</span>
 					<span class="charsheet__sense-range">${sense.range}</span>
 				</div>
-			`);
+			`}));
 		});
 	}
 
@@ -2320,82 +2325,82 @@ class CharacterSheetPage {
 		// Resistances
 		if (defenses.resistances.length > 0) {
 			const resistanceText = defenses.resistances.map(formatType).join(", ");
-			$("#charsheet-resistances").text(resistanceText);
+			document.getElementById("charsheet-resistances").textContent = resistanceText;
 		} else {
-			$("#charsheet-resistances").text("—");
+			document.getElementById("charsheet-resistances").textContent = "—";
 		}
 
 		// Immunities (damage immunities)
 		if (defenses.immunities.length > 0) {
 			const immunityText = defenses.immunities.map(formatType).join(", ");
-			$("#charsheet-immunities").text(immunityText);
+			document.getElementById("charsheet-immunities").textContent = immunityText;
 		} else {
-			$("#charsheet-immunities").text("—");
+			document.getElementById("charsheet-immunities").textContent = "—";
 		}
 
 		// Vulnerabilities
 		if (defenses.vulnerabilities.length > 0) {
 			const vulnerabilityText = defenses.vulnerabilities.map(formatType).join(", ");
-			$("#charsheet-vulnerabilities").text(vulnerabilityText);
+			document.getElementById("charsheet-vulnerabilities").textContent = vulnerabilityText;
 		} else {
-			$("#charsheet-vulnerabilities").text("—");
+			document.getElementById("charsheet-vulnerabilities").textContent = "—";
 		}
 
 		// Condition immunities (if there's a UI element for it)
-		const $conditionImmunities = $("#charsheet-condition-immunities");
-		if ($conditionImmunities.length > 0) {
+		const conditionImmunities = document.getElementById("charsheet-condition-immunities");
+		if (conditionImmunities) {
 			if (defenses.conditionImmunities.length > 0) {
 				const conditionText = defenses.conditionImmunities.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
-				$conditionImmunities.text(conditionText);
+				conditionImmunities.textContent = conditionText;
 			} else {
-				$conditionImmunities.text("—");
+				conditionImmunities.textContent = "—";
 			}
 		}
 	}
 
 	_renderHitDice () {
 		const hitDice = this._state.getHitDiceSummary();
-		$("#charsheet-disp-hitdice-current").text(hitDice.current);
-		$("#charsheet-disp-hitdice-max").text(hitDice.max);
-		$("#charsheet-disp-hitdice-type").text(hitDice.type || "d8");
+		document.getElementById("charsheet-disp-hitdice-current").textContent = hitDice.current;
+		document.getElementById("charsheet-disp-hitdice-max").textContent = hitDice.max;
+		document.getElementById("charsheet-disp-hitdice-type").textContent = hitDice.type || "d8";
 	}
 
 	_renderDeathSaves () {
 		const deathSaves = this._state.getDeathSaves();
 
-		const $success = $("#charsheet-deathsaves-success input");
-		const $failure = $("#charsheet-deathsaves-failure input");
+		const success = document.querySelectorAll("#charsheet-deathsaves-success input");
+		const failure = document.querySelectorAll("#charsheet-deathsaves-failure input");
 
-		$success.each((i, el) => {
+		[...success].forEach((el, i) => {
 			el.checked = i < deathSaves.successes;
 		});
 
-		$failure.each((i, el) => {
+		[...failure].forEach((el, i) => {
 			el.checked = i < deathSaves.failures;
 		});
 	}
 
 	_updateDeathSaves () {
-		const successes = $("#charsheet-deathsaves-success input:checked").length;
-		const failures = $("#charsheet-deathsaves-failure input:checked").length;
+		const successes = document.querySelectorAll("#charsheet-deathsaves-success input:checked").length;
+		const failures = document.querySelectorAll("#charsheet-deathsaves-failure input:checked").length;
 		this._state.setDeathSaves(successes, failures);
 	}
 
 	_renderInspiration () {
 		const hasInspiration = this._state.hasInspiration();
-		const $icon = $("#charsheet-icon-inspiration");
-		const $box = $("#charsheet-box-inspiration");
+		const icon = document.getElementById("charsheet-icon-inspiration");
+		const box = document.getElementById("charsheet-box-inspiration");
 		
 		// Update emoji-based icon
-		$icon.text(hasInspiration ? "⭐" : "☆");
+		icon.textContent = hasInspiration ? "⭐" : "☆";
 		
 		// Toggle active class for styling
-		$box.toggleClass("active", hasInspiration);
+		box.classList.toggle("active", hasInspiration);
 		
 		// Legacy glyphicon support (fallback)
-		$icon.removeClass("glyphicon-star glyphicon-star-empty");
-		if ($icon.hasClass("glyphicon")) {
-			$icon.addClass(hasInspiration ? "glyphicon-star" : "glyphicon-star-empty");
+		icon.classList.remove("glyphicon-star", "glyphicon-star-empty");
+		if (icon.classList.contains("glyphicon")) {
+			icon.classList.add(hasInspiration ? "glyphicon-star" : "glyphicon-star-empty");
 		}
 	}
 
@@ -2406,9 +2411,9 @@ class CharacterSheetPage {
 		const tools = profs.tools.map(t => typeof t === "string" ? t : t.full).join(", ");
 
 		
-		$("#charsheet-prof-armor").html(`${Renderer.get().render(armor)}` || "—");
-		$("#charsheet-prof-weapons").html(`${Renderer.get().render(weapons)}` || "—");
-		$("#charsheet-prof-tools").html(`${Renderer.get().render(tools)}` || "—");
+		document.getElementById("charsheet-prof-armor").innerHTML = `${Renderer.get().render(armor)}` || "—";
+		document.getElementById("charsheet-prof-weapons").innerHTML = `${Renderer.get().render(weapons)}` || "—";
+		document.getElementById("charsheet-prof-tools").innerHTML = `${Renderer.get().render(tools)}` || "—";
 
 		// Languages with hover links - look up correct source from language data
 		if (profs.languages?.length) {
@@ -2437,9 +2442,9 @@ class CharacterSheetPage {
 					return lang;
 				}
 			}).join(", ");
-			$("#charsheet-prof-languages").html(langHtml);
+			document.getElementById("charsheet-prof-languages").innerHTML = langHtml;
 		} else {
-			$("#charsheet-prof-languages").text("—");
+			document.getElementById("charsheet-prof-languages").textContent = "—";
 		}
 
 		// Weapon Masteries
@@ -2466,8 +2471,8 @@ class CharacterSheetPage {
 	 */
 	_renderWeaponMasteries () {
 		const masteries = this._state.getWeaponMasteries();
-		const $group = $("#charsheet-masteries-group");
-		const $container = $("#charsheet-combat-masteries");
+		const group = document.getElementById("charsheet-masteries-group");
+		const container = document.getElementById("charsheet-combat-masteries");
 
 		// Check if character has Weapon Mastery feature
 		const maxMasteries = this._getMaxWeaponMasteries();
@@ -2475,13 +2480,13 @@ class CharacterSheetPage {
 
 		if (!hasWeaponMasteryFeature) {
 			// Hide if character doesn't have the Weapon Mastery feature
-			$group.hide();
+			group.style.display = "none";
 			return;
 		}
 
 		// Show the section since character has the feature
-		$group.show();
-		$container.empty();
+		group.style.display = "";
+		container.innerHTML = "";
 
 		if (masteries?.length) {
 			// Render each mastery as a badge with the mastery property
@@ -2495,21 +2500,21 @@ class CharacterSheetPage {
 				);
 				const masteryProp = this._getMasteryName(weapon?.mastery?.[0]);
 				
-				const $badge = $(`
+				const badge = e_({outer: `
 					<span class="charsheet__mastery-badge" title="${masteryProp ? `Mastery: ${masteryProp}` : weaponName}">
 						<strong>${weaponName}</strong>
 						${masteryProp ? `<span class="charsheet__mastery-prop">${masteryProp}</span>` : ""}
 					</span>
-				`);
-				$container.append($badge);
+				`});
+				container.append(badge);
 			});
 			
 			// Show count, highlight if there are unfilled slots
 			const hasUnfilled = masteries.length < maxMasteries;
-			$container.append(`<span class="${hasUnfilled ? "text-warning" : "ve-muted"} ve-small ml-2">(${masteries.length}/${maxMasteries}${hasUnfilled ? " — click ✎ to add more" : ""})</span>`);
+			container.append(e_({outer: `<span class="${hasUnfilled ? "text-warning" : "ve-muted"} ve-small ml-2">(${masteries.length}/${maxMasteries}${hasUnfilled ? " — click ✎ to add more" : ""})</span>`}));
 		} else {
 			// No masteries selected yet
-			$container.html(`<span class="ve-muted">None selected — click ✎ to choose weapons</span>`);
+			container.innerHTML = `<span class="ve-muted">None selected — click ✎ to choose weapons</span>`;
 		}
 	}
 
@@ -2517,17 +2522,18 @@ class CharacterSheetPage {
 		const values = {};
 		["cp", "sp", "ep", "gp", "pp"].forEach(currency => {
 			values[currency] = this._state.getCurrency(currency) || 0;
-			$(`#charsheet-ipt-${currency}`).val(values[currency]);
+			document.getElementById(`charsheet-ipt-${currency}`).value = values[currency];
 		});
 		
 		// Calculate total value in GP (standard D&D conversion rates)
 		// 10 CP = 1 SP, 10 SP = 1 GP, 2 EP = 1 GP, 10 GP = 1 PP
 		const totalGp = (values.cp / 100) + (values.sp / 10) + (values.ep / 2) + values.gp + (values.pp * 10);
-		const $total = $("#charsheet-currency-total");
+		const total = document.getElementById("charsheet-currency-total");
 		if (totalGp > 0) {
-			$total.text(`≈ ${totalGp.toFixed(1)} GP`).show();
+			total.textContent = `≈ ${totalGp.toFixed(1)} GP`;
+			total.style.display = "";
 		} else {
-			$total.hide();
+			total.style.display = "none";
 		}
 	}
 
@@ -2560,13 +2566,13 @@ class CharacterSheetPage {
 
 	_renderNotes () {
 		["personality", "ideals", "bonds", "flaws", "backstory", "notes"].forEach(field => {
-			$(`#charsheet-txt-${field}`).val(this._state.getNote(field));
+			document.getElementById(`charsheet-txt-${field}`).value = this._state.getNote(field);
 		});
 	}
 
 	_renderAppearance () {
 		["age", "height", "weight", "eyes", "skin", "hair"].forEach(field => {
-			$(`#charsheet-ipt-${field}`).val(this._state.getAppearance(field));
+			document.getElementById(`charsheet-ipt-${field}`).value = this._state.getAppearance(field);
 		});
 	}
 
@@ -2574,31 +2580,30 @@ class CharacterSheetPage {
 	 * Initialize portrait upload handlers for both overview and notes tabs
 	 */
 	_initPortraitHandlers () {
-		const $portraitInput = $("#charsheet-portrait-input");
-		const portraitInput = $portraitInput[0];
-
+		const portraitInput = document.getElementById("charsheet-portrait-input");
+		
 		// Overview tab portrait - clicking container triggers file input
-		$("#charsheet-portrait-container").on("click", (e) => {
-			if ($(e.target).closest("#charsheet-portrait-input").length) return;
+		document.getElementById("charsheet-portrait-container").addEventListener("click", (e) => {
+			if (e.target.closest("#charsheet-portrait-input")) return;
 			portraitInput?.click();
 		});
 
 		// Prevent input click from bubbling back to the container and recursively retriggering
-		$portraitInput.on("click", (e) => e.stopPropagation());
+		portraitInput.addEventListener("click", (e) => e.stopPropagation());
 
 		// File input change handler (overview tab)
-		$portraitInput.on("change", (e) => {
+		portraitInput.addEventListener("change", (e) => {
 			const file = e.target.files?.[0];
 			if (file) this._handlePortraitFile(file);
 		});
 
 		// Notes tab portrait - clicking triggers same file input
-		$("#charsheet-notes-portrait-container").on("click", () => {
+		document.getElementById("charsheet-notes-portrait-container")?.addEventListener("click", () => {
 			portraitInput?.click();
 		});
 
 		// Remove portrait button
-		$("#charsheet-portrait-remove-btn").on("click", (e) => {
+		document.getElementById("charsheet-portrait-remove-btn")?.addEventListener("click", (e) => {
 			e.stopPropagation();
 			this._removePortrait();
 		});
@@ -2652,31 +2657,35 @@ class CharacterSheetPage {
 		const hasPortrait = !!portraitUrl;
 
 		// Overview tab portrait
-		const $overviewPlaceholder = $("#charsheet-portrait-placeholder");
-		const $overviewImage = $("#charsheet-portrait-image");
+		const overviewPlaceholder = document.getElementById("charsheet-portrait-placeholder");
+		const overviewImage = document.getElementById("charsheet-portrait-image");
 
 		if (hasPortrait) {
-			$overviewPlaceholder.addClass("ve-hidden");
-			$overviewImage.attr("src", portraitUrl).removeClass("ve-hidden");
+			overviewPlaceholder.classList.add("ve-hidden");
+			overviewImage.setAttribute("src", portraitUrl);
+			overviewImage.classList.remove("ve-hidden");
 		} else {
-			$overviewPlaceholder.removeClass("ve-hidden");
-			$overviewImage.addClass("ve-hidden").attr("src", "");
+			overviewPlaceholder.classList.remove("ve-hidden");
+			overviewImage.classList.add("ve-hidden");
+			overviewImage.setAttribute("src", "");
 		}
 
 		// Notes tab portrait
-		const $notesPlaceholder = $("#charsheet-notes-portrait-placeholder");
-		const $notesImage = $("#charsheet-notes-portrait-image");
+		const notesPlaceholder = document.getElementById("charsheet-notes-portrait-placeholder");
+		const notesImage = document.getElementById("charsheet-notes-portrait-image");
 
 		if (hasPortrait) {
-			$notesPlaceholder.addClass("ve-hidden");
-			$notesImage.attr("src", portraitUrl).removeClass("ve-hidden");
+			notesPlaceholder.classList.add("ve-hidden");
+			notesImage.setAttribute("src", portraitUrl);
+			notesImage.classList.remove("ve-hidden");
 		} else {
-			$notesPlaceholder.removeClass("ve-hidden");
-			$notesImage.addClass("ve-hidden").attr("src", "");
+			notesPlaceholder.classList.remove("ve-hidden");
+			notesImage.classList.add("ve-hidden");
+			notesImage.setAttribute("src", "");
 		}
 
 		// Remove button visibility
-		$("#charsheet-portrait-remove-btn").toggleClass("ve-hidden", !hasPortrait);
+		document.getElementById("charsheet-portrait-remove-btn")?.classList.toggle("ve-hidden", !hasPortrait);
 	}
 
 	/**
@@ -2689,14 +2698,14 @@ class CharacterSheetPage {
 		const activeCount = activeModifiers.length;
 
 		// Update button badge
-		const $btn = $("#charsheet-btn-modifiers");
-		$btn.find(".charsheet__modifier-badge").remove();
+		const btn = document.getElementById("charsheet-btn-modifiers");
+		btn?.querySelector(".charsheet__modifier-badge")?.remove();
 		
 		if (activeCount > 0) {
-			$btn.append(`<span class="charsheet__modifier-badge">${activeCount}</span>`);
-			$btn.addClass("charsheet__btn--has-modifiers");
+			btn.append(e_({outer: `<span class="charsheet__modifier-badge">${activeCount}</span>`}));
+			btn.classList.add("charsheet__btn--has-modifiers");
 		} else {
-			$btn.removeClass("charsheet__btn--has-modifiers");
+			btn.classList.remove("charsheet__btn--has-modifiers");
 		}
 
 		// Add/remove indicator classes on affected stat displays
@@ -2707,38 +2716,38 @@ class CharacterSheetPage {
 		const damageMod = this._state.getCustomModifier("damage");
 
 		// AC indicator
-		const $acBox = $("#charsheet-box-ac");
-		$acBox.removeClass("charsheet__combat-stat--modified-positive charsheet__combat-stat--modified-negative");
+		const acBox = document.getElementById("charsheet-box-ac");
+		acBox.classList.remove("charsheet__combat-stat--modified-positive", "charsheet__combat-stat--modified-negative");
 		if (acMod !== 0) {
-			$acBox.addClass(acMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
+			acBox.classList.add(acMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
 		}
-		$acBox.attr("title", acMod !== 0 ? `AC modified by ${acMod >= 0 ? "+" : ""}${acMod}` : "Armor Class");
+		acBox.setAttribute("title", acMod !== 0 ? `AC modified by ${acMod >= 0 ? "+" : ""}${acMod}` : "Armor Class");
 
 		// Initiative indicator
-		const $initBox = $("#charsheet-box-initiative");
-		$initBox.removeClass("charsheet__combat-stat--modified-positive charsheet__combat-stat--modified-negative");
+		const initBox = document.getElementById("charsheet-box-initiative");
+		initBox.classList.remove("charsheet__combat-stat--modified-positive", "charsheet__combat-stat--modified-negative");
 		if (initMod !== 0) {
-			$initBox.addClass(initMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
+			initBox.classList.add(initMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
 		}
-		$initBox.attr("title", initMod !== 0 ? `Initiative modified by ${initMod >= 0 ? "+" : ""}${initMod}` : "Click to roll Initiative (Shift=Adv, Ctrl=Dis)");
+		initBox.setAttribute("title", initMod !== 0 ? `Initiative modified by ${initMod >= 0 ? "+" : ""}${initMod}` : "Click to roll Initiative (Shift=Adv, Ctrl=Dis)");
 
 		// Speed indicator
-		const $speedBox = $("#charsheet-box-speed");
-		if ($speedBox.length) {
-			$speedBox.removeClass("charsheet__combat-stat--modified-positive charsheet__combat-stat--modified-negative");
+		const speedBox = document.getElementById("charsheet-box-speed");
+		if (speedBox) {
+			speedBox.classList.remove("charsheet__combat-stat--modified-positive", "charsheet__combat-stat--modified-negative");
 			if (speedMod !== 0) {
-				$speedBox.addClass(speedMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
+				speedBox.classList.add(speedMod > 0 ? "charsheet__combat-stat--modified-positive" : "charsheet__combat-stat--modified-negative");
 			}
-			$speedBox.attr("title", speedMod !== 0 ? `Speed modified by ${speedMod >= 0 ? "+" : ""}${speedMod} ft.` : "Speed");
+			speedBox.setAttribute("title", speedMod !== 0 ? `Speed modified by ${speedMod >= 0 ? "+" : ""}${speedMod} ft.` : "Speed");
 		}
 
 		// Also update save rows if they have modifiers
 		Parser.ABIL_ABVS.forEach(abl => {
 			const saveMod = this._state.getCustomModifier(`save:${abl}`);
-			const $row = $(`.charsheet__save-row[data-save="${abl}"]`);
-			$row.removeClass("charsheet__save-row--modified-positive charsheet__save-row--modified-negative");
+			const row = document.querySelector(`.charsheet__save-row[data-save="${abl}"]`);
+			row?.classList.remove("charsheet__save-row--modified-positive", "charsheet__save-row--modified-negative");
 			if (saveMod !== 0) {
-				$row.addClass(saveMod > 0 ? "charsheet__save-row--modified-positive" : "charsheet__save-row--modified-negative");
+				row?.classList.add(saveMod > 0 ? "charsheet__save-row--modified-positive" : "charsheet__save-row--modified-negative");
 			}
 		});
 
@@ -2747,17 +2756,17 @@ class CharacterSheetPage {
 		skills.forEach(skill => {
 			const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
 			const skillMod = this._state.getSkillCustomMod(skillKey);
-			const $row = $(`.charsheet__skill-row[data-skill="${skillKey}"]`);
-			$row.removeClass("charsheet__skill-row--modified-positive charsheet__skill-row--modified-negative");
+			const row = document.querySelector(`.charsheet__skill-row[data-skill="${skillKey}"]`);
+			row?.classList.remove("charsheet__skill-row--modified-positive", "charsheet__skill-row--modified-negative");
 			if (skillMod !== 0) {
-				$row.addClass(skillMod > 0 ? "charsheet__skill-row--modified-positive" : "charsheet__skill-row--modified-negative");
+				row?.classList.add(skillMod > 0 ? "charsheet__skill-row--modified-positive" : "charsheet__skill-row--modified-negative");
 			}
 		});
 	}
 
 	_renderConditions () {
-		const $container = $("#charsheet-conditions");
-		$container.empty();
+		const container = document.getElementById("charsheet-conditions");
+		container.innerHTML = "";
 
 		// Now returns {name, source} objects
 		const conditions = this._state.getConditions();
@@ -2783,7 +2792,7 @@ class CharacterSheetPage {
 					if (e.type === "note") return `• ${e.value}`;
 					return null;
 				}).filter(Boolean);
-				if (effectList.length) {
+				if (effectList) {
 					effectsHtml = `<div class="mt-1 ve-small">${effectList.join("<br>")}</div>`;
 				}
 			}
@@ -2792,21 +2801,21 @@ class CharacterSheetPage {
 			const conditionLink = this.getConditionLinkWithSource(conditionName, conditionSource);
 			const sourceAbbr = Parser.sourceJsonToAbv(conditionSource);
 			
-			const $badge = $(`
+			const badge = e_({outer: `
 				<span class="charsheet__condition-badge" title="${description}">
 					<span class="charsheet__condition-icon">${icon}</span>
 					${conditionLink}
 					<span class="charsheet__condition-source-badge">${sourceAbbr}</span>
 					<span class="charsheet__condition-remove glyphicon glyphicon-remove"></span>
 				</span>
-			`);
+			`});
 
 			// Add tooltip with effects
 			if (effectsHtml) {
-				$badge.attr("data-tippy-content", `<strong>${condDef?.name || conditionName}</strong> (${sourceAbbr}): ${description}${effectsHtml}`);
+				badge.setAttribute("data-tippy-content", `<strong>${condDef?.name || conditionName}</strong> (${sourceAbbr}): ${description}${effectsHtml}`);
 			}
 
-			$badge.find(".charsheet__condition-remove").on("click", () => {
+			badge.querySelector(".charsheet__condition-remove").addEventListener("click", () => {
 				// Now passes {name, source} object
 				this._state.removeCondition({name: conditionName, source: conditionSource});
 				this._saveCurrentCharacter();
@@ -2819,7 +2828,7 @@ class CharacterSheetPage {
 				this._combat?.renderCombatDefenses?.();
 			});
 
-			$container.append($badge);
+			container.append(badge);
 		});
 	}
 
@@ -2829,17 +2838,17 @@ class CharacterSheetPage {
 		const maxExhaustion = this._state.getMaxExhaustion();
 		
 		// Update the number display
-		const $number = $("#charsheet-exhaustion-number");
-		const $maxDisplay = $("#charsheet-exhaustion-max");
-		const $effect = $("#charsheet-exhaustion-effect");
-		const $rulesToggle = $("#charsheet-exhaustion-rules");
-		const $pipsContainer = $("#charsheet-exhaustion-display");
+		const number = document.getElementById("charsheet-exhaustion-number");
+		const maxDisplay = document.getElementById("charsheet-exhaustion-max");
+		const effect = document.getElementById("charsheet-exhaustion-effect");
+		const rulesToggle = document.getElementById("charsheet-exhaustion-rules");
+		const pipsContainer = document.getElementById("charsheet-exhaustion-display");
 		
 		// Update max display
-		$maxDisplay.text(`/ ${maxExhaustion}`);
+		maxDisplay.textContent = `/ ${maxExhaustion}`;
 		
 		// Dynamically generate pips based on rules
-		$pipsContainer.empty();
+		pipsContainer.innerHTML = "";
 		for (let i = 1; i <= maxExhaustion; i++) {
 			let tooltip;
 			if (rules === "thelemar") {
@@ -2867,23 +2876,23 @@ class CharacterSheetPage {
 			}
 			const isDeath = i === maxExhaustion;
 			const isActive = i <= exhaustion;
-			const $pip = $(`<div class="charsheet__exhaustion-pip ${isDeath ? "charsheet__exhaustion-pip--death" : ""} ${isActive ? "active" : ""}" data-level="${i}" title="${tooltip}"></div>`);
-			$pipsContainer.append($pip);
+			const pip = e_({outer: `<div class="charsheet__exhaustion-pip ${isDeath ? "charsheet__exhaustion-pip--death" : ""} ${isActive ? "active" : ""}" data-level="${i}" title="${tooltip}"></div>`});
+			pipsContainer.append(pip);
 		}
 
 		// Update number display
-		$number.text(exhaustion);
+		number.textContent = exhaustion;
 
 		// Update color class based on level
-		$number.removeClass("exhaustion-0 exhaustion-1 exhaustion-2 exhaustion-3 exhaustion-4 exhaustion-5 exhaustion-6 exhaustion-max");
+		number.classList.remove("exhaustion-0", "exhaustion-1", "exhaustion-2", "exhaustion-3", "exhaustion-4", "exhaustion-5", "exhaustion-6", "exhaustion-max");
 		if (exhaustion >= maxExhaustion) {
-			$number.addClass("exhaustion-max exhaustion-6");
+			number.classList.add("exhaustion-max", "exhaustion-6");
 		} else if (rules === "thelemar") {
 			// For Thelemar, map 0-10 to color classes
 			const colorLevel = Math.min(6, Math.floor(exhaustion * 6 / 10));
-			$number.addClass(`exhaustion-${colorLevel}`);
+			number.classList.add(`exhaustion-${colorLevel}`);
 		} else {
-			$number.addClass(`exhaustion-${exhaustion}`);
+			number.classList.add(`exhaustion-${exhaustion}`);
 		}
 
 		// 2024 rules: -2 per level to d20 Tests, -5 ft speed per level
@@ -2922,12 +2931,12 @@ class CharacterSheetPage {
 			const effects = rules === "2024" ? effects2024 : effects2014;
 			effectText = effects[exhaustion] || effects[effects.length - 1];
 		}
-		$effect.html(effectText);
+		effect.innerHTML = effectText;
 
 		// Show which rules are being used (non-editable - change in Settings)
-		if ($rulesToggle.length) {
+		if (rulesToggle) {
 			const rulesLabel = rules === "thelemar" ? "Thelemar" : rules === "2014" ? "2014" : "2024";
-			$rulesToggle.html(`<span class="ve-muted ve-small" title="Change exhaustion rules in Settings">Using ${rulesLabel} rules</span>`);
+			rulesToggle.innerHTML = `<span class="ve-muted ve-small" title="Change exhaustion rules in Settings">Using ${rulesLabel} rules</span>`;
 		}
 	}
 
@@ -2965,13 +2974,13 @@ class CharacterSheetPage {
 	}
 
 	_renderCompanions () {
-		const $list = $("#charsheet-companions-list");
-		if (!$list.length) return;
+		const list = document.getElementById("charsheet-companions-list");
+		if (!list) return;
 
 		// Render dynamic summon buttons based on character features
 		this._renderCompanionButtons();
 
-		$list.empty();
+		list.innerHTML = "";
 
 		const companions = this._state.getActiveCompanions?.() || [];
 
@@ -2979,20 +2988,20 @@ class CharacterSheetPage {
 		this._renderCompanionsOverviewIndicator();
 
 		if (companions.length === 0) {
-			$list.append(`
+			list.innerHTML = `
 				<div class="charsheet__companions-empty" style="text-align: center; padding: 40px 20px;">
 					<div style="font-size: 3em; margin-bottom: 12px; opacity: 0.5;">🦉</div>
 					<div class="ve-muted" style="font-size: 1.1em; margin-bottom: 8px;">No active companions</div>
 					<div class="ve-muted ve-small">Cast <em>Find Familiar</em> or click the button above to summon one.</div>
 				</div>
-			`);
+			`;
 			return;
 		}
 
 		companions.forEach(companion => {
 			// Check if this is a grouped companion (conjured creatures)
 			if (companion.count > 1 && companion.hpArray) {
-				this._renderGroupedCompanion(companion, $list);
+				this._renderGroupedCompanion(companion, list);
 				return;
 			}
 
@@ -3089,7 +3098,7 @@ class CharacterSheetPage {
 				</button>`;
 			}).join("");
 
-			const $card = $(`
+			const card = e_({outer: `
 				<div class="charsheet__companion-card" data-companion-id="${companion.id}" style="
 					border: 2px solid ${info.color}33;
 					border-radius: 12px;
@@ -3249,10 +3258,10 @@ class CharacterSheetPage {
 						</button>
 					</div>
 				</div>
-			`);
+			`});
 
 			// Dismiss button
-			$card.find(".btn-companion-dismiss").on("click", async () => {
+			card.querySelector(".btn-companion-dismiss").addEventListener("click", async () => {
 				const confirmed = await InputUiUtil.pGetUserBoolean({
 					title: "Dismiss Companion?",
 					htmlDescription: `Are you sure you want to dismiss <strong>${companion.customName || companion.name}</strong>?`,
@@ -3268,12 +3277,12 @@ class CharacterSheetPage {
 			});
 
 			// View stat block button
-			$card.find(".btn-companion-view").on("click", () => {
+			card.querySelector(".btn-companion-view").addEventListener("click", () => {
 				this._showCompanionStatBlock(companion);
 			});
 
 			// Heal button
-			$card.find(".btn-companion-heal").on("click", async () => {
+			card.querySelector(".btn-companion-heal").addEventListener("click", async () => {
 				const healing = await InputUiUtil.pGetUserNumber({
 					title: `Heal ${companion.name}`,
 					min: 1,
@@ -3288,7 +3297,7 @@ class CharacterSheetPage {
 			});
 
 			// Damage button
-			$card.find(".btn-companion-damage").on("click", async () => {
+			card.querySelector(".btn-companion-damage").addEventListener("click", async () => {
 				const damage = await InputUiUtil.pGetUserNumber({
 					title: `Damage ${companion.name}`,
 					min: 1,
@@ -3307,33 +3316,33 @@ class CharacterSheetPage {
 			});
 
 			// Add condition button
-			$card.find(".btn-companion-add-condition").on("click", () => {
+			card.querySelector(".btn-companion-add-condition").addEventListener("click", () => {
 				this._onAddCompanionCondition(companion);
 			});
 
 			// Remove condition badges
-			$card.find(".charsheet__companion-condition-badge").on("click", (evt) => {
-				const condName = $(evt.currentTarget).data("condition");
+			card.querySelectorAll(".charsheet__companion-condition-badge").forEach(el => el.addEventListener("click", (evt) => {
+				const condName = evt.currentTarget.dataset.condition;
 				this._state.removeCompanionCondition?.(companion.id, condName);
 				this._saveCurrentCharacter();
 				this._renderCompanions();
 				JqueryUtil.doToast({type: "info", content: `Removed ${condName} from ${companion.name}`});
-			});
+			}));
 
 			// Skill check buttons
-			$card.find(".btn-companion-skill").on("click", (evt) => {
-				const skill = $(evt.currentTarget).data("skill");
+			card.querySelectorAll(".btn-companion-skill").forEach(el => el.addEventListener("click", (evt) => {
+				const skill = evt.currentTarget.dataset.skill;
 				this._rollCompanionSkillCheck(companion, skill);
-			});
+			}));
 
 			// Edit name button
-			$card.find(".btn-companion-edit").on("click", () => {
+			card.querySelector(".btn-companion-edit").addEventListener("click", () => {
 				this._onEditCompanionName(companion);
 			});
 
 			// Note button
 			const companionRenderFn = () => this._renderCompanions();
-			$card.find(".btn-companion-note").on("click", () => {
+			card.querySelector(".btn-companion-note").addEventListener("click", () => {
 				this.getNotes()?.showNoteModal(
 					"companion",
 					companion.id,
@@ -3343,36 +3352,36 @@ class CharacterSheetPage {
 			});
 
 			// Action buttons
-			$card.find(".btn-companion-action").on("click", (evt) => {
-				const action = $(evt.currentTarget).data("action");
+			card.querySelectorAll(".btn-companion-action").forEach(el => el.addEventListener("click", (evt) => {
+				const action = evt.currentTarget.dataset.action;
 				this._useCompanionAction(companion, action);
-			});
+			}));
 
 			// Attack roll buttons
-			$card.find(".btn-companion-attack-roll").on("click", async (evt) => {
-				const actionName = $(evt.currentTarget).data("action-name");
+			card.querySelectorAll(".btn-companion-attack-roll").forEach(el => el.addEventListener("click", async (evt) => {
+				const actionName = evt.currentTarget.dataset.actionName;
 				await this._rollCompanionAttack(companion, actionName);
-			});
+			}));
 
-			$list.append($card);
+			list.append(card);
 		});
 	}
 
 	_renderCompanionsOverviewIndicator () {
-		const $container = $("#charsheet-companions-indicator");
-		const $section = $("#charsheet-companions-section");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-companions-indicator");
+		const section = document.getElementById("charsheet-companions-section");
+		if (!container) return;
 
 		const companions = this._state.getActiveCompanions?.() || [];
 
 		if (companions.length === 0) {
-			$container.hide();
-			$section.hide();
+			container.style.display = "none";
+			section.style.display = "none";
 			return;
 		}
 
-		$container.empty().show();
-		$section.show();
+		container.innerHTML = "".style.display = "";
+		section.style.display = "";
 
 		companions.forEach(companion => {
 			const hp = companion.hp || {current: 1, max: 1};
@@ -3401,7 +3410,7 @@ class CharacterSheetPage {
 				nameHtml = companion.customName || companion.name;
 			}
 
-			const $badge = $(`
+			const badge = e_({outer: `
 				<div class="charsheet__companion-badge" style="
 					display: inline-flex;
 					align-items: center;
@@ -3427,14 +3436,14 @@ class CharacterSheetPage {
 						font-weight: 600;
 					">❤️ ${hp.current}/${hp.max}</span>
 				</div>
-			`);
+			`});
 
-			$container.append($badge);
+			container.append(badge);
 		});
 	}
 
 	async _showCompanionStatBlock (companion) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `📋 ${companion.customName || companion.name}`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -3536,7 +3545,7 @@ class CharacterSheetPage {
 		const typeStr = companion.creatureType || "";
 		const subtypeStr = [sizeStr, typeStr].filter(Boolean).join(" ");
 
-		$modalInner.append(`
+		modalInner.innerHTML = `
 			<div style="font-size: 0.95em;">
 				${subtypeStr ? `<div class="ve-muted ve-small mb-2">${subtypeStr}</div>` : ""}
 
@@ -3569,12 +3578,12 @@ class CharacterSheetPage {
 
 				${reactionsHtml ? `<h5 class="mb-1" style="border-bottom: 1px solid var(--rgb-border-grey-muted); padding-bottom: 4px;">Reactions</h5><div>${reactionsHtml}</div>` : ""}
 			</div>
-		`);
+		`;
 
 		// Bind save roll buttons
-		$modalInner.find(".btn-companion-save").on("click", (evt) => {
-			const ability = $(evt.currentTarget).data("ability");
-			const mod = parseInt($(evt.currentTarget).data("mod"));
+		modalInner.querySelectorAll(".btn-companion-save").forEach(el => el.addEventListener("click", (evt) => {
+			const ability = evt.currentTarget.dataset.ability;
+			const mod = parseInt(evt.currentTarget.dataset.mod);
 			const roll = Renderer.dice.parseRandomise2("1d20");
 			const total = roll + mod;
 			const modStr = mod >= 0 ? `+${mod}` : mod;
@@ -3582,17 +3591,17 @@ class CharacterSheetPage {
 				type: "info",
 				content: `🎲 ${companion.name} ${ability.toUpperCase()} Save: ${roll} ${modStr} = <strong>${total}</strong>`,
 			});
-		});
+		}));
 
 		// Bind attack roll buttons in stat block
-		$modalInner.find(".btn-statblock-attack").on("click", async (evt) => {
-			const actionName = $(evt.currentTarget).data("action-name");
+		modalInner.querySelectorAll(".btn-statblock-attack").forEach(el => el.addEventListener("click", async (evt) => {
+			const actionName = evt.currentTarget.dataset.actionName;
 			await this._rollCompanionAttack(companion, actionName);
-		});
+		}));
 
 		// Bind damage-only roll buttons in stat block
-		$modalInner.find(".btn-statblock-damage").on("click", (evt) => {
-			const actionName = $(evt.currentTarget).data("action-name");
+		modalInner.querySelectorAll(".btn-statblock-damage").forEach(el => el.addEventListener("click", (evt) => {
+			const actionName = evt.currentTarget.dataset.actionName;
 			const action = companion.actions?.find(a => a.name === actionName);
 			if (!action) return;
 
@@ -3603,7 +3612,7 @@ class CharacterSheetPage {
 			if (damages.length > 0) {
 				this._rollCompanionDamage(companion, actionName, damages, false);
 			}
-		});
+		}));
 	}
 
 	_formatCompanionSpeeds (speed) {
@@ -3620,9 +3629,9 @@ class CharacterSheetPage {
 	/**
 	 * Render a grouped companion card (for conjured creatures)
 	 * @param {object} companion - The companion data with count and hpArray
-	 * @param {jQuery} $list - The list container to append to
+	 * @param {jQuery} list - The list container to append to
 	 */
-	_renderGroupedCompanion (companion, $list) {
+	_renderGroupedCompanion (companion, list) {
 		const livingCount = this._state.getLivingGroupedCreatureCount?.(companion.id) || 0;
 		const totalCount = companion.count || 1;
 
@@ -3689,7 +3698,7 @@ class CharacterSheetPage {
 			`;
 		}).join("");
 
-		const $card = $(`
+		const card = e_({outer: `
 			<div class="charsheet__companion-card charsheet__grouped-companion" data-companion-id="${companion.id}" style="
 				border: 2px solid ${info.color}33;
 				border-radius: 12px;
@@ -3790,18 +3799,18 @@ class CharacterSheetPage {
 					</button>
 				</div>
 			</div>
-		`);
+		`});
 
 		// Toggle creatures list
-		$card.find(".btn-toggle-creatures").on("click", function () {
-			const $list = $card.find(".charsheet__grouped-creatures-list");
-			const $icon = $(this).find(".toggle-icon");
-			$list.slideToggle(200);
-			$icon.text($list.is(":visible") ? "▶" : "▼");
+		card.querySelector(".btn-toggle-creatures").addEventListener("click", function () {
+			const list = card.querySelector(".charsheet__grouped-creatures-list");
+			const icon = this.querySelector(".toggle-icon");
+			list.style.display = list.style.display === "none" ? "" : "none";
+			icon.textContent = list.style.display === "none" ? "▶" : "▼";
 		});
 
 		// Heal all creatures
-		$card.find(".btn-heal-all").on("click", async () => {
+		card.querySelector(".btn-heal-all").addEventListener("click", async () => {
 			const amount = await InputUiUtil.pGetUserNumber({
 				title: `Heal All ${companion.name}`,
 				min: 1,
@@ -3816,7 +3825,7 @@ class CharacterSheetPage {
 		});
 
 		// Damage all creatures
-		$card.find(".btn-damage-all").on("click", async () => {
+		card.querySelector(".btn-damage-all").addEventListener("click", async () => {
 			const amount = await InputUiUtil.pGetUserNumber({
 				title: `Damage All ${companion.name}`,
 				min: 1,
@@ -3836,9 +3845,9 @@ class CharacterSheetPage {
 		});
 
 		// Heal individual creature
-		$card.find(".btn-heal-creature").on("click", async (evt) => {
+		card.querySelectorAll(".btn-heal-creature").forEach(el => el.addEventListener("click", async (evt) => {
 			evt.stopPropagation();
-			const index = parseInt($(evt.currentTarget).data("index"));
+			const index = parseInt(evt.currentTarget.dataset.index);
 			const amount = await InputUiUtil.pGetUserNumber({
 				title: `Heal ${companion.name} #${index + 1}`,
 				min: 1,
@@ -3849,12 +3858,12 @@ class CharacterSheetPage {
 			this._state.healGroupedCreature?.(companion.id, index, amount);
 			this._saveCurrentCharacter();
 			this._renderCompanions();
-		});
+		}));
 
 		// Damage individual creature
-		$card.find(".btn-damage-creature").on("click", async (evt) => {
+		card.querySelectorAll(".btn-damage-creature").forEach(el => el.addEventListener("click", async (evt) => {
 			evt.stopPropagation();
-			const index = parseInt($(evt.currentTarget).data("index"));
+			const index = parseInt(evt.currentTarget.dataset.index);
 			const amount = await InputUiUtil.pGetUserNumber({
 				title: `Damage ${companion.name} #${index + 1}`,
 				min: 1,
@@ -3869,21 +3878,21 @@ class CharacterSheetPage {
 			if (result.droppedToZero) {
 				JqueryUtil.doToast({type: "warning", content: `${companion.name} #${index + 1} dropped to 0 HP!`});
 			}
-		});
+		}));
 
 		// View stat block
-		$card.find(".btn-companion-view").on("click", () => {
+		card.querySelector(".btn-companion-view").addEventListener("click", () => {
 			this._showCompanionStatBlock(companion);
 		});
 
 		// Attack roll buttons for grouped companions
-		$card.find(".btn-grouped-attack-roll").on("click", async (evt) => {
-			const actionName = $(evt.currentTarget).data("action-name");
+		card.querySelectorAll(".btn-grouped-attack-roll").forEach(el => el.addEventListener("click", async (evt) => {
+			const actionName = evt.currentTarget.dataset.actionName;
 			await this._rollCompanionAttack(companion, actionName);
-		});
+		}));
 
 		// Dismiss all
-		$card.find(".btn-companion-dismiss").on("click", async () => {
+		card.querySelector(".btn-companion-dismiss").addEventListener("click", async () => {
 			const confirmed = await InputUiUtil.pGetUserBoolean({
 				title: "Dismiss Conjured Creatures?",
 				htmlDescription: `Are you sure you want to dismiss all <strong>${companion.count}× ${companion.name}</strong>?`,
@@ -3898,7 +3907,7 @@ class CharacterSheetPage {
 			JqueryUtil.doToast({type: "info", content: `${companion.count}× ${companion.name} have been dismissed.`});
 		});
 
-		$list.append($card);
+		list.append(card);
 	}
 
 	/**
@@ -3943,7 +3952,7 @@ class CharacterSheetPage {
 			}),
 		);
 
-		if (!availableConditions.length) {
+		if (!availableConditions) {
 			JqueryUtil.doToast({type: "warning", content: "All conditions already applied!"});
 			return;
 		}
@@ -4024,19 +4033,19 @@ class CharacterSheetPage {
 		// Show attack roll first
 		JqueryUtil.doToast({
 			type: isCrit ? "success" : isFumble ? "danger" : "info",
-			content: $(`<div>
+			content: e_({outer: `<div>
 				<div class="bold mb-1">⚔️ ${companion.customName || companion.name} — ${actionName}</div>
 				<div>${attackResult}</div>
 				${damages.length > 0 ? `<div class="mt-2"><button class="ve-btn ve-btn-xs ve-btn-warning btn-roll-damage" style="width: 100%;">💥 Roll Damage${isCrit ? " (Crit!)" : ""}</button></div>` : ""}
 				${saveDC ? `<div class="ve-muted ve-small mt-1">Target must make a DC ${saveDC} save</div>` : ""}
-			</div>`),
+			</div>`}),
 		});
 
 		// Bind damage roll button
 		setTimeout(() => {
-			const $btn = $(".btn-roll-damage");
-			if ($btn.length && damages.length > 0) {
-				$btn.off("click").on("click", () => {
+			const btn = document.querySelector(".btn-roll-damage");
+			if (btn && damages.length > 0) {
+				btn.addEventListener("click", () => {
 					this._rollCompanionDamage(companion, actionName, damages, isCrit);
 				});
 			}
@@ -4077,11 +4086,11 @@ class CharacterSheetPage {
 
 		JqueryUtil.doToast({
 			type: "warning",
-			content: $(`<div>
+			content: e_({outer: `<div>
 				<div class="bold mb-1">💥 ${companion.customName || companion.name} — ${actionName} Damage${isCrit ? " (CRIT!)" : ""}</div>
 				<div>${damageLines}</div>
 				<div class="bold mt-1" style="font-size: 1.2em;">Total: ${totalDamage} damage</div>
-			</div>`),
+			</div>`}),
 		});
 	}
 
@@ -4155,7 +4164,7 @@ class CharacterSheetPage {
 			a.entries?.some(e => typeof e === "string" && e.toLowerCase().includes("attack")),
 		);
 
-		if (!attacks.length) {
+		if (!attacks) {
 			JqueryUtil.doToast({type: "warning", content: "No attack actions available"});
 			return;
 		}
@@ -4204,10 +4213,10 @@ class CharacterSheetPage {
 	}
 
 	_renderAbilitiesDetailed () {
-		const $container = $("#charsheet-abilities-detailed");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-abilities-detailed");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		// Get skills list for later use
 		const skills = this.getSkillsList();
@@ -4233,10 +4242,10 @@ class CharacterSheetPage {
 		};
 
 		// Main container with modern layout
-		const $mainContent = $(`<div class="charsheet__abilities-tab"></div>`);
+		const mainContent = e_({outer: `<div class="charsheet__abilities-tab"></div>`});
 
 		// Ability Scores Section - Hero cards
-		const $abilitiesSection = $(`
+		const abilitiesSection = e_({outer: `
 			<div class="charsheet__abilities-section">
 				<div class="charsheet__abilities-section-header">
 					<span class="charsheet__abilities-section-icon">📊</span>
@@ -4244,9 +4253,9 @@ class CharacterSheetPage {
 				</div>
 				<div class="charsheet__abilities-hero-grid"></div>
 			</div>
-		`);
+		`});
 
-		const $heroGrid = $abilitiesSection.find(".charsheet__abilities-hero-grid");
+		const heroGrid = abilitiesSection.querySelector(".charsheet__abilities-hero-grid");
 
 		Parser.ABIL_ABVS.forEach(abl => {
 			const base = this._state.getAbilityBase(abl);
@@ -4261,7 +4270,7 @@ class CharacterSheetPage {
 			// Get related skills for this ability
 			const relatedSkills = skills.filter(s => s.ability === abl);
 
-			const $card = $(`
+			const card = e_({outer: `
 				<div class="charsheet__ability-hero-card" data-ability="${abl}" style="--ability-color: ${abilityColors[abl]}">
 					<div class="charsheet__ability-hero-header">
 						<span class="charsheet__ability-hero-icon">${abilityIcons[abl]}</span>
@@ -4310,43 +4319,43 @@ class CharacterSheetPage {
 						</button>
 					</div>
 				</div>
-			`);
+			`});
 
 			// Click handlers - pass event for shift/ctrl (advantage/disadvantage)
-			$card.find(".charsheet__ability-roll-check").on("click", (e) => {
+			card.querySelector(".charsheet__ability-roll-check").addEventListener("click", (e) => {
 				e.stopPropagation();
 				this._rollAbilityCheck(abl, e);
 			});
-			$card.find(".charsheet__ability-roll-save").on("click", (e) => {
+			card.querySelector(".charsheet__ability-roll-save").addEventListener("click", (e) => {
 				e.stopPropagation();
 				this._rollSavingThrow(abl, e);
 			});
 			// Click on proficiency indicator to toggle proficiency
-			$card.find(".charsheet__ability-skill-prof").on("click", (e) => {
+			card.querySelectorAll(".charsheet__ability-skill-prof").forEach(el => el.addEventListener("click", (e) => {
 				e.stopPropagation();
 				e.preventDefault();
-				const $skillMini = $(e.currentTarget).closest(".charsheet__ability-skill-mini");
-				const skillKey = $skillMini.data("skill");
+				const skillMini = e.currentTarget.closest(".charsheet__ability-skill-mini");
+				const skillKey = skillMini.dataset.skill;
 				this._cycleSkillProficiency(skillKey);
 				this._renderAbilitiesDetailed(); // Re-render to update the display
-			});
+			}));
 			// Click elsewhere on skill row to roll
-			$card.find(".charsheet__ability-skill-mini").on("click", (e) => {
+			card.querySelectorAll(".charsheet__ability-skill-mini").forEach(el => el.addEventListener("click", (e) => {
 				// Don't roll if clicking the proficiency indicator (handled above)
-				if ($(e.target).closest(".charsheet__ability-skill-prof").length) return;
+				if (e.target.closest(".charsheet__ability-skill-prof")) return;
 				e.stopPropagation();
-				const skillKey = $(e.currentTarget).data("skill");
+				const skillKey = e.currentTarget.dataset.skill;
 				const skill = skills.find(s => s.name.toLowerCase().replace(/\s+/g, "") === skillKey);
 				if (skill) this._rollSkillCheck(skillKey, skill.name, e);
-			});
+			}));
 
-			$heroGrid.append($card);
+			heroGrid.append(card);
 		});
 
-		$mainContent.append($abilitiesSection);
+		mainContent.append(abilitiesSection);
 
 		// Passive Scores Section
-		const $passivesSection = $(`
+		const passivesSection = e_({outer: `
 			<div class="charsheet__abilities-section charsheet__abilities-section--passives">
 				<div class="charsheet__abilities-section-header">
 					<span class="charsheet__abilities-section-icon">👁️</span>
@@ -4355,7 +4364,7 @@ class CharacterSheetPage {
 				</div>
 				<div class="charsheet__passives-hero-grid"></div>
 			</div>
-		`);
+		`});
 
 		const passiveSkills = [
 			{key: "perception", name: "Perception", icon: "👁️", desc: "Notices hidden creatures, traps, secret doors"},
@@ -4363,7 +4372,7 @@ class CharacterSheetPage {
 			{key: "insight", name: "Insight", icon: "💭", desc: "Detects lies, understands true intentions"},
 		];
 
-		const $passivesGrid = $passivesSection.find(".charsheet__passives-hero-grid");
+		const passivesGrid = passivesSection.querySelector(".charsheet__passives-hero-grid");
 		passiveSkills.forEach(passive => {
 			const skillMod = this._state.getSkillMod(passive.key);
 			const passiveScore = 10 + skillMod;
@@ -4372,7 +4381,7 @@ class CharacterSheetPage {
 			if (profLevel === 2) profIcon = "◉";
 			else if (profLevel === 1) profIcon = "●";
 
-			$passivesGrid.append(`
+			passivesGrid.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__passive-hero-card charsheet__passive-hero-card--${passive.key}" title="${passive.desc}">
 					<div class="charsheet__passive-hero-icon">${passive.icon}</div>
 					<div class="charsheet__passive-hero-value">${passiveScore}</div>
@@ -4382,10 +4391,10 @@ class CharacterSheetPage {
 			`);
 		});
 
-		$mainContent.append($passivesSection);
+		mainContent.append(passivesSection);
 
 		// Full Skills Section
-		const $skillsSection = $(`
+		const skillsSection = e_({outer: `
 			<div class="charsheet__abilities-section charsheet__abilities-section--skills">
 				<div class="charsheet__abilities-section-header">
 					<span class="charsheet__abilities-section-icon">📋</span>
@@ -4394,9 +4403,9 @@ class CharacterSheetPage {
 				</div>
 				<div class="charsheet__skills-full-grid"></div>
 			</div>
-		`);
+		`});
 
-		const $skillsGrid = $skillsSection.find(".charsheet__skills-full-grid");
+		const skillsGrid = skillsSection.querySelector(".charsheet__skills-full-grid");
 
 		// Group skills by ability
 		const skillsByAbility = {};
@@ -4410,7 +4419,7 @@ class CharacterSheetPage {
 		Parser.ABIL_ABVS.forEach(abl => {
 			if (skillsByAbility[abl].length === 0) return;
 
-			const $group = $(`
+			const group = e_({outer: `
 				<div class="charsheet__skills-ability-group" style="--ability-color: ${abilityColors[abl]}">
 					<div class="charsheet__skills-ability-header">
 						<span class="charsheet__skills-ability-icon">${abilityIcons[abl]}</span>
@@ -4424,9 +4433,9 @@ class CharacterSheetPage {
 					</div>
 					<div class="charsheet__skills-ability-list"></div>
 				</div>
-			`);
+			`});
 
-			const $list = $group.find(".charsheet__skills-ability-list");
+			const list = group.querySelector(".charsheet__skills-ability-list");
 
 			skillsByAbility[abl].forEach(skill => {
 				const skillKey = skill.name.toLowerCase().replace(/\s+/g, "");
@@ -4440,30 +4449,30 @@ class CharacterSheetPage {
 				if (profLevel === 2) { profIcon = "◉"; profClass = "expertise"; }
 				else if (profLevel === 1) { profIcon = "●"; profClass = "proficient"; }
 
-				const $skillRow = $(`
+				const skillRow = e_({outer: `
 					<div class="charsheet__skill-full-row ${profClass}" data-skill="${skillKey}">
 						<span class="charsheet__skill-full-prof">${profIcon}</span>
 						<span class="charsheet__skill-full-name">${skill.name}</span>
 						<span class="charsheet__skill-full-mod">${modStr}</span>
 						<span class="charsheet__skill-full-passive">${passiveScore}</span>
 					</div>
-				`);
+				`});
 
-				$skillRow.on("click", () => this._rollSkillCheck(skillKey, skill.name));
-				$list.append($skillRow);
+				skillRow.addEventListener("click", () => this._rollSkillCheck(skillKey, skill.name));
+				list.append(skillRow);
 			});
 
-			$skillsGrid.append($group);
+			skillsGrid.append(group);
 		});
 
-		$mainContent.append($skillsSection);
+		mainContent.append(skillsSection);
 
-		$container.append($mainContent);
+		container.append(mainContent);
 	}
 
 	_renderResources () {
-		const $container = $("#charsheet-resources");
-		$container.empty();
+		const container = document.getElementById("charsheet-resources");
+		container.innerHTML = "";
 
 		const resources = this._state.getResources();
 		const usesCombatSystem = this._state.usesCombatSystem?.() || false;
@@ -4487,7 +4496,7 @@ class CharacterSheetPage {
 			const exertionMax = this._state.getExertionMax() || 0;
 			if (exertionMax > 0) totalResourceCount++;
 		}
-		$("#charsheet-resources-count").text(totalResourceCount);
+		document.getElementById("charsheet-resources-count").textContent = totalResourceCount;
 
 		// Show exertion if character uses combat methods system
 		if (usesCombatSystem) {
@@ -4500,7 +4509,7 @@ class CharacterSheetPage {
 			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
 			
 			if (exertionMax > 0) {
-				const $row = $(`
+				const row = e_({outer: `
 					<div class="charsheet__resource-row" data-resource-id="exertion">
 						<span class="charsheet__resource-name">Exertion</span>
 						<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(Short)</span>
@@ -4511,9 +4520,9 @@ class CharacterSheetPage {
 							<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__exertion-restore-btn" ${exertionCurrent >= exertionMax ? "disabled" : ""}>+</button>
 						</div>
 					</div>
-				`);
+				`});
 
-				$row.find(".charsheet__exertion-use-btn").on("click", () => {
+				row.querySelector(".charsheet__exertion-use-btn").addEventListener("click", () => {
 					const current = this._state.getExertionCurrent() || 0;
 					if (current > 0) {
 						this._state.setExertionCurrent(current - 1);
@@ -4525,7 +4534,7 @@ class CharacterSheetPage {
 					}
 				});
 
-				$row.find(".charsheet__exertion-restore-btn").on("click", () => {
+				row.querySelector(".charsheet__exertion-restore-btn").addEventListener("click", () => {
 					const current = this._state.getExertionCurrent() || 0;
 					if (current < exertionMax) {
 						this._state.setExertionCurrent(current + 1);
@@ -4537,17 +4546,17 @@ class CharacterSheetPage {
 					}
 				});
 
-				$container.append($row);
+				container.append(row);
 			}
 		}
 
 		if (!resources.length && !usesCombatSystem && !limitedAbilities.length) {
-			$container.html(`<div class="ve-muted ve-text-center py-2">No limited-use features</div>`);
+			container.innerHTML = `<div class="ve-muted ve-text-center py-2">No limited-use features</div>`;
 			return;
 		}
 
 		resources.forEach(resource => {
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__resource-row" data-resource-id="${resource.id}">
 					<span class="charsheet__resource-name">${resource.name}</span>
 					<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(${resource.recharge === "short" ? "Short" : "Long"})</span>
@@ -4558,9 +4567,9 @@ class CharacterSheetPage {
 						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__resource-restore-btn" ${resource.current >= resource.max ? "disabled" : ""}>+</button>
 					</div>
 				</div>
-			`);
+			`});
 
-			$row.find(".charsheet__resource-use-btn").on("click", () => {
+			row.querySelector(".charsheet__resource-use-btn").addEventListener("click", () => {
 				if (resource.current > 0) {
 					this._state.setResourceCurrent(resource.id, resource.current - 1);
 					this._saveCurrentCharacter();
@@ -4570,7 +4579,7 @@ class CharacterSheetPage {
 				}
 			});
 
-			$row.find(".charsheet__resource-restore-btn").on("click", () => {
+			row.querySelector(".charsheet__resource-restore-btn").addEventListener("click", () => {
 				if (resource.current < resource.max) {
 					this._state.setResourceCurrent(resource.id, resource.current + 1);
 					this._saveCurrentCharacter();
@@ -4580,7 +4589,7 @@ class CharacterSheetPage {
 				}
 			});
 
-			$container.append($row);
+			container.append(row);
 		});
 
 		// Render limited-use custom abilities
@@ -4601,7 +4610,7 @@ class CharacterSheetPage {
 			const canUse = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
 			const canRestore = uses.current < uses.max;
 			
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__resource-row charsheet__resource-row--custom" data-ability-id="${ability.id}">
 					<span class="charsheet__resource-icon mr-1">${ability.icon || "⚡"}</span>
 					<span class="charsheet__resource-name">${ability.name}</span>
@@ -4613,9 +4622,9 @@ class CharacterSheetPage {
 						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__ability-restore-btn" ${!canRestore ? "disabled" : ""}>+</button>
 					</div>
 				</div>
-			`);
+			`});
 
-			$row.find(".charsheet__ability-use-btn").on("click", () => {
+			row.querySelector(".charsheet__ability-use-btn").addEventListener("click", () => {
 				if (this._state.useCustomAbility(ability.id)) {
 					this._saveCurrentCharacter();
 					this._renderResources();
@@ -4627,7 +4636,7 @@ class CharacterSheetPage {
 				}
 			});
 
-			$row.find(".charsheet__ability-restore-btn").on("click", () => {
+			row.querySelector(".charsheet__ability-restore-btn").addEventListener("click", () => {
 				if (this._state.restoreCustomAbilityUse(ability.id)) {
 					this._saveCurrentCharacter();
 					this._renderResources();
@@ -4639,7 +4648,7 @@ class CharacterSheetPage {
 				}
 			});
 
-			$container.append($row);
+			container.append(row);
 		});
 	}
 
@@ -4648,10 +4657,10 @@ class CharacterSheetPage {
 	}
 
 	_renderOverviewAbilities () {
-		const $container = $("#charsheet-overview-abilities");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-overview-abilities");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		// Get limited-use custom abilities
 		const customAbilities = this._state.getCustomAbilities?.() || [];
@@ -4662,12 +4671,12 @@ class CharacterSheetPage {
 		const classResources = resources.filter(r => r.max > 0);
 
 		if (!limitedAbilities.length && !classResources.length) {
-			$container.html(`
+			container.innerHTML = `
 				<div class="charsheet__empty-state">
 					<span class="charsheet__empty-icon">💫</span>
 					<span class="charsheet__empty-text">No useable abilities</span>
 				</div>
-			`);
+			`;
 			return;
 		}
 
@@ -4677,7 +4686,7 @@ class CharacterSheetPage {
 			const rechargeLabel = resource.recharge === "short" ? "short rest" : "long rest";
 			const canUse = resource.current > 0;
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__ability-row charsheet__ability-row--resource" data-resource-name="${resource.name.replace(/"/g, "&quot;")}">
 					<div class="charsheet__ability-info">
 						<span class="charsheet__ability-icon" title="Class Resource">⚡</span>
@@ -4690,14 +4699,14 @@ class CharacterSheetPage {
 							${!canUse ? "disabled" : ""}>Use</button>
 					</div>
 				</div>
-			`);
+			`});
 
-			$row.find(".charsheet__ability-use-btn").on("click", (e) => {
+			row.querySelector(".charsheet__ability-use-btn").addEventListener("click", (e) => {
 				e.stopPropagation();
 				this._useOverviewResource(resource);
 			});
 
-			$container.append($row);
+			container.append(row);
 		}
 
 		// Render custom abilities
@@ -4725,7 +4734,7 @@ class CharacterSheetPage {
 			// Recharge icon
 			const rechargeIcon = uses.recharge === "short" ? "☀️" : "🌙";
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__ability-row" data-ability-id="${ability.id}">
 					<div class="charsheet__ability-info">
 						<span class="charsheet__ability-icon" title="${actionType}">${ability.icon || actionIcon}</span>
@@ -4738,21 +4747,21 @@ class CharacterSheetPage {
 							${!canUse ? "disabled" : ""}>Use</button>
 					</div>
 				</div>
-			`);
+			`});
 
 			// Click on row to show modal
-			$row.on("click", (e) => {
-				if ($(e.target).hasClass("charsheet__ability-use-btn")) return;
+			row.addEventListener("click", (e) => {
+				if (e.target.classList.contains("charsheet__ability-use-btn")) return;
 				this._showAbilityDetailModal(ability);
 			});
 
 			// Use button
-			$row.find(".charsheet__ability-use-btn").on("click", (e) => {
+			row.querySelector(".charsheet__ability-use-btn").addEventListener("click", (e) => {
 				e.stopPropagation();
 				this._useOverviewAbility(ability);
 			});
 
-			$container.append($row);
+			container.append(row);
 		}
 	}
 
@@ -4817,7 +4826,7 @@ class CharacterSheetPage {
 			if (ability.defensiveTraits.immunities?.length) {
 				parts.push(`Immune: ${ability.defensiveTraits.immunities.join(", ")}`);
 			}
-			if (parts.length) {
+			if (parts) {
 				defenseSummary = `<div class="mt-2"><strong>Defenses:</strong> ${parts.join("; ")}</div>`;
 			}
 		}
@@ -4839,7 +4848,7 @@ class CharacterSheetPage {
 		`;
 
 		// Create and show modal
-		const $modal = $(`
+		const modal = e_({outer: `
 			<div class="modal-overlay charsheet__ability-detail-modal">
 				<div class="modal-content charsheet__ability-detail-content">
 					<div class="modal-header">
@@ -4855,25 +4864,25 @@ class CharacterSheetPage {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$modal.find(".modal-close, .charsheet__ability-modal-close").on("click", () => {
-			$modal.remove();
-		});
+		modal.querySelectorAll(".modal-close, .charsheet__ability-modal-close").forEach(el => el.addEventListener("click", () => {
+			modal.remove();
+		}));
 
-		$modal.find(".charsheet__ability-modal-use").on("click", () => {
+		modal.querySelector(".charsheet__ability-modal-use").addEventListener("click", () => {
 			this._useOverviewAbility(ability);
-			$modal.remove();
+			modal.remove();
 		});
 
 		// Close on background click
-		$modal.on("click", (e) => {
-			if ($(e.target).hasClass("modal-overlay")) {
-				$modal.remove();
+		modal.addEventListener("click", (e) => {
+			if (e.target.classList.contains("modal-overlay")) {
+				modal.remove();
 			}
 		});
 
-		$("body").append($modal);
+		document.body.append(modal);
 	}
 
 	/**
@@ -4884,9 +4893,9 @@ class CharacterSheetPage {
 	 * Clicking the row opens the combat action detail modal.
 	 */
 	_renderOverviewActions () {
-		const $container = $("#charsheet-overview-actions");
-		const $section = $("#charsheet-overview-actions-section");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-overview-actions");
+		const section = document.getElementById("charsheet-overview-actions-section");
+		if (!container) return;
 
 		// Get combat-classified features from the combat module if available
 		let combatFeatures = [];
@@ -4903,13 +4912,13 @@ class CharacterSheetPage {
 			});
 		}
 
-		if (!combatFeatures.length) {
-			$section.hide();
+		if (!combatFeatures) {
+			section.style.display = "none";
 			return;
 		}
 
-		$section.show();
-		$container.empty();
+		section.style.display = "";
+		container.innerHTML = "";
 
 		for (const feature of combatFeatures) {
 			const actionType = this._combat?._getFeatureActionType?.(feature) || "action";
@@ -4936,7 +4945,7 @@ class CharacterSheetPage {
 				usesHtml = `<span class="ve-small ve-muted mr-1">${feature.uses.current}/${feature.uses.max} ${rechargeIcon}</span>`;
 			}
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__action-row ve-flex-v-center py-1 px-2 mb-1 rounded"
 					style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b)); cursor: pointer;">
 					<span class="mr-2" title="${actionLabel}">${actionIcon}</span>
@@ -4946,21 +4955,21 @@ class CharacterSheetPage {
 						${costHtml}${usesHtml}
 					</div>
 				</div>
-			`);
+			`});
 
-			$row.on("click", () => {
+			row.addEventListener("click", () => {
 				if (this._combat?._showCombatActionModal) {
 					this._combat._showCombatActionModal(feature);
 				}
 			});
 
-			$container.append($row);
+			container.append(row);
 		}
 	}
 
 	_renderActiveStates () {
-		const $container = $("#charsheet-active-states");
-		$container.empty();
+		const container = document.getElementById("charsheet-active-states");
+		container.innerHTML = "";
 
 		const activeStates = this._state.getActiveStates();
 		const activatableFeatures = this._state.getActivatableFeatures();
@@ -4976,22 +4985,22 @@ class CharacterSheetPage {
 		const hasActiveStates = nonConditionStates.some(s => s.active) || concentration;
 		
 		if (hasActiveStates) {
-			const $activeSection = $(`<div class="charsheet__active-states-section mb-3">
+			const activeSection = e_({outer: `<div class="charsheet__active-states-section mb-3">
 				<div class="charsheet__section-subtitle ve-flex-v-center mb-1">
 					<span class="ve-small ve-bold text-success">● Currently Active</span>
 				</div>
-			</div>`);
+			</div>`});
 			
 			// Render active states
 			nonConditionStates.filter(s => s.active).forEach(state => {
 				const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
-				const $row = this._renderActiveStateRow(state, stateType, true);
-				$activeSection.append($row);
+				const row = this._renderActiveStateRow(state, stateType, true);
+				activeSection.append(row);
 			});
 			
 			// Show concentration if active
 			if (concentration) {
-				const $concRow = $(`
+				const concRow = e_({outer: `
 					<div class="charsheet__state-row charsheet__state--active">
 						<span class="charsheet__state-icon">🔮</span>
 						<span class="charsheet__state-name">Concentrating: ${concentration.spellName || "Unknown"}</span>
@@ -4999,16 +5008,16 @@ class CharacterSheetPage {
 							<button class="ve-btn ve-btn-xs ve-btn-warning charsheet__end-concentration-btn">End</button>
 						</div>
 					</div>
-				`);
-				$concRow.find(".charsheet__end-concentration-btn").on("click", () => {
+				`});
+				concRow.querySelector(".charsheet__end-concentration-btn").addEventListener("click", () => {
 					this._state.breakConcentration();
 					this._saveCurrentCharacter();
 					this._renderActiveStates();
 				});
-				$activeSection.append($concRow);
+				activeSection.append(concRow);
 			}
 			
-			$container.append($activeSection);
+			container.append(activeSection);
 		}
 
 		// === Section 2: Available Activatable Features ===
@@ -5025,14 +5034,14 @@ class CharacterSheetPage {
 		});
 		
 		if (availableFeatures.length > 0 || !hasActiveStates) {
-			const $availableSection = $(`<div class="charsheet__activatable-section">
+			const availableSection = e_({outer: `<div class="charsheet__activatable-section">
 				<div class="charsheet__section-subtitle ve-flex-v-center mb-1">
 					<span class="ve-small ve-muted">Available to Activate</span>
 				</div>
-			</div>`);
+			</div>`});
 			
 			if (availableFeatures.length === 0) {
-				$availableSection.append(`<div class="ve-muted ve-small ve-text-center py-1">No activatable features</div>`);
+				availableSection.append(e_({outer: `<div class="ve-muted ve-small ve-text-center py-1">No activatable features</div>`}));
 			} else {
 				availableFeatures.forEach(({feature, activationInfo, resource, stateTypeId}) => {
 					const stateType = activationInfo.stateType || CharacterSheetState.ACTIVE_STATE_TYPES[stateTypeId];
@@ -5071,7 +5080,7 @@ class CharacterSheetPage {
 						resourceTooltip = `Costs ${resourceCost} Exertion`;
 					}
 					
-					const $row = $(`
+					const row = e_({outer: `
 						<div class="charsheet__activatable-row ve-flex-v-center py-1 px-2 mb-1 rounded" 
 							style="background: var(--cs-bg-surface, var(--rgb-bg-alt, #1e293b));">
 							<span class="charsheet__state-icon mr-2">${icon}</span>
@@ -5087,31 +5096,31 @@ class CharacterSheetPage {
 								</button>
 							</div>
 						</div>
-					`);
+					`});
 					
-					$row.find(".charsheet__activate-btn").on("click", () => {
+					row.querySelector(".charsheet__activate-btn").addEventListener("click", () => {
 						this._activateFeatureState(feature, stateTypeId, stateType, resource, resourceCost, activationInfo);
 					});
 					
-					$availableSection.append($row);
+					availableSection.append(row);
 				});
 			}
 			
-			$container.append($availableSection);
+			container.append(availableSection);
 		}
 
 		// === Section 3: Inactive/Ended States (can be removed) ===
 		const endedStates = nonConditionStates.filter(s => !s.active);
 		if (endedStates.length > 0) {
-			const $endedSection = $(`<div class="charsheet__ended-states-section mt-2">
+			const endedSection = e_({outer: `<div class="charsheet__ended-states-section mt-2">
 				<div class="charsheet__section-subtitle ve-flex-v-center mb-1">
 					<span class="ve-small ve-muted">Ended (click to remove)</span>
 				</div>
-			</div>`);
+			</div>`});
 			
 			endedStates.forEach(state => {
 				const stateType = CharacterSheetState.ACTIVE_STATE_TYPES[state.stateTypeId];
-				const $row = $(`
+				const row = e_({outer: `
 					<div class="charsheet__state-row charsheet__state--inactive ve-small py-1">
 						<span class="charsheet__state-icon">${state.icon || stateType?.icon || "⚡"}</span>
 						<span class="charsheet__state-name ve-muted">${state.name}</span>
@@ -5120,25 +5129,25 @@ class CharacterSheetPage {
 							<button class="ve-btn ve-btn-xs ve-btn-danger charsheet__remove-btn" title="Remove">×</button>
 						</div>
 					</div>
-				`);
+				`});
 				
-				$row.find(".charsheet__reactivate-btn").on("click", () => {
+				row.querySelector(".charsheet__reactivate-btn").addEventListener("click", () => {
 					this._state.activateState(state.stateTypeId);
 					this._saveCurrentCharacter();
 					this._renderActiveStates();
 					this._renderCharacter();
 				});
 				
-				$row.find(".charsheet__remove-btn").on("click", () => {
+				row.querySelector(".charsheet__remove-btn").addEventListener("click", () => {
 					this._state.removeActiveState(state.id);
 					this._saveCurrentCharacter();
 					this._renderActiveStates();
 				});
 				
-				$endedSection.append($row);
+				endedSection.append(row);
 			});
 			
-			$container.append($endedSection);
+			container.append(endedSection);
 		}
 
 		// === Section 4: Quick Actions (Dodge, etc.) ===
@@ -5149,7 +5158,7 @@ class CharacterSheetPage {
 		// Get hover attributes for Dodge action
 		const dodgeHoverAttrs = this._getActionHoverAttrs("Dodge");
 		
-		const $quickActions = $(`<div class="charsheet__quick-actions mt-2 pt-2 border-top">
+		const quickActions = e_({outer: `<div class="charsheet__quick-actions mt-2 pt-2 border-top">
 			<span class="ve-small ve-muted mr-2">Quick:</span>
 			<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("dodge") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-dodge-btn" ${dodgeHoverAttrs}>
 				💨 ${activeStateTypeIds.has("dodge") ? "End Dodge" : "Dodge"}
@@ -5157,9 +5166,9 @@ class CharacterSheetPage {
 			${hasRecklessAttack ? `<button class="ve-btn ve-btn-xs ${activeStateTypeIds.has("recklessAttack") ? "ve-btn-warning" : "ve-btn-default"} mr-1 charsheet__toggle-reckless-btn" title="Reckless Attack: You gain advantage on melee weapon attack rolls using Strength, but attack rolls against you have advantage until your next turn.">
 				⚡ ${activeStateTypeIds.has("recklessAttack") ? "End Reckless" : "Reckless"}
 			</button>` : ""}
-		</div>`);
+		</div>`});
 		
-		$quickActions.find(".charsheet__toggle-dodge-btn").on("click", () => {
+		quickActions.querySelector(".charsheet__toggle-dodge-btn").addEventListener("click", () => {
 			if (this._state.isStateTypeActive("dodge")) {
 				this._state.deactivateState("dodge");
 			} else {
@@ -5171,7 +5180,7 @@ class CharacterSheetPage {
 		});
 		
 		if (hasRecklessAttack) {
-			$quickActions.find(".charsheet__toggle-reckless-btn").on("click", () => {
+			quickActions.querySelector(".charsheet__toggle-reckless-btn").addEventListener("click", () => {
 				if (this._state.isStateTypeActive("recklessAttack")) {
 					this._state.deactivateState("recklessAttack");
 				} else {
@@ -5183,7 +5192,7 @@ class CharacterSheetPage {
 			});
 		}
 		
-		$container.append($quickActions);
+		container.append(quickActions);
 		
 		// Sync combat tab's active states, defenses, and effects display
 		this._combat?.renderCombatStates?.();
@@ -5329,6 +5338,7 @@ class CharacterSheetPage {
 			if (effectsStr) tooltipParts.push(`Effects: ${effectsStr}`);
 		}
 		const tooltip = tooltipParts.join("\n");
+		const tooltipAttr = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 		
 		// Check if this state can be ended (some passive states shouldn't be endable)
 		const isEndable = this._isStateEndable(state, stateType) || isSpellEffect;
@@ -5380,21 +5390,21 @@ class CharacterSheetPage {
 			? (isSpellEffect ? "var(--bs-purple, #6f42c1)" : "var(--bs-success, #28a745)") 
 			: "transparent";
 		
-		const $row = $(`
+		const row = e_({outer: `
 			<div class="charsheet__state-row ${activeClass} ve-flex-v-center py-2 px-2 mb-1 rounded" 
 				style="background: ${bgColor}; border: 1px solid ${borderColor};">
-				<span class="charsheet__state-icon mr-2" style="font-size: 1.2em;" title="${tooltip}">${icon}</span>
-				<span class="charsheet__state-name ve-bold" title="${tooltip}">${nameHtml}${concentrationHtml}</span>
+				<span class="charsheet__state-icon mr-2" style="font-size: 1.2em;" title="${tooltipAttr}">${icon}</span>
+				<span class="charsheet__state-name ve-bold" title="${tooltipAttr}">${nameHtml}${concentrationHtml}</span>
 				${effectLabelsHtml}${durationHtml}${grantsConditionsHtml}
 				<div class="charsheet__state-controls ml-auto ve-flex-v-center">
 					${isSpellEffect ? `<span class="ve-small ve-muted mr-2" title="Remember to end this when the spell ends">Spell Effect</span>` : ""}
 					${isEndable ? `<button class="ve-btn ve-btn-xs ${isSpellEffect ? "ve-btn-danger" : "ve-btn-warning"} charsheet__end-state-btn">${isSpellEffect ? "End Spell" : "End"}</button>` : `<span class="ve-small ve-muted" title="This is a passive ability">Passive</span>`}
 				</div>
 			</div>
-		`);
+		`});
 
 		if (isEndable) {
-			$row.find(".charsheet__end-state-btn").on("click", () => {
+			row.querySelector(".charsheet__end-state-btn").addEventListener("click", () => {
 				if (isSpellEffect) {
 					// For spell effects that grant conditions, also remove those conditions
 					if (state.grantsConditions?.length > 0) {
@@ -5422,7 +5432,7 @@ class CharacterSheetPage {
 			});
 		}
 
-		return $row;
+		return row;
 	}
 
 	/**
@@ -5575,8 +5585,8 @@ class CharacterSheetPage {
 	}
 
 	_renderAttacks () {
-		const $container = $("#charsheet-attacks");
-		$container.empty();
+		const container = document.getElementById("charsheet-attacks");
+		container.innerHTML = "";
 
 		// Get configured attacks
 		let attacks = [...this._state.getAttacks()];
@@ -5617,8 +5627,8 @@ class CharacterSheetPage {
 			}
 		});
 
-		if (!attacks.length) {
-			$container.html(`<div class="ve-muted ve-text-center py-2">No attacks. Equip weapons from Inventory.</div>`);
+		if (!attacks) {
+			container.innerHTML = `<div class="ve-muted ve-text-center py-2">No attacks. Equip weapons from Inventory.</div>`;
 			return;
 		}
 
@@ -5659,7 +5669,7 @@ class CharacterSheetPage {
 				}
 			}
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__attack-row">
 					<div class="charsheet__attack-info">
 						<span class="charsheet__attack-name">${attackNameHtml}</span>
@@ -5673,26 +5683,26 @@ class CharacterSheetPage {
 						<span class="glyphicon glyphicon-screenshot"></span> Roll
 					</button>
 				</div>
-			`);
+			`});
 
-			$row.find("button").on("click", () => this._rollAttack(attack));
-			$container.append($row);
+			row.querySelector("button").addEventListener("click", () => this._rollAttack(attack));
+			container.append(row);
 		});
 
 		if (attacks.length > 5) {
-			$container.append(`<div class="ve-muted ve-small text-center">+${attacks.length - 5} more in Combat tab</div>`);
+			container.insertAdjacentHTML("beforeend", `<div class="ve-muted ve-small text-center">+${attacks.length - 5} more in Combat tab</div>`);
 		}
 	}
 
 	_renderQuickSpells () {
-		const $container = $("#charsheet-quick-spells");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-quick-spells");
+		if (!container) return;
 		
-		$container.empty();
+		container.innerHTML = "";
 
 		const spells = this._state.getSpells();
-		if (!spells.length) {
-			$container.html(`<div class="ve-muted ve-text-center py-2">No spells. Add from Spells tab.</div>`);
+		if (!spells) {
+			container.innerHTML = `<div class="ve-muted ve-text-center py-2">No spells. Add from Spells tab.</div>`;
 			return;
 		}
 
@@ -5713,7 +5723,7 @@ class CharacterSheetPage {
 			const saveDC = 8 + spellMod + profBonus - dcPenalty;
 			const attackBonus = spellMod + profBonus;
 			const dcPenaltyText = dcPenalty > 0 ? ` <span class="ve-muted ve-small">(−${dcPenalty} exhaustion)</span>` : "";
-			$container.append(`
+			container.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__spell-stats ve-flex ve-flex-wrap mb-2">
 					<span class="ve-small mr-3"><strong>Save DC:</strong> ${saveDC}${dcPenaltyText}</span>
 					<span class="ve-small mr-3"><strong>Attack:</strong> ${this._formatMod(attackBonus)}</span>
@@ -5723,14 +5733,14 @@ class CharacterSheetPage {
 		}
 
 		// Show spell slots
-		const $slotsRow = $(`<div class="charsheet__spell-slots-row mb-2"><span class="charsheet__spell-slots-label">Spell Slots:</span></div>`);
+		const slotsRow = e_({outer: `<div class="charsheet__spell-slots-row mb-2"><span class="charsheet__spell-slots-label">Spell Slots:</span></div>`});
 		let hasSlots = false;
 		for (let level = 1; level <= 9; level++) {
 			const max = this._state.getSpellSlotsMax(level);
 			if (max > 0) {
 				hasSlots = true;
 				const current = this._state.getSpellSlotsCurrent(level);
-				$slotsRow.append(`
+				slotsRow.insertAdjacentHTML("beforeend", `
 					<div class="charsheet__spell-slot-box" title="Level ${level} spell slots">
 						<span class="charsheet__spell-slot-level">${level}</span>
 						<span class="charsheet__spell-slot-count ${current === 0 ? 've-muted' : ''}">${current}/${max}</span>
@@ -5742,7 +5752,7 @@ class CharacterSheetPage {
 		const pactSlots = this._state.getPactSlots();
 		if (pactSlots?.max > 0) {
 			hasSlots = true;
-			$slotsRow.append(`
+			slotsRow.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__spell-slot-box charsheet__spell-slot-box--pact" title="Pact Magic slots (level ${pactSlots.level})">
 					<span class="charsheet__spell-slot-level">P${pactSlots.level}</span>
 					<span class="charsheet__spell-slot-count ${pactSlots.current === 0 ? 've-muted' : ''}">${pactSlots.current}/${pactSlots.max}</span>
@@ -5750,7 +5760,7 @@ class CharacterSheetPage {
 			`);
 		}
 		if (hasSlots) {
-			$container.append($slotsRow);
+			container.append(slotsRow);
 		}
 
 		// Helper to create hoverable spell name
@@ -5766,10 +5776,10 @@ class CharacterSheetPage {
 		};
 
 		if (displayCantrips.length) {
-			$container.append(`<div class="ve-small ve-muted mb-1"><strong>Cantrips</strong></div>`);
+			container.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mb-1"><strong>Cantrips</strong></div>`);
 			displayCantrips.forEach(spell => {
 				const castTime = spell.castingTime || "1 action";
-				const $spell = $(`
+				const spellEl = e_({outer: `
 					<div class="charsheet__quick-spell">
 						<div class="charsheet__quick-spell-info">
 							<span class="charsheet__quick-spell-name">${getSpellLink(spell)}</span>
@@ -5779,20 +5789,20 @@ class CharacterSheetPage {
 							<span class="glyphicon glyphicon-flash"></span> Cast
 						</button>
 					</div>
-				`);
-				$spell.find("button").on("click", () => {
+				`});
+				spellEl.querySelector("button").addEventListener("click", () => {
 					if (this._spells) this._spells._castSpell(spell.id);
 				});
-				$container.append($spell);
+				container.append(spellEl);
 			});
 		}
 
 		if (displayPrepared.length) {
-			$container.append(`<div class="ve-small ve-muted mb-1 mt-2"><strong>Prepared Spells</strong></div>`);
+			container.insertAdjacentHTML("beforeend", `<div class="ve-small ve-muted mb-1 mt-2"><strong>Prepared Spells</strong></div>`);
 			displayPrepared.forEach(spell => {
 				const levelText = spell.level === 1 ? "1st" : spell.level === 2 ? "2nd" : spell.level === 3 ? "3rd" : `${spell.level}th`;
 				const castTime = spell.castingTime || "1 action";
-				const $spell = $(`
+				const spellEl = e_({outer: `
 					<div class="charsheet__quick-spell">
 						<div class="charsheet__quick-spell-info">
 							<span class="charsheet__quick-spell-name">${getSpellLink(spell)}</span>
@@ -5802,18 +5812,18 @@ class CharacterSheetPage {
 							<span class="glyphicon glyphicon-flash"></span> Cast
 						</button>
 					</div>
-				`);
-				$spell.find("button").on("click", () => {
+				`});
+				spellEl.querySelector("button").addEventListener("click", () => {
 					if (this._spells) this._spells._castSpell(spell.id);
 				});
-				$container.append($spell);
+				container.append(spellEl);
 			});
 		}
 
 		const totalCantrips = cantrips.length;
 		const totalPrepared = preparedSpells.length;
 		if (totalCantrips > 3 || totalPrepared > 4) {
-			$container.append(`<div class="ve-muted ve-small text-center mt-2">More spells in Spells tab</div>`);
+			container.insertAdjacentHTML("beforeend", `<div class="ve-muted ve-small text-center mt-2">More spells in Spells tab</div>`);
 		}
 	}
 	// #endregion
@@ -5898,26 +5908,26 @@ class CharacterSheetPage {
 		if (sources.length) bonusBreakdown.push(...sources);
 
 		return new Promise(resolve => {
-			const {$modalInner, doClose} = UiUtil.getShowModal({
+			const {eleModalInner: modalInner, doClose} = UiUtil.getShowModal({
 				title: "Concentration Check",
 				isMinHeight0: true,
 				cbClose: () => resolve(),
 			});
 
-			const $rollResult = $(`<div class="charsheet__concentration-result ve-hidden"></div>`);
+			const rollResult = e_({outer: `<div class="charsheet__concentration-result ve-hidden"></div>`});
 			
 			// Editable DC input
-			const $dcInput = $(`<input type="number" class="form-control form-control--minimal input-xs" style="width: 50px; text-align: center;" value="${dc}" min="1">`);
-			const $rollNeededDisplay = $(`<span>${rollNeeded}</span>`);
+			const dcInput = e_({outer: `<input type="number" class="form-control form-control--minimal input-xs" style="width: 50px; text-align: center;" value="${dc}" min="1">`});
+			const rollNeededDisplay = e_({outer: `<span>${rollNeeded}</span>`});
 			
 			// Update roll needed when DC changes
-			$dcInput.on("change input", () => {
-				dc = parseInt($dcInput.val()) || 10;
+			dcInput.addEventListener("change", () => {
+				dc = parseInt(dcInput.value) || 10;
 				const newRollNeeded = Math.max(1, Math.min(20, dc - bonus));
-				$rollNeededDisplay.text(newRollNeeded);
+				rollNeededDisplay.textContent = newRollNeeded;
 			});
 
-			$modalInner.append(`
+			modalInner.insertAdjacentHTML("beforeend", `
 				<div class="ve-flex-col w-100">
 					<div class="mb-2">
 						You are concentrating on <strong>${spellName.escapeQuotes()}</strong> and took <strong>${damageTaken}</strong> damage.
@@ -5926,15 +5936,15 @@ class CharacterSheetPage {
 			`);
 			
 			// DC row with editable input
-			const $dcRow = $$`<div class="ve-flex ve-flex-v-center mb-2">
+			const dcRow = ee`<div class="ve-flex ve-flex-v-center mb-2">
 				<span class="mr-2"><strong>DC:</strong></span>
-				${$dcInput}
+				${dcInput}
 				<span class="glyphicon glyphicon-info-sign help ml-2" title="${dcExplanation.escapeQuotes()}"></span>
 				<span class="ve-muted ml-2 ve-small">(click to edit)</span>
 			</div>`;
-			$modalInner.append($dcRow);
+			modalInner.append(dcRow);
 			
-			$modalInner.append(`
+			modalInner.insertAdjacentHTML("beforeend", `
 				<div class="ve-flex-col w-100">
 					<div class="mb-2">
 						<strong>Your bonus:</strong> ${bonus >= 0 ? "+" : ""}${bonus}
@@ -5945,18 +5955,18 @@ class CharacterSheetPage {
 			`);
 			
 			// Roll needed display (updates dynamically)
-			const $rollNeededRow = $$`<div class="mb-3">
-				<span class="ve-muted">You need to roll a </span>${$rollNeededDisplay}<span class="ve-muted"> or higher on the die${advantage ? " (with advantage)" : ""} to maintain concentration.</span>
+			const rollNeededRow = ee`<div class="mb-3">
+				<span class="ve-muted">You need to roll a </span>${rollNeededDisplay}<span class="ve-muted"> or higher on the die${advantage ? " (with advantage)" : ""} to maintain concentration.</span>
 			</div>`;
-			$modalInner.append($rollNeededRow);
+			modalInner.append(rollNeededRow);
 			
-			$modalInner.append($rollResult);
+			modalInner.append(rollResult);
 
-			const $btnRow = $(`<div class="ve-flex-h-right mt-3"></div>`);
+			const btnRow = e_({outer: `<div class="ve-flex-h-right mt-3"></div>`});
 
 			const performRoll = async () => {
 				// Get current DC value from input
-				const currentDc = parseInt($dcInput.val()) || 10;
+				const currentDc = parseInt(dcInput.value) || 10;
 				
 				const roll1 = RollerUtil.randomise(20);
 				const roll2 = advantage ? RollerUtil.randomise(20) : null;
@@ -5976,12 +5986,12 @@ class CharacterSheetPage {
 				const resultClass = success ? "charsheet__concentration-success" : "charsheet__concentration-fail";
 				const resultText = success ? "Success! Concentration maintained." : "Failed! Concentration broken.";
 
-				$rollResult.html(`
+				rollResult.innerHTML = `
 					<div class="${resultClass} p-2 text-center">
 						<div>${rollText}</div>
 						<div class="mt-1"><strong>${resultText}</strong></div>
 					</div>
-				`).removeClass("ve-hidden");
+				`.classList.remove("ve-hidden");
 
 				if (!success) {
 					this._state.breakConcentration();
@@ -5992,23 +6002,23 @@ class CharacterSheetPage {
 				}
 
 				// Replace buttons with close button
-				$btnRow.empty().append(
-					$(`<button class="btn btn-primary">Close</button>`)
-						.on("click", () => { doClose(); resolve(); }),
+				btnRow.empty().append(
+					e_({outer: `<button class="btn btn-primary">Close</button>`})
+						.addEventListener("click", () => { doClose(); resolve(); }),
 				);
 			};
 
 			// Roll button
-			const $btnRoll = $(`<button class="btn btn-primary mr-2">Roll Check</button>`)
-				.on("click", () => performRoll());
+			const btnRoll = e_({outer: `<button class="btn btn-primary mr-2">Roll Check</button>`})
+				.addEventListener("click", () => performRoll());
 
 			// Skip button (keep concentration without rolling)
-			const $btnSkip = $(`<button class="btn btn-default mr-2">Skip (Keep)</button>`)
-				.on("click", () => { doClose(); resolve(); });
+			const btnSkip = e_({outer: `<button class="btn btn-default mr-2">Skip (Keep)</button>`})
+				.addEventListener("click", () => { doClose(); resolve(); });
 
 			// Break button (voluntarily end concentration)
-			const $btnBreak = $(`<button class="btn btn-danger">Break Concentration</button>`)
-				.on("click", () => {
+			const btnBreak = e_({outer: `<button class="btn btn-danger">Break Concentration</button>`})
+				.addEventListener("click", () => {
 					this._state.breakConcentration();
 					this._combatModule?.renderCombatStates?.();
 					this._renderActiveStates?.();
@@ -6019,8 +6029,8 @@ class CharacterSheetPage {
 					resolve();
 				});
 
-			$btnRow.append($btnRoll, $btnSkip, $btnBreak);
-			$modalInner.append($btnRow);
+			btnRow.append(btnRoll, btnSkip, btnBreak);
+			modalInner.append(btnRow);
 		});
 	}
 
@@ -6161,21 +6171,21 @@ class CharacterSheetPage {
 	}
 
 	_toggleHelpTips () {
-		const $helpTips = $(".charsheet__help-tips");
-		const $toggle = $("#charsheet-help-toggle");
-		const $toggleText = $toggle.find(".charsheet__help-toggle-text");
-		const isVisible = $helpTips.is(":visible");
+		const helpTips = document.querySelector(".charsheet__help-tips");
+		const toggle = document.getElementById("charsheet-help-toggle");
+		const toggleText = toggle.querySelector(".charsheet__help-toggle-text");
+		const isVisible = (getComputedStyle(helpTips).display !== "none");
 		
 		if (isVisible) {
-			$helpTips.slideUp(200);
-			$toggleText.text("Show");
-			$toggle.attr("title", "Show help tips");
-			$toggle.removeClass("active");
+			helpTips.style.display = "none";
+			toggleText.textContent = "Show";
+			toggle.setAttribute("title", "Show help tips");
+			toggle.classList.remove("active");
 		} else {
-			$helpTips.slideDown(200);
-			$toggleText.text("Hide");
-			$toggle.attr("title", "Hide help tips");
-			$toggle.addClass("active");
+			helpTips.style.display = "";
+			toggleText.textContent = "Hide";
+			toggle.setAttribute("title", "Hide help tips");
+			toggle.classList.add("active");
 		}
 		
 		// Save preference
@@ -6190,17 +6200,17 @@ class CharacterSheetPage {
 		if (!this._layout) return;
 		
 		const isNowEditing = this._layout.toggleEditMode();
-		const $btn = $("#charsheet-btn-layout");
-		const $btnText = $btn.find(".charsheet__layout-toggle-text");
+		const btn = document.getElementById("charsheet-btn-layout");
+		const btnText = btn.querySelector(".charsheet__layout-toggle-text");
 		
 		if (isNowEditing) {
-			$btn.addClass("active");
-			$btnText.text("Done");
-			$btn.attr("title", "Finish editing layout");
+			btn.classList.add("active");
+			btnText.textContent = "Done";
+			btn.setAttribute("title", "Finish editing layout");
 		} else {
-			$btn.removeClass("active");
-			$btnText.text("Layout");
-			$btn.attr("title", "Customize section layout by dragging");
+			btn.classList.remove("active");
+			btnText.textContent = "Layout";
+			btn.setAttribute("title", "Customize section layout by dragging");
 			// Save character to persist layout
 			this._saveCurrentCharacter();
 		}
@@ -6210,9 +6220,9 @@ class CharacterSheetPage {
 	 * Initialize theme picker dropdown in header
 	 */
 	_initThemePicker () {
-		const $btn = $("#charsheet-btn-theme");
-		const $dropdown = $("#charsheet-theme-dropdown");
-		const $content = $dropdown.find(".charsheet__theme-dropdown-content");
+		const btn = document.getElementById("charsheet-btn-theme");
+		const dropdown = document.getElementById("charsheet-theme-dropdown");
+		const content = dropdown.querySelector(".charsheet__theme-dropdown-content");
 		
 		const themes = [
 			{id: "default", name: "Default", color: "#1c1c1c"},
@@ -6243,11 +6253,11 @@ class CharacterSheetPage {
 			</button>`;
 		}).join("");
 		
-		$content.html(swatchesHtml);
+		content.innerHTML = swatchesHtml;
 		
 		// Position dropdown relative to button (using fixed positioning)
 		const positionDropdown = () => {
-			const btnRect = $btn[0].getBoundingClientRect();
+			const btnRect = btn.getBoundingClientRect();
 			const dropdownWidth = 280; // min-width from CSS
 			
 			// Position below button, aligned to right edge
@@ -6257,31 +6267,32 @@ class CharacterSheetPage {
 			// Ensure it doesn't go off-screen left
 			if (left < 8) left = 8;
 			
-			$dropdown.css({
+			Object.assign(dropdown.style, {
 				top: `${top}px`,
 				left: `${left}px`,
 			});
 		};
 		
 		// Toggle dropdown
-		$btn.on("click", (e) => {
+		btn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const isOpen = $dropdown.hasClass("active");
+			const isOpen = dropdown.classList.contains("active");
 			if (!isOpen) {
 				positionDropdown();
 			}
-			$dropdown.toggleClass("active", !isOpen);
-			$btn.toggleClass("active", !isOpen);
+			dropdown.classList.toggle("active", !isOpen);
+			btn.classList.toggle("active", !isOpen);
 		});
 		
-		// Handle swatch click
-		$content.on("click", ".charsheet__theme-swatch", (e) => {
-			const $swatch = $(e.currentTarget);
-			const theme = $swatch.data("theme");
+		// Handle swatch click (delegated)
+		content.addEventListener("click", (e) => {
+			const swatch = e.target.closest(".charsheet__theme-swatch");
+			if (!swatch) return;
+			const theme = swatch.dataset.theme;
 			
 			// Update selection visuals
-			$content.find(".charsheet__theme-swatch").removeClass("charsheet__theme-swatch--selected");
-			$swatch.addClass("charsheet__theme-swatch--selected");
+			content.querySelectorAll(".charsheet__theme-swatch--selected").forEach(el => el.classList.remove("charsheet__theme-swatch--selected"));
+			swatch.classList.add("charsheet__theme-swatch--selected");
 			
 			// Save and apply theme
 			this._state.setBackgroundTheme(theme);
@@ -6289,15 +6300,15 @@ class CharacterSheetPage {
 			this._saveCurrentCharacter();
 			
 			// Close dropdown
-			$dropdown.removeClass("active");
-			$btn.removeClass("active");
+			dropdown.classList.remove("active");
+			btn.classList.remove("active");
 		});
 		
 		// Close dropdown when clicking outside
-		$(document).on("click", (e) => {
-			if (!$(e.target).closest(".charsheet__header-theme-controls").length) {
-				$dropdown.removeClass("active");
-				$btn.removeClass("active");
+		document.addEventListener("click", (e) => {
+			if (!e.target.closest(".charsheet__header-theme-controls")) {
+				dropdown.classList.remove("active");
+				btn.classList.remove("active");
 			}
 		});
 	}
@@ -6307,14 +6318,14 @@ class CharacterSheetPage {
 	 * Text size is stored globally (not per-character) for consistent UX
 	 */
 	_initTextSizePicker () {
-		const $btn = $("#charsheet-btn-textsize");
-		const $dropdown = $("#charsheet-textsize-dropdown");
-		const $slider = $("#charsheet-textsize-slider");
-		const $valueDisplay = $("#charsheet-textsize-value");
-		const $decreaseBtn = $("#charsheet-textsize-decrease");
-		const $increaseBtn = $("#charsheet-textsize-increase");
-		const $resetBtn = $("#charsheet-textsize-reset");
-		const $presets = $dropdown.find(".charsheet__textsize-preset");
+		const btn = document.getElementById("charsheet-btn-textsize");
+		const dropdown = document.getElementById("charsheet-textsize-dropdown");
+		const slider = document.getElementById("charsheet-textsize-slider");
+		const valueDisplay = document.getElementById("charsheet-textsize-value");
+		const decreaseBtn = document.getElementById("charsheet-textsize-decrease");
+		const increaseBtn = document.getElementById("charsheet-textsize-increase");
+		const resetBtn = document.getElementById("charsheet-textsize-reset");
+		const presets = dropdown.querySelector(".charsheet__textsize-preset");
 
 		const STORAGE_KEY = "charsheet-text-size";
 		const DEFAULT_SIZE = 100;
@@ -6343,16 +6354,16 @@ class CharacterSheetPage {
 
 		// Apply text size to the page
 		const applyTextSize = (size) => {
-			const $page = $(".charsheet-page");
-			$page.attr("data-textsize", size);
+			const page = document.querySelector(".charsheet-page");
+			page.setAttribute("data-textsize", size);
 
 			// Update UI
-			$slider.val(size);
-			$valueDisplay.text(size);
+			slider.value = size;
+			valueDisplay.textContent = size;
 
 			// Update preset buttons
-			$presets.removeClass("charsheet__textsize-preset--active");
-			$presets.filter(`[data-size="${size}"]`).addClass("charsheet__textsize-preset--active");
+			dropdown.querySelectorAll(".charsheet__textsize-preset--active").forEach(el => el.classList.remove("charsheet__textsize-preset--active"));
+			dropdown.querySelector(`.charsheet__textsize-preset[data-size="${size}"]`)?.classList.add("charsheet__textsize-preset--active");
 		};
 
 		// Set text size (apply + save)
@@ -6368,7 +6379,7 @@ class CharacterSheetPage {
 
 		// Position dropdown relative to button
 		const positionDropdown = () => {
-			const btnRect = $btn[0].getBoundingClientRect();
+			const btnRect = btn.getBoundingClientRect();
 			const dropdownWidth = 240;
 
 			let left = btnRect.right - dropdownWidth;
@@ -6376,61 +6387,61 @@ class CharacterSheetPage {
 
 			if (left < 8) left = 8;
 
-			$dropdown.css({
+			Object.assign(dropdown.style, {
 				top: `${top}px`,
 				left: `${left}px`,
 			});
 		};
 
 		// Toggle dropdown
-		$btn.on("click", (e) => {
+		btn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const isOpen = $dropdown.hasClass("active");
+			const isOpen = dropdown.classList.contains("active");
 			if (!isOpen) {
 				positionDropdown();
 			}
-			$dropdown.toggleClass("active", !isOpen);
-			$btn.toggleClass("active", !isOpen);
+			dropdown.classList.toggle("active", !isOpen);
+			btn.classList.toggle("active", !isOpen);
 		});
 
 		// Slider input
-		$slider.on("input", (e) => {
+		slider.addEventListener("input", (e) => {
 			const size = parseInt(e.target.value, 10);
 			setTextSize(size);
 		});
 
 		// Decrease button
-		$decreaseBtn.on("click", (e) => {
+		decreaseBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const currentSize = parseInt($slider.val(), 10);
+			const currentSize = parseInt(slider.value, 10);
 			setTextSize(currentSize - STEP);
 		});
 
 		// Increase button
-		$increaseBtn.on("click", (e) => {
+		increaseBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const currentSize = parseInt($slider.val(), 10);
+			const currentSize = parseInt(slider.value, 10);
 			setTextSize(currentSize + STEP);
 		});
 
 		// Preset buttons
-		$presets.on("click", (e) => {
+		presets.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const size = parseInt($(e.currentTarget).data("size"), 10);
+			const size = parseInt(e.currentTarget.dataset.size, 10);
 			setTextSize(size);
 		});
 
 		// Reset button
-		$resetBtn.on("click", (e) => {
+		resetBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
 			setTextSize(DEFAULT_SIZE);
 		});
 
 		// Close dropdown when clicking outside
-		$(document).on("click", (e) => {
-			if (!$(e.target).closest(".charsheet__header-textsize-controls").length) {
-				$dropdown.removeClass("active");
-				$btn.removeClass("active");
+		document.addEventListener("click", (e) => {
+			if (!e.target.closest(".charsheet__header-textsize-controls")) {
+				dropdown.classList.remove("active");
+				btn.classList.remove("active");
 			}
 		});
 
@@ -6444,10 +6455,10 @@ class CharacterSheetPage {
 	 * Font is stored globally (not per-character) for consistent UX
 	 */
 	_initFontPicker () {
-		const $btn = $("#charsheet-btn-font");
-		const $dropdown = $("#charsheet-font-dropdown");
-		const $options = $("#charsheet-font-options");
-		const $resetBtn = $("#charsheet-font-reset");
+		const btn = document.getElementById("charsheet-btn-font");
+		const dropdown = document.getElementById("charsheet-font-dropdown");
+		const options = document.getElementById("charsheet-font-options");
+		const resetBtn = document.getElementById("charsheet-font-reset");
 
 		const STORAGE_KEY = "charsheet-font";
 		const DEFAULT_FONT = "system";
@@ -6483,12 +6494,12 @@ class CharacterSheetPage {
 
 		// Apply font to the page
 		const applyFont = (font) => {
-			const $page = $(".charsheet-page");
-			$page.attr("data-font", font);
+			const page = document.querySelector(".charsheet-page");
+			page.setAttribute("data-font", font);
 
 			// Update UI
-			$options.find(".charsheet__font-option").removeClass("charsheet__font-option--active");
-			$options.find(`[data-font="${font}"]`).addClass("charsheet__font-option--active");
+			options.querySelectorAll(".charsheet__font-option--active").forEach(el => el.classList.remove("charsheet__font-option--active"));
+			options.querySelector(`[data-font="${font}"]`).classList.add("charsheet__font-option--active");
 		};
 
 		// Set font (apply + save)
@@ -6506,24 +6517,24 @@ class CharacterSheetPage {
 				font.id === "hubot" ? "'Hubot Sans', 'Mona Sans', -apple-system, sans-serif" :
 				font.id === "readable" ? "Verdana, sans-serif" : "inherit";
 
-			const $option = $(`
+			const optionEl = e_({outer: `
 				<button class="charsheet__font-option" data-font="${font.id}" style="font-family: ${fontFamily};">
 					<span class="charsheet__font-option-preview">${font.name}</span>
 					<span class="charsheet__font-option-check">✓</span>
 				</button>
-			`);
+			`});
 
-			$option.on("click", (e) => {
+			optionEl.addEventListener("click", (e) => {
 				e.stopPropagation();
 				setFont(font.id);
 			});
 
-			$options.append($option);
+			options.append(optionEl);
 		});
 
 		// Position dropdown relative to button
 		const positionDropdown = () => {
-			const btnRect = $btn[0].getBoundingClientRect();
+			const btnRect = btn.getBoundingClientRect();
 			const dropdownWidth = 200;
 
 			let left = btnRect.right - dropdownWidth;
@@ -6531,34 +6542,34 @@ class CharacterSheetPage {
 
 			if (left < 8) left = 8;
 
-			$dropdown.css({
+			Object.assign(dropdown.style, {
 				top: `${top}px`,
 				left: `${left}px`,
 			});
 		};
 
 		// Toggle dropdown
-		$btn.on("click", (e) => {
+		btn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const isOpen = $dropdown.hasClass("active");
+			const isOpen = dropdown.classList.contains("active");
 			if (!isOpen) {
 				positionDropdown();
 			}
-			$dropdown.toggleClass("active", !isOpen);
-			$btn.toggleClass("active", !isOpen);
+			dropdown.classList.toggle("active", !isOpen);
+			btn.classList.toggle("active", !isOpen);
 		});
 
 		// Reset button
-		$resetBtn.on("click", (e) => {
+		resetBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
 			setFont(DEFAULT_FONT);
 		});
 
 		// Close dropdown when clicking outside
-		$(document).on("click", (e) => {
-			if (!$(e.target).closest(".charsheet__header-font-controls").length) {
-				$dropdown.removeClass("active");
-				$btn.removeClass("active");
+		document.addEventListener("click", (e) => {
+			if (!e.target.closest(".charsheet__header-font-controls")) {
+				dropdown.classList.remove("active");
+				btn.classList.remove("active");
 			}
 		});
 
@@ -6572,27 +6583,27 @@ class CharacterSheetPage {
 	 * Uses character settings for animated dice preference
 	 */
 	_initDicePicker () {
-		const $btn = $("#charsheet-btn-dice");
-		const $dropdown = $("#charsheet-dice-dropdown");
-		const $animatedCheckbox = $("#charsheet-dice-animated");
-		const $themeButtons = $(".charsheet__dice-theme-btn");
+		const btn = document.getElementById("charsheet-btn-dice");
+		const dropdown = document.getElementById("charsheet-dice-dropdown");
+		const animatedCheckbox = document.getElementById("charsheet-dice-animated");
+		const themeButtons = document.querySelector(".charsheet__dice-theme-btn");
 
 		// Update checkbox state from settings
 		const updateCheckbox = () => {
 			const isAnimated = this._state?.getSettings()?.animatedDice || false;
-			$animatedCheckbox.prop("checked", isAnimated);
+			animatedCheckbox.checked = isAnimated;
 		};
 
 		// Update theme button selection
 		const updateThemeSelection = () => {
 			const currentTheme = this._state?.getSettings()?.diceTheme || "standard";
-			$themeButtons.removeClass("active");
-			$(`.charsheet__dice-theme-btn[data-theme="${currentTheme}"]`).addClass("active");
+			themeButtons.classList.remove("active");
+			document.querySelector(`.charsheet__dice-theme-btn[data-theme="${currentTheme}"]`).classList.add("active");
 		};
 
 		// Position dropdown relative to button
 		const positionDropdown = () => {
-			const btnRect = $btn[0].getBoundingClientRect();
+			const btnRect = btn.getBoundingClientRect();
 			const dropdownWidth = 180;
 
 			let left = btnRect.right - dropdownWidth;
@@ -6600,46 +6611,46 @@ class CharacterSheetPage {
 
 			if (left < 8) left = 8;
 
-			$dropdown.css({
+			Object.assign(dropdown.style, {
 				top: `${top}px`,
 				left: `${left}px`,
 			});
 		};
 
 		// Toggle dropdown
-		$btn.on("click", (e) => {
+		btn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const isOpen = $dropdown.hasClass("active");
+			const isOpen = dropdown.classList.contains("active");
 			if (!isOpen) {
 				updateCheckbox();
 				updateThemeSelection();
 				positionDropdown();
 			}
-			$dropdown.toggleClass("active", !isOpen);
-			$btn.toggleClass("active", !isOpen);
+			dropdown.classList.toggle("active", !isOpen);
+			btn.classList.toggle("active", !isOpen);
 		});
 
 		// Animated dice checkbox
-		$animatedCheckbox.on("change", (e) => {
+		animatedCheckbox.addEventListener("change", (e) => {
 			e.stopPropagation();
 			this._state.setSetting("animatedDice", e.target.checked);
 			this._saveCurrentCharacter();
 		});
 
 		// Theme buttons
-		$themeButtons.on("click", (e) => {
+		themeButtons.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const theme = $(e.currentTarget).data("theme");
+			const theme = e.currentTarget.dataset.theme;
 			this._state.setSetting("diceTheme", theme);
 			this._saveCurrentCharacter();
 			updateThemeSelection();
 		});
 
 		// Close dropdown when clicking outside
-		$(document).on("click", (e) => {
-			if (!$(e.target).closest(".charsheet__header-dice-controls").length) {
-				$dropdown.removeClass("active");
-				$btn.removeClass("active");
+		document.addEventListener("click", (e) => {
+			if (!e.target.closest(".charsheet__header-dice-controls")) {
+				dropdown.classList.remove("active");
+				btn.classList.remove("active");
 			}
 		});
 
@@ -6689,12 +6700,12 @@ class CharacterSheetPage {
 			)
 		);
 
-		if (!availableConditions.length) {
+		if (!availableConditions) {
 			JqueryUtil.doToast({type: "warning", content: "All conditions already applied!"});
 			return;
 		}
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🩹 Add Condition",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -6729,32 +6740,32 @@ class CharacterSheetPage {
 			conditionSources.forEach(s => selectedSources.add(s));
 		}
 
-		const $search = $(`<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search conditions...">`);
-		const $list = $(`<div class="charsheet__conditions-list"></div>`);
-		const $count = $(`<span class="charsheet__modal-search-count">${availableConditions.length} conditions</span>`);
+		const search = e_({outer: `<input type="text" class="form-control charsheet__modal-search" placeholder="🔍 Search conditions...">`});
+		const list = e_({outer: `<div class="charsheet__conditions-list"></div>`});
+		const count = e_({outer: `<span class="charsheet__modal-search-count">${availableConditions.length} conditions</span>`});
 
 		// Build source filter UI
-		const $sourceFilter = $(`<div class="charsheet__source-multiselect"></div>`);
-		const $sourceBtn = $(`
+		const sourceFilter = e_({outer: `<div class="charsheet__source-multiselect"></div>`});
+		const sourceBtn = e_({outer: `
 			<button type="button" class="charsheet__source-multiselect-btn">
 				<span class="charsheet__source-multiselect-icon">📚</span>
 				<span class="charsheet__source-multiselect-text">All Sources</span>
 				<span class="charsheet__source-multiselect-arrow">▼</span>
 			</button>
-		`);
-		const $sourceDropdown = $(`<div class="charsheet__source-multiselect-dropdown"></div>`);
+		`});
+		const sourceDropdown = e_({outer: `<div class="charsheet__source-multiselect-dropdown"></div>`});
 		
 		// Action buttons
-		const $sourceActions = $(`
+		const sourceActions = e_({outer: `
 			<div class="charsheet__source-multiselect-actions">
 				<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__source-action-btn" data-action="all">Select All</button>
 				<button type="button" class="ve-btn ve-btn-xs ve-btn-default charsheet__source-action-btn" data-action="clear">Clear All</button>
 				<button type="button" class="ve-btn ve-btn-xs ve-btn-primary charsheet__source-action-btn" data-action="official">Official Only</button>
 				${prioritySources.length ? `<button type="button" class="ve-btn ve-btn-xs ve-btn-success charsheet__source-action-btn" data-action="priority">Priority Only</button>` : ""}
 			</div>
-		`);
+		`});
 		
-		const $sourceList = $(`<div class="charsheet__source-multiselect-list"></div>`);
+		const sourceList = e_({outer: `<div class="charsheet__source-multiselect-list"></div>`});
 		
 		// Build source checkboxes
 		conditionSources.forEach(src => {
@@ -6762,7 +6773,7 @@ class CharacterSheetPage {
 			const srcFull = Parser.sourceJsonToFull(src);
 			const isChecked = selectedSources.has(src);
 			
-			const $item = $(`
+			const itemEl = e_({outer: `
 				<label class="charsheet__source-multiselect-item">
 					<input type="checkbox" value="${src}" ${isChecked ? "checked" : ""}>
 					<span class="charsheet__source-multiselect-check">${isChecked ? "✓" : ""}</span>
@@ -6771,57 +6782,58 @@ class CharacterSheetPage {
 						<span class="ve-muted ve-small">${srcFull}</span>
 					</span>
 				</label>
-			`);
+			`});
 			
-			$item.find("input").on("change", function() {
+			item.querySelector("input").addEventListener("change", function() {
 				if (this.checked) {
 					selectedSources.add(src);
-					$(this).siblings(".charsheet__source-multiselect-check").text("✓");
+					this.parentElement.querySelector(".charsheet__source-multiselect-check").textContent = "✓";
 				} else {
 					selectedSources.delete(src);
-					$(this).siblings(".charsheet__source-multiselect-check").text("");
+					this.parentElement.querySelector(".charsheet__source-multiselect-check").textContent = "";
 				}
 				updateSourceBtnText();
-				renderList($search.val());
+				renderList(search.value);
 			});
 			
-			$sourceList.append($item);
+			sourceList.append(itemEl);
 		});
 		
-		$sourceDropdown.append($sourceActions, $sourceList);
-		$sourceFilter.append($sourceBtn, $sourceDropdown);
+		sourceDropdown.append(sourceActions, sourceList);
+		sourceFilter.append(sourceBtn, sourceDropdown);
 		
 		// Toggle dropdown
-		$sourceBtn.on("click", (e) => {
+		sourceBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			$sourceDropdown.toggleClass("open");
+			sourceDropdown.classList.toggle("open");
 		});
 		
 		// Close dropdown when clicking outside
-		$(document).on("click.conditionSourceFilter", () => {
-			$sourceDropdown.removeClass("open");
-		});
+		const _condSourceFilterHandler = () => {
+			sourceDropdown.classList.remove("open");
+		};
+		document.addEventListener("click", _condSourceFilterHandler);
 		
-		$sourceDropdown.on("click", (e) => e.stopPropagation());
+		sourceDropdown.addEventListener("click", (e) => e.stopPropagation());
 		
 		// Action button handlers
-		$sourceActions.find("[data-action='all']").on("click", () => {
+		sourceActions.querySelector("[data-action='all']").addEventListener("click", () => {
 			conditionSources.forEach(src => selectedSources.add(src));
-			$sourceList.find("input").prop("checked", true);
-			$sourceList.find(".charsheet__source-multiselect-check").text("✓");
+			sourceList.querySelector("input").checked = true;
+			sourceList.querySelector(".charsheet__source-multiselect-check").textContent = "✓";
 			updateSourceBtnText();
-			renderList($search.val());
+			renderList(search.value);
 		});
 		
-		$sourceActions.find("[data-action='clear']").on("click", () => {
+		sourceActions.querySelector("[data-action='clear']").addEventListener("click", () => {
 			selectedSources.clear();
-			$sourceList.find("input").prop("checked", false);
-			$sourceList.find(".charsheet__source-multiselect-check").text("");
+			sourceList.querySelector("input").checked = false;
+			sourceList.querySelector(".charsheet__source-multiselect-check").textContent = "";
 			updateSourceBtnText();
-			renderList($search.val());
+			renderList(search.value);
 		});
 		
-		$sourceActions.find("[data-action='official']").on("click", () => {
+		sourceActions.querySelector("[data-action='official']").addEventListener("click", () => {
 			selectedSources.clear();
 			const officialSources = [Parser.SRC_XPHB, Parser.SRC_PHB, Parser.SRC_DMG, Parser.SRC_MM, Parser.SRC_XDMG, Parser.SRC_XMM];
 			conditionSources.forEach(src => {
@@ -6829,17 +6841,17 @@ class CharacterSheetPage {
 					selectedSources.add(src);
 				}
 			});
-			$sourceList.find("input").each(function() {
-				const isSelected = selectedSources.has($(this).val());
-				$(this).prop("checked", isSelected);
-				$(this).siblings(".charsheet__source-multiselect-check").text(isSelected ? "✓" : "");
+			[...sourceList.querySelectorAll("input")].forEach(function() {
+				const isSelected = selectedSources.has(this.value);
+				this.checked = isSelected;
+				this.parentElement.querySelector(".charsheet__source-multiselect-check").textContent = isSelected ? "✓" : "";
 			});
 			updateSourceBtnText();
-			renderList($search.val());
+			renderList(search.value);
 		});
 		
 		// Priority Only button handler (only present if priority sources are set)
-		$sourceActions.find("[data-action='priority']").on("click", () => {
+		sourceActions.querySelector("[data-action='priority']").addEventListener("click", () => {
 			selectedSources.clear();
 			conditionSources.forEach(src => {
 				if (prioritySources.includes(src)) {
@@ -6850,26 +6862,26 @@ class CharacterSheetPage {
 			if (selectedSources.size === 0) {
 				conditionSources.forEach(s => selectedSources.add(s));
 			}
-			$sourceList.find("input").each(function() {
-				const isSelected = selectedSources.has($(this).val());
-				$(this).prop("checked", isSelected);
-				$(this).siblings(".charsheet__source-multiselect-check").text(isSelected ? "✓" : "");
+			[...sourceList.querySelectorAll("input")].forEach(function() {
+				const isSelected = selectedSources.has(this.value);
+				this.checked = isSelected;
+				this.parentElement.querySelector(".charsheet__source-multiselect-check").textContent = isSelected ? "✓" : "";
 			});
 			updateSourceBtnText();
-			renderList($search.val());
+			renderList(search.value);
 		});
 		
 		const updateSourceBtnText = () => {
 			if (selectedSources.size === conditionSources.length) {
-				$sourceBtn.find(".charsheet__source-multiselect-text").text("All Sources");
+				sourceBtn.querySelector(".charsheet__source-multiselect-text").textContent = "All Sources";
 			} else if (selectedSources.size === 0) {
-				$sourceBtn.find(".charsheet__source-multiselect-text").text("No Sources");
+				sourceBtn.querySelector(".charsheet__source-multiselect-text").textContent = "No Sources";
 			} else if (prioritySources.length && 
 				prioritySources.filter(s => conditionSources.includes(s)).every(s => selectedSources.has(s)) &&
 				[...selectedSources].every(s => prioritySources.includes(s))) {
-				$sourceBtn.find(".charsheet__source-multiselect-text").text("Priority Sources");
+				sourceBtn.querySelector(".charsheet__source-multiselect-text").textContent = "Priority Sources";
 			} else {
-				$sourceBtn.find(".charsheet__source-multiselect-text").text(`${selectedSources.size} Source${selectedSources.size !== 1 ? "s" : ""}`);
+				sourceBtn.querySelector(".charsheet__source-multiselect-text").textContent = `${selectedSources.size} Source${selectedSources.size !== 1 ? "s" : ""}`;
 			}
 		};
 		
@@ -6877,7 +6889,7 @@ class CharacterSheetPage {
 		updateSourceBtnText();
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 
 			const filtered = availableConditions.filter(cond => {
 				// Check source filter
@@ -6905,10 +6917,10 @@ class CharacterSheetPage {
 				return a.source.localeCompare(b.source);
 			});
 
-			$count.text(`${filtered.length} conditions`);
+			count.textContent = `${filtered.length} conditions`;
 
 			if (filtered.length === 0) {
-				$list.append(`<div class="ve-muted p-2 text-center">No matching conditions found</div>`);
+				list.insertAdjacentHTML("beforeend", `<div class="ve-muted p-2 text-center">No matching conditions found</div>`);
 				return;
 			}
 
@@ -6942,7 +6954,7 @@ class CharacterSheetPage {
 				const isImmune = this._state.isImmuneToCondition(cond.name);
 				const immuneBadge = isImmune ? `<span class="charsheet__condition-item-immune">🛡️ Immune</span>` : "";
 
-				const $item = $(`
+				const itemEl = e_({outer: `
 					<div class="charsheet__condition-item ${isImmune ? "charsheet__condition-item--immune" : ""}" data-condition-name="${cond.name}" data-condition-source="${cond.source}">
 						<div class="charsheet__condition-item-header">
 							<span class="charsheet__condition-item-icon">${icon}</span>
@@ -6953,29 +6965,29 @@ class CharacterSheetPage {
 						<div class="charsheet__condition-item-desc">${description}</div>
 						${effectsPreview}
 					</div>
-				`);
+				`});
 
 				if (!isImmune) {
-					$item.on("click", () => {
-						$list.find(".charsheet__condition-item").removeClass("selected");
-						$item.addClass("selected");
+					itemEl.addEventListener("click", () => {
+						list.querySelectorAll(".charsheet__condition-item.selected").forEach(el => el.classList.remove("selected"));
+						itemEl.classList.add("selected");
 						selectedCondition = cond;
-						$btnConfirm.prop("disabled", false);
-						$btnConfirm.find(".btn-text").text(`Apply ${cond.name}`);
+						btnConfirm.disabled = false;
+						btnConfirm.querySelector(".btn-text").textContent = `Apply ${cond.name}`;
 					});
 
 					// Double-click to apply immediately
-					$item.on("dblclick", () => {
+					itemEl.addEventListener("dblclick", () => {
 						selectedCondition = cond;
 						applyCondition();
 					});
 				}
 
-				$list.append($item);
+				list.append(itemEl);
 			});
 		};
 
-		$search.on("input", (e) => renderList(e.target.value));
+		search.addEventListener("input", (e) => renderList(e.target.value));
 		renderList();
 
 		const applyCondition = () => {
@@ -6990,11 +7002,11 @@ class CharacterSheetPage {
 			this._combat?.renderCombatEffects?.();
 			this._combat?.renderCombatDefenses?.();
 			// Clean up event listener
-			$(document).off("click.conditionSourceFilter");
+			document.removeEventListener("click", _condSourceFilterHandler);
 			doClose(true);
 		};
 
-		$$`<div class="charsheet__conditions-modal-body">
+		modalInner.append(ee`<div class="charsheet__conditions-modal-body">
 			<div class="charsheet__modal-info-banner charsheet__modal-info-banner--info">
 				<div class="charsheet__modal-info-banner-icon">🩹</div>
 				<div class="charsheet__modal-info-banner-content">
@@ -7003,26 +7015,26 @@ class CharacterSheetPage {
 				</div>
 			</div>
 			<div class="charsheet__modal-search-wrapper">
-				${$search}
-				${$sourceFilter}
-				${$count}
+				${search}
+				${sourceFilter}
+				${count}
 			</div>
-			${$list}
-		</div>`.appendTo($modalInner);
+			${list}
+		</div>`);
 
 		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => {
-				$(document).off("click.conditionSourceFilter");
-				doClose(false);
-			});
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select Condition</span></button>`)
-			.on("click", applyCondition);
+		const btnCancel = e_({outer: `<button class="ve-btn ve-btn-default">Cancel</button>`});
+		btnCancel.addEventListener("click", () => {
+			document.removeEventListener("click", _condSourceFilterHandler);
+			doClose(false);
+		});
+		const btnConfirm = e_({outer: `<button class="ve-btn ve-btn-primary" disabled><span class="btn-text">Select Condition</span></button>`});
+		btnConfirm.addEventListener("click", applyCondition);
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			${$btnCancel}
-			${$btnConfirm}
-		</div>`.appendTo($modalInner);
+		modalInner.append(ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			${btnCancel}
+			${btnConfirm}
+		</div>`);
 	}
 	// #endregion
 
@@ -7433,7 +7445,7 @@ class CharacterSheetPage {
 		event.stopPropagation();
 
 		// Remove any existing menu
-		$(".charsheet__ability-menu").remove();
+		document.querySelector(".charsheet__ability-menu").remove();
 
 		const abilities = ["str", "dex", "con", "int", "wis", "cha"];
 		const abilityNames = {
@@ -7445,44 +7457,44 @@ class CharacterSheetPage {
 			cha: "Charisma",
 		};
 
-		const $menu = $(`<div class="charsheet__ability-menu"></div>`);
+		const menu = e_({outer: `<div class="charsheet__ability-menu"></div>`});
 
 		abilities.forEach(ability => {
 			const isDefault = ability === defaultAbility;
 			const mod = this._state.getSkillModWithAbility(skillKey, ability);
 			const modStr = mod >= 0 ? `+${mod}` : mod.toString();
-			const $option = $(`
+			const optionEl = e_({outer: `
 				<div class="charsheet__ability-menu-option ${isDefault ? "charsheet__ability-menu-option--default" : ""}" 
 					 title="${isDefault ? "Default ability" : ""}">
 					<span class="charsheet__ability-menu-name">${abilityNames[ability]}</span>
 					<span class="charsheet__ability-menu-mod">${modStr}</span>
 				</div>
-			`);
-			$option.on("click", (e) => {
-				$menu.remove();
+			`});
+			optionEl.addEventListener("click", (e) => {
+				menu.remove();
 				this._rollSkillCheck(skillKey, skillName, e, ability);
 			});
-			$menu.append($option);
+			menu.append(optionEl);
 		});
 
 		// Position menu near cursor
-		$menu.css({
+		Object.assign(menu.style, {
 			position: "fixed",
 			left: event.clientX + "px",
 			top: event.clientY + "px",
 			zIndex: 10000,
 		});
 
-		$("body").append($menu);
+		document.body.append(menu);
 
 		// Close menu when clicking elsewhere
 		const closeMenu = (e) => {
-			if (!$(e.target).closest(".charsheet__ability-menu").length) {
-				$menu.remove();
-				$(document).off("click", closeMenu);
+			if (!e.target.closest(".charsheet__ability-menu")) {
+				menu.remove();
+				document.removeEventListener("click", closeMenu);
 			}
 		};
-		setTimeout(() => $(document).on("click", closeMenu), 10);
+		setTimeout(() => document.addEventListener("click", closeMenu), 10);
 	}
 
 	_rollInitiative (event) {
@@ -7703,7 +7715,7 @@ class CharacterSheetPage {
 		};
 
 		// Create overlay
-		const $overlay = $(`
+		const overlay = e_({outer: `
 			<div class="charsheet__dice-overlay">
 				<div class="charsheet__dice-container">
 					<div class="charsheet__dice ${diceShape} ${specialClass} charsheet__dice--rolling" style="${bgStyle}; --dice-pip: ${colors.pip}; --dice-text: ${colors.text}; --dice-shadow: ${colors.shadow}; --dice-glow: ${colors.glow}; --dice-accent: ${colors.accent}">
@@ -7712,12 +7724,12 @@ class CharacterSheetPage {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$("body").append($overlay);
+		document.body.append(overlay);
 
 		// Animate random values
-		const $dice = $overlay.find(".charsheet__dice");
+		const dice = overlay.querySelector(".charsheet__dice");
 		const maxValue = diceType === 100 ? 100 : diceType;
 		let animationCycles = 0;
 		const maxCycles = 12;
@@ -7725,15 +7737,15 @@ class CharacterSheetPage {
 		// Helper to update dice face
 		const updateFace = (value) => {
 			if (diceType === 6) {
-				$dice.find(".charsheet__dice-face").remove();
-				$dice.find(".charsheet__dice-value").remove();
-				$dice.prepend(createFaceContent(value));
+				dice.querySelector(".charsheet__dice-face").remove();
+				dice.querySelector(".charsheet__dice-value").remove();
+				dice.insertAdjacentHTML("afterbegin", createFaceContent(value));
 			} else {
-				let $value = $dice.find(".charsheet__dice-value");
-				if (!$value.length) {
-					$dice.prepend(`<span class="charsheet__dice-value">${value}</span>`);
+				let value = dice.querySelector(".charsheet__dice-value");
+				if (!value) {
+					dice.insertAdjacentHTML("afterbegin", `<span class="charsheet__dice-value">${value}</span>`);
 				} else {
-					$value.text(value);
+					value.textContent = value;
 				}
 			}
 		};
@@ -7760,24 +7772,24 @@ class CharacterSheetPage {
 				} else {
 					// Show final value with landing animation
 					updateFace(finalValue);
-					$dice.removeClass("charsheet__dice--rolling").addClass("charsheet__dice--landed");
+					dice.classList.remove("charsheet__dice--rolling");
+					dice.classList.add("charsheet__dice--landed");
 					
 					// Check for critical/fumble styling
 					if (diceType === 20) {
 						if (finalValue === 20) {
-							$dice.addClass("charsheet__dice--critical");
+							dice.classList.add("charsheet__dice--critical");
 						} else if (finalValue === 1) {
-							$dice.addClass("charsheet__dice--fumble");
+							dice.classList.add("charsheet__dice--fumble");
 						}
 					}
 					
 					// Remove after delay
 					const displayTime = (finalValue === 20 || finalValue === 1) && diceType === 20 ? 1000 : 700;
 					setTimeout(() => {
-						$overlay.fadeOut(150, () => {
-							$overlay.remove();
-							resolve();
-						});
+						overlay.style.transition = "opacity 150ms";
+							overlay.style.opacity = "0";
+							setTimeout(() => { overlay.remove(); resolve(); }, 150);
 					}, displayTime);
 				}
 			};
@@ -7788,12 +7800,12 @@ class CharacterSheetPage {
 
 	_showDiceResult (title, total, breakdown, resultClass = "", resultNote = "") {
 		// Remove existing result
-		$(".charsheet__dice-result").remove();
+		document.querySelector(".charsheet__dice-result").remove();
 
 		const totalClass = resultClass ? ` ${resultClass}` : "";
 		const noteHtml = resultNote ? `<div class="charsheet__dice-result-note">${resultNote}</div>` : "";
 
-		const $result = $(`
+		const resultEl = e_({outer: `
 			<div class="charsheet__dice-result">
 				<span class="charsheet__dice-result-close glyphicon glyphicon-remove"></span>
 				<div class="charsheet__dice-result-header">${title}</div>
@@ -7801,13 +7813,13 @@ class CharacterSheetPage {
 				<div class="charsheet__dice-result-breakdown">${breakdown}</div>
 				${noteHtml}
 			</div>
-		`);
+		`});
 
-		$result.find(".charsheet__dice-result-close").on("click", () => $result.remove());
-		$("body").append($result);
+		resultEl.querySelector(".charsheet__dice-result-close").addEventListener("click", () => resultEl.remove());
+		document.body.append(resultEl);
 
 		// Auto-remove after 5 seconds
-		setTimeout(() => $result.fadeOut(300, () => $result.remove()), 5000);
+		setTimeout(() => setTimeout(() => resultEl.remove(), 300), 5000);
 	}
 	// #endregion
 
@@ -7821,11 +7833,11 @@ class CharacterSheetPage {
 	 * @param {object} breakdown - Object from getAcBreakdown() with total and components
 	 */
 	_renderAcBreakdown (breakdown) {
-		const $container = $("#charsheet-ac-breakdown");
-		$container.empty();
+		const container = document.getElementById("charsheet-ac-breakdown");
+		container.innerHTML = "";
 
 		if (!breakdown.components.length) {
-			$container.html(`<div class="charsheet__ac-breakdown-item"><span>Base AC</span><span>10</span></div>`);
+			container.innerHTML = `<div class="charsheet__ac-breakdown-item"><span>Base AC</span><span>10</span></div>`;
 			return;
 		}
 
@@ -7835,7 +7847,7 @@ class CharacterSheetPage {
 			const displayValue = comp.type === "base" || comp.type === "armor" ? comp.value : this._formatMod(comp.value);
 			const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-breakdown-subtype">(${comp.subtype})</span>` : "";
 			
-			$container.append(`
+			container.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__ac-breakdown-item">
 					<span class="charsheet__ac-breakdown-name">
 						<span class="charsheet__ac-breakdown-icon">${comp.icon || ""}</span>
@@ -7847,7 +7859,7 @@ class CharacterSheetPage {
 		});
 
 		// Add total line
-		$container.append(`
+		container.insertAdjacentHTML("beforeend", `
 			<div class="charsheet__ac-breakdown-item charsheet__ac-breakdown-item--total">
 				<span class="charsheet__ac-breakdown-name">
 					<span class="charsheet__ac-breakdown-icon">🛡️</span>
@@ -7864,26 +7876,26 @@ class CharacterSheetPage {
 	async _showAcBreakdownModal () {
 		const breakdown = this._state.getAcBreakdown();
 		
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🛡️ Armor Class Breakdown",
 			isMinHeight0: true,
 		});
 
-		const $content = $(`<div class="charsheet__ac-modal-content"></div>`).appendTo($modalInner);
+		const contentEl = e_({outer: `<div class="charsheet__ac-modal-content"></div>`}); modalInner.append(contentEl);
 
 		// Large AC display
-		const $acDisplay = $(`
+		const acDisplay = e_({outer: `
 			<div class="charsheet__ac-modal-total">
 				<div class="charsheet__ac-modal-total-value">${breakdown.total}</div>
 				<div class="charsheet__ac-modal-total-label">Total AC</div>
 			</div>
-		`).appendTo($content);
+		`}); contentEl.append(acDisplay);
 
 		// Breakdown list
-		const $breakdownList = $(`<div class="charsheet__ac-modal-breakdown"></div>`).appendTo($content);
+		const breakdownList = e_({outer: `<div class="charsheet__ac-modal-breakdown"></div>`}); contentEl.append(breakdownList);
 
 		if (!breakdown.components.length) {
-			$breakdownList.append(`
+			breakdownList.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__ac-modal-item">
 					<span class="charsheet__ac-modal-item-name">
 						<span class="charsheet__ac-modal-item-icon">🧍</span>
@@ -7899,7 +7911,7 @@ class CharacterSheetPage {
 				const displayValue = comp.type === "base" || comp.type === "armor" ? comp.value : this._formatMod(comp.value);
 				const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-modal-item-subtype">(${comp.subtype})</span>` : "";
 				
-				$breakdownList.append(`
+				breakdownList.insertAdjacentHTML("beforeend", `
 					<div class="charsheet__ac-modal-item">
 						<span class="charsheet__ac-modal-item-name">
 							<span class="charsheet__ac-modal-item-icon">${comp.icon || "📦"}</span>
@@ -7916,21 +7928,23 @@ class CharacterSheetPage {
 		const equippedShield = this._state.getItems().find(i => i.equipped && i._isShield);
 
 		if (equippedArmor || equippedShield) {
-			const $equipment = $(`<div class="charsheet__ac-modal-equipment"></div>`).appendTo($content);
-			$equipment.append(`<div class="charsheet__ac-modal-equipment-title">⚔️ Equipped Protection</div>`);
+			const equipment = e_({outer: `<div class="charsheet__ac-modal-equipment"></div>`}); contentEl.append(equipment);
+			equipment.insertAdjacentHTML("beforeend", `<div class="charsheet__ac-modal-equipment-title">⚔️ Equipped Protection</div>`);
 			
 			if (equippedArmor) {
-				$equipment.append(`<div class="charsheet__ac-modal-equipment-item">🛡️ ${equippedArmor.name}</div>`);
+				equipment.insertAdjacentHTML("beforeend", `<div class="charsheet__ac-modal-equipment-item">🛡️ ${equippedArmor.name}</div>`);
 			}
 			if (equippedShield) {
-				$equipment.append(`<div class="charsheet__ac-modal-equipment-item">🔰 ${equippedShield.name}</div>`);
+				equipment.insertAdjacentHTML("beforeend", `<div class="charsheet__ac-modal-equipment-item">🔰 ${equippedShield.name}</div>`);
 			}
 		}
 
 		// Close button
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeFooter = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-primary">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		modalInner.append(closeFooter);
+		closeFooter.querySelector("button").addEventListener("click", () => doClose(false));
 	}
 
 	/**
@@ -7940,8 +7954,8 @@ class CharacterSheetPage {
 	 * @param {{total: number, components: Array<{type: string, name: string, value: number, icon: string, subtype?: string}>}} breakdown
 	 */
 	_renderStatBreakdown (selector, breakdown) {
-		const $container = $(selector);
-		$container.empty();
+		const container = document.querySelector(selector);
+		container.innerHTML = "";
 
 		if (!breakdown || !breakdown.components.length) return;
 
@@ -7951,7 +7965,7 @@ class CharacterSheetPage {
 			const displayValue = comp.type === "base" ? comp.value : this._formatMod(comp.value);
 			const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-breakdown-subtype">(${comp.subtype})</span>` : "";
 
-			$container.append(`
+			container.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__ac-breakdown-item">
 					<span class="charsheet__ac-breakdown-name">
 						<span class="charsheet__ac-breakdown-icon">${comp.icon || ""}</span>
@@ -7962,7 +7976,7 @@ class CharacterSheetPage {
 			`);
 		});
 
-		$container.append(`
+		container.insertAdjacentHTML("beforeend", `
 			<div class="charsheet__ac-breakdown-item charsheet__ac-breakdown-item--total">
 				<span class="charsheet__ac-breakdown-name">
 					<span class="charsheet__ac-breakdown-icon">🎯</span>
@@ -7983,15 +7997,15 @@ class CharacterSheetPage {
 			.map(type => ({type, breakdown: this._state.getSpeedBreakdown(type)}))
 			.filter(({breakdown}) => breakdown.total > 0 || breakdown.components.length > 0);
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🏃 Speed Breakdown",
 			isMinHeight0: true,
 		});
 
-		const $content = $(`<div class="charsheet__ac-modal-content"></div>`).appendTo($modalInner);
+		const contentEl = e_({outer: `<div class="charsheet__ac-modal-content"></div>`}); modalInner.append(contentEl);
 
 		// Walk speed display
-		$content.append(`
+		contentEl.insertAdjacentHTML("beforeend", `
 			<div class="charsheet__ac-modal-total">
 				<div class="charsheet__ac-modal-total-value">${walkBreakdown.total} ft.</div>
 				<div class="charsheet__ac-modal-total-label">Walking Speed</div>
@@ -7999,36 +8013,38 @@ class CharacterSheetPage {
 		`);
 
 		// Walk breakdown
-		const $walkList = $(`<div class="charsheet__ac-modal-breakdown"></div>`).appendTo($content);
-		this._renderModalBreakdownItems($walkList, walkBreakdown, "ft.");
+		const walkList = e_({outer: `<div class="charsheet__ac-modal-breakdown"></div>`}); contentEl.append(walkList);
+		this._renderModalBreakdownItems(walkList, walkBreakdown, "ft.");
 
 		// Other movement types
 		for (const {type, breakdown} of otherBreakdowns) {
 			const label = type.charAt(0).toUpperCase() + type.slice(1);
-			$content.append(`
+			contentEl.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__ac-modal-total mt-3">
 					<div class="charsheet__ac-modal-total-value" style="font-size: 1.5rem;">${breakdown.total} ft.</div>
 					<div class="charsheet__ac-modal-total-label">${label} Speed</div>
 				</div>
 			`);
-			const $list = $(`<div class="charsheet__ac-modal-breakdown"></div>`).appendTo($content);
-			this._renderModalBreakdownItems($list, breakdown, "ft.");
+			const listEl = e_({outer: `<div class="charsheet__ac-modal-breakdown"></div>`}); contentEl.append(listEl);
+			this._renderModalBreakdownItems(listEl, breakdown, "ft.");
 		}
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeFooter2 = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-primary">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		modalInner.append(closeFooter2);
+		closeFooter2.querySelector("button").addEventListener("click", () => doClose(false));
 	}
 
 	/**
 	 * Render breakdown items into a modal list container
-	 * @param {jQuery} $list - The list container
+	 * @param {HTMLElement} listEl - The list container
 	 * @param {{total: number, components: Array}} breakdown - The breakdown data
 	 * @param {string} [unit=""] - Optional unit suffix (e.g., "ft.")
 	 */
-	_renderModalBreakdownItems ($list, breakdown, unit = "") {
+	_renderModalBreakdownItems (listEl, breakdown, unit = "") {
 		if (!breakdown.components.length) {
-			$list.append(`<div class="charsheet__ac-modal-item"><span class="charsheet__ac-modal-item-name">No modifiers</span></div>`);
+			listEl.insertAdjacentHTML("beforeend", `<div class="charsheet__ac-modal-item"><span class="charsheet__ac-modal-item-name">No modifiers</span></div>`);
 			return;
 		}
 
@@ -8038,7 +8054,7 @@ class CharacterSheetPage {
 			const displayValue = comp.type === "base" ? `${comp.value}${unit ? ` ${unit}` : ""}` : `${this._formatMod(comp.value)}${unit ? ` ${unit}` : ""}`;
 			const subtypeHtml = comp.subtype ? `<span class="charsheet__ac-modal-item-subtype">(${comp.subtype})</span>` : "";
 
-			$list.append(`
+			listEl.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__ac-modal-item">
 					<span class="charsheet__ac-modal-item-name">
 						<span class="charsheet__ac-modal-item-icon">${comp.icon || "📦"}</span>
@@ -8214,7 +8230,7 @@ class CharacterSheetPage {
 
 	// #region Settings Modal
 	async _showSettingsModal () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "⚙️ Sheet Settings",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -8231,10 +8247,10 @@ class CharacterSheetPage {
 		const hasHomebrew = allSources.some(src => BrewUtil2.hasSourceJson(src.json) || PrereleaseUtil.hasSourceJson(src.json));
 
 		// Build source selection UI
-		const $sourceFilter = $(`<div class="charsheet__settings-sources"></div>`);
+		const sourceFilter = e_({outer: `<div class="charsheet__settings-sources"></div>`});
 
 		// Quick select buttons
-		const $quickButtons = $$`<div class="charsheet__settings-quick-buttons">
+		const quickButtons = ee`<div class="charsheet__settings-quick-buttons">
 			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-all">All</button>
 			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-none">None</button>
 			<button class="ve-btn ve-btn-xs ve-btn-default" id="settings-source-core">Core Only</button>
@@ -8248,27 +8264,27 @@ class CharacterSheetPage {
 
 		// Create checkboxes for each source
 		Object.entries(sourceGroups).forEach(([group, sources]) => {
-			const $group = $(`<div class="charsheet__settings-source-group">
+			const groupEl = e_({outer: `<div class="charsheet__settings-source-group">
 				<div class="charsheet__settings-source-group-header">${group}</div>
-			</div>`);
+			</div>`});
 
 			sources.forEach(src => {
 				const isChecked = !currentAllowed || currentAllowed.includes(src.json);
-				const $checkbox = $(`
+				const checkboxEl = e_({outer: `
 					<label class="charsheet__settings-source-item">
 						<input type="checkbox" value="${src.json}" ${isChecked ? "checked" : ""} class="source-checkbox">
 						<span title="${src.full}">${src.abbr}</span>
 					</label>
-				`);
-				$group.append($checkbox);
+				`});
+				groupEl.append(checkboxEl);
 			});
 
-			$sourceFilter.append($group);
+			sourceFilter.append(groupEl);
 		});
 
 		// Exhaustion rules toggle
 		const currentExhaustionRules = this._state.getExhaustionRules();
-		const $exhaustionToggle = $$`<div class="charsheet__settings-option">
+		const exhaustionToggle = ee`<div class="charsheet__settings-option">
 			<label class="charsheet__settings-option-label">
 				<span class="charsheet__settings-option-icon">😫</span>
 				<span class="charsheet__settings-option-name">Exhaustion Rules</span>
@@ -8291,7 +8307,7 @@ class CharacterSheetPage {
 		
 		// Master toggle for all Thelemar rules (uses currentExhaustionRules from above)
 		const allThelemar = currentThelemar_carryWeight && currentThelemar_jumping && currentThelemar_linguisticsBonus && currentThelemar_criticalRolls && currentThelemar_asiFeat && currentThelemar_itemUtilization && currentThelemar_spellRarityCheck && currentExhaustionRules === "thelemar";
-		const $thelemar_masterToggle = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--master">
+		const thelemar_masterToggle = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--master">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-all" ${allThelemar ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8301,7 +8317,7 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
-		const $thelemar_carryWeight = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+		const thelemar_carryWeight = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-carry" ${currentThelemar_carryWeight ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8311,7 +8327,7 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
-		const $thelemar_linguisticsBonus = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+		const thelemar_linguisticsBonus = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-linguistics" ${currentThelemar_linguisticsBonus ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8321,7 +8337,7 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
-		const $thelemar_criticalRolls = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+		const thelemar_criticalRolls = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-crits" ${currentThelemar_criticalRolls ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8331,7 +8347,7 @@ class CharacterSheetPage {
 			</label>
 		</div>`;
 
-		const $thelemar_asiFeat = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+		const thelemar_asiFeat = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-asifeat" ${currentThelemar_asiFeat ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8342,7 +8358,7 @@ class CharacterSheetPage {
 		</div>`;
 
 		// Thelemar jumping rules (Athletics-based)
-		const $thelemar_jumping = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+		const thelemar_jumping = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-jumping" ${currentThelemar_jumping ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8353,7 +8369,7 @@ class CharacterSheetPage {
 		</div>`;
 
 		// Thelemar item utilization (healing potions as action = max healing)
-		const $thelemar_itemUtilization = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+		const thelemar_itemUtilization = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-item-util" ${currentThelemar_itemUtilization ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8365,7 +8381,7 @@ class CharacterSheetPage {
 
 		// Thelemar spell rarity/legality
 		const currentThelemar_spellRarity = this._state.getSettings()?.thelemar_spellRarity !== false;
-		const $thelemar_spellRarity = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
+		const thelemar_spellRarity = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox charsheet__settings-option--sub">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-thelemar-spell-rarity" ${currentThelemar_spellRarity ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8377,7 +8393,7 @@ class CharacterSheetPage {
 
 		// Spell list settings
 		const currentIncludeCoreSpells = this._state.getSettings()?.includeCoreSpellsForHomebrew !== false;
-		const $includeCoreSpells = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+		const includeCoreSpells = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-include-core-spells" ${currentIncludeCoreSpells ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8389,7 +8405,7 @@ class CharacterSheetPage {
 
 		// Language settings
 		const currentAllowExoticLanguages = this._state.getSettings()?.allowExoticLanguages !== false;
-		const $allowExoticLanguages = $$`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
+		const allowExoticLanguages = ee`<div class="charsheet__settings-option charsheet__settings-option--checkbox">
 			<label class="charsheet__settings-checkbox-label">
 				<input type="checkbox" id="settings-allow-exotic-languages" ${currentAllowExoticLanguages ? "checked" : ""}>
 				<span class="charsheet__settings-checkbox-text">
@@ -8403,14 +8419,15 @@ class CharacterSheetPage {
 		const currentPriority = this._state.getPrioritySources() || [];
 		const homebrewSources = allSources.filter(src => BrewUtil2.hasSourceJson(src.json) || PrereleaseUtil.hasSourceJson(src.json));
 		
-		let $prioritySection = null;
+		let prioritySection = null;
 		if (homebrewSources.length) {
-			const $prioritySelect = $(`<select class="form-control" id="settings-priority-source">
+			const priorityOptionsHtml = homebrewSources.map(src => `<option value="${src.json}" ${currentPriority.includes(src.json) ? "selected" : ""}>${src.full || src.abbr}</option>`).join("");
+			const prioritySelect = e_({outer: `<select class="form-control" id="settings-priority-source">
 				<option value="">None (show all versions)</option>
-				${homebrewSources.map(src => `<option value="${src.json}" ${currentPriority.includes(src.json) ? "selected" : ""}>${src.full || src.abbr}</option>`).join("")}
-			</select>`);
+				${priorityOptionsHtml}
+			</select>`});;
 
-			$prioritySection = $$`<div class="charsheet__settings-section">
+			prioritySection = ee`<div class="charsheet__settings-section">
 				<div class="charsheet__settings-section-title">⭐ Priority Source</div>
 				<p class="charsheet__settings-section-intro">Choose a homebrew source to prioritize. When set, if a spell, item, class, or feature with the same name exists in both this source and another source, only the version from this source will appear. Other unique options from all sources will still be shown.</p>
 				<div class="charsheet__settings-option">
@@ -8418,7 +8435,7 @@ class CharacterSheetPage {
 						<span class="charsheet__settings-option-icon">🏆</span>
 						<span class="charsheet__settings-option-name">Prioritize Homebrew Source</span>
 					</label>
-					${$prioritySelect}
+					${prioritySelect}
 				</div>
 				<p class="charsheet__settings-section-note ve-muted mt-2" style="font-size: 0.8rem;">
 					<strong>Example:</strong> If your homebrew has a custom "Fireball" spell and you prioritize it, the PHB version of Fireball won't appear in spell lists—but all other PHB spells will still show.
@@ -8427,116 +8444,121 @@ class CharacterSheetPage {
 		}
 
 		// Build modal content
-		$$`<div class="charsheet__settings-modal">
+		const settingsContent = ee`<div class="charsheet__settings-modal">
 			<div class="charsheet__settings-section">
 				<div class="charsheet__settings-section-title">📚 Source Filter</div>
 				<p class="charsheet__settings-section-intro">Select which sources to use when adding races, classes, spells, items, etc. Uncheck sources to exclude them from selection lists.</p>
-				${$quickButtons}
+				${quickButtons}
 				<div class="charsheet__settings-sources-container">
-					${$sourceFilter}
+					${sourceFilter}
 				</div>
 			</div>
 			
-			${$prioritySection || ""}
+			${prioritySection || ""}
 			
 			<div class="charsheet__settings-section">
 				<div class="charsheet__settings-section-title">🎮 Game Rules</div>
-				${$exhaustionToggle}
-				${$includeCoreSpells}
-				${$allowExoticLanguages}
+				${exhaustionToggle}
+				${includeCoreSpells}
+				${allowExoticLanguages}
 			</div>
 			
 			<div class="charsheet__settings-section">
 				<div class="charsheet__settings-section-title">🏠 Thelemar Homebrew Rules</div>
 				<p class="charsheet__settings-section-intro">Optional Thelemar house rules for customized gameplay.</p>
-				${$thelemar_masterToggle}
+				${thelemar_masterToggle}
 				<div class="charsheet__settings-thelemar-sub">
-					${$thelemar_carryWeight}
-					${$thelemar_jumping}
-					${$thelemar_linguisticsBonus}
-					${$thelemar_criticalRolls}
-					${$thelemar_asiFeat}
-					${$thelemar_itemUtilization}
-					${$thelemar_spellRarity}
+					${thelemar_carryWeight}
+					${thelemar_jumping}
+					${thelemar_linguisticsBonus}
+					${thelemar_criticalRolls}
+					${thelemar_asiFeat}
+					${thelemar_itemUtilization}
+					${thelemar_spellRarity}
 				</div>
 			</div>
-		</div>`.appendTo($modalInner);
+		</div>`;
+		modalInner.append(settingsContent);
 
 		// Priority source handler
-		$modalInner.find("#settings-priority-source").on("change", (e) => {
+		modalInner.querySelector("#settings-priority-source").addEventListener("change", (e) => {
 			const value = e.target.value;
 			this._state.setPrioritySources(value ? [value] : null);
 		});
 
 		// Quick select handlers
-		$modalInner.find("#settings-source-all").on("click", () => {
-			$modalInner.find(".source-checkbox").prop("checked", true);
-			this._updateAllowedSources($modalInner);
+		modalInner.querySelector("#settings-source-all").addEventListener("click", () => {
+			[...modalInner.querySelectorAll(".source-checkbox")].forEach(el => el.checked = true);
+			this._updateAllowedSources(modalInner);
 		});
 
-		$modalInner.find("#settings-source-none").on("click", () => {
-			$modalInner.find(".source-checkbox").prop("checked", false);
-			this._updateAllowedSources($modalInner);
+		modalInner.querySelector("#settings-source-none").addEventListener("click", () => {
+			[...modalInner.querySelectorAll(".source-checkbox")].forEach(el => el.checked = false);
+			this._updateAllowedSources(modalInner);
 		});
 
-		$modalInner.find("#settings-source-core").on("click", () => {
-			$modalInner.find(".source-checkbox").prop("checked", false);
+		modalInner.querySelector("#settings-source-core").addEventListener("click", () => {
+			[...modalInner.querySelectorAll(".source-checkbox")].forEach(el => el.checked = false);
 			const coreSources = [Parser.SRC_PHB, Parser.SRC_DMG, Parser.SRC_MM, Parser.SRC_XPHB, Parser.SRC_XDMG, Parser.SRC_XMM];
 			coreSources.forEach(src => {
-				$modalInner.find(`.source-checkbox[value="${src}"]`).prop("checked", true);
+				const cb = modalInner.querySelector(`.source-checkbox[value="${src}"]`);
+				if (cb) cb.checked = true;
 			});
-			this._updateAllowedSources($modalInner);
+			this._updateAllowedSources(modalInner);
 		});
 
-		$modalInner.find("#settings-source-2024").on("click", () => {
-			$modalInner.find(".source-checkbox").prop("checked", false);
+		modalInner.querySelector("#settings-source-2024").addEventListener("click", () => {
+			[...modalInner.querySelectorAll(".source-checkbox")].forEach(el => el.checked = false);
 			const sources2024 = [Parser.SRC_XPHB, Parser.SRC_XDMG, Parser.SRC_XMM];
 			sources2024.forEach(src => {
-				$modalInner.find(`.source-checkbox[value="${src}"]`).prop("checked", true);
+				const cb = modalInner.querySelector(`.source-checkbox[value="${src}"]`);
+				if (cb) cb.checked = true;
 			});
-			this._updateAllowedSources($modalInner);
+			this._updateAllowedSources(modalInner);
 		});
 
-		$modalInner.find("#settings-source-official").on("click", () => {
-			$modalInner.find(".source-checkbox").each((i, el) => {
-				const src = $(el).val();
+		modalInner.querySelector("#settings-source-official").addEventListener("click", () => {
+			[...modalInner.querySelectorAll(".source-checkbox")].forEach((el) => {
+				const src = el.value;
 				const isOfficial = !SourceUtil.isNonstandardSource(src) && !BrewUtil2.hasSourceJson(src) && !PrereleaseUtil.hasSourceJson(src);
-				$(el).prop("checked", isOfficial);
+				el.checked = isOfficial;
 			});
-			this._updateAllowedSources($modalInner);
+			this._updateAllowedSources(modalInner);
 		});
 
 		// Homebrew only button handler
-		$modalInner.find("#settings-source-homebrew").on("click", () => {
-			$modalInner.find(".source-checkbox").each((i, el) => {
-				const src = $(el).val();
+		modalInner.querySelector("#settings-source-homebrew").addEventListener("click", () => {
+			[...modalInner.querySelectorAll(".source-checkbox")].forEach((el) => {
+				const src = el.value;
 				const isHomebrew = BrewUtil2.hasSourceJson(src) || PrereleaseUtil.hasSourceJson(src);
-				$(el).prop("checked", isHomebrew);
+				el.checked = isHomebrew;
 			});
-			this._updateAllowedSources($modalInner);
+			this._updateAllowedSources(modalInner);
 		});
 
 		// Source checkbox change handler
-		$modalInner.find(".source-checkbox").on("change", () => {
-			this._updateAllowedSources($modalInner);
+		[...modalInner.querySelectorAll(".source-checkbox")].forEach(el => {
+			el.addEventListener("change", () => {
+				this._updateAllowedSources(modalInner);
+			});
 		});
 
 		// Thelemar master toggle helper - defined early so exhaustion handler can use it
 		const updateMasterToggleState = () => {
-			const carryChecked = $modalInner.find("#settings-thelemar-carry").prop("checked");
-			const jumpingChecked = $modalInner.find("#settings-thelemar-jumping").prop("checked");
-			const lingChecked = $modalInner.find("#settings-thelemar-linguistics").prop("checked");
-			const critsChecked = $modalInner.find("#settings-thelemar-crits").prop("checked");
-			const asiFeatChecked = $modalInner.find("#settings-thelemar-asifeat").prop("checked");
-			const itemUtilChecked = $modalInner.find("#settings-thelemar-item-util").prop("checked");
-			const spellRarityChecked = $modalInner.find("#settings-thelemar-spell-rarity").prop("checked");
-			const exhaustionRules = $modalInner.find("#settings-exhaustion-rules").val();
+			const carryChecked = modalInner.querySelector("#settings-thelemar-carry").checked;
+			const jumpingChecked = modalInner.querySelector("#settings-thelemar-jumping").checked;
+			const lingChecked = modalInner.querySelector("#settings-thelemar-linguistics").checked;
+			const critsChecked = modalInner.querySelector("#settings-thelemar-crits").checked;
+			const asiFeatChecked = modalInner.querySelector("#settings-thelemar-asifeat").checked;
+			const itemUtilChecked = modalInner.querySelector("#settings-thelemar-item-util").checked;
+			const spellRarityChecked = modalInner.querySelector("#settings-thelemar-spell-rarity").checked;
+			const exhaustionRules = modalInner.querySelector("#settings-exhaustion-rules").value;
 			const exhaustionIsThelemar = exhaustionRules === "thelemar";
-			$modalInner.find("#settings-thelemar-all").prop("checked", carryChecked && jumpingChecked && lingChecked && critsChecked && asiFeatChecked && itemUtilChecked && spellRarityChecked && exhaustionIsThelemar);
+			modalInner.querySelector("#settings-thelemar-all").checked = carryChecked && jumpingChecked && lingChecked && critsChecked && asiFeatChecked && itemUtilChecked && spellRarityChecked && exhaustionIsThelemar;
 		};
 
 		// Exhaustion rules handler
-		$modalInner.find("#settings-exhaustion-rules").on("change", (e) => {
+		modalInner.querySelector("#settings-exhaustion-rules").addEventListener("change", (e) => {
 			this._state.setExhaustionRules(e.target.value);
 			this._renderExhaustion();
 			this._renderCombatStats();
@@ -8549,22 +8571,22 @@ class CharacterSheetPage {
 		});
 
 		// Thelemar master toggle handler
-		$modalInner.find("#settings-thelemar-all").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-all").addEventListener("change", (e) => {
 			const isChecked = e.target.checked;
 			// Set all sub-toggles
-			$modalInner.find("#settings-thelemar-carry").prop("checked", isChecked).trigger("change");
-			$modalInner.find("#settings-thelemar-jumping").prop("checked", isChecked).trigger("change");
-			$modalInner.find("#settings-thelemar-linguistics").prop("checked", isChecked).trigger("change");
-			$modalInner.find("#settings-thelemar-crits").prop("checked", isChecked).trigger("change");
-			$modalInner.find("#settings-thelemar-asifeat").prop("checked", isChecked).trigger("change");
-			$modalInner.find("#settings-thelemar-item-util").prop("checked", isChecked).trigger("change");
-			$modalInner.find("#settings-thelemar-spell-rarity").prop("checked", isChecked).trigger("change");
+			modalInner.querySelector("#settings-thelemar-carry").checked = isChecked.dispatchEvent(new Event("change"));
+			modalInner.querySelector("#settings-thelemar-jumping").checked = isChecked.dispatchEvent(new Event("change"));
+			modalInner.querySelector("#settings-thelemar-linguistics").checked = isChecked.dispatchEvent(new Event("change"));
+			modalInner.querySelector("#settings-thelemar-crits").checked = isChecked.dispatchEvent(new Event("change"));
+			modalInner.querySelector("#settings-thelemar-asifeat").checked = isChecked.dispatchEvent(new Event("change"));
+			modalInner.querySelector("#settings-thelemar-item-util").checked = isChecked.dispatchEvent(new Event("change"));
+			modalInner.querySelector("#settings-thelemar-spell-rarity").checked = isChecked.dispatchEvent(new Event("change"));
 			// Also set exhaustion rules
-			$modalInner.find("#settings-exhaustion-rules").val(isChecked ? "thelemar" : "2024").trigger("change");
+			modalInner.querySelector("#settings-exhaustion-rules").value = isChecked ? "thelemar" : "2024".dispatchEvent(new Event("change"));
 		});
 
 		// Thelemar carry weight handler
-		$modalInner.find("#settings-thelemar-carry").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-carry").addEventListener("change", (e) => {
 			this._state.setSetting("thelemar_carryWeight", e.target.checked);
 			// Update encumbrance display
 			this._inventory?._updateEncumbrance?.();
@@ -8574,14 +8596,14 @@ class CharacterSheetPage {
 		});
 
 		// Thelemar jumping rules handler
-		$modalInner.find("#settings-thelemar-jumping").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-jumping").addEventListener("change", (e) => {
 			this._state.setSetting("thelemar_jumping", e.target.checked);
 			this._renderCombatStats();
 			updateMasterToggleState();
 		});
 
 		// Thelemar linguistics bonus handler
-		$modalInner.find("#settings-thelemar-linguistics").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-linguistics").addEventListener("change", (e) => {
 			this._state.setSetting("thelemar_linguisticsBonus", e.target.checked);
 			
 			// Auto-add/remove Linguistics custom skill when setting is toggled
@@ -8602,36 +8624,36 @@ class CharacterSheetPage {
 		});
 
 		// Thelemar critical rolls handler
-		$modalInner.find("#settings-thelemar-crits").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-crits").addEventListener("change", (e) => {
 			this._state.setSetting("thelemar_criticalRolls", e.target.checked);
 			updateMasterToggleState();
 		});
 
 		// Thelemar ASI+Feat at level 4 handler
-		$modalInner.find("#settings-thelemar-asifeat").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-asifeat").addEventListener("change", (e) => {
 			this._state.setSetting("thelemar_asiFeat", e.target.checked);
 			updateMasterToggleState();
 		});
 
 		// Thelemar item utilization handler
-		$modalInner.find("#settings-thelemar-item-util").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-item-util").addEventListener("change", (e) => {
 			this._state.setSetting("thelemar_itemUtilization", e.target.checked);
 			updateMasterToggleState();
 		});
 
 		// Thelemar spell rarity handler
-		$modalInner.find("#settings-thelemar-spell-rarity").on("change", (e) => {
+		modalInner.querySelector("#settings-thelemar-spell-rarity").addEventListener("change", (e) => {
 			this._state.setSetting("thelemar_spellRarity", e.target.checked);
 			updateMasterToggleState();
 		});
 
 		// Include core spells for homebrew classes handler
-		$modalInner.find("#settings-include-core-spells").on("change", (e) => {
+		modalInner.querySelector("#settings-include-core-spells").addEventListener("change", (e) => {
 			this._state.setSetting("includeCoreSpellsForHomebrew", e.target.checked);
 		});
 
 		// Allow exotic languages handler
-		$modalInner.find("#settings-allow-exotic-languages").on("change", (e) => {
+		modalInner.querySelector("#settings-allow-exotic-languages").addEventListener("change", (e) => {
 			this._state.setSetting("allowExoticLanguages", e.target.checked);
 		});
 	}
@@ -8704,14 +8726,14 @@ class CharacterSheetPage {
 		return groups;
 	}
 
-	_updateAllowedSources ($modalInner) {
+	_updateAllowedSources (modalInner) {
 		const checkedSources = [];
-		$modalInner.find(".source-checkbox:checked").each((i, el) => {
-			checkedSources.push($(el).val());
+		[...modalInner.querySelectorAll(".source-checkbox:checked")].forEach((el) => {
+			checkedSources.push(el.value);
 		});
 
 		// If all are checked, set to null (all allowed)
-		const allSources = $modalInner.find(".source-checkbox").length;
+		const allSources = modalInner.querySelectorAll(".source-checkbox").length;
 		if (checkedSources.length === allSources || checkedSources.length === 0) {
 			this._state.setAllowedSources(null);
 		} else {
@@ -8748,11 +8770,13 @@ class CharacterSheetPage {
 	 * Update theme picker UI to reflect current selection
 	 */
 	_updateThemePickerSelection (theme) {
-		const $dropdown = $("#charsheet-theme-dropdown");
-		if (!$dropdown.length) return;
+		const dropdownEl = document.getElementById("charsheet-theme-dropdown");
+		if (!dropdownEl) return;
 		
-		$dropdown.find(".charsheet__theme-swatch").removeClass("charsheet__theme-swatch--selected");
-		$dropdown.find(`.charsheet__theme-swatch[data-theme="${theme || "default"}"]`).addClass("charsheet__theme-swatch--selected");
+		const currentSelected = dropdownEl.querySelector(".charsheet__theme-swatch--selected");
+		if (currentSelected) currentSelected.classList.remove("charsheet__theme-swatch--selected");
+		const targetSwatch = dropdownEl.querySelector(`.charsheet__theme-swatch[data-theme="${theme || "default"}"]`);
+		if (targetSwatch) targetSwatch.classList.add("charsheet__theme-swatch--selected");
 	}
 
 	/**
@@ -8808,7 +8832,7 @@ class CharacterSheetPage {
 	 * Show the custom modifiers management modal
 	 */
 	async _showCustomModifiersModal () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🎯 Custom Modifiers",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -8945,11 +8969,11 @@ class CharacterSheetPage {
 		// Render the modifiers list
 		const renderModifiersList = () => {
 			const modifiers = this._state.getNamedModifiers();
-			const $list = $modalInner.find("#charsheet-modifiers-list");
-			$list.empty();
+			const listEl = modalInner.querySelector("#charsheet-modifiers-list");
+			listEl.innerHTML = "";
 
 			if (!modifiers.length) {
-				$list.append(`<div class="ve-muted ve-text-center py-3">No custom modifiers. Add one below!</div>`);
+				listEl.insertAdjacentHTML("beforeend", `<div class="ve-muted ve-text-center py-3">No custom modifiers. Add one below!</div>`);
 				return;
 			}
 
@@ -8982,7 +9006,7 @@ class CharacterSheetPage {
 
 				const effectsStr = effects.length ? effects.join(" ") : `<span class="ve-muted">+0</span>`;
 
-				const $row = $$`<div class="charsheet__modifier-row ${mod.enabled ? "" : "charsheet__modifier-row--disabled"}">
+				const rowEl = ee`<div class="charsheet__modifier-row ${mod.enabled ? "" : "charsheet__modifier-row--disabled"}">
 					<div class="charsheet__modifier-toggle">
 						<input type="checkbox" ${mod.enabled ? "checked" : ""} title="Enable/disable this modifier">
 					</div>
@@ -9000,19 +9024,19 @@ class CharacterSheetPage {
 				</div>`;
 
 				// Toggle handler
-				$row.find("input[type='checkbox']").on("change", () => {
+				rowEl.querySelector("input[type='checkbox']").addEventListener("change", () => {
 					this._state.toggleNamedModifier(mod.id);
 					renderModifiersList();
 					renderSummary();
 				});
 
 				// Edit handler
-				$row.find(".charsheet__modifier-edit").on("click", () => {
+				rowEl.querySelector(".charsheet__modifier-edit").addEventListener("click", () => {
 					showEditForm(mod);
 				});
 
 				// Delete handler
-				$row.find(".charsheet__modifier-delete").on("click", () => {
+				rowEl.querySelector(".charsheet__modifier-delete").addEventListener("click", () => {
 					if (confirm(`Remove "${mod.name}" modifier?`)) {
 						this._state.removeNamedModifier(mod.id);
 						renderModifiersList();
@@ -9020,43 +9044,43 @@ class CharacterSheetPage {
 					}
 				});
 
-				$list.append($row);
+				listEl.append(rowEl);
 			});
 		};
 
 		// Show/hide custom skill fields based on type selection
-		const updateCustomSkillVisibility = ($form) => {
-			const type = $form.find("#mod-type").val();
-			const $customSkillFields = $form.find(".charsheet__modifier-form-row--custom-skill");
+		const updateCustomSkillVisibility = (formEl) => {
+			const type = formEl.querySelector("#mod-type").value;
+			const customSkillFields = formEl.querySelector(".charsheet__modifier-form-row--custom-skill");
 			if (type === "skill:custom" || type === "passive:custom") {
-				$customSkillFields.show();
+				customSkillFields.style.display = "";
 			} else {
-				$customSkillFields.hide();
+				customSkillFields.style.display = "none";
 			}
 		};
 
 		// Show edit/add form
 		const showEditForm = (existingMod = null) => {
-			const $form = $modalInner.find("#charsheet-modifier-form");
-			$form.show();
+			const formEl = modalInner.querySelector("#charsheet-modifier-form");
+			formEl.style.display = "";
 
-			const $nameInput = $form.find("#mod-name");
-			const $typeSelect = $form.find("#mod-type");
-			const $valueInput = $form.find("#mod-value");
-			const $scalingSelect = $form.find("#mod-scaling");
-			const $noteInput = $form.find("#mod-note");
-			const $advSelect = $form.find("#mod-advantage");
-			const $minInput = $form.find("#mod-minimum");
-			const $diceCountInput = $form.find("#mod-dice-count");
-			const $diceTypeSelect = $form.find("#mod-dice-type");
-			const $conditionalInput = $form.find("#mod-conditional");
-			const $customSkillInput = $form.find("#mod-custom-skill");
-			const $customSkillAbilitySelect = $form.find("#mod-custom-skill-ability");
+			const nameInput = formEl.querySelector("#mod-name");
+			const typeSelect = formEl.querySelector("#mod-type");
+			const valueInput = formEl.querySelector("#mod-value");
+			const scalingSelect = formEl.querySelector("#mod-scaling");
+			const noteInput = formEl.querySelector("#mod-note");
+			const advSelect = formEl.querySelector("#mod-advantage");
+			const minInput = formEl.querySelector("#mod-minimum");
+			const diceCountInput = formEl.querySelector("#mod-dice-count");
+			const diceTypeSelect = formEl.querySelector("#mod-dice-type");
+			const conditionalInput = formEl.querySelector("#mod-conditional");
+			const customSkillInput = formEl.querySelector("#mod-custom-skill");
+			const customSkillAbilitySelect = formEl.querySelector("#mod-custom-skill-ability");
 
 			if (existingMod) {
-				$nameInput.val(existingMod.name);
-				$typeSelect.val(existingMod.type);
-				$valueInput.val(existingMod.value || 0);
+				nameInput.value = existingMod.name;
+				typeSelect.value = existingMod.type;
+				valueInput.value = existingMod.value || 0;
 				// Determine scaling value
 				let scalingVal = "";
 				if (existingMod.proficiencyBonus) scalingVal = "proficiencyBonus";
@@ -9064,55 +9088,56 @@ class CharacterSheetPage {
 				else if (existingMod.doubleProficiency) scalingVal = "doubleProficiency";
 				else if (existingMod.abilityMod) scalingVal = `abilityMod:${existingMod.abilityMod}`;
 				else if (existingMod.perLevel) scalingVal = "perLevel";
-				$scalingSelect.val(scalingVal);
-				$noteInput.val(existingMod.note || "");
-				$advSelect.val(existingMod.advantage ? "advantage" : existingMod.disadvantage ? "disadvantage" : "");
-				$minInput.val(existingMod.setMinimum != null ? existingMod.setMinimum : "");
+				scalingSelect.value = scalingVal;
+				noteInput.value = existingMod.note || "";
+				advSelect.value = existingMod.advantage ? "advantage" : existingMod.disadvantage ? "disadvantage" : "";
+				minInput.value = existingMod.setMinimum != null ? existingMod.setMinimum : "";
 				// Parse bonusDie (e.g., "2d6") into count and type
 				if (existingMod.bonusDie) {
 					const diceMatch = existingMod.bonusDie.match(/(\d+)d(\d+)/);
 					if (diceMatch) {
-						$diceCountInput.val(diceMatch[1]);
-						$diceTypeSelect.val(`d${diceMatch[2]}`);
+						diceCountInput.value = diceMatch[1];
+						diceTypeSelect.value = `d${diceMatch[2]}`;
 					}
 				} else {
-					$diceCountInput.val("");
-					$diceTypeSelect.val("");
+					diceCountInput.value = "";
+					diceTypeSelect.value = "";
 				}
-				$conditionalInput.val(existingMod.conditional || "");
-				$customSkillInput.val(existingMod.customSkillName || "");
-				$customSkillAbilitySelect.val(existingMod.customSkillAbility || "");
-				$form.data("editing-id", existingMod.id);
-				$form.find(".charsheet__modifier-form-title-text").text("Edit Modifier");
+				conditionalInput.value = existingMod.conditional || "";
+				customSkillInput.value = existingMod.customSkillName || "";
+				customSkillAbilitySelect.value = existingMod.customSkillAbility || "";
+				formEl.dataset.editingId = existingMod.id;
+				formEl.querySelector(".charsheet__modifier-form-title-text").textContent = "Edit Modifier";
 			} else {
-				$nameInput.val("");
-				$typeSelect.val("ac");
-				$valueInput.val(0);
-				$scalingSelect.val("");
-				$noteInput.val("");
-				$advSelect.val("");
-				$minInput.val("");
-				$diceCountInput.val("");
-				$diceTypeSelect.val("");
-				$conditionalInput.val("");
-				$customSkillInput.val("");
-				$customSkillAbilitySelect.val("");
-				$form.removeData("editing-id");
-				$form.find(".charsheet__modifier-form-title-text").text("Add Modifier");
+				nameInput.value = "";
+				typeSelect.value = "ac";
+				valueInput.value = 0;
+				scalingSelect.value = "";
+				noteInput.value = "";
+				advSelect.value = "";
+				minInput.value = "";
+				diceCountInput.value = "";
+				diceTypeSelect.value = "";
+				conditionalInput.value = "";
+				customSkillInput.value = "";
+				customSkillAbilitySelect.value = "";
+				formEl;
+			delete formEl.dataset.editingId;
+				formEl.querySelector(".charsheet__modifier-form-title-text").textContent = "Add Modifier";
 			}
 
-			updateCustomSkillVisibility($form);
-			$nameInput.focus();
+			updateCustomSkillVisibility(formEl);
+			nameInput.focus();
 		};
 
 		// Build type select options using optgroups
-		const $typeOptions = modifierGroups.map(group => {
+		const typeOptionsHtml = modifierGroups.map(group => {
 			const options = group.options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join("");
 			return `<optgroup label="${group.group}">${options}</optgroup>`;
 		}).join("");
 
 		// Build modal content
-		$$`<div class="charsheet__modifiers-modal">
+		const modifiersContent = ee`<div class="charsheet__modifiers-modal">
 			<div class="charsheet__modifiers-intro">
 				<p class="mb-0">Add custom modifiers to adjust your rolls. These can represent temporary effects (Bless, Guidance, Cover), magic items, or other situational bonuses. Toggle modifiers on/off as needed.</p>
 			</div>
@@ -9138,7 +9163,7 @@ class CharacterSheetPage {
 					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--type">
 						<label class="charsheet__modifier-form-label">Type</label>
 						<select class="form-control form-control--minimal" id="mod-type">
-							${$typeOptions}
+							${typeOptionsHtml}
 						</select>
 					</div>
 					<div class="charsheet__modifier-form-field charsheet__modifier-form-field--value">
@@ -9237,12 +9262,13 @@ class CharacterSheetPage {
 					<!-- Populated by renderSummary -->
 				</div>
 			</div>
-		</div>`.appendTo($modalInner);
+		</div>`;
+		modalInner.append(modifiersContent);
 
 		// Render summary of active modifiers
 		const renderSummary = () => {
-			const $summary = $modalInner.find("#charsheet-modifiers-summary");
-			$summary.empty();
+			const summaryEl = modalInner.querySelector("#charsheet-modifiers-summary");
+			summaryEl.innerHTML = "";
 
 			const summaryItems = [
 				{type: "ac", label: "AC", icon: "🛡️"},
@@ -9261,7 +9287,7 @@ class CharacterSheetPage {
 				if (value !== 0) {
 					hasAny = true;
 					const valueStr = value >= 0 ? `+${value}` : value;
-					$summary.append(`
+					summaryEl.insertAdjacentHTML("beforeend", `
 						<div class="charsheet__modifier-summary-item">
 							<span class="charsheet__modifier-summary-icon">${item.icon}</span>
 							<span class="charsheet__modifier-summary-label">${item.label}</span>
@@ -9277,7 +9303,7 @@ class CharacterSheetPage {
 				if (value !== 0) {
 					hasAny = true;
 					const valueStr = value >= 0 ? `+${value}` : value;
-					$summary.append(`
+					summaryEl.insertAdjacentHTML("beforeend", `
 						<div class="charsheet__modifier-summary-item">
 							<span class="charsheet__modifier-summary-icon">💪</span>
 							<span class="charsheet__modifier-summary-label">${Parser.attAbvToFull(abl)} Save</span>
@@ -9294,7 +9320,7 @@ class CharacterSheetPage {
 					hasAny = true;
 					const valueStr = total >= 0 ? `+${total}` : total;
 					const skillName = skill.charAt(0).toUpperCase() + skill.slice(1);
-					$summary.append(`
+					summaryEl.insertAdjacentHTML("beforeend", `
 						<div class="charsheet__modifier-summary-item">
 							<span class="charsheet__modifier-summary-icon">👁️</span>
 							<span class="charsheet__modifier-summary-label">Passive ${skillName}</span>
@@ -9311,7 +9337,7 @@ class CharacterSheetPage {
 					hasAny = true;
 					const valueStr = total >= 0 ? `+${total}` : total;
 					const skillName = skill.charAt(0).toUpperCase() + skill.slice(1);
-					$summary.append(`
+					summaryEl.insertAdjacentHTML("beforeend", `
 						<div class="charsheet__modifier-summary-item">
 							<span class="charsheet__modifier-summary-icon">📚</span>
 							<span class="charsheet__modifier-summary-label">${skillName} Checks</span>
@@ -9323,7 +9349,7 @@ class CharacterSheetPage {
 					hasAny = true;
 					const pb = this._state.getProficiencyBonus();
 					const skillName = skill.charAt(0).toUpperCase() + skill.slice(1);
-					$summary.append(`
+					summaryEl.insertAdjacentHTML("beforeend", `
 						<div class="charsheet__modifier-summary-item">
 							<span class="charsheet__modifier-summary-icon">📚</span>
 							<span class="charsheet__modifier-summary-label">${skillName} Checks</span>
@@ -9334,33 +9360,33 @@ class CharacterSheetPage {
 			});
 
 			if (!hasAny) {
-				$summary.append(`<div class="charsheet__modifiers-empty">No active modifiers affecting stats</div>`);
+				summaryEl.insertAdjacentHTML("beforeend", `<div class="charsheet__modifiers-empty">No active modifiers affecting stats</div>`);
 			}
 		};
 
 		// Add modifier button
-		$modalInner.find("#charsheet-btn-add-modifier").on("click", () => showEditForm());
+		modalInner.querySelector("#charsheet-btn-add-modifier").addEventListener("click", () => showEditForm());
 
 		// Bind type change to show/hide custom skill fields
-		$modalInner.on("change", "#mod-type", function () {
-			updateCustomSkillVisibility($modalInner.find("#charsheet-modifier-form"));
+		modalInner.addEventListener("change", "#mod-type", function () {
+			updateCustomSkillVisibility(modalInner.querySelector("#charsheet-modifier-form"));
 		});
 
 		// Save modifier
-		$modalInner.find("#mod-save").on("click", () => {
-			const $form = $modalInner.find("#charsheet-modifier-form");
-			const name = $form.find("#mod-name").val().trim();
-			let type = $form.find("#mod-type").val();
-			const value = parseInt($form.find("#mod-value").val()) || 0;
-			const scalingVal = $form.find("#mod-scaling").val();
-			const note = $form.find("#mod-note").val().trim();
-			const advantageVal = $form.find("#mod-advantage").val();
-			const minimumVal = $form.find("#mod-minimum").val();
-			const diceCount = parseInt($form.find("#mod-dice-count").val()) || 0;
-			const diceType = $form.find("#mod-dice-type").val();
-			const conditional = $form.find("#mod-conditional").val().trim();
-			const customSkillName = $form.find("#mod-custom-skill").val().trim();
-			const customSkillAbility = $form.find("#mod-custom-skill-ability").val();
+		modalInner.querySelector("#mod-save").addEventListener("click", () => {
+			const formEl = modalInner.querySelector("#charsheet-modifier-form");
+			const name = formEl.querySelector("#mod-name").value.trim();
+			let type = formEl.querySelector("#mod-type").value;
+			const value = parseInt(formEl.querySelector("#mod-value").value) || 0;
+			const scalingVal = formEl.querySelector("#mod-scaling").value;
+			const note = formEl.querySelector("#mod-note").value.trim();
+			const advantageVal = formEl.querySelector("#mod-advantage").value;
+			const minimumVal = formEl.querySelector("#mod-minimum").value;
+			const diceCount = parseInt(formEl.querySelector("#mod-dice-count").value) || 0;
+			const diceType = formEl.querySelector("#mod-dice-type").value;
+			const conditional = formEl.querySelector("#mod-conditional").value.trim();
+			const customSkillName = formEl.querySelector("#mod-custom-skill").value.trim();
+			const customSkillAbility = formEl.querySelector("#mod-custom-skill-ability").value;
 
 			if (!name) {
 				JqueryUtil.doToast({type: "warning", content: "Please enter a name for the modifier."});
@@ -9397,21 +9423,21 @@ class CharacterSheetPage {
 			if (customSkillName) modifier.customSkillName = customSkillName;
 			if (customSkillAbility) modifier.customSkillAbility = customSkillAbility;
 
-			const editingId = $form.data("editing-id");
+			const editingId = formEl.dataset.editingId;
 			if (editingId) {
 				this._state.updateNamedModifier(editingId, modifier);
 			} else {
 				this._state.addNamedModifier(modifier);
 			}
 
-			$form.hide();
+			formEl.style.display = "none";
 			renderModifiersList();
 			renderSummary();
 		});
 
 		// Cancel form
-		$modalInner.find("#mod-cancel").on("click", () => {
-			$modalInner.find("#charsheet-modifier-form").hide();
+		modalInner.querySelector("#mod-cancel").addEventListener("click", () => {
+			modalInner.querySelector("#charsheet-modifier-form").style.display = "none";
 		});
 
 		// Initial render
@@ -9744,14 +9770,14 @@ class CharacterSheetPage {
 		const selectedLanguages = [];
 
 		return new Promise(async (resolve) => {
-			const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 				title: count > 1 ? `${title} (Choose ${count})` : title,
 				isMinHeight0: true,
 				isWidth100: true,
 				cbClose: () => resolve(selectedLanguages.length === count ? selectedLanguages : null),
 			});
 
-			$modalInner.append(`
+			modalInner.insertAdjacentHTML("beforeend", `
 				<div class="charsheet__language-picker-header mb-3" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.1)); border-radius: 8px; padding: 12px;">
 					<div class="ve-flex ve-flex-v-center" style="gap: 10px;">
 						<span style="font-size: 2em;">🗣️</span>
@@ -9764,21 +9790,21 @@ class CharacterSheetPage {
 			`);
 
 			// Search filter
-			const $searchContainer = $(`<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`).appendTo($modalInner);
-			$searchContainer.append(`<span style="font-size: 1.2em;">🔍</span>`);
-			const $search = $(`<input type="text" class="form-control" placeholder="Search languages..." style="flex: 1;">`).appendTo($searchContainer);
+			const searchContainer = e_({outer: `<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`}); modalInner.append(searchContainer);
+			searchContainer.insertAdjacentHTML("beforeend", `<span style="font-size: 1.2em;">🔍</span>`);
+			const searchEl = e_({outer: `<input type="text" class="form-control" placeholder="Search languages..." style="flex: 1;">`}); searchContainer.append(searchEl);
 
 			// Selection status
-			const $status = $(`<div class="ve-flex ve-flex-v-center mb-2" style="gap: 8px;">
+			const statusEl = e_({outer: `<div class="ve-flex ve-flex-v-center mb-2" style="gap: 8px;">
 				<span class="ve-muted">Selected: </span>
 				<span class="badge" style="background: rgba(var(--rgb-link-rgb), 0.15); color: var(--rgb-link);">
 					<span class="lang-count">0</span>/${count}
 				</span>
 				<span class="selected-names ve-muted ve-small"></span>
-			</div>`).appendTo($modalInner);
+			</div>`}); modalInner.append(statusEl);
 
 			// Languages grid
-			const $list = $(`<div class="charsheet__language-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto; padding: 4px;"></div>`).appendTo($modalInner);
+			const listEl = e_({outer: `<div class="charsheet__language-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 400px; overflow-y: auto; padding: 4px;"></div>`}); modalInner.append(listEl);
 
 			// Category icons/colors
 			const categoryInfo = {
@@ -9789,19 +9815,19 @@ class CharacterSheetPage {
 			};
 
 			const updateStatus = () => {
-				$status.find(".lang-count").text(selectedLanguages.length);
-				$status.find(".selected-names").text(selectedLanguages.length ? `(${selectedLanguages.join(", ")})` : "");
+				statusEl.querySelector(".lang-count").textContent = selectedLanguages.length;
+				statusEl.querySelector(".selected-names").textContent = selectedLanguages.length ? `(${selectedLanguages.join(", ")})` : "";
 			};
 
 			const renderList = (filter = "") => {
-				$list.empty();
+				listEl.innerHTML = "";
 				const filtered = allLanguages.filter(l =>
 					l.name.toLowerCase().includes(filter.toLowerCase()) &&
 					!selectedLanguages.includes(l.name),
 				);
 
 				if (filtered.length === 0 && selectedLanguages.length === 0) {
-					$list.append(`<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No languages match your search</div>`);
+					listEl.insertAdjacentHTML("beforeend", `<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No languages match your search</div>`);
 					return;
 				}
 
@@ -9820,12 +9846,12 @@ class CharacterSheetPage {
 					const info = categoryInfo[category];
 
 					// Category header
-					$list.append(`<div style="grid-column: 1 / -1; margin-top: 8px; font-weight: bold; color: var(--rgb-link); display: flex; align-items: center; gap: 6px;">
+					listEl.insertAdjacentHTML("beforeend", `<div style="grid-column: 1 / -1; margin-top: 8px; font-weight: bold; color: var(--rgb-link); display: flex; align-items: center; gap: 6px;">
 						<span>${info.emoji}</span> ${category} Languages
 					</div>`);
 
 					langs.forEach(lang => {
-						const $card = $(`
+						const cardEl = e_({outer: `
 							<div class="charsheet__language-card" style="
 								border: 2px solid var(--rgb-border-grey-muted);
 								border-radius: 8px;
@@ -9840,51 +9866,53 @@ class CharacterSheetPage {
 								<span style="font-size: 1.3em;">${info.emoji}</span>
 								<span class="bold">${lang.name}</span>
 							</div>
-						`);
+						`});
 
-						$card.on("mouseenter", function () {
-							$(this).css({
+						cardEl.addEventListener("mouseenter", function () {
+							Object.assign(this.style, {
 								"border-color": "var(--rgb-link)",
 								"transform": "translateY(-2px)",
 								"box-shadow": "0 4px 8px rgba(0, 0, 0, 0.1)",
 							});
-						}).on("mouseleave", function () {
-							$(this).css({
+						});
+						cardEl.addEventListener("mouseleave", function () {
+							Object.assign(this.style, {
 								"border-color": "var(--rgb-border-grey-muted)",
 								"transform": "translateY(0)",
 								"box-shadow": "none",
 							});
-						}).on("click", function () {
+						});
+						cardEl.addEventListener("click", function () {
 							if (selectedLanguages.length < count) {
 								selectedLanguages.push(lang.name);
 								updateStatus();
 								if (selectedLanguages.length === count) {
 									doClose();
 								} else {
-									renderList($search.val());
+									renderList(searchEl.value);
 								}
 							}
 						});
 
-						$list.append($card);
+						listEl.append(cardEl);
 					});
 				}
 			};
 
 			// Confirm button
-			const $footer = $(`<div class="ve-flex ve-flex-h-right mt-3"></div>`).appendTo($modalInner);
-			const $confirmBtn = $(`<button class="ve-btn ve-btn-primary" ${count > 1 ? 'disabled' : ''}>Confirm Selection</button>`).appendTo($footer);
-			$confirmBtn.on("click", () => {
+			const footerEl = e_({outer: `<div class="ve-flex ve-flex-h-right mt-3"></div>`}); modalInner.append(footerEl);
+			const confirmBtn = e_({outer: `<button class="ve-btn ve-btn-primary" ${count > 1 ? 'disabled' : ''}>Confirm Selection</button>`}); footerEl.append(confirmBtn);
+			confirmBtn.addEventListener("click", () => {
 				if (selectedLanguages.length === count || count === 1) {
 					doClose();
 				}
 			});
 
-			$search.on("input", () => renderList($search.val()));
+			searchEl.addEventListener("input", () => renderList(searchEl.value));
 			renderList();
 
 			// Auto-focus search
-			setTimeout(() => $search.focus(), 100);
+			setTimeout(() => searchEl.focus(), 100);
 		});
 	}
 
@@ -9966,7 +9994,7 @@ class CharacterSheetPage {
 	 * Show modal for adding a custom skill
 	 */
 	async _showAddCustomSkillModal () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "Add Custom Skill",
 			isMinHeight0: true,
 		});
@@ -9981,7 +10009,7 @@ class CharacterSheetPage {
 			{value: "cha", label: "Charisma"},
 		];
 
-		const $form = $$`<div class="ve-flex-col">
+		const formEl = ee`<div class="ve-flex-col">
 			<div class="ve-flex-v-center mb-2">
 				<label class="mr-2 w-100p">Skill Name:</label>
 				<input type="text" class="form-control" id="custom-skill-name" placeholder="e.g. Brewing, Sailing">
@@ -9996,18 +10024,19 @@ class CharacterSheetPage {
 				<button class="ve-btn ve-btn-default mr-2" id="custom-skill-cancel">Cancel</button>
 				<button class="ve-btn ve-btn-primary" id="custom-skill-add">Add Skill</button>
 			</div>
-		</div>`.appendTo($modalInner);
+		</div>`;
+		modalInner.append(formEl);
 
-		const $name = $form.find("#custom-skill-name");
-		const $ability = $form.find("#custom-skill-ability");
-		const $addBtn = $form.find("#custom-skill-add");
-		const $cancelBtn = $form.find("#custom-skill-cancel");
+		const nameEl = formEl.querySelector("#custom-skill-name");
+		const abilityEl = formEl.querySelector("#custom-skill-ability");
+		const addBtnEl = formEl.querySelector("#custom-skill-add");
+		const cancelBtn = formEl.querySelector("#custom-skill-cancel");
 
-		$cancelBtn.on("click", () => doClose());
+		cancelBtn.addEventListener("click", () => doClose());
 
-		$addBtn.on("click", () => {
-			const name = $name.val().trim();
-			const ability = $ability.val();
+		addBtnEl.addEventListener("click", () => {
+			const name = nameEl.value.trim();
+			const ability = abilityEl.value;
 
 			if (!name) {
 				JqueryUtil.doToast({type: "warning", content: "Please enter a skill name."});
@@ -10032,12 +10061,12 @@ class CharacterSheetPage {
 		});
 
 		// Allow Enter key to submit
-		$name.on("keypress", (e) => {
-			if (e.which === 13) $addBtn.click();
+		nameEl.addEventListener("keypress", (e) => {
+			if (e.which === 13) addBtnEl.click();
 		});
 
 		// Focus the name input
-		$name.focus();
+		nameEl.focus();
 	}
 
 	/**
@@ -10089,7 +10118,7 @@ class CharacterSheetPage {
 	 * Show modal for editing proficiencies and languages
 	 */
 	async _showEditProficienciesModal () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "Edit Proficiencies & Languages",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -10109,7 +10138,7 @@ class CharacterSheetPage {
 		];
 
 		const renderSection = (profType) => {
-			const $section = $(`
+			const sectionEl = e_({outer: `
 				<div class="charsheet__edit-prof-section mb-3">
 					<label class="ve-bold mb-1">${profType.label}</label>
 					<div class="charsheet__edit-prof-list mb-2" id="edit-prof-${profType.key}"></div>
@@ -10119,33 +10148,33 @@ class CharacterSheetPage {
 					</div>
 					<div class="charsheet__autocomplete-dropdown" id="edit-prof-${profType.key}-dropdown" style="display: none;"></div>
 				</div>
-			`);
+			`});
 
-			const $list = $section.find(`#edit-prof-${profType.key}`);
-			const $input = $section.find(`#edit-prof-${profType.key}-input`);
-			const $addBtn = $section.find(`#edit-prof-${profType.key}-add`);
-			const $dropdown = $section.find(`#edit-prof-${profType.key}-dropdown`);
+			const listEl = sectionEl.querySelector(`#edit-prof-${profType.key}`);
+			const inputEl = sectionEl.querySelector(`#edit-prof-${profType.key}-input`);
+			const addBtnEl = sectionEl.querySelector(`#edit-prof-${profType.key}-add`);
+			const dropdownEl = sectionEl.querySelector(`#edit-prof-${profType.key}-dropdown`);
 
 			const renderList = () => {
 				const currentItems = this._state[profType.getter]();
-				$list.empty();
+				listEl.innerHTML = "";
 				if (!currentItems.length) {
-					$list.append(`<span class="ve-muted">None</span>`);
+					listEl.insertAdjacentHTML("beforeend", `<span class="ve-muted">None</span>`);
 					return;
 				}
 				currentItems.forEach(item => {
 					const displayName = typeof item === "string" ? item : item.full || item.name || item;
-					const $badge = $(`
+					const badgeEl = e_({outer: `
 						<span class="charsheet__edit-prof-badge">
 							${displayName}
 							<span class="charsheet__edit-prof-remove glyphicon glyphicon-remove" title="Remove"></span>
 						</span>
-					`);
-					$badge.find(".charsheet__edit-prof-remove").on("click", () => {
+					`});
+					badgeEl.querySelector(".charsheet__edit-prof-remove").addEventListener("click", () => {
 						this._state[profType.remover](item);
 						renderList();
 					});
-					$list.append($badge);
+					listEl.append(badgeEl);
 				});
 			};
 			renderList();
@@ -10158,52 +10187,54 @@ class CharacterSheetPage {
 					return true;
 				}).slice(0, 10); // Limit to 10 suggestions
 
-				$dropdown.empty();
+				dropdownEl.innerHTML = "";
 				if (!filtered.length) {
-					$dropdown.hide();
+					dropdownEl.style.display = "none";
 					return;
 				}
 
 				filtered.forEach(suggestion => {
-					const $item = $(`<div class="charsheet__autocomplete-item">${suggestion}</div>`);
-					$item.on("click", () => {
+					const itemEl = e_({outer: `<div class="charsheet__autocomplete-item">${suggestion}</div>`});
+					itemEl.addEventListener("click", () => {
 						this._state[profType.adder](suggestion);
-						$input.val("");
-						$dropdown.hide();
+						inputEl.value = "";
+						dropdownEl.style.display = "none";
 						renderList();
 					});
-					$dropdown.append($item);
+					dropdownEl.append(itemEl);
 				});
-				$dropdown.show();
+				dropdownEl.style.display = "";
 			};
 
 			const addItem = () => {
-				const value = $input.val().trim();
+				const value = inputEl.value.trim();
 				if (!value) return;
 				this._state[profType.adder](value);
-				$input.val("");
-				$dropdown.hide();
+				inputEl.value = "";
+				dropdownEl.style.display = "none";
 				renderList();
 			};
 
-			$input.on("input", () => renderDropdown($input.val()));
-			$input.on("focus", () => renderDropdown($input.val()));
-			$input.on("blur", () => setTimeout(() => $dropdown.hide(), 200)); // Delay to allow click
-			$input.on("keypress", (e) => {
+			inputEl.addEventListener("input", () => renderDropdown(inputEl.value));
+			inputEl.addEventListener("focus", () => renderDropdown(inputEl.value));
+			inputEl.addEventListener("blur", () => setTimeout(() => dropdownEl.style.display = "none", 200)); // Delay to allow click
+			inputEl.addEventListener("keypress", (e) => {
 				if (e.which === 13) addItem();
 			});
-			$addBtn.on("click", addItem);
+			addBtnEl.addEventListener("click", addItem);
 
-			return $section;
+			return sectionEl;
 		};
 
 		profTypes.forEach(pt => {
-			$modalInner.append(renderSection(pt));
+			modalInner.append(renderSection(pt));
 		});
 
-		$$`<div class="ve-flex-h-right mt-3">
+		const doneFooter = ee`<div class="ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-primary">Done</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose());
+		</div>`;
+		modalInner.append(doneFooter);
+		doneFooter.querySelector("button").addEventListener("click", () => doClose());
 	}
 
 	/**
@@ -10216,7 +10247,7 @@ class CharacterSheetPage {
 		// Determine max masteries from class features
 		const maxMasteries = this._getMaxWeaponMasteries();
 		
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "Edit Weapon Masteries",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -10226,7 +10257,7 @@ class CharacterSheetPage {
 			},
 		});
 
-		$modalInner.append(`
+		modalInner.insertAdjacentHTML("beforeend", `
 			<p class="ve-muted mb-2">Choose up to ${maxMasteries} weapons to master. You can change these after a Long Rest.</p>
 			<div class="ve-small ve-muted mb-2">Selected: <span id="mastery-count">${currentMasteries.length}</span>/${maxMasteries}</div>
 		`);
@@ -10255,27 +10286,27 @@ class CharacterSheetPage {
 		const renderWeaponGroup = (weapons, groupName) => {
 			if (!weapons.length) return;
 
-			const $group = $(`<div class="mb-3"><strong>${groupName}:</strong></div>`);
-			const $checkboxes = $(`<div class="charsheet__mastery-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>`);
+			const groupEl = e_({outer: `<div class="mb-3"><strong>${groupName}:</strong></div>`});
+			const checkboxesEl = e_({outer: `<div class="charsheet__mastery-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>`});
 
 			weapons.forEach(weapon => {
 				const masteryName = this._getMasteryName(weapon.mastery?.[0]);
 				const weaponKey = `${weapon.name}|${weapon.source}`;
 				const isSelected = selectedMasteries.includes(weaponKey);
 				
-				const $label = $(`
+				const labelEl = e_({outer: `
 					<label class="charsheet__mastery-checkbox" style="display: flex; align-items: center; cursor: pointer; padding: 4px 8px; border: 1px solid var(--rgb-border-grey); border-radius: 4px; ${isSelected ? "background: var(--rgb-bg-highlight);" : ""}">
 						<input type="checkbox" value="${weaponKey}" ${isSelected ? "checked" : ""} style="margin-right: 6px;">
 						<span>${weapon.name}</span>
 						${masteryName ? `<span class="ve-small text-muted ml-1">(${masteryName})</span>` : ""}
 					</label>
-				`);
+				`});
 
-				$label.find("input").on("change", (e) => {
+				labelEl.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (selectedMasteries.length < maxMasteries) {
 							selectedMasteries.push(weaponKey);
-							$label.css("background", "var(--rgb-bg-highlight)");
+							labelEl.style.background = "var(--rgb-bg-highlight)";
 						} else {
 							e.target.checked = false;
 							JqueryUtil.doToast({type: "warning", content: `You can only choose ${maxMasteries} weapon masteries.`});
@@ -10283,25 +10314,27 @@ class CharacterSheetPage {
 					} else {
 						const idx = selectedMasteries.indexOf(weaponKey);
 						if (idx > -1) selectedMasteries.splice(idx, 1);
-						$label.css("background", "");
+						labelEl.style.background = "";
 					}
-					$("#mastery-count").text(selectedMasteries.length);
+					document.getElementById("mastery-count").textContent = selectedMasteries.length;
 				});
 
-				$checkboxes.append($label);
+				checkboxesEl.append(labelEl);
 			});
 
-			$group.append($checkboxes);
-			$modalInner.append($group);
+			groupEl.append(checkboxesEl);
+			modalInner.append(groupEl);
 		};
 
 		renderWeaponGroup(simpleWeapons, "Simple Weapons");
 		renderWeaponGroup(martialWeapons, "Martial Weapons");
 
 		// Save button
-		$$`<div class="ve-flex-h-right mt-3">
+		const saveFooter = ee`<div class="ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-primary">Save</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => {
+		</div>`;
+		modalInner.append(saveFooter);
+		saveFooter.querySelector("button").addEventListener("click", () => {
 			const targetLevel = this._getHistoryLevelForMartialChoice("weaponMasteries");
 			if (targetLevel != null && this._state.updateLevelChoice(targetLevel, {weaponMasteries: [...selectedMasteries]})) {
 				this.replayHistoryMartialChoices();

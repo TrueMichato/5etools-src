@@ -119,66 +119,77 @@ class CharacterSheetSpells {
 
 	_initEventListeners () {
 		// Spell slot pip clicks
-		$(document).on("click", ".charsheet__slot-pip", (e) => {
-			const $pip = $(e.currentTarget);
-			const level = parseInt($pip.closest("[data-spell-level]").data("spell-level"));
-			this._toggleSlot(level, $pip);
+		document.addEventListener("click", (e) => {
+			const pip = e.target.closest(".charsheet__slot-pip");
+			if (!pip) return;
+			const level = parseInt(pip.closest("[data-spell-level]").dataset.spellLevel);
+			this._toggleSlot(level, pip);
 		});
 
 		// Add spell button
-		$(document).on("click", "#charsheet-btn-add-spell, #charsheet-add-spell", () => this._showSpellPicker());
+		document.addEventListener("click", (e) => {
+			if (e.target.closest("#charsheet-btn-add-spell, #charsheet-add-spell")) this._showSpellPicker();
+		});
 
 		// Spell filter
-		$(document).on("input", "#charsheet-spell-search", (e) => {
+		document.addEventListener("input", (e) => {
+			if (!e.target.matches("#charsheet-spell-search")) return;
 			this._spellFilter = e.target.value.toLowerCase();
 			this._renderSpellList();
 		});
 
 		// Level filter
-		$(document).on("change", "#charsheet-spell-level-filter", (e) => {
+		document.addEventListener("change", (e) => {
+			if (!e.target.matches("#charsheet-spell-level-filter")) return;
 			this._spellLevelFilter = e.target.value;
 			this._renderSpellList();
 		});
 
 		// Cast spell button
-		$(document).on("click", ".charsheet__spell-cast", (e) => {
-			const $btn = $(e.currentTarget);
-			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+		document.addEventListener("click", (e) => {
+			const btn = e.target.closest(".charsheet__spell-cast");
+			if (!btn) return;
+			const spellId = btn.closest(".charsheet__spell-item").dataset.spellId;
 			this._castSpell(spellId);
 		});
 
 		// Cast as ritual button (for unprepared spells in spellbook)
-		$(document).on("click", ".charsheet__spell-cast-ritual", (e) => {
-			const $btn = $(e.currentTarget);
-			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+		document.addEventListener("click", (e) => {
+			const btn = e.target.closest(".charsheet__spell-cast-ritual");
+			if (!btn) return;
+			const spellId = btn.closest(".charsheet__spell-item").dataset.spellId;
 			this._castSpellAsRitual(spellId);
 		});
 
 		// Remove spell button
-		$(document).on("click", ".charsheet__spell-remove", (e) => {
-			const $btn = $(e.currentTarget);
-			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+		document.addEventListener("click", (e) => {
+			const btn = e.target.closest(".charsheet__spell-remove");
+			if (!btn) return;
+			const spellId = btn.closest(".charsheet__spell-item").dataset.spellId;
 			this._removeSpell(spellId);
 		});
 
 		// Toggle prepared
-		$(document).on("click", ".charsheet__spell-prepared", (e) => {
-			const $btn = $(e.currentTarget);
-			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+		document.addEventListener("click", (e) => {
+			const btn = e.target.closest(".charsheet__spell-prepared");
+			if (!btn) return;
+			const spellId = btn.closest(".charsheet__spell-item").dataset.spellId;
 			this._togglePrepared(spellId);
 		});
 
 		// Spell info button
-		$(document).on("click", ".charsheet__spell-info", (e) => {
-			const $btn = $(e.currentTarget);
-			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+		document.addEventListener("click", (e) => {
+			const btn = e.target.closest(".charsheet__spell-info");
+			if (!btn) return;
+			const spellId = btn.closest(".charsheet__spell-item").dataset.spellId;
 			this._showSpellInfo(spellId);
 		});
 
 		// Spell note button
-		$(document).on("click", ".charsheet__spell-note", (e) => {
-			const $btn = $(e.currentTarget);
-			const spellId = $btn.closest(".charsheet__spell-item").data("spell-id");
+		document.addEventListener("click", (e) => {
+			const btn = e.target.closest(".charsheet__spell-note");
+			if (!btn) return;
+			const spellId = btn.closest(".charsheet__spell-item").dataset.spellId;
 			const spell = this._state.getSpells().find(s => (s.id || `${s.name}|${s.source}`) === spellId);
 			if (!spell) return;
 			const renderFn = () => this._renderSpellList();
@@ -191,41 +202,42 @@ class CharacterSheetSpells {
 		});
 
 		// Gambler's Folly - manual d100 roll button in toast
-		$(document).on("click", ".btn-gambler-table-roll", (e) => {
-			const $btn = $(e.currentTarget);
-			$btn.prop("disabled", true);
+		document.addEventListener("click", (e) => {
+			const btn = e.target.closest(".btn-gambler-table-roll");
+			if (!btn) return;
+			btn.disabled = true;
 			const tableResult = this._state.rollGamblingTable();
 			if (tableResult) {
-				const $result = $(`<span class="text-info"><br>🎰 <b>d100:</b> ${tableResult.roll}<br>${tableResult.effect}</span>`);
-				$btn.after($result);
-				$btn.remove();
+				const result = e_({outer: `<span class="text-info"><br>🎰 <b>d100:</b> ${tableResult.roll}<br>${tableResult.effect}</span>`});
+				btn.after(result);
+				btn.remove();
 			}
 		});
 
 		// Open Gambling Table modal (can be triggered from features panel or spell UI)
-		$(document).on("click", ".btn-open-gambling-table", () => {
-			this._openGamblingTableModal();
+		document.addEventListener("click", (e) => {
+			if (e.target.closest(".btn-open-gambling-table")) this._openGamblingTableModal();
 		});
 	}
 
-	_toggleSlot (level, $pip) {
-		const isUsed = $pip.hasClass("used");
-		const $container = $pip.closest("[data-spell-level]");
-		const $pips = $container.find(".charsheet__slot-pip");
+	_toggleSlot (level, pip) {
+		const isUsed = pip.classList.contains("used");
+		const container = pip.closest("[data-spell-level]");
+		const pips = [...container.querySelectorAll(".charsheet__slot-pip")];
 
 		if (isUsed) {
 			// Restore a slot (rightmost used pip)
-			const usedPips = $pips.filter(".used");
+			const usedPips = pips.filter(p => p.classList.contains("used"));
 			if (usedPips.length > 0) {
-				$(usedPips[usedPips.length - 1]).removeClass("used");
+				usedPips[usedPips.length - 1].classList.remove("used");
 				const newCurrent = this._state.getSpellSlotsCurrent(level) + 1;
 				this._state.setSpellSlots(level, this._state.getSpellSlotsMax(level), newCurrent);
 			}
 		} else {
 			// Use a slot (leftmost available pip)
-			const availablePips = $pips.not(".used");
+			const availablePips = pips.filter(p => !p.classList.contains("used"));
 			if (availablePips.length > 0) {
-				$(availablePips[0]).addClass("used");
+				availablePips[0].classList.add("used");
 				const newCurrent = this._state.getSpellSlotsCurrent(level) - 1;
 				this._state.setSpellSlots(level, this._state.getSpellSlotsMax(level), newCurrent);
 			}
@@ -236,7 +248,7 @@ class CharacterSheetSpells {
 
 	async _showSpellPicker () {
 		const classes = this._state.getClasses();
-		if (!classes.length) {
+		if (!classes) {
 			JqueryUtil.doToast({type: "warning", content: "Add a class to your character first."});
 			return;
 		}
@@ -350,23 +362,24 @@ class CharacterSheetSpells {
 
 		const knownSpellIds = this._state.getSpells().map(s => `${s.name}|${s.source}`);
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "✨ Add Spell",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
 		// Spell tracking status bar - shows cantrips and spells known/prepared
-		const $statusBar = $(`<div class="charsheet__modal-status-bar" style="display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 12px; background: rgba(var(--rgb-bg-text), 0.05); border-radius: 6px; margin-bottom: 12px; font-size: 0.85em;"></div>`).appendTo($modalInner);
+		const statusBar = e_({tag: "div", clazz: "charsheet__modal-status-bar", style: "display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 12px; background: rgba(var(--rgb-bg-text), 0.05); border-radius: 6px; margin-bottom: 12px; font-size: 0.85em;"});
+		modalInner.append(statusBar);
 
 		const updateStatusBar = () => {
 			const info = this._state.getSpellcastingInfo();
 			if (!info) {
-				$statusBar.hide();
+				statusBar.style.display = "none";
 				return;
 			}
 
-			$statusBar.empty();
+			statusBar.innerHTML = "";
 
 			// Cantrips
 			if (info.cantripsKnown) {
@@ -376,12 +389,12 @@ class CharacterSheetSpells {
 				const colorClass = count > limit ? "text-danger" : (count === limit ? "text-success" : "");
 				const icon = count > limit ? `<span class="glyphicon glyphicon-alert mr-1"></span>` : "⭐ ";
 
-				$statusBar.append(`
+				statusBar.append(e_({outer: `
 					<div style="display: flex; align-items: center; gap: 6px;">
 						<span style="color: #2dd4bf;">${icon}Cantrips:</span>
 						<span class="bold ${colorClass}">${count}/${limit}</span>
 					</div>
-				`);
+				`}));
 			}
 
 			// Leveled spells
@@ -393,20 +406,20 @@ class CharacterSheetSpells {
 
 			// For multiclass with per-class breakdown, show each class separately
 			if (info.isMulticlass && info.byClass?.length > 1) {
-				this._renderMulticlassStatusBar($statusBar, info, manualLeveledSpells, preparedSpells);
+				this._renderMulticlassStatusBar(statusBar, info, manualLeveledSpells, preparedSpells);
 			} else if (info.type === "known") {
 				const currentKnown = manualLeveledSpells.length;
 				const maxKnown = info.spellsKnownMax || info.max;
 				const colorClass = currentKnown > maxKnown ? "text-danger" : (currentKnown === maxKnown ? "text-success" : "");
 				const icon = currentKnown > maxKnown ? `<span class="glyphicon glyphicon-alert mr-1"></span>` : "📖 ";
 
-				$statusBar.append(`
+				statusBar.append(e_({outer: `
 					<div style="display: flex; align-items: center; gap: 6px;">
 						<span style="color: #60a5fa;">${icon}Spells Known:</span>
 						<span class="bold ${colorClass}">${currentKnown}/${maxKnown}</span>
 						<span class="ve-muted ve-small" title="Known spells are permanent choices. You can swap one spell when you level up.">(permanent)</span>
 					</div>
-				`);
+				`}));
 			} else if (info.type === "prepared") {
 				const currentPrepared = preparedSpells.length;
 				const maxPrepared = info.preparedMax || info.max;
@@ -414,16 +427,16 @@ class CharacterSheetSpells {
 				const icon = currentPrepared > maxPrepared ? `<span class="glyphicon glyphicon-alert mr-1"></span>` : (info.is2024 ? "✨ " : "📚 ");
 				const editionLabel = info.is2024 ? "2024" : "2014";
 
-				$statusBar.append(`
+				statusBar.append(e_({outer: `
 					<div style="display: flex; align-items: center; gap: 6px;">
 						<span style="color: ${info.is2024 ? "#fbbf24" : "#a78bfa"};">${icon}Prepared:</span>
 						<span class="bold ${colorClass}">${currentPrepared}/${maxPrepared}</span>
 						<span class="ve-muted ve-small" title="Prepared spells can be changed after a long rest.">(${editionLabel} rules)</span>
 					</div>
-				`);
+				`}));
 			}
 
-			$statusBar.show();
+			statusBar.style.display = "";
 		};
 		updateStatusBar();
 
@@ -456,34 +469,39 @@ class CharacterSheetSpells {
 		});
 
 		// Intro text
-		$modalInner.append(`
+		modalInner.append(e_({outer: `
 			<p class="ve-small ve-muted mb-3">
 				Browse and add spells to your character. Click a spell to view details, or click <strong>+ Add</strong> to add it directly.
 			</p>
-		`);
+		`}));
 
 		// Build enhanced filter UI - single row with source pushed to right
-		const $filterRow = $(`<div class="charsheet__modal-filter-row"></div>`).appendTo($modalInner);
+		const filterRow = e_({tag: "div", clazz: "charsheet__modal-filter-row"});
+		modalInner.append(filterRow);
 
 		// Helper function to position dropdown towards center of modal
-		const positionDropdown = ($dropdown, $btn) => {
-			const btnRect = $btn[0].getBoundingClientRect();
-			const modalRect = $modalInner[0].getBoundingClientRect();
+		const positionDropdown = (dropdown, btn) => {
+			const btnRect = btn.getBoundingClientRect();
+			const modalRect = modalInner.getBoundingClientRect();
 			const btnCenterX = btnRect.left + btnRect.width / 2;
 			const modalCenterX = modalRect.left + modalRect.width / 2;
 
 			// If button is to the left of center, open dropdown to the right
 			// If button is to the right of center, open dropdown to the left
 			if (btnCenterX < modalCenterX) {
-				$dropdown.addClass("open-right").removeClass("open-left");
+				dropdown.classList.add("open-right");
+				dropdown.classList.remove("open-left");
 			} else {
-				$dropdown.removeClass("open-right").addClass("open-left");
+				dropdown.classList.remove("open-right");
+				dropdown.classList.add("open-left");
 			}
 		};
 
 		// Search input with icon
-		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterRow);
-		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search spells by name...">`).appendTo($searchWrapper);
+		const searchWrapper = e_({tag: "div", clazz: "charsheet__modal-search"});
+		filterRow.append(searchWrapper);
+		const search = e_({tag: "input", attr: {type: "text", placeholder: "🔍 Search spells by name..."}, clazz: "form-control"});
+		searchWrapper.append(search);
 
 		// Get all unique classes and subclasses from spells for the filters
 		// Use Renderer.spell.getCombinedClasses to get properly merged class/subclass data
@@ -551,7 +569,7 @@ class CharacterSheetSpells {
 
 		// ===== CLASS FILTER =====
 		let selectedClasses = new Set(characterClassNames.length > 0 ? characterClassNames : []); // Default to character's classes
-		const $classDropdown = $(`
+		const classDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect charsheet__class-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">⚔️</span>
@@ -579,62 +597,63 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterRow);
+		`});
+		filterRow.append(classDropdown);
 
 		// Class dropdown behavior
-		const $classBtn = $classDropdown.find(".charsheet__source-multiselect-btn");
-		const $classDropdownMenu = $classDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $classText = $classDropdown.find(".charsheet__source-multiselect-text");
+		const classBtn = classDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const classDropdownMenu = classDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const classText = classDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$classBtn.on("click", (e) => {
+		classBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			positionDropdown($classDropdownMenu, $classBtn);
-			$classDropdownMenu.toggleClass("open");
+			positionDropdown(classDropdownMenu, classBtn);
+			classDropdownMenu.classList.toggle("open");
 			// Close other dropdowns
-			$levelDropdownMenu?.removeClass("open");
-			$schoolDropdownMenu?.removeClass("open");
-			$sourceDropdownMenu?.removeClass("open");
-			$subschoolDropdownMenu?.removeClass("open");
-			$subclassDropdownMenu?.removeClass("open");
+			levelDropdownMenu?.classList.remove("open");
+			schoolDropdownMenu?.classList.remove("open");
+			sourceDropdownMenu?.classList.remove("open");
+			subschoolDropdownMenu?.classList.remove("open");
+			subclassDropdownMenu?.classList.remove("open");
 		});
 
 		const updateClassText = () => {
-			const checked = $classDropdown.find("input:checked");
+			const checked = classDropdown.querySelectorAll("input:checked");
 			if (checked.length === 0) {
-				$classText.text("No Classes");
+				classText.textContent = "No Classes";
 				selectedClasses = new Set(["__NONE__"]);
 			} else if (checked.length === sortedClassNames.length) {
-				$classText.text("All Classes");
+				classText.textContent = "All Classes";
 				selectedClasses = new Set(); // Empty = all
 			} else if (checked.length <= 2) {
-				$classText.text(checked.map((_, el) => $(el).val()).get().join(", "));
-				selectedClasses = new Set(checked.map((_, el) => $(el).val()).get());
+				classText.textContent = Array.from(checked).map(el => el.value).join(", ");
+				selectedClasses = new Set(Array.from(checked).map(el => el.value));
 			} else {
-				$classText.text(`${checked.length} Classes`);
-				selectedClasses = new Set(checked.map((_, el) => $(el).val()).get());
+				classText.textContent = `${checked.length} Classes`;
+				selectedClasses = new Set(Array.from(checked).map(el => el.value));
 			}
 			renderList();
 		};
 
-		$classDropdown.find("input[type=checkbox]").on("change", updateClassText);
-		$classDropdown.find("[data-action=all]").on("click", () => {
-			$classDropdown.find("input").prop("checked", true);
+		classDropdown.querySelectorAll("input[type=checkbox]").forEach(el => el.addEventListener("change", updateClassText));
+		classDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			classDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 			updateClassText();
 		});
-		$classDropdown.find("[data-action=myclass]").on("click", () => {
-			$classDropdown.find("input").each((_, el) => {
-				const val = $(el).val();
+		classDropdown.querySelector("[data-action=myclass]").addEventListener("click", () => {
+			classDropdown.querySelectorAll("input").forEach(el => {
+				const val = el.value;
 				const isCharClass = characterClassNames.includes(val);
-				$(el).prop("checked", isCharClass);
+				el.checked = isCharClass;
 			});
 			updateClassText();
 		});
-		$classDropdown.find("[data-action=none]").on("click", () => {
-			$classDropdown.find("input").prop("checked", false);
+		classDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			classDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 			updateClassText();
 		});
 
-		$classDropdownMenu.on("click", (e) => e.stopPropagation());
+		classDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 
 		// ===== SUBCLASS FILTER (SEPARATE) =====
 		// Calculate which subclasses will be checked by default (same logic as the HTML)
@@ -648,7 +667,7 @@ class CharacterSheetSpells {
 		let selectedSubclasses = defaultCheckedSubclasses.length === sortedSubclassNames.length
 			? new Set()
 			: new Set(defaultCheckedSubclasses.length > 0 ? defaultCheckedSubclasses : ["__NONE__"]);
-		const $subclassDropdown = sortedSubclassNames.length > 0 ? $(`
+		const subclassDropdown = sortedSubclassNames.length > 0 ? e_({outer: `
 			<div class="charsheet__source-multiselect charsheet__subclass-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📚</span>
@@ -690,67 +709,68 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterRow) : null;
+		`}) : null;
+		if (subclassDropdown) filterRow.append(subclassDropdown);
 
 		// Subclass dropdown behavior
-		let $subclassDropdownMenu = null;
-		const $subclassText = $subclassDropdown?.find(".charsheet__source-multiselect-text");
+		let subclassDropdownMenu = null;
+		const subclassText = subclassDropdown?.querySelector(".charsheet__source-multiselect-text");
 
-		if ($subclassDropdown) {
-			const $subclassBtn = $subclassDropdown.find(".charsheet__source-multiselect-btn");
-			$subclassDropdownMenu = $subclassDropdown.find(".charsheet__source-multiselect-dropdown");
+		if (subclassDropdown) {
+			const subclassBtn = subclassDropdown.querySelector(".charsheet__source-multiselect-btn");
+			subclassDropdownMenu = subclassDropdown.querySelector(".charsheet__source-multiselect-dropdown");
 
-			$subclassBtn.on("click", (e) => {
+			subclassBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				positionDropdown($subclassDropdownMenu, $subclassBtn);
-				$subclassDropdownMenu.toggleClass("open");
+				positionDropdown(subclassDropdownMenu, subclassBtn);
+				subclassDropdownMenu.classList.toggle("open");
 				// Close other dropdowns
-				$classDropdownMenu.removeClass("open");
-				$levelDropdownMenu?.removeClass("open");
-				$schoolDropdownMenu?.removeClass("open");
-				$sourceDropdownMenu?.removeClass("open");
-				$subschoolDropdownMenu?.removeClass("open");
+				classDropdownMenu.classList.remove("open");
+				levelDropdownMenu?.classList.remove("open");
+				schoolDropdownMenu?.classList.remove("open");
+				sourceDropdownMenu?.classList.remove("open");
+				subschoolDropdownMenu?.classList.remove("open");
 			});
 
 			const updateSubclassText = () => {
-				const checked = $subclassDropdown.find("input:checked");
+				const checked = subclassDropdown.querySelectorAll("input:checked");
 				if (checked.length === 0) {
-					$subclassText.text("No Expanded Lists");
+					subclassText.textContent = "No Expanded Lists";
 					selectedSubclasses = new Set(["__NONE__"]);
 				} else if (checked.length === sortedSubclassNames.length) {
-					$subclassText.text("All Expanded Lists");
+					subclassText.textContent = "All Expanded Lists";
 					selectedSubclasses = new Set(); // Empty = all
 				} else if (checked.length === 1) {
-					const val = checked.first().val();
+					const val = checked[0]?.value;
 					const [, subName] = val.split(": ");
-					$subclassText.text(subName);
-					selectedSubclasses = new Set(checked.map((_, el) => $(el).val()).get());
+					subclassText.textContent = subName;
+					selectedSubclasses = new Set(Array.from(checked).map(el => el.value));
 				} else {
-					$subclassText.text(`${checked.length} Expanded Lists`);
-					selectedSubclasses = new Set(checked.map((_, el) => $(el).val()).get());
+					subclassText.textContent = `${checked.length} Expanded Lists`;
+					selectedSubclasses = new Set(Array.from(checked).map(el => el.value));
 				}
 				renderList();
 			};
 
-			$subclassDropdown.find("input[type=checkbox]").on("change", updateSubclassText);
-			$subclassDropdown.find("[data-action=all]").on("click", () => {
-				$subclassDropdown.find("input").prop("checked", true);
+			subclassDropdown.querySelectorAll("input[type=checkbox]").forEach(el => el.addEventListener("change", updateSubclassText));
+			subclassDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+				subclassDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 				updateSubclassText();
 			});
-			$subclassDropdown.find("[data-action=mysubclass]").on("click", () => {
-				$subclassDropdown.find("input").each((_, el) => {
-					const val = $(el).val();
+			subclassDropdown.querySelector("[data-action=mysubclass]").addEventListener("click", () => {
+				subclassDropdown.querySelectorAll("input").forEach(el => {
+					const val = el.value;
 					const isCharSubclass = characterSubclassNames.includes(val);
-					$(el).prop("checked", isCharSubclass);
+					el.checked = isCharSubclass;
 				});
 				updateSubclassText();
 			});
-			$subclassDropdown.find("[data-action=none]").on("click", () => {
-				$subclassDropdown.find("input").prop("checked", false);
+			subclassDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+				subclassDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 				updateSubclassText();
 			});
 
-			$subclassDropdownMenu.on("click", (e) => e.stopPropagation());
+			subclassDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 		}
 
 		// Multi-select level filter
@@ -768,7 +788,7 @@ class CharacterSheetSpells {
 			{value: "9", label: "9️⃣ Level 9"},
 		];
 
-		const $levelDropdown = $(`
+		const levelDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect charsheet__level-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📊</span>
@@ -791,55 +811,56 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterRow);
+		`});
+		filterRow.append(levelDropdown);
 
 		// Level dropdown behavior
-		const $levelBtn = $levelDropdown.find(".charsheet__source-multiselect-btn");
-		const $levelDropdownMenu = $levelDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $levelText = $levelDropdown.find(".charsheet__source-multiselect-text");
+		const levelBtn = levelDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const levelDropdownMenu = levelDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const levelText = levelDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$levelBtn.on("click", (e) => {
+		levelBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			positionDropdown($levelDropdownMenu, $levelBtn);
-			$levelDropdownMenu.toggleClass("open");
+			positionDropdown(levelDropdownMenu, levelBtn);
+			levelDropdownMenu.classList.toggle("open");
 			// Close other dropdowns
-			$classDropdownMenu.removeClass("open");
-			$schoolDropdownMenu.removeClass("open");
-			$sourceDropdownMenu.removeClass("open");
+			classDropdownMenu.classList.remove("open");
+			schoolDropdownMenu.classList.remove("open");
+			sourceDropdownMenu.classList.remove("open");
 		});
 
 		const updateLevelText = () => {
-			const checked = $levelDropdown.find("input:checked");
+			const checked = levelDropdown.querySelectorAll("input:checked");
 			if (checked.length === 0) {
-				$levelText.text("No Levels");
+				levelText.textContent = "No Levels";
 				selectedLevels = new Set(["__NONE__"]);
 			} else if (checked.length === levelOptions.length) {
-				$levelText.text("All Levels");
+				levelText.textContent = "All Levels";
 				selectedLevels = new Set();
 			} else if (checked.length === 1) {
-				const val = checked.first().val();
-				$levelText.text(val === "0" ? "Cantrips" : `Level ${val}`);
-				selectedLevels = new Set(checked.map((_, el) => $(el).val()).get());
+				const val = checked[0]?.value;
+				levelText.textContent = val === "0" ? "Cantrips" : `Level ${val}`;
+				selectedLevels = new Set(Array.from(checked).map(el => el.value));
 			} else {
-				$levelText.text(`${checked.length} Levels`);
-				selectedLevels = new Set(checked.map((_, el) => $(el).val()).get());
+				levelText.textContent = `${checked.length} Levels`;
+				selectedLevels = new Set(Array.from(checked).map(el => el.value));
 			}
 			renderList();
 		};
 
-		$levelDropdown.find("input[type=checkbox]").on("change", updateLevelText);
-		$levelDropdown.find("[data-action=all]").on("click", () => {
-			$levelDropdown.find("input").prop("checked", true);
+		levelDropdown.querySelectorAll("input[type=checkbox]").forEach(el => el.addEventListener("change", updateLevelText));
+		levelDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			levelDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 			updateLevelText();
 		});
-		$levelDropdown.find("[data-action=none]").on("click", () => {
-			$levelDropdown.find("input").prop("checked", false);
+		levelDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			levelDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 			updateLevelText();
 		});
 
 		// Multi-select school filter
 		let selectedSchools = new Set(); // Empty = all schools
-		const $schoolDropdown = $(`
+		const schoolDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect charsheet__school-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">🎓</span>
@@ -862,48 +883,49 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterRow);
+		`});
+		filterRow.append(schoolDropdown);
 
 		// School dropdown behavior
-		const $schoolBtn = $schoolDropdown.find(".charsheet__source-multiselect-btn");
-		const $schoolDropdownMenu = $schoolDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $schoolText = $schoolDropdown.find(".charsheet__source-multiselect-text");
+		const schoolBtn = schoolDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const schoolDropdownMenu = schoolDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const schoolText = schoolDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$schoolBtn.on("click", (e) => {
+		schoolBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			positionDropdown($schoolDropdownMenu, $schoolBtn);
-			$schoolDropdownMenu.toggleClass("open");
+			positionDropdown(schoolDropdownMenu, schoolBtn);
+			schoolDropdownMenu.classList.toggle("open");
 			// Close other dropdowns
-			$classDropdownMenu.removeClass("open");
-			$levelDropdownMenu.removeClass("open");
-			$sourceDropdownMenu.removeClass("open");
+			classDropdownMenu.classList.remove("open");
+			levelDropdownMenu.classList.remove("open");
+			sourceDropdownMenu.classList.remove("open");
 		});
 
 		const updateSchoolText = () => {
-			const checked = $schoolDropdown.find("input:checked");
+			const checked = schoolDropdown.querySelectorAll("input:checked");
 			if (checked.length === 0) {
-				$schoolText.text("No Schools");
+				schoolText.textContent = "No Schools";
 				selectedSchools = new Set(["__NONE__"]);
 			} else if (checked.length === schools.length) {
-				$schoolText.text("All Schools");
+				schoolText.textContent = "All Schools";
 				selectedSchools = new Set();
 			} else if (checked.length === 1) {
-				$schoolText.text(Parser.spSchoolAbvToFull(checked.first().val()));
-				selectedSchools = new Set(checked.map((_, el) => $(el).val()).get());
+				schoolText.textContent = Parser.spSchoolAbvToFull(checked[0]?.value);
+				selectedSchools = new Set(Array.from(checked).map(el => el.value));
 			} else {
-				$schoolText.text(`${checked.length} Schools`);
-				selectedSchools = new Set(checked.map((_, el) => $(el).val()).get());
+				schoolText.textContent = `${checked.length} Schools`;
+				selectedSchools = new Set(Array.from(checked).map(el => el.value));
 			}
 			renderList();
 		};
 
-		$schoolDropdown.find("input[type=checkbox]").on("change", updateSchoolText);
-		$schoolDropdown.find("[data-action=all]").on("click", () => {
-			$schoolDropdown.find("input").prop("checked", true);
+		schoolDropdown.querySelectorAll("input[type=checkbox]").forEach(el => el.addEventListener("change", updateSchoolText));
+		schoolDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			schoolDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 			updateSchoolText();
 		});
-		$schoolDropdown.find("[data-action=none]").on("click", () => {
-			$schoolDropdown.find("input").prop("checked", false);
+		schoolDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			schoolDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 			updateSchoolText();
 		});
 
@@ -912,8 +934,8 @@ class CharacterSheetSpells {
 
 		// Multi-select subschool filter (only show if there are subschools)
 		let selectedSubschools = new Set(); // Empty = all (no filter)
-		let $subschoolDropdown = null;
-		let $subschoolDropdownMenu = null;
+		let subschoolDropdown = null;
+		let subschoolDropdownMenu = null;
 
 		if (allSubschools.length > 0) {
 			// Parse subschool into display name
@@ -926,7 +948,7 @@ class CharacterSheetSpells {
 				return sub.toTitleCase();
 			};
 
-			$subschoolDropdown = $(`
+			subschoolDropdown = e_({outer: `
 				<div class="charsheet__source-multiselect charsheet__subschool-multiselect">
 					<button class="charsheet__source-multiselect-btn">
 						<span class="charsheet__source-multiselect-icon">🏷️</span>
@@ -949,57 +971,58 @@ class CharacterSheetSpells {
 						</div>
 					</div>
 				</div>
-			`).appendTo($filterRow);
+			`});
+			filterRow.append(subschoolDropdown);
 
-			$subschoolDropdownMenu = $subschoolDropdown.find(".charsheet__source-multiselect-dropdown");
-			const $subschoolBtn = $subschoolDropdown.find(".charsheet__source-multiselect-btn");
-			const $subschoolText = $subschoolDropdown.find(".charsheet__source-multiselect-text");
+			subschoolDropdownMenu = subschoolDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+			const subschoolBtn = subschoolDropdown.querySelector(".charsheet__source-multiselect-btn");
+			const subschoolText = subschoolDropdown.querySelector(".charsheet__source-multiselect-text");
 
-			$subschoolBtn.on("click", (e) => {
+			subschoolBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				positionDropdown($subschoolDropdownMenu, $subschoolBtn);
-				$subschoolDropdownMenu.toggleClass("open");
+				positionDropdown(subschoolDropdownMenu, subschoolBtn);
+				subschoolDropdownMenu.classList.toggle("open");
 				// Close other dropdowns
-				$classDropdownMenu.removeClass("open");
-				$levelDropdownMenu.removeClass("open");
-				$schoolDropdownMenu.removeClass("open");
-				$sourceDropdownMenu.removeClass("open");
+				classDropdownMenu.classList.remove("open");
+				levelDropdownMenu.classList.remove("open");
+				schoolDropdownMenu.classList.remove("open");
+				sourceDropdownMenu.classList.remove("open");
 			});
 
 			const updateSubschoolText = () => {
-				const checked = $subschoolDropdown.find("input:checked");
+				const checked = subschoolDropdown.querySelectorAll("input:checked");
 				if (checked.length === 0) {
-					$subschoolText.text("No Tags");
+					subschoolText.textContent = "No Tags";
 					selectedSubschools = new Set(["__NONE__"]);
 				} else if (checked.length === allSubschools.length) {
-					$subschoolText.text("All Tags");
+					subschoolText.textContent = "All Tags";
 					selectedSubschools = new Set();
 				} else if (checked.length === 1) {
-					$subschoolText.text(formatSubschool(checked.first().val()));
-					selectedSubschools = new Set(checked.map((_, el) => $(el).val()).get());
+					subschoolText.textContent = formatSubschool(checked[0]?.value);
+					selectedSubschools = new Set(Array.from(checked).map(el => el.value));
 				} else {
-					$subschoolText.text(`${checked.length} Tags`);
-					selectedSubschools = new Set(checked.map((_, el) => $(el).val()).get());
+					subschoolText.textContent = `${checked.length} Tags`;
+					selectedSubschools = new Set(Array.from(checked).map(el => el.value));
 				}
 				renderList();
 			};
 
-			$subschoolDropdown.find("input[type=checkbox]").on("change", updateSubschoolText);
-			$subschoolDropdown.find("[data-action=all]").on("click", () => {
-				$subschoolDropdown.find("input").prop("checked", true);
+			subschoolDropdown.querySelectorAll("input[type=checkbox]").forEach(el => el.addEventListener("change", updateSubschoolText));
+			subschoolDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+				subschoolDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 				updateSubschoolText();
 			});
-			$subschoolDropdown.find("[data-action=none]").on("click", () => {
-				$subschoolDropdown.find("input").prop("checked", false);
+			subschoolDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+				subschoolDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 				updateSubschoolText();
 			});
 
-			$subschoolDropdownMenu.on("click", (e) => e.stopPropagation());
+			subschoolDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 		}
 
 		// Multi-select source filter (positioned on the right)
 		let selectedSources = new Set(); // Empty = all sources
-		const $sourceDropdown = $(`
+		const sourceDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect charsheet__source-multiselect--right">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📖</span>
@@ -1024,77 +1047,79 @@ class CharacterSheetSpells {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterRow);
+		`});
+		filterRow.append(sourceDropdown);
 
 		// Source dropdown toggle behavior
-		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
-		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
+		const sourceBtn = sourceDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const sourceDropdownMenu = sourceDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const sourceText = sourceDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$sourceBtn.on("click", (e) => {
+		sourceBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			positionDropdown($sourceDropdownMenu, $sourceBtn);
-			$sourceDropdownMenu.toggleClass("open");
+			positionDropdown(sourceDropdownMenu, sourceBtn);
+			sourceDropdownMenu.classList.toggle("open");
 			// Close other dropdowns
-			$classDropdownMenu.removeClass("open");
-			$levelDropdownMenu.removeClass("open");
-			$schoolDropdownMenu.removeClass("open");
-			$subschoolDropdownMenu?.removeClass("open");
+			classDropdownMenu.classList.remove("open");
+			levelDropdownMenu.classList.remove("open");
+			schoolDropdownMenu.classList.remove("open");
+			subschoolDropdownMenu?.classList.remove("open");
 		});
 
 		// Close all dropdowns when clicking outside
-		$(document).on("click.spellSourceFilter", () => {
-			$classDropdownMenu.removeClass("open");
-			$sourceDropdownMenu.removeClass("open");
-			$levelDropdownMenu.removeClass("open");
-			$schoolDropdownMenu.removeClass("open");
-			$subschoolDropdownMenu?.removeClass("open");
+		document.addEventListener("click", () => {
+			classDropdownMenu.classList.remove("open");
+			sourceDropdownMenu.classList.remove("open");
+			levelDropdownMenu.classList.remove("open");
+			schoolDropdownMenu.classList.remove("open");
+			subschoolDropdownMenu?.classList.remove("open");
 		});
-		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
-		$levelDropdownMenu.on("click", (e) => e.stopPropagation());
-		$schoolDropdownMenu.on("click", (e) => e.stopPropagation());
+		sourceDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
+		levelDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
+		schoolDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 
 		// Update source text based on selection
 		const updateSourceText = () => {
-			const checked = $sourceDropdown.find("input:checked");
+			const checked = sourceDropdown.querySelectorAll("input:checked");
 			if (checked.length === 0) {
-				$sourceText.text("No Sources");
+				sourceText.textContent = "No Sources";
 				selectedSources = new Set(["__NONE__"]); // Special marker
 			} else if (checked.length === uniqueSources.length) {
-				$sourceText.text("All Sources");
+				sourceText.textContent = "All Sources";
 				selectedSources = new Set(); // Empty = all
 			} else if (checked.length <= 2) {
-				$sourceText.text(checked.map((_, el) => Parser.sourceJsonToAbv($(el).val())).get().join(", "));
-				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+				sourceText.textContent = Array.from(checked).map(el => Parser.sourceJsonToAbv(el.value)).join(", ");
+				selectedSources = new Set(Array.from(checked).map(el => el.value));
 			} else {
-				$sourceText.text(`${checked.length} Sources`);
-				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+				sourceText.textContent = `${checked.length} Sources`;
+				selectedSources = new Set(Array.from(checked).map(el => el.value));
 			}
 			renderList();
 		};
 
 		// Checkbox change handler
-		$sourceDropdown.find("input[type=checkbox]").on("change", updateSourceText);
+		sourceDropdown.querySelectorAll("input[type=checkbox]").forEach(el => el.addEventListener("change", updateSourceText));
 
 		// Action buttons
-		$sourceDropdown.find("[data-action=all]").on("click", () => {
-			$sourceDropdown.find("input").prop("checked", true);
+		sourceDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			sourceDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 			updateSourceText();
 		});
-		$sourceDropdown.find("[data-action=none]").on("click", () => {
-			$sourceDropdown.find("input").prop("checked", false);
+		sourceDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			sourceDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 			updateSourceText();
 		});
-		$sourceDropdown.find("[data-action=official]").on("click", () => {
+		sourceDropdown.querySelector("[data-action=official]").addEventListener("click", () => {
 			const official = ["PHB", "XGE", "TCE", "FTD", "XPHB", "XDMG"];
-			$sourceDropdown.find("input").each((_, el) => {
-				$(el).prop("checked", official.includes($(el).val()));
+			sourceDropdown.querySelectorAll("input").forEach(el => {
+				el.checked = official.includes(el.value);
 			});
 			updateSourceText();
 		});
 
 		// Quick filter buttons row
-		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
+		const quickFilters = e_({outer: `<div class="charsheet__modal-quick-filters"></div>`});
+		modalInner.append(quickFilters);
 
 		let filterRitual = false;
 		let filterConcentration = false;
@@ -1102,44 +1127,52 @@ class CharacterSheetSpells {
 		let filterSomatic = false;
 		let filterMaterial = false;
 
-		const $ritualBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">🔮 Ritual</span>`).appendTo($quickFilters);
-		const $concBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">⏳ Concentration</span>`).appendTo($quickFilters);
-		const $verbalBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">🗣️ Verbal</span>`).appendTo($quickFilters);
-		const $somaticBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">✋ Somatic</span>`).appendTo($quickFilters);
-		const $materialBtn = $(`<span class="charsheet__modal-filter-btn" role="button" tabindex="0">💎 Material</span>`).appendTo($quickFilters);
+		const ritualBtn = e_({outer: `<span class="charsheet__modal-filter-btn" role="button" tabindex="0">🔮 Ritual</span>`});
+
+		quickFilters.append(ritualBtn);
+		const concBtn = e_({outer: `<span class="charsheet__modal-filter-btn" role="button" tabindex="0">⏳ Concentration</span>`});
+		quickFilters.append(concBtn);
+		const verbalBtn = e_({outer: `<span class="charsheet__modal-filter-btn" role="button" tabindex="0">🗣️ Verbal</span>`});
+		quickFilters.append(verbalBtn);
+		const somaticBtn = e_({outer: `<span class="charsheet__modal-filter-btn" role="button" tabindex="0">✋ Somatic</span>`});
+		quickFilters.append(somaticBtn);
+		const materialBtn = e_({outer: `<span class="charsheet__modal-filter-btn" role="button" tabindex="0">💎 Material</span>`});
+		quickFilters.append(materialBtn);
 
 		// Set up click handlers immediately after creation
-		$ritualBtn.on("click", function () {
+		ritualBtn.addEventListener("click", function () {
 			filterRitual = !filterRitual;
-			$(this).toggleClass("active");
+			this.classList.toggle("active");
 			renderList();
 		});
-		$concBtn.on("click", function () {
+		concBtn.addEventListener("click", function () {
 			filterConcentration = !filterConcentration;
-			$(this).toggleClass("active");
+			this.classList.toggle("active");
 			renderList();
 		});
-		$verbalBtn.on("click", function () {
+		verbalBtn.addEventListener("click", function () {
 			filterVerbal = !filterVerbal;
-			$(this).toggleClass("active");
+			this.classList.toggle("active");
 			renderList();
 		});
-		$somaticBtn.on("click", function () {
+		somaticBtn.addEventListener("click", function () {
 			filterSomatic = !filterSomatic;
-			$(this).toggleClass("active");
+			this.classList.toggle("active");
 			renderList();
 		});
-		$materialBtn.on("click", function () {
+		materialBtn.addEventListener("click", function () {
 			filterMaterial = !filterMaterial;
-			$(this).toggleClass("active");
+			this.classList.toggle("active");
 			renderList();
 		});
 
 		// Results count
-		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);
+		const resultsCount = e_({outer: `<div class="charsheet__modal-results-count"></div>`});
+		modalInner.append(resultsCount);
 
 		// Spell list
-		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
+		const list = e_({outer: `<div class="charsheet__modal-list"></div>`});
+		modalInner.append(list);
 
 		// Cache getCombinedClasses results per spell to avoid expensive recalculation on every filter
 		const _classListCache = new Map();
@@ -1162,9 +1195,9 @@ class CharacterSheetSpells {
 		};
 
 		const renderList = () => {
-			$list.empty();
+			list.innerHTML = "";
 
-			const searchTerm = $search.val().toLowerCase();
+			const searchTerm = search.value.toLowerCase();
 
 			const filtered = spells.filter(spell => {
 				if (searchTerm && !spell.name.toLowerCase().includes(searchTerm)) return false;
@@ -1212,15 +1245,15 @@ class CharacterSheetSpells {
 			});
 
 			const knownCount = filtered.filter(s => knownSpellIds.includes(`${s.name}|${s.source}`)).length;
-			$resultsCount.html(`<span>${filtered.length} spell${filtered.length !== 1 ? "s" : ""} found</span>${knownCount > 0 ? `<span class="ml-2" style="color: var(--cs-success);">(${knownCount} already known)</span>` : ""}`);
+			resultsCount.innerHTML = `<span>${filtered.length} spell${filtered.length !== 1 ? "s" : ""} found</span>${knownCount > 0 ? `<span class="ml-2" style="color: var(--cs-success);">(${knownCount} already known)</span>` : ""}`;
 
-			if (!filtered.length) {
-				$list.html(`
+			if (!filtered) {
+				list.innerHTML = `
 					<div class="charsheet__modal-empty">
 						<div class="charsheet__modal-empty-icon">📖</div>
 						<div class="charsheet__modal-empty-text">No spells match your filters.<br>Try adjusting your search or filters.</div>
 					</div>
-				`);
+				`;
 				return;
 			}
 
@@ -1237,9 +1270,10 @@ class CharacterSheetSpells {
 				if (b[0] === "Cantrips") return 1;
 				return parseInt(a[0].split(" ")[1]) - parseInt(b[0].split(" ")[1]);
 			}).forEach(([level, levelSpells]) => {
-				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
+				const section = e_({outer: `<div class="charsheet__modal-section"></div>`});
+				list.append(section);
 				const levelEmoji = level === "Cantrips" ? "⭐" : ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"][parseInt(level.split(" ")[1]) - 1] || "📜";
-				$(`<div class="charsheet__modal-section-title">${levelEmoji} ${level} <span style="opacity: 0.6;">(${levelSpells.length})</span></div>`).appendTo($section);
+				section.append(e_({outer: `<div class="charsheet__modal-section-title">${levelEmoji} ${level} <span style="opacity: 0.6;">(${levelSpells.length})</span></div>`}));
 
 				levelSpells.forEach(spell => {
 					const spellId = `${spell.name}|${spell.source}`;
@@ -1272,7 +1306,7 @@ class CharacterSheetSpells {
 						subschoolStr = ` • 🏷️ ${spell.subschools.map(formatSubschool).join(", ")}`;
 					}
 
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""}">
 							<div class="charsheet__modal-list-item-icon">${this._getSchoolEmoji(spell.school)}</div>
 							<div class="charsheet__modal-list-item-content">
@@ -1284,41 +1318,41 @@ class CharacterSheetSpells {
 		: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-picker-add">+ Add</button>`
 }
 						</div>
-					`);
+					`});
 
 					if (!isKnown) {
-						$item.find(".spell-picker-add").on("click", (e) => {
+						item.querySelector(".spell-picker-add").addEventListener("click", (e) => {
 							e.stopPropagation();
 							this._addSpell(spell);
 							knownSpellIds.push(spellId);
-							$item.addClass("ve-muted");
-							$item.find(".spell-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`);
+							item.classList.add("ve-muted");
+							{ const _btn = item.querySelector(".spell-picker-add"); const _badge = e_({outer: `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`}); _btn.replaceWith(_badge); }
 							JqueryUtil.doToast({type: "success", content: `Added ${spell.name} to your spellbook!`});
 							updateStatusBar();
 						});
 
 						// Click row to show info
-						$item.on("click", () => this._showSpellInfoFromData(spell));
+						item.addEventListener("click", () => this._showSpellInfoFromData(spell));
 					}
 
-					$section.append($item);
+					section.append(item);
 				});
 			});
 		};
 
-		$search.on("input", renderList);
+		search.addEventListener("input", renderList);
 		// Level, school, and source filters are handled by checkbox change events above
 
 		// Initial render
 		renderList();
 
 		// Focus search on open
-		setTimeout(() => $search.focus(), 100);
+		setTimeout(() => search.focus(), 100);
 
 		// Close button
-		$$`<div class="charsheet__modal-footer">
+		{ const _cl = ee`<div class="charsheet__modal-footer">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`; modalInner.append(_cl); _cl.querySelector("button").addEventListener("click", () => doClose(false)); }
 	}
 
 	_getSchoolEmoji (school) {
@@ -1336,7 +1370,7 @@ class CharacterSheetSpells {
 	}
 
 	async _showSpellInfoFromData (spell) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: spell.name,
 			isMinHeight0: true,
 			zIndex: 10002, // Above Quick Build overlay (9999) and toasts (10001)
@@ -1354,7 +1388,7 @@ class CharacterSheetSpells {
 			components.push(`M (${mStr})`);
 		}
 
-		const $content = $(`
+		const content = e_({outer: `
 			<div class="charsheet__spell-info-modal">
 				<div class="ve-flex gap-2 mb-2">
 					<span class="charsheet__modal-list-item-badge">${level}</span>
@@ -1369,17 +1403,18 @@ class CharacterSheetSpells {
 					<div><strong>Duration:</strong> ${this._getDuration(spell)}</div>
 				</div>
 				<hr>
-				<div class="rd__b">${Renderer.get().render({entries: spell.entries || []})}</div>
+				<div class="rd__b">${Renderer.render({entries: spell.entries || []})}</div>
 				${spell.entriesHigherLevel ? `
 					<hr>
-					<div class="rd__b"><strong>At Higher Levels.</strong> ${Renderer.get().render({entries: spell.entriesHigherLevel})}</div>
+					<div class="rd__b"><strong>At Higher Levels.</strong> ${Renderer.render({entries: spell.entriesHigherLevel})}</div>
 				` : ""}
 			</div>
-		`).appendTo($modalInner);
+		`});
+		modalInner.append(content);
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		{ const _cl = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`; modalInner.append(_cl); _cl.querySelector("button").addEventListener("click", () => doClose(false)); }
 	}
 
 	/**
@@ -2172,7 +2207,7 @@ class CharacterSheetSpells {
 
 		JqueryUtil.doToast({
 			type: "success",
-			content: $(`<div>${toastContent}</div>`),
+			content: toastContent,
 		});
 
 		// Update UI to show new active states
@@ -2235,27 +2270,28 @@ class CharacterSheetSpells {
 		const table = CharacterSheetState.GAMBLER_GAMBLING_TABLE;
 		if (!table || !table.length) return;
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🎰 Gambling Table",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
 		// Roll button and result display
-		const $rollSection = $(`
+		const rollSection = e_({outer: `
 			<div class="flex-v-center mb-3" style="gap: 12px;">
 				<button class="btn btn-primary btn-gambler-modal-roll">🎲 Roll d100</button>
 				<div class="gambler-roll-result" style="font-size: 1.1em;"></div>
 			</div>
-		`).appendTo($modalInner);
+		`});
+		modalInner.append(rollSection);
 
-		const $resultDisplay = $rollSection.find(".gambler-roll-result");
+		const resultDisplay = rollSection.querySelector(".gambler-roll-result");
 
 		// Check for Master of Fortune (roll twice, choose result)
 		const calcs = this._state.getFeatureCalculations?.();
 		const hasMasterOfFortune = calcs?.hasMasterOfFortune;
 
-		$rollSection.find(".btn-gambler-modal-roll").on("click", () => {
+		rollSection.querySelector(".btn-gambler-modal-roll").addEventListener("click", () => {
 			const result = this._state.rollGamblingTable();
 			if (result) {
 				let resultHtml = `<b>d100:</b> ${result.roll}`;
@@ -2264,31 +2300,32 @@ class CharacterSheetSpells {
 					resultHtml += `<br><span class="text-info">Master of Fortune: Choose which result to use</span>`;
 				}
 				resultHtml += `<br><span class="text-warning">${result.effect}</span>`;
-				$resultDisplay.html(resultHtml);
+				resultDisplay.innerHTML = resultHtml;
 
 				// Highlight the result row in the table
-				$tableBody.find("tr").removeClass("table-warning");
-				$tableBody.find(`tr[data-roll="${result.roll}"]`).addClass("table-warning");
+				tableBody.querySelectorAll("tr.table-warning").forEach(el => el.classList.remove("table-warning"));
+				tableBody.querySelector(`tr[data-roll="${result.roll}"]`)?.classList.add("table-warning");
 			}
 		});
 
 		// Last roll display
 		const lastRoll = this._state.getGamblerLastTableRoll?.();
 		if (lastRoll) {
-			$resultDisplay.html(`<span class="text-muted">Last roll: ${lastRoll.roll} — ${lastRoll.effect}</span>`);
+			resultDisplay.innerHTML = `<span class="text-muted">Last roll: ${lastRoll.roll} — ${lastRoll.effect}</span>`;
 		}
 
 		// Search filter
-		const $searchRow = $(`
+		const searchRow = e_({outer: `
 			<div class="mb-2">
 				<input type="text" class="form-control form-control-sm" placeholder="Filter table..." style="max-width: 300px;">
 			</div>
-		`).appendTo($modalInner);
+		`});
+		modalInner.append(searchRow);
 
-		const $searchInput = $searchRow.find("input");
+		const searchInput = searchRow.querySelector("input");
 
 		// Table
-		const $tableContainer = $(`
+		const tableContainer = e_({outer: `
 			<div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--rgb-border-grey); border-radius: 4px;">
 				<table class="table table-striped table-hover table-sm mb-0" style="font-size: 0.85em;">
 					<thead style="position: sticky; top: 0; background: var(--rgb-bg); z-index: 1;">
@@ -2300,42 +2337,44 @@ class CharacterSheetSpells {
 					<tbody></tbody>
 				</table>
 			</div>
-		`).appendTo($modalInner);
+		`});
+		modalInner.append(tableContainer);
 
-		const $tableBody = $tableContainer.find("tbody");
+		const tableBody = tableContainer.querySelector("tbody");
 
 		// Render all 100 rows
 		const renderTable = (filter = "") => {
-			$tableBody.empty();
+			tableBody.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 			table.forEach((effect, idx) => {
 				const roll = idx + 1;
 				if (filter && !effect.toLowerCase().includes(filterLower) && !String(roll).includes(filter)) {
 					return;
 				}
-				const $row = $(`<tr data-roll="${roll}"><td class="text-center"><b>${roll}</b></td><td>${effect}</td></tr>`);
-				$tableBody.append($row);
+				const row = e_({outer: `<tr data-roll="${roll}"><td class="text-center"><b>${roll}</b></td><td>${effect}</td></tr>`});
+				tableBody.append(row);
 			});
 		};
 
 		renderTable();
 
-		$searchInput.on("input", (e) => {
+		searchInput.addEventListener("input", (e) => {
 			renderTable(e.target.value);
 		});
 
 		// Auto-roll setting toggle
 		const autoRollEnabled = this._state.getGamblerAutoRollTable?.();
-		const $settingRow = $(`
+		const settingRow = e_({outer: `
 			<div class="mt-3 text-muted" style="font-size: 0.85em;">
 				<label class="flex-v-center" style="gap: 6px; cursor: pointer;">
 					<input type="checkbox" ${autoRollEnabled ? "checked" : ""}>
 					<span>Auto-roll d100 when bet is lost</span>
 				</label>
 			</div>
-		`).appendTo($modalInner);
+		`});
+		modalInner.append(settingRow);
 
-		$settingRow.find("input").on("change", (e) => {
+		settingRow.querySelector("input").addEventListener("change", (e) => {
 			this._state.setGamblerAutoRollTable?.(e.target.checked);
 		});
 	}
@@ -2625,7 +2664,7 @@ class CharacterSheetSpells {
 			return a.name.localeCompare(b.name);
 		});
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `✨ ${spell.name} - Choose Creature`,
 			isMinHeight0: true,
 			isWidth100: true,
@@ -2634,7 +2673,7 @@ class CharacterSheetSpells {
 		const typeLabel = types.join("/");
 		const crLabel = maxCR === 0.25 ? "¼" : maxCR === 0.5 ? "½" : maxCR;
 
-		$modalInner.append(`
+		modalInner.append(`
 			<div class="charsheet__conjure-picker-header mb-3" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1)); border-radius: 8px; padding: 12px;">
 				<div class="ve-flex ve-flex-v-center" style="gap: 10px;">
 					<span style="font-size: 2em;">✨</span>
@@ -2647,21 +2686,24 @@ class CharacterSheetSpells {
 		`);
 
 		// Search filter
-		const $searchContainer = $(`<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`).appendTo($modalInner);
-		$searchContainer.append(`<span style="font-size: 1.2em;">🔍</span>`);
-		const $search = $(`<input type="text" class="form-control" placeholder="Search creatures..." style="flex: 1;">`).appendTo($searchContainer);
+		const searchContainer = e_({outer: `<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`});
+		modalInner.append(searchContainer);
+		searchContainer.insertAdjacentHTML("beforeend", `<span style="font-size: 1.2em;">🔍</span>`);
+		const search = e_({outer: `<input type="text" class="form-control" placeholder="Search creatures..." style="flex: 1;">`});
+		searchContainer.append(search);
 
 		// Creatures grid
-		const $list = $(`<div class="charsheet__conjure-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; max-height: 450px; overflow-y: auto; padding: 4px;"></div>`).appendTo($modalInner);
+		const list = e_({outer: `<div class="charsheet__conjure-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; max-height: 450px; overflow-y: auto; padding: 4px;"></div>`});
+		modalInner.append(list);
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 			const filteredCreatures = validCreatures.filter(c =>
 				c.name.toLowerCase().includes(filter.toLowerCase()),
 			);
 
 			if (filteredCreatures.length === 0) {
-				$list.append(`<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No creatures match your search</div>`);
+				list.insertAdjacentHTML("beforeend", `<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No creatures match your search</div>`);
 				return;
 			}
 
@@ -2685,7 +2727,7 @@ class CharacterSheetSpells {
 					nameDisplay = `<span class="charsheet__conjure-name">${creature.name}</span>`;
 				}
 
-				const $card = $(`
+				const card = e_({outer: `
 					<div class="charsheet__conjure-card" style="
 						border: 2px solid var(--rgb-border-grey-muted);
 						border-radius: 10px;
@@ -2724,25 +2766,28 @@ class CharacterSheetSpells {
 							transition: opacity 0.2s;
 						">Summon</button>
 					</div>
-				`).appendTo($list);
+				`});
+
+				list.append(card);
 
 				// Hover effects
-				$card.on("mouseenter", function () {
-					$(this).css({
-						"border-color": "var(--rgb-link)",
-						"background": "rgba(var(--rgb-link-rgb), 0.08)",
-						"transform": "translateY(-2px)",
-						"box-shadow": "0 4px 12px rgba(0, 0, 0, 0.15)",
+				card.addEventListener("mouseenter", function () {
+					Object.assign(this.style, {
+						borderColor: "var(--rgb-link)",
+						background: "rgba(var(--rgb-link-rgb), 0.08)",
+						transform: "translateY(-2px)",
+						boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
 					});
-					$(this).find(".btn-select-conjure").css("opacity", "1");
-				}).on("mouseleave", function () {
-					$(this).css({
-						"border-color": "var(--rgb-border-grey-muted)",
-						"background": "rgba(var(--rgb-bg-text), 0.02)",
-						"transform": "translateY(0)",
-						"box-shadow": "none",
+					this.querySelector(".btn-select-conjure").style.opacity = "1";
+				});
+				card.addEventListener("mouseleave", function () {
+					Object.assign(this.style, {
+						borderColor: "var(--rgb-border-grey-muted)",
+						background: "rgba(var(--rgb-bg-text), 0.02)",
+						transform: "translateY(0)",
+						boxShadow: "none",
 					});
-					$(this).find(".btn-select-conjure").css("opacity", "0");
+					this.querySelector(".btn-select-conjure").style.opacity = "0";
 				});
 
 				const selectCreature = async () => {
@@ -2750,19 +2795,19 @@ class CharacterSheetSpells {
 					doClose();
 				};
 
-				$card.find(".btn-select-conjure").on("click", async (evt) => {
+				card.querySelector(".btn-select-conjure").addEventListener("click", async (evt) => {
 					evt.stopPropagation();
 					await selectCreature();
 				});
 
-				$card.on("click", async (evt) => {
-					if ($(evt.target).closest("a").length) return;
+				card.addEventListener("click", async (evt) => {
+					if (evt.target.closest("a").length) return;
 					await selectCreature();
 				});
 			});
 		};
 
-		$search.on("input", () => renderList($search.val()));
+		search.addEventListener("input", () => renderList(search.value));
 		renderList();
 	}
 
@@ -2917,13 +2962,13 @@ class CharacterSheetSpells {
 			? "Select a form for your Fey familiar. Cost: 1 Wild Shape use or spell slot."
 			: "Select a beast to serve you. Your familiar appears within 10 feet.";
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: modalTitle,
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
-		$modalInner.append(`
+		modalInner.append(`
 			<div class="charsheet__familiar-picker-header mb-3" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1)); border-radius: 8px; padding: 12px;">
 				<div class="ve-flex ve-flex-v-center" style="gap: 10px;">
 					<span style="font-size: 2em;">${headerEmoji}</span>
@@ -2936,21 +2981,24 @@ class CharacterSheetSpells {
 		`);
 
 		// Search filter with icon
-		const $searchContainer = $(`<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`).appendTo($modalInner);
-		$searchContainer.append(`<span style="font-size: 1.2em;">🔍</span>`);
-		const $search = $(`<input type="text" class="form-control" placeholder="Search familiars..." style="flex: 1;">`).appendTo($searchContainer);
+		const searchContainer = e_({outer: `<div class="ve-flex ve-flex-v-center mb-3" style="gap: 8px;"></div>`});
+		modalInner.append(searchContainer);
+		searchContainer.insertAdjacentHTML("beforeend", `<span style="font-size: 1.2em;">🔍</span>`);
+		const search = e_({outer: `<input type="text" class="form-control" placeholder="Search familiars..." style="flex: 1;">`});
+		searchContainer.append(search);
 
 		// Familiars grid
-		const $list = $(`<div class="charsheet__familiar-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-height: 450px; overflow-y: auto; padding: 4px;"></div>`).appendTo($modalInner);
+		const list = e_({outer: `<div class="charsheet__familiar-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-height: 450px; overflow-y: auto; padding: 4px;"></div>`});
+		modalInner.append(list);
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 			const filteredFamiliars = familiars.filter(f =>
 				f.name.toLowerCase().includes(filter.toLowerCase()),
 			);
 
 			if (filteredFamiliars.length === 0) {
-				$list.append(`<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No familiars match your search</div>`);
+				list.insertAdjacentHTML("beforeend", `<div class="ve-muted ve-text-center py-3" style="grid-column: 1 / -1;">No familiars match your search</div>`);
 				return;
 			}
 
@@ -2980,7 +3028,7 @@ class CharacterSheetSpells {
 					nameDisplay = `<span class="charsheet__familiar-name">${creature.name}</span>`;
 				}
 
-				const $card = $(`
+				const card = e_({outer: `
 					<div class="charsheet__familiar-card" style="
 						border: 2px solid var(--rgb-border-grey-muted);
 						border-radius: 10px;
@@ -3020,43 +3068,46 @@ class CharacterSheetSpells {
 							transition: opacity 0.2s;
 						">Select</button>
 					</div>
-				`).appendTo($list);
+				`});
+
+				list.append(card);
 
 				// Hover effects
-				$card.on("mouseenter", function () {
-					$(this).css({
-						"border-color": "var(--rgb-link)",
-						"background": "rgba(var(--rgb-link-rgb), 0.08)",
-						"transform": "translateY(-2px)",
-						"box-shadow": "0 4px 12px rgba(0, 0, 0, 0.15)",
+				card.addEventListener("mouseenter", function () {
+					Object.assign(this.style, {
+						borderColor: "var(--rgb-link)",
+						background: "rgba(var(--rgb-link-rgb), 0.08)",
+						transform: "translateY(-2px)",
+						boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
 					});
-					$(this).find(".btn-select-familiar").css("opacity", "1");
-				}).on("mouseleave", function () {
-					$(this).css({
-						"border-color": "var(--rgb-border-grey-muted)",
-						"background": "rgba(var(--rgb-bg-text), 0.02)",
-						"transform": "translateY(0)",
-						"box-shadow": "none",
+					this.querySelector(".btn-select-familiar").style.opacity = "1";
+				});
+				card.addEventListener("mouseleave", function () {
+					Object.assign(this.style, {
+						borderColor: "var(--rgb-border-grey-muted)",
+						background: "rgba(var(--rgb-bg-text), 0.02)",
+						transform: "translateY(0)",
+						boxShadow: "none",
 					});
-					$(this).find(".btn-select-familiar").css("opacity", "0");
+					this.querySelector(".btn-select-familiar").style.opacity = "0";
 				});
 
-				$card.find(".btn-select-familiar").on("click", async (evt) => {
+				card.querySelector(".btn-select-familiar").addEventListener("click", async (evt) => {
 					evt.stopPropagation();
 					await this._selectFamiliar(creature, {isWildCompanion});
 					doClose();
 				});
 
 				// Clicking the card also selects
-				$card.on("click", async (evt) => {
-					if ($(evt.target).closest("a").length) return; // Don't select if clicking hover link
+				card.addEventListener("click", async (evt) => {
+					if (evt.target.closest("a").length) return; // Don't select if clicking hover link
 					await this._selectFamiliar(creature, {isWildCompanion});
 					doClose();
 				});
 			});
 		};
 
-		$search.on("input", () => renderList($search.val()));
+		search.addEventListener("input", () => renderList(search.value));
 		renderList();
 	}
 
@@ -3740,29 +3791,29 @@ class CharacterSheetSpells {
 		if (!spellData) return;
 
 		// Show spell details using UiUtil modal
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: spellData.name,
 			isMinHeight0: true,
 		});
 
-		const content = Renderer.get().render({type: "entries", entries: spellData.entries || []});
+		const content = Renderer.render({type: "entries", entries: spellData.entries || []});
 		const higherLevel = spellData.entriesHigherLevel
-			? `<p><strong>At Higher Levels.</strong> ${Renderer.get().render({type: "entries", entries: spellData.entriesHigherLevel})}</p>`
+			? `<p><strong>At Higher Levels.</strong> ${Renderer.render({type: "entries", entries: spellData.entriesHigherLevel})}</p>`
 			: "";
 
-		$modalInner.append(`<div class="rd__b">${content}${higherLevel}</div>`);
+		modalInner.insertAdjacentHTML("beforeend", `<div class="rd__b">${content}${higherLevel}</div>`);
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		{ const _cl = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`; modalInner.append(_cl); _cl.querySelector("button").addEventListener("click", () => doClose(false)); }
 	}
 
 	// #region Rendering
 	renderSlots () {
-		const $container = $("#charsheet-spell-slots");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-spell-slots");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		// Debug: Log all slot maxes
 		const allSlots = {};
@@ -3784,17 +3835,17 @@ class CharacterSheetSpells {
 				pipsHtml += `<span class="charsheet__spell-slot-pip ${isAvailable ? "" : "charsheet__spell-slot-pip--used"}" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #337ab7; border-radius: 50%; margin: 2px; ${isAvailable ? "background: #337ab7;" : "background: transparent;"}"></span>`;
 			}
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__spell-slot-level" data-spell-level="${level}">
 					<div class="charsheet__spell-slot-level-label">Level ${level}</div>
 					<div class="charsheet__spell-slot-pips" style="display: flex; gap: 4px; margin-top: 4px;">
 						${pipsHtml}
 					</div>
 				</div>
-			`);
+			`});
 
 
-			$container.append($row);
+			container.append(row);
 		}
 
 		// Render Warlock Pact Slots
@@ -3809,33 +3860,33 @@ class CharacterSheetSpells {
 				pactPipsHtml += `<span class="charsheet__spell-slot-pip charsheet__spell-slot-pip--pact ${isAvailable ? "" : "charsheet__spell-slot-pip--used"}" data-pact-slot="true" style="display: inline-block; width: 18px; height: 18px; border: 2px solid #9b59b6; border-radius: 50%; margin: 2px; ${isAvailable ? "background: #9b59b6;" : "background: transparent;"}"></span>`;
 			}
 
-			const $pactRow = $(`
+			const pactRow = e_({outer: `
 				<div class="charsheet__spell-slot-level charsheet__spell-slot-level--pact" data-spell-level="pact" style="border-color: #9b59b6;">
 					<div class="charsheet__spell-slot-level-label" style="color: #9b59b6;">Pact (Lvl ${pactSlots.level})</div>
 					<div class="charsheet__spell-slot-pips" style="display: flex; gap: 4px; margin-top: 4px;">
 						${pactPipsHtml}
 					</div>
 				</div>
-			`);
+			`});
 
-			$container.append($pactRow);
+			container.append(pactRow);
 		}
 
 
 		// Show if no slots
-		if (!$container.children().length) {
-			$container.append(`<p class="ve-muted">No spell slots available</p>`);
+		if (!container.children.length) {
+			container.insertAdjacentHTML("beforeend", `<p class="ve-muted">No spell slots available</p>`);
 		}
 	}
 
 	_renderSpellList () {
-		const $container = $("#charsheet-spell-lists");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-spell-lists");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		// Render innate spells first (from features/feats)
-		this._renderInnateSpells($container);
+		this._renderInnateSpells(container);
 
 		let spells = this._state.getSpells();
 		// Apply Thelemar rarity to stored spells (for backwards compatibility and display)
@@ -3857,22 +3908,22 @@ class CharacterSheetSpells {
 
 		// For spellbook casters, separate prepared vs unprepared spells
 		if (hasSpellbook && filtered.some(s => s.level > 0)) {
-			this._renderSpellbookLayout($container, filtered, spellcastingInfo);
+			this._renderSpellbookLayout(container, filtered, spellcastingInfo);
 		} else {
 			// Standard layout for known casters
-			this._renderStandardSpellLayout($container, filtered, spellcastingInfo);
+			this._renderStandardSpellLayout(container, filtered, spellcastingInfo);
 		}
 
 		const innateSpells = this._state.getInnateSpells();
 		if (!filtered.length && !innateSpells.length) {
-			$container.append(`<p class="ve-muted text-center">No spells</p>`);
+			container.insertAdjacentHTML("beforeend", `<p class="ve-muted text-center">No spells</p>`);
 		}
 	}
 
 	/**
 	 * Render standard spell layout - grouped by level
 	 */
-	_renderStandardSpellLayout ($container, spells, spellcastingInfo) {
+	_renderStandardSpellLayout (container, spells, spellcastingInfo) {
 		// Group by level
 		const grouped = {
 			0: {name: "Cantrips", spells: []},
@@ -3909,28 +3960,28 @@ class CharacterSheetSpells {
 		Object.entries(grouped).forEach(([level, group]) => {
 			if (!group.spells.length) return;
 
-			const $group = $(`
+			const groupEl = e_({outer: `
 				<div class="charsheet__spell-group">
 					<h5 class="charsheet__spell-group-header">${group.name}</h5>
 					<div class="charsheet__spell-group-list"></div>
 				</div>
-			`);
+			`});
 
-			const $list = $group.find(".charsheet__spell-group-list");
+			const list = groupEl.querySelector(".charsheet__spell-group-list");
 
 			group.spells.sort((a, b) => a.name.localeCompare(b.name)).forEach(spell => {
-				const $item = this._renderSpellItem(spell);
-				$list.append($item);
+				const item = this._renderSpellItem(spell);
+				list.append(item);
 			});
 
-			$container.append($group);
+			container.append(groupEl);
 		});
 	}
 
 	/**
 	 * Render spellbook layout - separates prepared spells from unprepared (for Wizards)
 	 */
-	_renderSpellbookLayout ($container, spells, spellcastingInfo) {
+	_renderSpellbookLayout (container, spells, spellcastingInfo) {
 		const cantrips = spells.filter(s => s.level === 0);
 		const leveledSpells = spells.filter(s => s.level > 0);
 		const preparedSpells = leveledSpells.filter(s => s.prepared || s.alwaysPrepared);
@@ -3952,22 +4003,22 @@ class CharacterSheetSpells {
 				cantripsHeader = `Cantrips <span class="ve-small ${colorClass}">(${count}/${limit})</span>`;
 			}
 
-			const $cantripsGroup = $(`
+			const cantripsGroup = e_({outer: `
 				<div class="charsheet__spell-group">
 					<h5 class="charsheet__spell-group-header">${cantripsHeader}</h5>
 					<div class="charsheet__spell-group-list"></div>
 				</div>
-			`);
+			`});
 
-			const $list = $cantripsGroup.find(".charsheet__spell-group-list");
+			const list = cantripsGroup.querySelector(".charsheet__spell-group-list");
 			cantrips.sort((a, b) => a.name.localeCompare(b.name)).forEach(spell => {
-				$list.append(this._renderSpellItem(spell));
+				list.append(this._renderSpellItem(spell));
 			});
-			$container.append($cantripsGroup);
+			container.append(cantripsGroup);
 		}
 
 		// Render PREPARED spells section
-		const $preparedSection = $(`
+		const preparedSection = e_({outer: `
 			<div class="charsheet__spell-section charsheet__spell-section--prepared">
 				<h4 class="charsheet__spell-section-header">
 					<span class="charsheet__spell-section-icon">📖</span>
@@ -3976,23 +4027,23 @@ class CharacterSheetSpells {
 				</h4>
 				<div class="charsheet__spell-section-content" id="charsheet-prepared-spells-content"></div>
 			</div>
-		`);
+		`});
 
-		const $preparedContent = $preparedSection.find("#charsheet-prepared-spells-content");
+		const preparedContent = preparedSection.querySelector("#charsheet-prepared-spells-content");
 
 		if (preparedSpells.length) {
 			// Group prepared spells by level
 			const groupedPrepared = this._groupSpellsByLevel(preparedSpells);
-			this._renderGroupedSpells($preparedContent, groupedPrepared);
+			this._renderGroupedSpells(preparedContent, groupedPrepared);
 		} else {
-			$preparedContent.append(`<p class="ve-muted ve-text-center py-2">No spells prepared. Prepare spells from your spellbook below.</p>`);
+			preparedContent.insertAdjacentHTML("beforeend", `<p class="ve-muted ve-text-center py-2">No spells prepared. Prepare spells from your spellbook below.</p>`);
 		}
 
-		$container.append($preparedSection);
+		container.append(preparedSection);
 
 		// Render SPELLBOOK section (unprepared spells)
 		const totalInSpellbook = leveledSpells.length;
-		const $spellbookSection = $(`
+		const spellbookSection = e_({outer: `
 			<div class="charsheet__spell-section charsheet__spell-section--spellbook">
 				<h4 class="charsheet__spell-section-header">
 					<span class="charsheet__spell-section-icon">📚</span>
@@ -4001,21 +4052,21 @@ class CharacterSheetSpells {
 				</h4>
 				<div class="charsheet__spell-section-content" id="charsheet-spellbook-content"></div>
 			</div>
-		`);
+		`});
 
-		const $spellbookContent = $spellbookSection.find("#charsheet-spellbook-content");
+		const spellbookContent = spellbookSection.querySelector("#charsheet-spellbook-content");
 
 		if (unpreparedSpells.length) {
 			// Group unprepared spells by level
 			const groupedUnprepared = this._groupSpellsByLevel(unpreparedSpells);
-			this._renderGroupedSpells($spellbookContent, groupedUnprepared, true); // true = show prepare button
+			this._renderGroupedSpells(spellbookContent, groupedUnprepared, true); // true = show prepare button
 		} else if (preparedSpells.length) {
-			$spellbookContent.append(`<p class="ve-muted ve-text-center py-2">All spellbook spells are currently prepared!</p>`);
+			spellbookContent.insertAdjacentHTML("beforeend", `<p class="ve-muted ve-text-center py-2">All spellbook spells are currently prepared!</p>`);
 		} else {
-			$spellbookContent.append(`<p class="ve-muted ve-text-center py-2">No spells in spellbook. Add spells using the + button above.</p>`);
+			spellbookContent.insertAdjacentHTML("beforeend", `<p class="ve-muted ve-text-center py-2">No spells in spellbook. Add spells using the + button above.</p>`);
 		}
 
-		$container.append($spellbookSection);
+		container.append(spellbookSection);
 	}
 
 	/**
@@ -4035,7 +4086,7 @@ class CharacterSheetSpells {
 	/**
 	 * Render grouped spells into a container
 	 */
-	_renderGroupedSpells ($container, groupedSpells, showPrepareHint = false) {
+	_renderGroupedSpells (container, groupedSpells, showPrepareHint = false) {
 		const levelNames = {
 			1: "1st Level",
 			2: "2nd Level",
@@ -4049,29 +4100,29 @@ class CharacterSheetSpells {
 		};
 
 		Object.entries(groupedSpells).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).forEach(([level, spells]) => {
-			const $group = $(`
+			const group = e_({outer: `
 				<div class="charsheet__spell-group charsheet__spell-group--compact">
 					<h5 class="charsheet__spell-group-header charsheet__spell-group-header--small">${levelNames[level] || `Level ${level}`}</h5>
 					<div class="charsheet__spell-group-list"></div>
 				</div>
-			`);
+			`});
 
-			const $list = $group.find(".charsheet__spell-group-list");
+			const list = group.querySelector(".charsheet__spell-group-list");
 			spells.sort((a, b) => a.name.localeCompare(b.name)).forEach(spell => {
-				const $item = this._renderSpellItem(spell, showPrepareHint);
-				$list.append($item);
+				const item = this._renderSpellItem(spell, showPrepareHint);
+				list.append(item);
 			});
 
-			$container.append($group);
+			container.append(group);
 		});
 	}
 
 	/**
 	 * Render innate spells section (from features/feats)
 	 */
-	_renderInnateSpells ($container) {
+	_renderInnateSpells (container) {
 		const innateSpells = this._state.getInnateSpells();
-		if (!innateSpells.length) return;
+		if (!innateSpells) return;
 
 		// Apply filter
 		let filtered = innateSpells;
@@ -4079,9 +4130,9 @@ class CharacterSheetSpells {
 			filtered = filtered.filter(s => s.name.toLowerCase().includes(this._spellFilter));
 		}
 
-		if (!filtered.length) return;
+		if (!filtered) return;
 
-		const $group = $(`
+		const group = e_({outer: `
 			<div class="charsheet__spell-group charsheet__spell-group--innate">
 				<h5 class="charsheet__spell-group-header">
 					<span class="glyphicon glyphicon-star text-warning mr-1"></span>
@@ -4089,16 +4140,16 @@ class CharacterSheetSpells {
 				</h5>
 				<div class="charsheet__spell-group-list"></div>
 			</div>
-		`);
+		`});
 
-		const $list = $group.find(".charsheet__spell-group-list");
+		const list = group.querySelector(".charsheet__spell-group-list");
 
 		filtered.sort((a, b) => a.name.localeCompare(b.name)).forEach(spell => {
-			const $item = this._renderInnateSpellItem(spell);
-			$list.append($item);
+			const item = this._renderInnateSpellItem(spell);
+			list.append(item);
 		});
 
-		$container.append($group);
+		container.append(group);
 	}
 
 	/**
@@ -4139,7 +4190,7 @@ class CharacterSheetSpells {
 			? `<span class="ve-muted ve-small">(${spell.sourceFeature})</span>`
 			: "";
 
-		const $item = $(`
+		const item = e_({outer: `
 			<div class="charsheet__spell-item charsheet__spell-item--innate" data-innate-spell-id="${spellId}">
 				<div class="charsheet__spell-item-main">
 					<span class="charsheet__spell-item-name">${spellLink}</span>
@@ -4157,24 +4208,24 @@ class CharacterSheetSpells {
 					</button>
 				</div>
 			</div>
-		`);
+		`});
 
 		// Bind cast button
-		$item.find(".charsheet__innate-cast").on("click", () => {
+		item.querySelector(".charsheet__innate-cast").addEventListener("click", () => {
 			this._castInnateSpell(spellId);
 		});
 
 		// Bind pip clicks to restore uses
-		$item.find(".charsheet__innate-pip").on("click", (e) => {
-			const $pip = $(e.currentTarget);
-			if ($pip.hasClass("used")) {
+		item.querySelector(".charsheet__innate-pip").addEventListener("click", (e) => {
+			const pip = e.currentTarget;
+			if (pip.classList.contains("used")) {
 				// Restore one use
 				spell.uses.current = Math.min(spell.uses.current + 1, spell.uses.max);
 				this._renderSpellList();
 			}
 		});
 
-		return $item;
+		return item;
 	}
 
 	/**
@@ -4303,7 +4354,7 @@ class CharacterSheetSpells {
 			}
 		}
 
-		return $(`
+		return e_({outer: `
 			<div class="charsheet__spell-item ${isPrepared || isAlwaysPrepared ? "prepared" : ""} ${isAlwaysPrepared ? "always-prepared" : ""}" data-spell-id="${spellId}">
 				<div class="charsheet__spell-item-main">
 					<div class="charsheet__spell-item-header">
@@ -4340,7 +4391,7 @@ class CharacterSheetSpells {
 					`}
 				</div>
 			</div>
-		`);
+		`});
 	}
 
 	/**
@@ -4355,9 +4406,9 @@ class CharacterSheetSpells {
 	/**
 	 * Render multiclass status bar showing per-class spell tracking
 	 */
-	_renderMulticlassStatusBar ($statusBar, info, manualLeveledSpells, preparedSpells) {
+	_renderMulticlassStatusBar (statusBar, info, manualLeveledSpells, preparedSpells) {
 		// Add a multiclass indicator
-		$statusBar.append(`
+		statusBar.append(`
 			<div style="display: flex; align-items: center; gap: 6px; padding-right: 8px; border-right: 1px solid rgba(var(--rgb-bg-text), 0.2);">
 				<span class="ve-muted ve-small">⚔️ Multiclass</span>
 			</div>
@@ -4372,7 +4423,7 @@ class CharacterSheetSpells {
 				// Note: In a real implementation, we'd need to track which spells belong to which class
 				// For now, show the limit per class
 				const icon = "📖 ";
-				$statusBar.append(`
+				statusBar.append(`
 					<div style="display: flex; align-items: center; gap: 4px;" title="${classInfo.className}: Spells known are permanent. Can swap 1 on level up.">
 						<span style="color: #60a5fa;">${icon}${classInfo.className}:</span>
 						<span class="ve-muted ve-small">max ${maxKnown} known</span>
@@ -4382,7 +4433,7 @@ class CharacterSheetSpells {
 				const maxPrepared = classInfo.preparedMax || classInfo.max;
 				const icon = classInfo.is2024 ? "✨ " : "📚 ";
 				const color = classInfo.is2024 ? "#fbbf24" : "#a78bfa";
-				$statusBar.append(`
+				statusBar.append(`
 					<div style="display: flex; align-items: center; gap: 4px;" title="${classInfo.className}: Can prepare from full class spell list after long rest.">
 						<span style="color: ${color};">${icon}${classInfo.className}:</span>
 						<span class="ve-muted ve-small">max ${maxPrepared} prepared</span>
@@ -4396,7 +4447,7 @@ class CharacterSheetSpells {
 		const totalPrepared = preparedSpells.length;
 		const totalMax = info.max;
 
-		$statusBar.append(`
+		statusBar.append(`
 			<div style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid rgba(var(--rgb-bg-text), 0.2);">
 				<span class="ve-muted">Total:</span>
 				<span class="bold">${totalManual} spells</span>
@@ -4418,11 +4469,11 @@ class CharacterSheetSpells {
 	_renderSpellcastingStats () {
 		// Get spellcasting ability from class
 		const classes = this._state.getClasses();
-		if (!classes.length) {
-			$("#charsheet-spell-ability").text("—");
-			$("#charsheet-spell-dc").text("—");
-			$("#charsheet-spell-attack").text("—");
-			$("#charsheet-spell-tracking").hide();
+		if (!classes) {
+			document.getElementById("charsheet-spell-ability").textContent = "—";
+			document.getElementById("charsheet-spell-dc").textContent = "—";
+			document.getElementById("charsheet-spell-attack").textContent = "—";
+			document.getElementById("charsheet-spell-tracking").style.display = "none";
 			return;
 		}
 
@@ -4452,10 +4503,10 @@ class CharacterSheetSpells {
 		}
 
 		if (!ability) {
-			$("#charsheet-spell-ability").text("—");
-			$("#charsheet-spell-dc").text("—");
-			$("#charsheet-spell-attack").text("—");
-			$("#charsheet-spell-tracking").hide();
+			document.getElementById("charsheet-spell-ability").textContent = "—";
+			document.getElementById("charsheet-spell-dc").textContent = "—";
+			document.getElementById("charsheet-spell-attack").textContent = "—";
+			document.getElementById("charsheet-spell-tracking").style.display = "none";
 			return;
 		}
 
@@ -4483,7 +4534,7 @@ class CharacterSheetSpells {
 
 		// Gambler spellcasting: show formula with roll buttons instead of static values
 		if (hasGamblerSpellcasting) {
-			$("#charsheet-spell-ability").text("Gambler (Cha)");
+			document.getElementById("charsheet-spell-ability").textContent = "Gambler (Cha)";
 			
 			// Build formula strings with item/exhaustion bonuses
 			const dcBase = 8 + prof;
@@ -4495,38 +4546,38 @@ class CharacterSheetSpells {
 			const gamblerAttackFormula = `+${prof} + ${calcs.gamblerModifierDice}${attackBonusStr}`;
 
 			// Create clickable DC display with roll button
-			const $dcElement = $("#charsheet-spell-dc");
-			$dcElement.html(`
+			const dcElement = document.getElementById("charsheet-spell-dc");
+			dcElement.innerHTML = `
 				<span class="charsheet__gambler-formula" title="Roll ${calcs.gamblerModifierDice} per cast">
 					${gamblerDcFormula}
 					<button class="charsheet__gambler-roll-btn btn btn-xs btn-default ml-1" type="button" title="Roll DC">
 						🎲
 					</button>
 				</span>
-			`);
-			$dcElement.find(".charsheet__gambler-roll-btn").on("click", (evt) => {
+			`;
+			dcElement.querySelector(".charsheet__gambler-roll-btn").addEventListener("click", (evt) => {
 				evt.stopPropagation();
 				this._rollGamblerModifier("DC", dcBase + spellDcBonus - exhaustionDcPenalty, calcs.gamblerModifierDice);
 			});
 
 			// Create clickable attack display with roll button
-			const $attackElement = $("#charsheet-spell-attack");
-			$attackElement.html(`
+			const attackElement = document.getElementById("charsheet-spell-attack");
+			attackElement.innerHTML = `
 				<span class="charsheet__gambler-formula" title="Roll ${calcs.gamblerModifierDice} per cast">
 					${gamblerAttackFormula}
 					<button class="charsheet__gambler-roll-btn btn btn-xs btn-default ml-1" type="button" title="Roll Attack">
 						🎲
 					</button>
 				</span>
-			`);
-			$attackElement.find(".charsheet__gambler-roll-btn").on("click", (evt) => {
+			`;
+			attackElement.querySelector(".charsheet__gambler-roll-btn").addEventListener("click", (evt) => {
 				evt.stopPropagation();
 				this._rollGamblerModifier("Attack", prof + spellAttackBonus, calcs.gamblerModifierDice);
 			});
 		} else {
-			$("#charsheet-spell-ability").text(abilityFull);
-			$("#charsheet-spell-dc").text(saveDC);
-			$("#charsheet-spell-attack").text(`+${attackBonus}`);
+			document.getElementById("charsheet-spell-ability").textContent = abilityFull;
+			document.getElementById("charsheet-spell-dc").textContent = saveDC;
+			document.getElementById("charsheet-spell-attack").textContent = `+${attackBonus}`;
 		}
 
 		// Display spell tracking using the new enhanced UI
@@ -4573,14 +4624,13 @@ class CharacterSheetSpells {
 	 */
 	_renderSpellTrackingUI () {
 		const spellcastingInfo = this._state.getSpellcastingInfo();
-		const $trackingContainer = $("#charsheet-spell-tracking");
+		const trackingContainer = document.getElementById("charsheet-spell-tracking");
 
 		// Hide all tracking boxes by default
-		$("#charsheet-known-caster-info").hide();
-		$("#charsheet-prepared-caster-info-2014").hide();
-		$("#charsheet-prepared-caster-info-2024").hide();
-		$("#charsheet-cantrips-info").hide();
-		$("#charsheet-gambler-caster-info").hide();
+		for (const id of ["charsheet-known-caster-info", "charsheet-prepared-caster-info-2014", "charsheet-prepared-caster-info-2024", "charsheet-cantrips-info", "charsheet-gambler-caster-info"]) {
+			const el = document.getElementById(id);
+			if (el) el.style.display = "none";
+		}
 
 		// Check for Gambler spellcasting (TGTT Rogue subclass)
 		const calcs = this._state.getFeatureCalculations();
@@ -4590,11 +4640,11 @@ class CharacterSheetSpells {
 		}
 
 		if (!spellcastingInfo) {
-			$trackingContainer.hide();
+			trackingContainer.style.display = "none";
 			return;
 		}
 
-		$trackingContainer.show();
+		trackingContainer.style.display = "";
 
 		const spells = this._state.getSpells();
 		const leveledSpells = spells.filter(s => s.level > 0);
@@ -4609,40 +4659,40 @@ class CharacterSheetSpells {
 
 		// Show cantrips info if the class has cantrips
 		if (cantripsMax > 0) {
-			const $cantripsInfo = $("#charsheet-cantrips-info").show();
-			$("#charsheet-cantrips-current").text(cantripsChosen);
-			$("#charsheet-cantrips-max").text(cantripsMax);
+			const cantripsInfo = document.getElementById("charsheet-cantrips-info"); cantripsInfo.style.display = "";
+			document.getElementById("charsheet-cantrips-current").textContent = cantripsChosen;
+			document.getElementById("charsheet-cantrips-max").textContent = cantripsMax;
 
 			// Handle over-limit state
-			const $count = $cantripsInfo.find(".charsheet__spell-tracking-count");
+			const countEl = cantripsInfo.querySelector(".charsheet__spell-tracking-count");
 			if (cantripsChosen > cantripsMax) {
-				$count.addClass("charsheet__spell-tracking-count--over");
-				$cantripsInfo.addClass("charsheet__spell-tracking-box--over");
+				countEl.classList.add("charsheet__spell-tracking-count--over");
+				cantripsInfo.classList.add("charsheet__spell-tracking-box--over");
 			} else {
-				$count.removeClass("charsheet__spell-tracking-count--over");
-				$cantripsInfo.removeClass("charsheet__spell-tracking-box--over");
+				countEl.classList.remove("charsheet__spell-tracking-count--over");
+				cantripsInfo.classList.remove("charsheet__spell-tracking-box--over");
 			}
 		}
 
 		// Determine which spell tracking box to show based on caster type
 		if (spellcastingInfo.type === "known") {
 			// Known caster (2014 Bard, Sorcerer, Warlock, Ranger, EK, AT)
-			const $knownInfo = $("#charsheet-known-caster-info").show();
+			const knownInfo = document.getElementById("charsheet-known-caster-info"); knownInfo.style.display = "";
 			// Only count manual spells (not from features) against the limit
 			const currentKnown = manualLeveledSpells.length;
 			const maxKnown = spellcastingInfo.spellsKnownMax || spellcastingInfo.max;
 
-			$("#charsheet-spells-known-current").text(currentKnown);
-			$("#charsheet-spells-known-max").text(maxKnown);
+			document.getElementById("charsheet-spells-known-current").textContent = currentKnown;
+			document.getElementById("charsheet-spells-known-max").textContent = maxKnown;
 
 			// Handle over-limit state
-			const $count = $knownInfo.find(".charsheet__spell-tracking-count");
+			const countEl = knownInfo.querySelector(".charsheet__spell-tracking-count");
 			if (currentKnown > maxKnown) {
-				$count.addClass("charsheet__spell-tracking-count--over");
-				$knownInfo.addClass("charsheet__spell-tracking-box--over");
+				countEl.classList.add("charsheet__spell-tracking-count--over");
+				knownInfo.classList.add("charsheet__spell-tracking-box--over");
 			} else {
-				$count.removeClass("charsheet__spell-tracking-count--over");
-				$knownInfo.removeClass("charsheet__spell-tracking-box--over");
+				countEl.classList.remove("charsheet__spell-tracking-count--over");
+				knownInfo.classList.remove("charsheet__spell-tracking-box--over");
 			}
 		} else if (spellcastingInfo.type === "prepared") {
 			// Prepared caster - check if 2024 or 2014
@@ -4651,30 +4701,30 @@ class CharacterSheetSpells {
 			const maxPrepared = spellcastingInfo.preparedMax || spellcastingInfo.max;
 
 			if (is2024) {
-				const $preparedInfo = $("#charsheet-prepared-caster-info-2024").show();
-				$("#charsheet-spells-prepared-current-2024").text(currentPrepared);
-				$("#charsheet-spells-prepared-max-2024").text(maxPrepared);
+				const preparedInfo = document.getElementById("charsheet-prepared-caster-info-2024"); preparedInfo.style.display = "";
+				document.getElementById("charsheet-spells-prepared-current-2024").textContent = currentPrepared;
+				document.getElementById("charsheet-spells-prepared-max-2024").textContent = maxPrepared;
 
-				const $count = $preparedInfo.find(".charsheet__spell-tracking-count");
+				const countEl = preparedInfo.querySelector(".charsheet__spell-tracking-count");
 				if (currentPrepared > maxPrepared) {
-					$count.addClass("charsheet__spell-tracking-count--over");
-					$preparedInfo.addClass("charsheet__spell-tracking-box--over");
+					countEl.classList.add("charsheet__spell-tracking-count--over");
+					preparedInfo.classList.add("charsheet__spell-tracking-box--over");
 				} else {
-					$count.removeClass("charsheet__spell-tracking-count--over");
-					$preparedInfo.removeClass("charsheet__spell-tracking-box--over");
+					countEl.classList.remove("charsheet__spell-tracking-count--over");
+					preparedInfo.classList.remove("charsheet__spell-tracking-box--over");
 				}
 			} else {
-				const $preparedInfo = $("#charsheet-prepared-caster-info-2014").show();
-				$("#charsheet-spells-prepared-current-2014").text(currentPrepared);
-				$("#charsheet-spells-prepared-max-2014").text(maxPrepared);
+				const preparedInfo = document.getElementById("charsheet-prepared-caster-info-2014"); preparedInfo.style.display = "";
+				document.getElementById("charsheet-spells-prepared-current-2014").textContent = currentPrepared;
+				document.getElementById("charsheet-spells-prepared-max-2014").textContent = maxPrepared;
 
-				const $count = $preparedInfo.find(".charsheet__spell-tracking-count");
+				const countEl = preparedInfo.querySelector(".charsheet__spell-tracking-count");
 				if (currentPrepared > maxPrepared) {
-					$count.addClass("charsheet__spell-tracking-count--over");
-					$preparedInfo.addClass("charsheet__spell-tracking-box--over");
+					countEl.classList.add("charsheet__spell-tracking-count--over");
+					preparedInfo.classList.add("charsheet__spell-tracking-box--over");
 				} else {
-					$count.removeClass("charsheet__spell-tracking-count--over");
-					$preparedInfo.removeClass("charsheet__spell-tracking-box--over");
+					countEl.classList.remove("charsheet__spell-tracking-count--over");
+					preparedInfo.classList.remove("charsheet__spell-tracking-box--over");
 				}
 			}
 		} else if (spellcastingInfo.type === "mixed" && spellcastingInfo.isMulticlass) {
@@ -4684,30 +4734,28 @@ class CharacterSheetSpells {
 			const hasPrepared = spellcastingInfo.byClass?.some(c => c.type === "prepared");
 
 			if (hasKnown) {
-				const $knownInfo = $("#charsheet-known-caster-info").show();
+				const knownInfo = document.getElementById("charsheet-known-caster-info"); knownInfo.style.display = "";
 				const knownClasses = spellcastingInfo.byClass.filter(c => c.type === "known");
 				const totalKnownMax = knownClasses.reduce((sum, c) => sum + (c.spellsKnownMax || c.max || 0), 0);
 				// For multiclass, only count manual spells against limit
-				$("#charsheet-spells-known-current").text(manualLeveledSpells.length);
-				$("#charsheet-spells-known-max").text(totalKnownMax);
+				document.getElementById("charsheet-spells-known-current").textContent = manualLeveledSpells.length;
+				document.getElementById("charsheet-spells-known-max").textContent = totalKnownMax;
 
 				// Update hint for multiclass
-				$knownInfo.find(".charsheet__spell-tracking-hint").text(
-					`From: ${knownClasses.map(c => c.className).join(", ")}`,
-				);
+				knownInfo.querySelector(".charsheet__spell-tracking-hint").textContent = 
+					`From: ${knownClasses.map(c => c.className).join(", ")}`;
 			}
 
 			if (hasPrepared) {
-				const $preparedInfo = $("#charsheet-prepared-caster-info-2014").show();
+				const preparedInfo = document.getElementById("charsheet-prepared-caster-info-2014"); preparedInfo.style.display = "";
 				const preparedClasses = spellcastingInfo.byClass.filter(c => c.type === "prepared");
 				const totalPreparedMax = preparedClasses.reduce((sum, c) => sum + (c.preparedMax || c.max || 0), 0);
-				$("#charsheet-spells-prepared-current-2014").text(preparedSpells.length);
-				$("#charsheet-spells-prepared-max-2014").text(totalPreparedMax);
+				document.getElementById("charsheet-spells-prepared-current-2014").textContent = preparedSpells.length;
+				document.getElementById("charsheet-spells-prepared-max-2014").textContent = totalPreparedMax;
 
 				// Update hint for multiclass
-				$preparedInfo.find(".charsheet__spell-tracking-hint").text(
-					`From: ${preparedClasses.map(c => c.className).join(", ")}`,
-				);
+				preparedInfo.querySelector(".charsheet__spell-tracking-hint").textContent = 
+					`From: ${preparedClasses.map(c => c.className).join(", ")}`;
 			}
 		}
 	}
@@ -4718,13 +4766,13 @@ class CharacterSheetSpells {
 	 * @param {object} calcs - Feature calculations from state
 	 */
 	_renderGamblerSpellTrackingUI (calcs) {
-		const $trackingContainer = $("#charsheet-spell-tracking").show();
+		const trackingContainer = document.getElementById("charsheet-spell-tracking"); trackingContainer.style.display = "";
 		
 		// Get or create Gambler-specific tracking box
-		let $gamblerInfo = $("#charsheet-gambler-caster-info");
-		if (!$gamblerInfo.length) {
+		let gamblerInfo = document.getElementById("charsheet-gambler-caster-info");
+		if (!gamblerInfo) {
 			// Create the Gambler tracking box dynamically if not in HTML
-			$gamblerInfo = $(`
+			gamblerInfo = e_({outer: `
 				<div id="charsheet-gambler-caster-info" class="charsheet__spell-tracking-box charsheet__spell-tracking-box--gambler">
 					<div class="charsheet__spell-tracking-header">
 						<span class="charsheet__spell-tracking-icon">🎲</span>
@@ -4743,10 +4791,11 @@ class CharacterSheetSpells {
 						</button>
 					</div>
 				</div>
-			`).appendTo($trackingContainer);
+			`});
+			trackingContainer.append(gamblerInfo);
 		}
 
-		$gamblerInfo.show();
+		gamblerInfo.style.display = "";
 
 		// Get Gambler prepared spell state
 		const currentPrepared = this._state.getGamblerCurrentPreparedCount();
@@ -4754,64 +4803,60 @@ class CharacterSheetSpells {
 		const rollDetails = this._state.getGamblerPreparedRollDetails();
 
 		// Update current count
-		$("#charsheet-gambler-prepared-current").text(currentPrepared);
+		document.getElementById("charsheet-gambler-prepared-current").textContent = currentPrepared;
 
 		// Update max display and hint based on rolled state
-		const $maxDisplay = $("#charsheet-gambler-prepared-max");
-		const $hint = $("#charsheet-gambler-hint");
-		const $rollBtn = $("#charsheet-gambler-roll-prepared-btn");
+		const maxDisplay = document.getElementById("charsheet-gambler-prepared-max");
+		const hint = document.getElementById("charsheet-gambler-hint");
+		const rollBtn = document.getElementById("charsheet-gambler-roll-prepared-btn");
 
 		if (rolledMax !== null) {
 			// Already rolled - show the rolled value
-			$maxDisplay.text(rolledMax);
+			maxDisplay.textContent = rolledMax;
 			if (rollDetails) {
-				$hint.html(`Rolled <strong>${rollDetails.dice}</strong>: (${rollDetails.rolls.join(" + ")}) = ${rollDetails.total}`);
+				hint.innerHTML = `Rolled <strong>${rollDetails.dice}</strong>: (${rollDetails.rolls.join(" + ")}) = ${rollDetails.total}`;
 			} else {
-				$hint.text(`Rolled ${rolledMax} for today`);
+				hint.textContent = `Rolled ${rolledMax} for today`;
 			}
-			$rollBtn.hide();
+			rollBtn.style.display = "none";
 
 			// Show "Manage Prepared" button
-			let $manageBtn = $("#charsheet-gambler-manage-prepared-btn");
-			if (!$manageBtn.length) {
-				$manageBtn = $(`<button id="charsheet-gambler-manage-prepared-btn" class="btn btn-sm btn-outline-primary mt-2">📜 Manage Prepared Spells</button>`)
-					.insertAfter($rollBtn);
+			let manageBtn = document.getElementById("charsheet-gambler-manage-prepared-btn");
+			if (!manageBtn) {
+				manageBtn = e_({outer: `<button id="charsheet-gambler-manage-prepared-btn" class="btn btn-sm btn-outline-primary mt-2">📜 Manage Prepared Spells</button>`});
+				rollBtn.after(manageBtn);
 			}
-			$manageBtn
-				.show()
-				.off("click")
-				.on("click", () => this._openGamblerSpellPicker(calcs, rolledMax));
+			manageBtn.style.display = "";
+			manageBtn.addEventListener("click", () => this._openGamblerSpellPicker(calcs, rolledMax));
 
 			// Check for over-limit
-			const $count = $gamblerInfo.find(".charsheet__spell-tracking-count");
+			const countEl = gamblerInfo.querySelector(".charsheet__spell-tracking-count");
 			if (currentPrepared > rolledMax) {
-				$count.addClass("charsheet__spell-tracking-count--over");
-				$gamblerInfo.addClass("charsheet__spell-tracking-box--over");
+				countEl.classList.add("charsheet__spell-tracking-count--over");
+				gamblerInfo.classList.add("charsheet__spell-tracking-box--over");
 			} else {
-				$count.removeClass("charsheet__spell-tracking-count--over");
-				$gamblerInfo.removeClass("charsheet__spell-tracking-box--over");
+				countEl.classList.remove("charsheet__spell-tracking-count--over");
+				gamblerInfo.classList.remove("charsheet__spell-tracking-box--over");
 			}
 		} else {
 			// Not rolled yet - show dice formula and roll button
-			$maxDisplay.html(`<span class="ve-muted">${calcs.gamblerSpellsPreparedDice}</span>`);
-			$hint.text("Roll for prepared spells after long rest");
-			$rollBtn
-				.text(`🎲 Roll ${calcs.gamblerSpellsPreparedDice}`)
-				.show()
-				.off("click")
-				.on("click", () => this._onGamblerRollPrepared(calcs));
+			maxDisplay.innerHTML = `<span class="ve-muted">${calcs.gamblerSpellsPreparedDice}</span>`;
+			hint.textContent = "Roll for prepared spells after long rest";
+			rollBtn.textContent = `🎲 Roll ${calcs.gamblerSpellsPreparedDice}`;
+			rollBtn.style.display = "";
+			rollBtn.addEventListener("click", () => this._onGamblerRollPrepared(calcs));
 			
 			// Hide manage button if present
-			$("#charsheet-gambler-manage-prepared-btn").hide();
+			document.getElementById("charsheet-gambler-manage-prepared-btn").style.display = "none";
 		}
 
 		// Also show cantrips for Gambler
 		const allCantrips = this._state.getCantripsKnown();
 		const gamblerCantrips = allCantrips.filter(c => c.sourceClass === "Gambler" || c.sourceSubclass === "Gambler");
 		if (calcs.gamblerCantripsKnown > 0) {
-			const $cantripsInfo = $("#charsheet-cantrips-info").show();
-			$("#charsheet-cantrips-current").text(gamblerCantrips.length);
-			$("#charsheet-cantrips-max").text(calcs.gamblerCantripsKnown);
+			const cantripsInfo = document.getElementById("charsheet-cantrips-info"); cantripsInfo.style.display = "";
+			document.getElementById("charsheet-cantrips-current").textContent = gamblerCantrips.length;
+			document.getElementById("charsheet-cantrips-max").textContent = calcs.gamblerCantripsKnown;
 		}
 	}
 
@@ -4872,7 +4917,7 @@ class CharacterSheetSpells {
 		});
 
 		// Build modal content
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Gambler: Select Prepared Spells (${maxPrepared} max)`,
 			isWidth100: true,
 			isHeight100: true,
@@ -4887,7 +4932,7 @@ class CharacterSheetSpells {
 		let selectedSpells = [...currentPrepared];
 
 		// Progress header
-		const $header = $(`
+		const header = e_({outer: `
 			<div class="charsheet__spell-picker-header mb-3">
 				<div class="charsheet__spell-picker-counter">
 					<span class="charsheet__spell-picker-counter-icon">🎲</span>
@@ -4898,41 +4943,46 @@ class CharacterSheetSpells {
 				</div>
 				<div class="ve-muted ve-small ml-auto">Warlock spell list only • Max level ${maxSpellLevel}</div>
 			</div>
-		`).appendTo($modalInner);
+		`});
+		modalInner.append(header);
 
 		const updateHeader = () => {
-			$header.find(".spell-count-current").text(selectedSpells.length);
-			const $value = $header.find(".spell-counter-value");
-			$value.removeClass("charsheet__spell-picker-counter-value--complete charsheet__spell-picker-counter-value--over");
+			header.querySelector(".spell-count-current").textContent = selectedSpells.length;
+			const valueEl = header.querySelector(".spell-counter-value");
+			valueEl.classList.remove("charsheet__spell-picker-counter-value--complete", "charsheet__spell-picker-counter-value--over");
 			if (selectedSpells.length === maxPrepared) {
-				$value.addClass("charsheet__spell-picker-counter-value--complete");
+				valueEl.classList.add("charsheet__spell-picker-counter-value--complete");
 			} else if (selectedSpells.length > maxPrepared) {
-				$value.addClass("charsheet__spell-picker-counter-value--over");
+				valueEl.classList.add("charsheet__spell-picker-counter-value--over");
 			}
 		};
 
 		// Filter controls
-		const $filterRow = $(`<div class="ve-flex ve-flex-wrap gap-2 mb-3"></div>`).appendTo($modalInner);
+		const filterRow = e_({outer: `<div class="ve-flex ve-flex-wrap gap-2 mb-3"></div>`});
+		modalInner.append(filterRow);
 
 		// Level filter
-		const $levelFilter = $(`
+		const levelFilter = e_({outer: `
 			<select class="form-control form-control-sm" style="width: auto;">
 				<option value="">All Levels</option>
 				${Array.from({length: maxSpellLevel}, (_, i) => `<option value="${i + 1}">Level ${i + 1}</option>`).join("")}
 			</select>
-		`).appendTo($filterRow);
+		`});
+		filterRow.append(levelFilter);
 
 		// Search filter
-		const $searchInput = $(`<input type="text" class="form-control form-control-sm" placeholder="Search spells..." style="flex: 1; min-width: 150px;">`).appendTo($filterRow);
+		const searchInput = e_({outer: `<input type="text" class="form-control form-control-sm" placeholder="Search spells..." style="flex: 1; min-width: 150px;">`});
+		filterRow.append(searchInput);
 
 		// Spell list container
-		const $spellList = $(`<div class="charsheet__spell-picker-list" style="max-height: 400px; overflow-y: auto;"></div>`).appendTo($modalInner);
+		const spellList = e_({outer: `<div class="charsheet__spell-picker-list" style="max-height: 400px; overflow-y: auto;"></div>`});
+		modalInner.append(spellList);
 
 		// Render spell list
 		const renderSpells = () => {
-			$spellList.empty();
-			const levelFilter = $levelFilter.val() ? parseInt($levelFilter.val()) : null;
-			const searchFilter = $searchInput.val().toLowerCase().trim();
+			spellList.innerHTML = "";
+			const levelFilter = levelFilter.value ? parseInt(levelFilter.value) : null;
+			const searchFilter = searchInput.value.toLowerCase().trim();
 
 			const filteredSpells = warlockSpells.filter(spell => {
 				if (levelFilter && spell.level !== levelFilter) return false;
@@ -4940,8 +4990,8 @@ class CharacterSheetSpells {
 				return true;
 			}).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
-			if (!filteredSpells.length) {
-				$spellList.append(`<p class="ve-muted text-center py-3">No spells match your filters</p>`);
+			if (!filteredSpells) {
+				spellList.insertAdjacentHTML("beforeend", `<p class="ve-muted text-center py-3">No spells match your filters</p>`);
 				return;
 			}
 
@@ -4953,13 +5003,13 @@ class CharacterSheetSpells {
 			});
 
 			Object.keys(byLevel).sort((a, b) => a - b).forEach(level => {
-				$spellList.append(`<h6 class="charsheet__spell-group-header--small mt-2 mb-1">Level ${level}</h6>`);
+				spellList.insertAdjacentHTML("beforeend", `<h6 class="charsheet__spell-group-header--small mt-2 mb-1">Level ${level}</h6>`);
 
 				byLevel[level].forEach(spell => {
 					const isSelected = selectedSpells.some(s => s.name === spell.name && s.source === spell.source);
 					const canSelect = selectedSpells.length < maxPrepared || isSelected;
 
-					const $row = $(`
+					const row = e_({outer: `
 						<div class="charsheet__spell-picker-row ${isSelected ? "charsheet__spell-picker-row--selected" : ""} ${!canSelect ? "charsheet__spell-picker-row--disabled" : ""}">
 							<div class="charsheet__spell-picker-checkbox">
 								<input type="checkbox" ${isSelected ? "checked" : ""} ${!canSelect ? "disabled" : ""}>
@@ -4969,13 +5019,15 @@ class CharacterSheetSpells {
 								<span class="charsheet__spell-picker-meta ve-muted ve-small">${Parser.spSchoolAbvToFull(spell.school)} • ${spell.source}</span>
 							</div>
 						</div>
-					`).appendTo($spellList);
+					`});
 
-					$row.find("input").on("change", function () {
-						const isNowSelected = $(this).prop("checked");
+					spellList.append(row);
+
+					row.querySelector("input").addEventListener("change", function () {
+						const isNowSelected = this.checked;
 						if (isNowSelected) {
 							if (selectedSpells.length >= maxPrepared) {
-								$(this).prop("checked", false);
+								this.checked = false;
 								JqueryUtil.doToast({
 									content: `Cannot prepare more than ${maxPrepared} spells (rolled limit)`,
 									type: "warning",
@@ -4983,33 +5035,35 @@ class CharacterSheetSpells {
 								return;
 							}
 							selectedSpells.push({name: spell.name, source: spell.source});
-							$row.addClass("charsheet__spell-picker-row--selected");
+							row.classList.add("charsheet__spell-picker-row--selected");
 						} else {
 							selectedSpells = selectedSpells.filter(s => !(s.name === spell.name && s.source === spell.source));
-							$row.removeClass("charsheet__spell-picker-row--selected");
+							row.classList.remove("charsheet__spell-picker-row--selected");
 						}
 						updateHeader();
 						renderSpells(); // Re-render to update disabled states
 					});
 
-					$row.on("click", (evt) => {
-						if ($(evt.target).is("input")) return;
-						const $checkbox = $row.find("input");
-						if (!$checkbox.prop("disabled")) {
-							$checkbox.prop("checked", !$checkbox.prop("checked")).trigger("change");
+					row.addEventListener("click", (evt) => {
+						if (evt.target.matches("input")) return;
+						const checkbox = row.querySelector("input");
+						if (!checkbox.disabled) {
+							checkbox.checked = !checkbox.checked;
+							checkbox.dispatchEvent(new Event("change"));
 						}
 					});
 				});
 			});
 		};
 
-		$levelFilter.on("change", renderSpells);
-		$searchInput.on("input", renderSpells);
+		levelFilter.addEventListener("change", renderSpells);
+		searchInput.addEventListener("input", renderSpells);
 		renderSpells();
 
 		// Confirm button
-		const $btnConfirm = $(`<button class="btn btn-primary mt-3">Confirm Selection</button>`).appendTo($modalInner);
-		$btnConfirm.on("click", () => {
+		const btnConfirm = e_({outer: `<button class="btn btn-primary mt-3">Confirm Selection</button>`});
+		modalInner.append(btnConfirm);
+		btnConfirm.addEventListener("click", () => {
 			// Clear old Gambler prepared spells
 			this._state.getSpells()
 				.filter(s => (s.sourceClass === "Gambler" || s.sourceSubclass === "Gambler") && s.level > 0)
@@ -5169,7 +5223,7 @@ class CharacterSheetSpells {
 		const matchingSpells = this._filterSpellsByCriteria(filteredSpells, criteria)
 			.sort((a, b) => a.name.localeCompare(b.name));
 
-		if (!matchingSpells.length) {
+		if (!matchingSpells) {
 			JqueryUtil.doToast({type: "warning", content: `No spells found matching: ${filterDescription}`});
 			return;
 		}
@@ -5180,31 +5234,32 @@ class CharacterSheetSpells {
 			...this._state.getInnateSpells().map(s => `${s.name}|${s.source}`),
 		];
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: `Choose Spell: ${choice.featureName}`,
 			isMinHeight0: true,
 			zIndex: 10002, // Above QuickBuild/LevelUp modals
 		});
 
 		// Description
-		$modalInner.append(`<p class="mb-2">Select a <strong>${filterDescription}</strong> spell:</p>`);
+		modalInner.insertAdjacentHTML("beforeend", `<p class="mb-2">Select a <strong>${filterDescription}</strong> spell:</p>`);
 
 		// Search
-		const $search = $(`<input type="text" class="form-control form-control--minimal mb-2" placeholder="Search spells...">`);
-		$modalInner.append($search);
+		const search = e_({outer: `<input type="text" class="form-control form-control--minimal mb-2" placeholder="Search spells...">`});
+		modalInner.append(search);
 
 		// Spell list
-		const $list = $(`<div class="spell-choice-list" style="max-height: 350px; overflow-y: auto;"></div>`).appendTo($modalInner);
+		const list = e_({outer: `<div class="spell-choice-list" style="max-height: 350px; overflow-y: auto;"></div>`});
+		modalInner.append(list);
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 
 			const filtered = filter
 				? matchingSpells.filter(s => s.name.toLowerCase().includes(filter))
 				: matchingSpells;
 
-			if (!filtered.length) {
-				$list.append(`<p class="ve-muted text-center py-2">No spells found</p>`);
+			if (!filtered) {
+				list.insertAdjacentHTML("beforeend", `<p class="ve-muted text-center py-2">No spells found</p>`);
 				return;
 			}
 
@@ -5214,9 +5269,9 @@ class CharacterSheetSpells {
 				const school = Parser.spSchoolAbvToFull(spell.school);
 
 				// Render spell name with hover capability
-				const spellNameRendered = Renderer.get().render(`{@spell ${spell.name}|${spell.source}}`);
+				const spellNameRendered = Renderer.render(`{@spell ${spell.name}|${spell.source}}`);
 
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="ve-flex-v-center p-2 clickable spell-choice-item ${isKnown ? "ve-muted" : ""}" 
 						 style="border-bottom: 1px solid var(--rgb-border-grey);">
 						<div class="ve-flex-col" style="flex: 1;">
@@ -5228,41 +5283,41 @@ class CharacterSheetSpells {
 		: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-choice-select">Select</button>`
 }
 					</div>
-				`);
+				`});
 
 				if (!isKnown) {
-					$item.find(".spell-choice-select").on("click", () => {
+					item.querySelector(".spell-choice-select").addEventListener("click", () => {
 						onSelect(spell);
 						doClose(true);
 						JqueryUtil.doToast({type: "success", content: `Selected ${spell.name} for ${choice.featureName}`});
 					});
 
 					// Show spell info on item click (not on button)
-					$item.on("click", (e) => {
-						if (!$(e.target).is("button")) {
+					item.addEventListener("click", (e) => {
+						if (!e.target.matches("button")) {
 							this._showSpellInfoModal(spell);
 						}
 					});
 				}
 
-				$list.append($item);
+				list.append(item);
 			});
 		};
 
-		$search.on("input", () => renderList($search.val().toLowerCase()));
+		search.addEventListener("input", () => renderList(search.value.toLowerCase()));
 		renderList();
 
 		// Cancel button
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		{ const _cl = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Cancel</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`; modalInner.append(_cl); _cl.querySelector("button").addEventListener("click", () => doClose(false)); }
 	}
 
 	/**
 	 * Show spell info in a modal
 	 */
 	async _showSpellInfoModal (spell) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: spell.name,
 			isMinHeight0: true,
 			zIndex: 10003, // Above spell picker modal (10002)
@@ -5272,7 +5327,7 @@ class CharacterSheetSpells {
 			? `${Parser.spSchoolAbvToFull(spell.school)} cantrip`
 			: `${Parser.spLevelToFull(spell.level)}-level ${Parser.spSchoolAbvToFull(spell.school).toLowerCase()}`;
 
-		$modalInner.append(`<p class="ve-muted"><em>${levelSchool}</em></p>`);
+		modalInner.insertAdjacentHTML("beforeend", `<p class="ve-muted"><em>${levelSchool}</em></p>`);
 
 		// Basic info
 		const infoLines = [];
@@ -5309,16 +5364,16 @@ class CharacterSheetSpells {
 			infoLines.push(`<strong>Duration:</strong> ${durStr}`);
 		}
 
-		$modalInner.append(`<div class="mb-2">${infoLines.join("<br>")}</div>`);
+		modalInner.insertAdjacentHTML("beforeend", `<div class="mb-2">${infoLines.join("<br>")}</div>`);
 
 		// Spell description
 		if (spell.entries) {
-			$modalInner.append(`<div class="rd__b">${Renderer.get().render({type: "entries", entries: spell.entries})}</div>`);
+			modalInner.insertAdjacentHTML("beforeend", `<div class="rd__b">${Renderer.render({type: "entries", entries: spell.entries})}</div>`);
 		}
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		{ const _cl = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`; modalInner.append(_cl); _cl.querySelector("button").addEventListener("click", () => doClose(false)); }
 	}
 
 	/**
@@ -5326,7 +5381,7 @@ class CharacterSheetSpells {
 	 */
 	async processPendingSpellChoices () {
 		const pendingChoices = this._state.getPendingSpellChoices();
-		if (!pendingChoices.length) return;
+		if (!pendingChoices) return;
 
 		for (const choice of pendingChoices) {
 			await this.showFilteredSpellPicker(choice, (spell) => {

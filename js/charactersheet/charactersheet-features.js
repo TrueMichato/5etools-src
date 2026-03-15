@@ -96,99 +96,120 @@ class CharacterSheetFeatures {
 	}
 
 	_initEventListeners () {
-		// Add feat button
-		$(document).on("click", "#charsheet-add-feat", () => this._showFeatPicker());
+		document.addEventListener("click", (e) => {
+			// Add feat button
+			if (e.target.closest("#charsheet-add-feat")) {
+				this._showFeatPicker();
+				return;
+			}
 
-		// Toggle feature expansion - only on the chevron toggle button
-		$(document).on("click", ".charsheet__feature-toggle", (e) => {
-			e.stopPropagation();
-			const $feature = $(e.currentTarget).closest(".charsheet__feature");
-			const featureId = $feature.data("feature-id");
-			this._toggleFeatureExpansion(featureId);
-		});
+			// Toggle feature expansion - only on the chevron toggle button
+			const featureToggle = e.target.closest(".charsheet__feature-toggle");
+			if (featureToggle) {
+				e.stopPropagation();
+				const feature = featureToggle.closest(".charsheet__feature");
+				const featureId = feature?.dataset.featureId;
+				this._toggleFeatureExpansion(featureId);
+				return;
+			}
 
-		// Also toggle on header click, but not if clicking a link
-		$(document).on("click", ".charsheet__feature-header", (e) => {
-			// Don't toggle if clicking on a link, button, or actions area
-			if ($(e.target).closest("a, button, .charsheet__feature-actions").length) return;
-			const $feature = $(e.currentTarget).closest(".charsheet__feature");
-			const featureId = $feature.data("feature-id");
-			this._toggleFeatureExpansion(featureId);
-		});
+			// Remove feature
+			const featureRemove = e.target.closest(".charsheet__feature-remove");
+			if (featureRemove) {
+				e.stopPropagation();
+				const featureId = featureRemove.closest(".charsheet__feature")?.dataset.featureId;
+				this._removeFeature(featureId);
+				return;
+			}
 
-		// Remove feature
-		$(document).on("click", ".charsheet__feature-remove", (e) => {
-			e.stopPropagation();
-			const featureId = $(e.currentTarget).closest(".charsheet__feature").data("feature-id");
-			this._removeFeature(featureId);
-		});
+			// Use feature (for features with limited uses)
+			const featureUse = e.target.closest(".charsheet__feature-use");
+			if (featureUse) {
+				e.stopPropagation();
+				const featureId = featureUse.closest(".charsheet__feature")?.dataset.featureId;
+				this._useFeature(featureId);
+				return;
+			}
 
-		// Use feature (for features with limited uses)
-		$(document).on("click", ".charsheet__feature-use", (e) => {
-			e.stopPropagation();
-			const featureId = $(e.currentTarget).closest(".charsheet__feature").data("feature-id");
-			this._useFeature(featureId);
-		});
+			// Feature note button
+			const featureNote = e.target.closest(".charsheet__feature-note");
+			if (featureNote) {
+				e.stopPropagation();
+				const featureEl = featureNote.closest(".charsheet__feature");
+				const featureId = featureEl?.dataset.featureId;
+				const feature = this._state.getFeatures().find(f => f.id === featureId);
+				if (!feature) return;
+				const renderFn = () => this.render();
+				this._page.getNotes()?.showNoteModal(
+					"feature",
+					featureId,
+					feature.name,
+					renderFn,
+				);
+				return;
+			}
 
-		// Feature note button
-		$(document).on("click", ".charsheet__feature-note", (e) => {
-			e.stopPropagation();
-			const $feature = $(e.currentTarget).closest(".charsheet__feature");
-			const featureId = $feature.data("feature-id");
-			const feature = this._state.getFeatures().find(f => f.id === featureId);
-			if (!feature) return;
-			const renderFn = () => this.render();
-			this._page.getNotes()?.showNoteModal(
-				"feature",
-				featureId,
-				feature.name,
-				renderFn,
-			);
-		});
+			// Feat note button
+			const featNote = e.target.closest(".charsheet__feat-note");
+			if (featNote) {
+				e.stopPropagation();
+				const featEl = featNote.closest(".charsheet__feat");
+				const featId = featEl?.dataset.featId;
+				const feat = this._state.getFeats().find(f => f.id === featId);
+				if (!feat) return;
+				const renderFn = () => this.render();
+				this._page.getNotes()?.showNoteModal(
+					"feat",
+					featId,
+					feat.name,
+					renderFn,
+				);
+				return;
+			}
 
-		// Feat note button
-		$(document).on("click", ".charsheet__feat-note", (e) => {
-			e.stopPropagation();
-			const $feat = $(e.currentTarget).closest(".charsheet__feat");
-			const featId = $feat.data("feat-id");
-			const feat = this._state.getFeats().find(f => f.id === featId);
-			if (!feat) return;
-			const renderFn = () => this.render();
-			this._page.getNotes()?.showNoteModal(
-				"feat",
-				featId,
-				feat.name,
-				renderFn,
-			);
-		});
+			// Resource management
+			const resourcePip = e.target.closest(".charsheet__resource-pip");
+			if (resourcePip) {
+				const resourceId = resourcePip.closest(".charsheet__resource")?.dataset.resourceId;
+				this._toggleResourcePip(resourceId, resourcePip);
+				return;
+			}
 
-		// Resource management
-		$(document).on("click", ".charsheet__resource-pip", (e) => {
-			const $pip = $(e.currentTarget);
-			const resourceId = $pip.closest(".charsheet__resource").data("resource-id");
-			this._toggleResourcePip(resourceId, $pip);
-		});
+			// "+X more features" modal trigger
+			const summaryMore = e.target.closest(".charsheet__feature-summary-more");
+			if (summaryMore) {
+				const featureType = summaryMore.dataset.featureType;
+				this._pShowMoreFeaturesModal(featureType);
+				return;
+			}
 
-		// "+X more features" modal trigger
-		$(document).on("click", ".charsheet__feature-summary-more", (e) => {
-			const featureType = $(e.currentTarget).data("feature-type");
-			this._pShowMoreFeaturesModal(featureType);
+			// Also toggle on header click, but not if clicking a link
+			const featureHeader = e.target.closest(".charsheet__feature-header");
+			if (featureHeader) {
+				if (e.target.closest("a, button, .charsheet__feature-actions")) return;
+				const feature = featureHeader.closest(".charsheet__feature");
+				const featureId = feature?.dataset.featureId;
+				this._toggleFeatureExpansion(featureId);
+			}
 		});
 	}
 
 	_toggleFeatureExpansion (featureId) {
-		const $feature = $(`.charsheet__feature[data-feature-id="${featureId}"]`);
-		const $body = $feature.find(".charsheet__feature-body");
-		const $toggle = $feature.find(".charsheet__feature-toggle");
+		const featureEl = document.querySelector(`.charsheet__feature[data-feature-id="${featureId}"]`);
+		if (!featureEl) return;
+		const body = featureEl.querySelector(".charsheet__feature-body");
+		const toggle = featureEl.querySelector(".charsheet__feature-toggle");
 
 		if (this._expandedFeatures.has(featureId)) {
 			this._expandedFeatures.delete(featureId);
-			$body.slideUp(200);
-			$toggle.removeClass("glyphicon-chevron-up").addClass("glyphicon-chevron-down");
+			body.style.display = "none";
+			toggle.classList.remove("glyphicon-chevron-up");
+			toggle.classList.add("glyphicon-chevron-down");
 		} else {
 			this._expandedFeatures.add(featureId);
-			$body.slideDown(200);
-			$toggle.removeClass("glyphicon-chevron-down").addClass("glyphicon-chevron-up");
+			body.style.display = "block";
+			toggle.classList.remove("glyphicon-chevron-down");
+			toggle.classList.add("glyphicon-chevron-up");
 		}
 	}
 
@@ -199,7 +220,7 @@ class CharacterSheetFeatures {
 	async _pShowFeatPickerModal () {
 		const knownFeatNames = this._state.getFeats().map(f => f.name.toLowerCase());
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🎖️ Add Feat",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -223,36 +244,43 @@ class CharacterSheetFeatures {
 		const categories = [...new Set(sourceFilteredFeats.map(f => f.category || "General"))].sort();
 
 		// Intro text
-		$modalInner.append(`
+		modalInner.append(e_({outer: `
 			<p class="ve-small ve-muted mb-3">
 				Browse and add feats to your character. Click a feat to view details, or click <strong>+ Add</strong> to add it directly.
 			</p>
-		`);
+		`}));
 
 		// Build enhanced filter UI (matching spell picker)
-		const $filterContainer = $(`<div class="charsheet__modal-filter"></div>`).appendTo($modalInner);
+		const filterContainer = e_({tag: "div", clazz: "charsheet__modal-filter"});
+		modalInner.append(filterContainer);
 
 		// Helper function to position dropdown towards center of modal
-		const positionDropdown = ($dropdown, $btn) => {
-			const btnRect = $btn[0].getBoundingClientRect();
-			const modalRect = $modalInner[0].getBoundingClientRect();
+		const positionDropdown = (dropdown, btn) => {
+			const btnRect = btn.getBoundingClientRect();
+			const modalRect = modalInner.getBoundingClientRect();
 			const btnCenterX = btnRect.left + btnRect.width / 2;
 			const modalCenterX = modalRect.left + modalRect.width / 2;
 
 			if (btnCenterX < modalCenterX) {
-				$dropdown.addClass("open-right").removeClass("open-left");
+				dropdown.classList.add("open-right");
+				dropdown.classList.remove("open-left");
 			} else {
-				$dropdown.removeClass("open-right").addClass("open-left");
+				dropdown.classList.remove("open-right");
+				dropdown.classList.add("open-left");
 			}
 		};
 
 		// Search input with icon
-		const $searchWrapper = $(`<div class="charsheet__modal-search"></div>`).appendTo($filterContainer);
-		const $search = $(`<input type="text" class="form-control" placeholder="🔍 Search feats by name...">`).appendTo($searchWrapper);
+		const searchWrapper = e_({tag: "div", clazz: "charsheet__modal-search"});
+		filterContainer.append(searchWrapper);
+		const search = e_({tag: "input", clazz: "form-control"});
+		search.type = "text";
+		search.placeholder = "🔍 Search feats by name...";
+		searchWrapper.append(search);
 
 		// Category filter
 		let selectedCategories = new Set(); // Empty = all
-		const $categoryDropdown = $(`
+		const categoryDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect charsheet__category-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📂</span>
@@ -275,55 +303,58 @@ class CharacterSheetFeatures {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`});
+		filterContainer.append(categoryDropdown);
 
 		// Category dropdown behavior
-		const $categoryBtn = $categoryDropdown.find(".charsheet__source-multiselect-btn");
-		const $categoryDropdownMenu = $categoryDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $categoryText = $categoryDropdown.find(".charsheet__source-multiselect-text");
+		const categoryBtn = categoryDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const categoryDropdownMenu = categoryDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const categoryText = categoryDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$categoryBtn.on("click", (e) => {
+		categoryBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			positionDropdown($categoryDropdownMenu, $categoryBtn);
-			$categoryDropdownMenu.toggleClass("open");
-			$sourceDropdownMenu?.removeClass("open");
+			positionDropdown(categoryDropdownMenu, categoryBtn);
+			categoryDropdownMenu.classList.toggle("open");
+			sourceDropdownMenu?.classList.remove("open");
 		});
 
 		const updateCategoryText = () => {
-			const checked = $categoryDropdown.find("input:checked");
+			const checked = [...categoryDropdown.querySelectorAll("input:checked")];
 			if (checked.length === 0) {
-				$categoryText.text("No Categories");
+				categoryText.textContent = "No Categories";
 				selectedCategories = new Set(["__NONE__"]);
 			} else if (checked.length === categories.length) {
-				$categoryText.text("All Categories");
+				categoryText.textContent = "All Categories";
 				selectedCategories = new Set();
 			} else if (checked.length <= 2) {
-				$categoryText.text(checked.map((_, el) => $(el).val()).get().join(", "));
-				selectedCategories = new Set(checked.map((_, el) => $(el).val()).get());
+				categoryText.textContent = checked.map(el => el.value).join(", ");
+				selectedCategories = new Set(checked.map(el => el.value));
 			} else {
-				$categoryText.text(`${checked.length} Categories`);
-				selectedCategories = new Set(checked.map((_, el) => $(el).val()).get());
+				categoryText.textContent = `${checked.length} Categories`;
+				selectedCategories = new Set(checked.map(el => el.value));
 			}
 			renderList();
 		};
 
-		$categoryDropdown.find("input[type=checkbox]").on("change", updateCategoryText);
-		$categoryDropdown.find("[data-action=all]").on("click", () => {
-			$categoryDropdown.find("input").prop("checked", true);
+		categoryDropdown.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", updateCategoryText));
+		categoryDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			categoryDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 			updateCategoryText();
 		});
-		$categoryDropdown.find("[data-action=none]").on("click", () => {
-			$categoryDropdown.find("input").prop("checked", false);
+		categoryDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			categoryDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 			updateCategoryText();
 		});
-		$categoryDropdownMenu.on("click", (e) => e.stopPropagation());
+		categoryDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 
 		// Spacer to push source filter to the right
-		$(`<div class="charsheet__filter-spacer" style="flex: 1;"></div>`).appendTo($filterContainer);
+		const spacer = e_({tag: "div", clazz: "charsheet__filter-spacer"});
+		spacer.style.flex = "1";
+		filterContainer.append(spacer);
 
 		// Source filter (on the right)
 		let selectedSources = new Set(); // Empty = all
-		const $sourceDropdown = $(`
+		const sourceDropdown = e_({outer: `
 			<div class="charsheet__source-multiselect">
 				<button class="charsheet__source-multiselect-btn">
 					<span class="charsheet__source-multiselect-icon">📖</span>
@@ -348,75 +379,81 @@ class CharacterSheetFeatures {
 					</div>
 				</div>
 			</div>
-		`).appendTo($filterContainer);
+		`});
+		filterContainer.append(sourceDropdown);
 
 		// Source dropdown behavior
-		const $sourceBtn = $sourceDropdown.find(".charsheet__source-multiselect-btn");
-		const $sourceDropdownMenu = $sourceDropdown.find(".charsheet__source-multiselect-dropdown");
-		const $sourceText = $sourceDropdown.find(".charsheet__source-multiselect-text");
+		const sourceBtn = sourceDropdown.querySelector(".charsheet__source-multiselect-btn");
+		const sourceDropdownMenu = sourceDropdown.querySelector(".charsheet__source-multiselect-dropdown");
+		const sourceText = sourceDropdown.querySelector(".charsheet__source-multiselect-text");
 
-		$sourceBtn.on("click", (e) => {
+		sourceBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			positionDropdown($sourceDropdownMenu, $sourceBtn);
-			$sourceDropdownMenu.toggleClass("open");
-			$categoryDropdownMenu.removeClass("open");
+			positionDropdown(sourceDropdownMenu, sourceBtn);
+			sourceDropdownMenu.classList.toggle("open");
+			categoryDropdownMenu.classList.remove("open");
 		});
 
-		$(document).on("click.featSourceFilter", () => {
-			$categoryDropdownMenu.removeClass("open");
-			$sourceDropdownMenu.removeClass("open");
-		});
-		$sourceDropdownMenu.on("click", (e) => e.stopPropagation());
+		const featSourceFilterHandler = () => {
+			categoryDropdownMenu.classList.remove("open");
+			sourceDropdownMenu.classList.remove("open");
+		};
+		document.addEventListener("click", featSourceFilterHandler);
+		sourceDropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 
 		const updateSourceText = () => {
-			const checked = $sourceDropdown.find("input:checked");
+			const checked = [...sourceDropdown.querySelectorAll("input:checked")];
 			if (checked.length === 0) {
-				$sourceText.text("No Sources");
+				sourceText.textContent = "No Sources";
 				selectedSources = new Set(["__NONE__"]);
 			} else if (checked.length === uniqueSources.length) {
-				$sourceText.text("All Sources");
+				sourceText.textContent = "All Sources";
 				selectedSources = new Set();
 			} else if (checked.length <= 2) {
-				$sourceText.text(checked.map((_, el) => Parser.sourceJsonToAbv($(el).val())).get().join(", "));
-				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+				sourceText.textContent = checked.map(el => Parser.sourceJsonToAbv(el.value)).join(", ");
+				selectedSources = new Set(checked.map(el => el.value));
 			} else {
-				$sourceText.text(`${checked.length} Sources`);
-				selectedSources = new Set(checked.map((_, el) => $(el).val()).get());
+				sourceText.textContent = `${checked.length} Sources`;
+				selectedSources = new Set(checked.map(el => el.value));
 			}
 			renderList();
 		};
 
-		$sourceDropdown.find("input[type=checkbox]").on("change", updateSourceText);
-		$sourceDropdown.find("[data-action=all]").on("click", () => {
-			$sourceDropdown.find("input").prop("checked", true);
+		sourceDropdown.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", updateSourceText));
+		sourceDropdown.querySelector("[data-action=all]").addEventListener("click", () => {
+			sourceDropdown.querySelectorAll("input").forEach(el => { el.checked = true; });
 			updateSourceText();
 		});
-		$sourceDropdown.find("[data-action=none]").on("click", () => {
-			$sourceDropdown.find("input").prop("checked", false);
+		sourceDropdown.querySelector("[data-action=none]").addEventListener("click", () => {
+			sourceDropdown.querySelectorAll("input").forEach(el => { el.checked = false; });
 			updateSourceText();
 		});
-		$sourceDropdown.find("[data-action=official]").on("click", () => {
+		sourceDropdown.querySelector("[data-action=official]").addEventListener("click", () => {
 			const official = ["PHB", "XGE", "TCE", "FTD", "XPHB"];
-			$sourceDropdown.find("input").each((_, el) => {
-				$(el).prop("checked", official.includes($(el).val()));
+			sourceDropdown.querySelectorAll("input").forEach(el => {
+				el.checked = official.includes(el.value);
 			});
 			updateSourceText();
 		});
 
 		// Quick filter: Prerequisites
-		const $quickFilters = $(`<div class="charsheet__modal-quick-filters"></div>`).appendTo($modalInner);
+		const quickFilters = e_({tag: "div", clazz: "charsheet__modal-quick-filters"});
+		modalInner.append(quickFilters);
 		let filterNoPrereq = false;
-		const $noPrereqBtn = $(`<button class="charsheet__modal-filter-btn">🆓 No Prerequisites</button>`).appendTo($quickFilters);
+		const noPrereqBtn = e_({tag: "button", clazz: "charsheet__modal-filter-btn", txt: "🆓 No Prerequisites"});
+		quickFilters.append(noPrereqBtn);
 
 		// Results count
-		const $resultsCount = $(`<div class="charsheet__modal-results-count"></div>`).appendTo($modalInner);
+		const resultsCount = e_({tag: "div", clazz: "charsheet__modal-results-count"});
+		modalInner.append(resultsCount);
 
 		// Feat list
-		const $list = $(`<div class="charsheet__modal-list"></div>`).appendTo($modalInner);
+		const list = e_({tag: "div", clazz: "charsheet__modal-list"});
+		modalInner.append(list);
 
 		const renderList = () => {
-			$list.empty();
-			const searchTerm = $search.val().toLowerCase();
+			list.innerHTML = "";
+			const searchTerm = search.value.toLowerCase();
 
 			const filtered = sourceFilteredFeats.filter(feat => {
 				if (searchTerm && !feat.name.toLowerCase().includes(searchTerm)) return false;
@@ -433,15 +470,15 @@ class CharacterSheetFeatures {
 			});
 
 			const knownCount = filtered.filter(f => knownFeatNames.includes(f.name.toLowerCase())).length;
-			$resultsCount.html(`<span>${filtered.length} feat${filtered.length !== 1 ? "s" : ""} found</span>${knownCount > 0 ? `<span class="ml-2" style="color: var(--cs-success);">(${knownCount} already known)</span>` : ""}`);
+			resultsCount.innerHTML = `<span>${filtered.length} feat${filtered.length !== 1 ? "s" : ""} found</span>${knownCount > 0 ? `<span class="ml-2" style="color: var(--cs-success);">(${knownCount} already known)</span>` : ""}`;
 
 			if (!filtered.length) {
-				$list.html(`
+				list.innerHTML = `
 					<div class="charsheet__modal-empty">
 						<div class="charsheet__modal-empty-icon">🎖️</div>
 						<div class="charsheet__modal-empty-text">No feats match your filters.<br>Try adjusting your search or filters.</div>
 					</div>
-				`);
+				`;
 				return;
 			}
 
@@ -454,14 +491,15 @@ class CharacterSheetFeatures {
 			});
 
 			Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0])).forEach(([category, categoryFeats]) => {
-				const $section = $(`<div class="charsheet__modal-section"></div>`).appendTo($list);
-				$(`<div class="charsheet__modal-section-title">📂 ${category} <span style="opacity: 0.6;">(${categoryFeats.length})</span></div>`).appendTo($section);
+				const section = e_({tag: "div", clazz: "charsheet__modal-section"});
+				list.append(section);
+				section.append(e_({outer: `<div class="charsheet__modal-section-title">📂 ${category} <span style="opacity: 0.6;">(${categoryFeats.length})</span></div>`}));
 
 				categoryFeats.forEach(feat => {
 					const isKnown = knownFeatNames.includes(feat.name.toLowerCase());
 					const prereqStr = feat.prerequisite ? this._formatPrerequisite(feat.prerequisite) : "";
 
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""}">
 							<div class="charsheet__modal-list-item-icon">🎖️</div>
 							<div class="charsheet__modal-list-item-content">
@@ -473,47 +511,50 @@ class CharacterSheetFeatures {
 		: `<button class="ve-btn ve-btn-primary ve-btn-xs feat-picker-add">+ Add</button>`
 }
 						</div>
-					`);
+					`});
 
 					if (!isKnown) {
-						$item.find(".feat-picker-add").on("click", async (e) => {
+						const addBtn = item.querySelector(".feat-picker-add");
+						addBtn.addEventListener("click", async (e) => {
 							e.stopPropagation();
 							await this._addFeat(feat);
 							knownFeatNames.push(feat.name.toLowerCase());
-							$item.addClass("ve-muted");
-							$item.find(".feat-picker-add").replaceWith(`<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`);
+							item.classList.add("ve-muted");
+							addBtn.replaceWith(e_({outer: `<span class="charsheet__modal-list-item-badge charsheet__modal-list-item-badge--known">✓ Known</span>`}));
 							JqueryUtil.doToast({type: "success", content: `Added ${feat.name}`});
 						});
 
-						$item.on("click", (e) => {
-							if (!$(e.target).is("button")) {
+						item.addEventListener("click", (e) => {
+							if (!e.target.matches("button")) {
 								this._showFeatInfo(feat);
 							}
 						});
 					}
 
-					$section.append($item);
+					section.append(item);
 				});
 			});
 		};
 
 		// Toggle quick filter button
-		$noPrereqBtn.on("click", () => {
+		noPrereqBtn.addEventListener("click", () => {
 			filterNoPrereq = !filterNoPrereq;
-			$noPrereqBtn.toggleClass("active", filterNoPrereq);
+			noPrereqBtn.classList.toggle("active", filterNoPrereq);
 			renderList();
 		});
 
-		$search.on("input", () => renderList());
+		search.addEventListener("input", () => renderList());
 		renderList();
 
 		// Close button
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeWrapper = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => {
-				$(document).off("click.featSourceFilter");
-				doClose(false);
-			});
+		</div>`;
+		modalInner.append(closeWrapper);
+		closeWrapper.querySelector("button").addEventListener("click", () => {
+			document.removeEventListener("click", featSourceFilterHandler);
+			doClose(false);
+		});
 	}
 
 	_formatPrerequisite (prereq) {
@@ -583,21 +624,23 @@ class CharacterSheetFeatures {
 	}
 
 	async _showFeatInfo (feat) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: feat.name,
 			isMinHeight0: true,
 		});
 
 		if (feat.prerequisite) {
-			$modalInner.append(`<p class="ve-muted"><em>Prerequisite: ${this._formatPrerequisite(feat.prerequisite)}</em></p>`);
+			modalInner.append(e_({outer: `<p class="ve-muted"><em>Prerequisite: ${this._formatPrerequisite(feat.prerequisite)}</em></p>`}));
 		}
 		if (feat.entries) {
-			$modalInner.append(`<div class="rd__b">${Renderer.get().render({type: "entries", entries: feat.entries})}</div>`);
+			modalInner.append(e_({outer: `<div class="rd__b">${Renderer.get().render({type: "entries", entries: feat.entries})}</div>`}));
 		}
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeWrapper = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		modalInner.append(closeWrapper);
+		closeWrapper.querySelector("button").addEventListener("click", () => doClose(false));
 	}
 
 	/**
@@ -625,20 +668,20 @@ class CharacterSheetFeatures {
 			return;
 		}
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title,
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
 		// Render each feature
-		const $list = $(`<div class="ve-flex-col"></div>`);
+		const list = e_({tag: "div", clazz: "ve-flex-col"});
 		features.forEach(feature => {
 			const usesStr = feature.uses
 				? `<span class="ve-muted ml-2">(${feature.uses.current}/${feature.uses.max} uses)</span>`
 				: "";
 
-			const $featureEntry = $(`
+			const featureEntry = e_({outer: `
 				<div class="charsheet__modal-feature-entry py-1 bb-1">
 					<div class="ve-flex-v-center">
 						<strong>${feature.name}</strong>
@@ -647,15 +690,17 @@ class CharacterSheetFeatures {
 					</div>
 					${feature.description ? `<div class="ve-small mt-1">${feature.description}</div>` : ""}
 				</div>
-			`);
-			$list.append($featureEntry);
+			`});
+			list.append(featureEntry);
 		});
 
-		$modalInner.append($list);
+		modalInner.append(list);
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeWrapper = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		modalInner.append(closeWrapper);
+		closeWrapper.querySelector("button").addEventListener("click", () => doClose(false));
 	}
 
 	_removeFeature (featureId) {
@@ -680,23 +725,23 @@ class CharacterSheetFeatures {
 		}
 	}
 
-	_toggleResourcePip (resourceId, $pip) {
+	_toggleResourcePip (resourceId, pip) {
 		const resources = this._state.getResources();
 		const resource = resources.find(r => r.id === resourceId);
 		if (!resource) return;
 
-		const $container = $pip.closest(".charsheet__resource");
-		const $pips = $container.find(".charsheet__resource-pip");
-		const pipIndex = $pips.index($pip);
+		const container = pip.closest(".charsheet__resource");
+		const pips = [...container.querySelectorAll(".charsheet__resource-pip")];
+		const pipIndex = pips.indexOf(pip);
 
 		let newCurrent;
-		if ($pip.hasClass("used")) {
+		if (pip.classList.contains("used")) {
 			// Restore this pip and all pips after it
-			$pips.slice(pipIndex).removeClass("used");
+			pips.slice(pipIndex).forEach(p => p.classList.remove("used"));
 			newCurrent = resource.max - pipIndex;
 		} else {
 			// Use this pip and all pips before it
-			$pips.slice(0, pipIndex + 1).addClass("used");
+			pips.slice(0, pipIndex + 1).forEach(p => p.classList.add("used"));
 			newCurrent = resource.max - pipIndex - 1;
 		}
 
@@ -718,10 +763,10 @@ class CharacterSheetFeatures {
 	}
 
 	_renderClassFeatures () {
-		const $container = $("#charsheet-class-features");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-class-features");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const classes = this._state.getClasses();
 		const allFeatures = this._state.getFeatures();
@@ -758,12 +803,12 @@ class CharacterSheetFeatures {
 		});
 
 		if (!classes.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">Select a class to see features</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">Select a class to see features</div>`}));
 			return;
 		}
 
 		if (!features.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No class features yet</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">No class features yet</div>`}));
 			return;
 		}
 
@@ -777,8 +822,8 @@ class CharacterSheetFeatures {
 
 		// Render standalone class features
 		standaloneFeatures.forEach(feature => {
-			const $feature = this._renderFeature(feature);
-			$container.append($feature);
+			const featureEl = this._renderFeature(feature);
+			container.append(featureEl);
 		});
 
 		// Group and render feature options by parentFeature
@@ -794,7 +839,7 @@ class CharacterSheetFeatures {
 
 			// Render each group
 			Object.values(featureOptionGroups).forEach(group => {
-				const $groupContainer = $(`
+				const groupContainer = e_({outer: `
 					<div class="charsheet__feature-group mb-3">
 						<div class="charsheet__feature-group-header">
 							<span class="glyphicon glyphicon-list-alt"></span> ${group.name}
@@ -802,21 +847,21 @@ class CharacterSheetFeatures {
 						</div>
 						<div class="charsheet__feature-group-body"></div>
 					</div>
-				`);
-				const $groupBody = $groupContainer.find(".charsheet__feature-group-body");
+				`});
+				const groupBody = groupContainer.querySelector(".charsheet__feature-group-body");
 
 				group.features.forEach(feature => {
-					const $feature = this._renderFeature(feature);
-					$groupBody.append($feature);
+					const featureEl = this._renderFeature(feature);
+					groupBody.append(featureEl);
 				});
 
-				$container.append($groupContainer);
+				container.append(groupContainer);
 			});
 		}
 
 		// Group and render optional features by type
 		if (optionalFeatures.length > 0) {
-			this._renderTgttMetamagicSummary($container, optionalFeatures);
+			this._renderTgttMetamagicSummary(container, optionalFeatures);
 
 			// Group by optional feature types
 			const optFeatureGroups = {};
@@ -851,7 +896,7 @@ class CharacterSheetFeatures {
 
 			// Render each group
 			Object.values(optFeatureGroups).forEach(group => {
-				const $groupContainer = $(`
+				const groupContainer = e_({outer: `
 					<div class="charsheet__feature-group mb-3">
 						<div class="charsheet__feature-group-header">
 							<span class="glyphicon glyphicon-list-alt"></span> ${group.name}
@@ -859,20 +904,20 @@ class CharacterSheetFeatures {
 						</div>
 						<div class="charsheet__feature-group-body"></div>
 					</div>
-				`);
-				const $groupBody = $groupContainer.find(".charsheet__feature-group-body");
+				`});
+				const groupBody = groupContainer.querySelector(".charsheet__feature-group-body");
 
 				group.features.forEach(feature => {
-					const $feature = this._renderFeature(feature);
-					$groupBody.append($feature);
+					const featureEl = this._renderFeature(feature);
+					groupBody.append(featureEl);
 				});
 
-				$container.append($groupContainer);
+				container.append(groupContainer);
 			});
 		}
 	}
 
-	_renderTgttMetamagicSummary ($container, optionalFeatures) {
+	_renderTgttMetamagicSummary (container, optionalFeatures) {
 		const metamagicFeatures = optionalFeatures.filter(feature =>
 			(feature.optionalFeatureTypes || []).includes("MM"),
 		);
@@ -925,7 +970,7 @@ class CharacterSheetFeatures {
 			</div>
 		`);
 
-		const $summary = $(`
+		const summary = e_({outer: `
 			<div class="charsheet__feature-group mb-3">
 				<div class="charsheet__feature-group-header">
 					<span class="glyphicon glyphicon-flash"></span> TGTT Metamagic
@@ -947,11 +992,11 @@ class CharacterSheetFeatures {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$summary.find(".charsheet__metamagic-tune-btn").each((_, btn) => {
-			$(btn).on("click", () => {
-				const key = $(btn).data("metamagic-key");
+		summary.querySelectorAll(".charsheet__metamagic-tune-btn").forEach(btn => {
+			btn.addEventListener("click", () => {
+				const key = btn.dataset.metamagicKey;
 				if (this._state.isMetamagicTuned?.(key)) {
 					this._state.detuneMetamagic(key);
 				} else {
@@ -962,19 +1007,19 @@ class CharacterSheetFeatures {
 				}
 				this._page.saveCharacter?.();
 				// Re-render this section
-				$summary.remove();
-				this._renderTgttMetamagicSummary($container, optionalFeatures);
+				summary.remove();
+				this._renderTgttMetamagicSummary(container, optionalFeatures);
 			});
 		});
 
-		$container.append($summary);
+		container.append(summary);
 	}
 
 	_renderRaceFeatures () {
-		const $container = $("#charsheet-race-features");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-race-features");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		// Include Species, Subrace, and legacy "Race" features
 		const features = this._state.getFeatures().filter(f =>
@@ -985,68 +1030,68 @@ class CharacterSheetFeatures {
 		const race = this._state.getRace();
 
 		if (!race) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">Select a species to see traits</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">Select a species to see traits</div>`}));
 			return;
 		}
 
 		if (!features.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No species traits yet</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">No species traits yet</div>`}));
 			return;
 		}
 
 		features.forEach(feature => {
-			const $feature = this._renderFeature(feature);
-			$container.append($feature);
+			const featureEl = this._renderFeature(feature);
+			container.append(featureEl);
 		});
 	}
 
 	_renderBackgroundFeatures () {
-		const $container = $("#charsheet-background-features");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-background-features");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const features = this._state.getFeatures().filter(f => f.featureType === "Background");
 		const background = this._state.getBackground();
 
 		if (!background) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">Select a background to see feature</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">Select a background to see feature</div>`}));
 			return;
 		}
 
 		if (!features.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No background feature yet</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">No background feature yet</div>`}));
 			return;
 		}
 
 		features.forEach(feature => {
-			const $feature = this._renderFeature(feature);
-			$container.append($feature);
+			const featureEl = this._renderFeature(feature);
+			container.append(featureEl);
 		});
 	}
 
 	_renderFeaturesSummary () {
-		const $container = $("#charsheet-features-summary");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-features-summary");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const features = this._state.getFeatures();
 		const classes = this._state.getClasses();
 		const race = this._state.getRace();
 
 		if (!classes.length && !race) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">Build your character to see features</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">Build your character to see features</div>`}));
 			return;
 		}
 
 		if (!features.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No features yet</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">No features yet</div>`}));
 			return;
 		}
 
 		// Render calculated class statistics (Sneak Attack, Ki DC, etc.) at the top
-		this._renderCalculatedStats($container);
+		this._renderCalculatedStats(container);
 
 		// Helper to create feature link - always display feature name
 		const getFeatureHtml = (feature) => {
@@ -1209,13 +1254,13 @@ class CharacterSheetFeatures {
 		// Render Class features first (most relevant for gameplay)
 		if (byType.Class.length) {
 			hasContent = true;
-			$container.append(`<div class="ve-small ve-muted mb-1"><strong>Class</strong></div>`);
+			container.append(e_({outer: `<div class="ve-small ve-muted mb-1"><strong>Class</strong></div>`}));
 			byType.Class.slice(0, 5).forEach(feature => {
 				const usesStr = feature.uses ? ` <span class="ve-muted">(${feature.uses.current}/${feature.uses.max})</span>` : "";
-				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}${usesStr}</div>`);
+				container.append(e_({outer: `<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}${usesStr}</div>`}));
 			});
 			if (byType.Class.length > 5) {
-				$container.append(`<div class="ve-muted ve-small charsheet__feature-summary-more" data-feature-type="Class">+${byType.Class.length - 5} more class features</div>`);
+				container.append(e_({outer: `<div class="ve-muted ve-small charsheet__feature-summary-more" data-feature-type="Class">+${byType.Class.length - 5} more class features</div>`}));
 			}
 		}
 
@@ -1223,21 +1268,21 @@ class CharacterSheetFeatures {
 		const speciesFeatures = [...byType.Species, ...byType.Subrace];
 		if (speciesFeatures.length) {
 			hasContent = true;
-			$container.append(`<div class="ve-small ve-muted mb-1 ${byType.Class.length ? "mt-2" : ""}"><strong>Species</strong></div>`);
+			container.append(e_({outer: `<div class="ve-small ve-muted mb-1 ${byType.Class.length ? "mt-2" : ""}"><strong>Species</strong></div>`}));
 			speciesFeatures.slice(0, 3).forEach(feature => {
-				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
+				container.append(e_({outer: `<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`}));
 			});
 			if (speciesFeatures.length > 3) {
-				$container.append(`<div class="ve-muted ve-small charsheet__feature-summary-more" data-feature-type="Species">+${speciesFeatures.length - 3} more species features</div>`);
+				container.append(e_({outer: `<div class="ve-muted ve-small charsheet__feature-summary-more" data-feature-type="Species">+${speciesFeatures.length - 3} more species features</div>`}));
 			}
 		}
 
 		// Background features
 		if (byType.Background.length) {
 			hasContent = true;
-			$container.append(`<div class="ve-small ve-muted mb-1 mt-2"><strong>Background</strong></div>`);
+			container.append(e_({outer: `<div class="ve-small ve-muted mb-1 mt-2"><strong>Background</strong></div>`}));
 			byType.Background.slice(0, 2).forEach(feature => {
-				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
+				container.append(e_({outer: `<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`}));
 			});
 		}
 
@@ -1248,11 +1293,11 @@ class CharacterSheetFeatures {
 			const raceFeatures = features.filter(f => f.featureType === "Species" || f.featureType === "Subrace").slice(0, 2);
 
 			[...classFeatures, ...raceFeatures].forEach(feature => {
-				$container.append(`<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`);
+				container.append(e_({outer: `<div class="charsheet__feature-summary-item">${getFeatureHtml(feature)}</div>`}));
 			});
 
 			if (features.length > 5) {
-				$container.append(`<div class="ve-muted ve-small text-center">View all ${features.length} features in Features tab</div>`);
+				container.append(e_({outer: `<div class="ve-muted ve-small text-center">View all ${features.length} features in Features tab</div>`}));
 			}
 		}
 	}
@@ -1260,7 +1305,7 @@ class CharacterSheetFeatures {
 	/**
 	 * Render calculated class statistics (Sneak Attack dice, Ki Save DC, etc.)
 	 */
-	_renderCalculatedStats ($container) {
+	_renderCalculatedStats (container) {
 		const calculations = this._state.getFeatureCalculations();
 		if (!calculations || Object.keys(calculations).length === 0) return;
 
@@ -1390,21 +1435,21 @@ class CharacterSheetFeatures {
 		// Only render if we have stats to show
 		if (stats.length === 0) return;
 
-		const $statsContainer = $(`<div class="charsheet__calculated-stats mb-2"></div>`);
-		$statsContainer.append(`<div class="ve-small ve-muted mb-1"><strong>Class Statistics</strong></div>`);
+		const statsContainer = e_({tag: "div", clazz: "charsheet__calculated-stats mb-2"});
+		statsContainer.append(e_({outer: `<div class="ve-small ve-muted mb-1"><strong>Class Statistics</strong></div>`}));
 
-		const $statsGrid = $(`<div class="charsheet__stats-grid"></div>`);
+		const statsGrid = e_({tag: "div", clazz: "charsheet__stats-grid"});
 		stats.forEach(stat => {
-			$statsGrid.append(`
+			statsGrid.append(e_({outer: `
 				<div class="charsheet__stat-item" title="${stat.title}">
 					<span class="charsheet__calc-stat-label">${stat.label}:</span>
 					<span class="charsheet__calc-stat-value">${stat.value}</span>
 				</div>
-			`);
+			`}));
 		});
 
-		$statsContainer.append($statsGrid);
-		$container.append($statsContainer);
+		statsContainer.append(statsGrid);
+		container.append(statsContainer);
 	}
 
 	/**
@@ -1604,7 +1649,7 @@ class CharacterSheetFeatures {
 			`;
 		}
 
-		const $feature = $(`
+		const featureEl = e_({outer: `
 			<div class="charsheet__feature" data-feature-id="${feature.id}">
 				<div class="charsheet__feature-header">
 					<span class="charsheet__feature-toggle glyphicon ${isExpanded ? "glyphicon-chevron-down" : "glyphicon-chevron-right"}"></span>
@@ -1627,41 +1672,43 @@ class CharacterSheetFeatures {
 					${description}
 				</div>
 			</div>
-		`);
+		`});
 
 		// Add Primal Focus switch button handlers
 		if (isPrimalFocus) {
-			$feature.find(".charsheet__primal-focus-btn").on("click", (e) => {
-				const targetMode = $(e.currentTarget).data("mode");
-				const currentMode = this._state.getPrimalFocusMode?.();
+			featureEl.querySelectorAll(".charsheet__primal-focus-btn").forEach(btn => {
+				btn.addEventListener("click", () => {
+					const targetMode = btn.dataset.mode;
+					const currentMode = this._state.getPrimalFocusMode?.();
 
-				if (targetMode === currentMode) return;
+					if (targetMode === currentMode) return;
 
-				// Try to switch
-				const success = this._state.switchPrimalFocus?.();
-				if (success) {
-					// Re-render features to update UI
-					this._page._features?.render?.();
-					JqueryUtil.doToast({type: "success", content: `Switched to ${targetMode.toTitleCase()} Focus`});
-				} else {
-					JqueryUtil.doToast({type: "warning", content: "No focus switches remaining! Rest to regain switches."});
-				}
+					// Try to switch
+					const success = this._state.switchPrimalFocus?.();
+					if (success) {
+						// Re-render features to update UI
+						this._page._features?.render?.();
+						JqueryUtil.doToast({type: "success", content: `Switched to ${targetMode.toTitleCase()} Focus`});
+					} else {
+						JqueryUtil.doToast({type: "warning", content: "No focus switches remaining! Rest to regain switches."});
+					}
+				});
 			});
 		}
 
-		return $feature;
+		return featureEl;
 	}
 
 	_renderFeats () {
-		const $container = $("#charsheet-feats, #charsheet-feats-list");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-feats") || document.getElementById("charsheet-feats-list");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const feats = this._state.getFeats();
 
 		if (!feats.length) {
-			$container.append(`<div class="ve-muted ve-text-center py-2">No feats selected</div>`);
+			container.append(e_({outer: `<div class="ve-muted ve-text-center py-2">No feats selected</div>`}));
 			return;
 		}
 
@@ -1681,7 +1728,7 @@ class CharacterSheetFeatures {
 			// Get description - look it up if not stored
 			const description = feat.description || this._getFeatDescription(feat) || "<em class='ve-muted'>No description available</em>";
 
-			const $feat = $(`
+			const featEl = e_({outer: `
 				<div class="charsheet__feat charsheet__feature" data-feat-id="${feat.id}">
 					<div class="charsheet__feat-header charsheet__feature-header">
 						<span class="charsheet__feature-toggle glyphicon ${isExpanded ? "glyphicon-chevron-down" : "glyphicon-chevron-right"}"></span>
@@ -1699,10 +1746,10 @@ class CharacterSheetFeatures {
 						${description}
 					</div>
 				</div>
-			`);
+			`});
 
 			// Toggle expansion
-			$feat.find(".charsheet__feature-toggle").on("click", (e) => {
+			featEl.querySelector(".charsheet__feature-toggle").addEventListener("click", (e) => {
 				e.stopPropagation();
 				const featKey = `feat-${feat.id}`;
 				const isCurrentlyExpanded = this._expandedFeatures.has(featKey);
@@ -1714,22 +1761,22 @@ class CharacterSheetFeatures {
 				this.render();
 			});
 
-			$feat.find(".charsheet__feat-remove").on("click", (e) => {
+			featEl.querySelector(".charsheet__feat-remove").addEventListener("click", (e) => {
 				e.stopPropagation();
 				this._state.removeFeat(feat.id);
 				this.render();
 				this._page.saveCharacter();
 			});
 
-			$container.append($feat);
+			container.append(featEl);
 		});
 	}
 
 	_renderResources () {
-		const $container = $("#charsheet-resources-list");
-		if (!$container.length) return;
+		const container = document.getElementById("charsheet-resources-list");
+		if (!container) return;
 
-		$container.empty();
+		container.innerHTML = "";
 
 		const resources = this._state.getResources();
 
@@ -1746,7 +1793,7 @@ class CharacterSheetFeatures {
 			const exertionCurrent = this._state.getExertionCurrent() ?? exertionMax;
 
 			if (exertionMax > 0) {
-				const $exertion = $(`
+				const exertion = e_({outer: `
 					<div class="charsheet__resource-row" data-resource-id="exertion">
 						<span class="charsheet__resource-name">Exertion</span>
 						<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(Short)</span>
@@ -1757,10 +1804,10 @@ class CharacterSheetFeatures {
 							<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__exertion-restore-btn" ${exertionCurrent >= exertionMax ? "disabled" : ""}>+</button>
 						</div>
 					</div>
-				`);
+				`});
 
 				// Use button - decrease exertion by 1
-				$exertion.find(".charsheet__exertion-use-btn").on("click", () => {
+				exertion.querySelector(".charsheet__exertion-use-btn").addEventListener("click", () => {
 					const current = this._state.getExertionCurrent() || 0;
 					if (current > 0) {
 						this._state.setExertionCurrent(current - 1);
@@ -1772,7 +1819,7 @@ class CharacterSheetFeatures {
 				});
 
 				// Restore button - increase exertion by 1
-				$exertion.find(".charsheet__exertion-restore-btn").on("click", () => {
+				exertion.querySelector(".charsheet__exertion-restore-btn").addEventListener("click", () => {
 					const current = this._state.getExertionCurrent() || 0;
 					const max = this._state.getExertionMax() || 0;
 					if (current < max) {
@@ -1784,17 +1831,17 @@ class CharacterSheetFeatures {
 					}
 				});
 
-				$container.append($exertion);
+				container.append(exertion);
 			}
 		}
 
 		if (!resources.length && !usesCombatSystem) {
-			$container.append(`<p class="ve-muted text-center">No class resources</p>`);
+			container.append(e_({outer: `<p class="ve-muted text-center">No class resources</p>`}));
 			return;
 		}
 
 		resources.forEach(resource => {
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__resource-row" data-resource-id="${resource.id}">
 					<span class="charsheet__resource-name">${resource.name}</span>
 					<span class="charsheet__resource-recharge ve-muted ve-small ml-2">(${resource.recharge === "short" ? "Short" : "Long"})</span>
@@ -1805,10 +1852,10 @@ class CharacterSheetFeatures {
 						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__resource-restore-btn" ${resource.current >= resource.max ? "disabled" : ""}>+</button>
 					</div>
 				</div>
-			`);
+			`});
 
 			// Use button - decrease current by 1
-			$row.find(".charsheet__resource-use-btn").on("click", () => {
+			row.querySelector(".charsheet__resource-use-btn").addEventListener("click", () => {
 				if (resource.current > 0) {
 					this._state.setResourceCurrent(resource.id, resource.current - 1);
 					this._renderResources();
@@ -1816,14 +1863,14 @@ class CharacterSheetFeatures {
 			});
 
 			// Restore button - increase current by 1
-			$row.find(".charsheet__resource-restore-btn").on("click", () => {
+			row.querySelector(".charsheet__resource-restore-btn").addEventListener("click", () => {
 				if (resource.current < resource.max) {
 					this._state.setResourceCurrent(resource.id, resource.current + 1);
 					this._renderResources();
 				}
 			});
 
-			$container.append($row);
+			container.append(row);
 		});
 
 		// Add limited-use custom abilities
@@ -1844,7 +1891,7 @@ class CharacterSheetFeatures {
 			const canUse = this._state.canUseCustomAbility?.(ability.id) ?? uses.current > 0;
 			const canRestore = uses.current < uses.max;
 			
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__resource-row charsheet__resource-row--custom" data-ability-id="${ability.id}">
 					<span class="charsheet__resource-icon mr-1">${ability.icon || "⚡"}</span>
 					<span class="charsheet__resource-name">${ability.name}</span>
@@ -1856,9 +1903,9 @@ class CharacterSheetFeatures {
 						<button class="ve-btn ve-btn-xs ve-btn-success ml-2 charsheet__ability-restore-btn" ${!canRestore ? "disabled" : ""}>+</button>
 					</div>
 				</div>
-			`);
+			`});
 
-			$row.find(".charsheet__ability-use-btn").on("click", () => {
+			row.querySelector(".charsheet__ability-use-btn").addEventListener("click", () => {
 				if (this._state.useCustomAbility(ability.id)) {
 					this._renderResources();
 					if (this._page) {
@@ -1870,7 +1917,7 @@ class CharacterSheetFeatures {
 				}
 			});
 
-			$row.find(".charsheet__ability-restore-btn").on("click", () => {
+			row.querySelector(".charsheet__ability-restore-btn").addEventListener("click", () => {
 				if (this._state.restoreCustomAbilityUse(ability.id)) {
 					this._renderResources();
 					if (this._page) {
@@ -1882,32 +1929,36 @@ class CharacterSheetFeatures {
 				}
 			});
 
-			$container.append($row);
+			container.append(row);
 		});
 	}
 
 	_renderProficiencies () {
 		// Armor
 		const armorProfs = this._state.getArmorProficiencies();
-		$("#charsheet-armor-proficiencies").text(armorProfs.length ? armorProfs.join(", ") : "None");
+		const armorEl = document.getElementById("charsheet-armor-proficiencies");
+		if (armorEl) armorEl.textContent = armorProfs.length ? armorProfs.join(", ") : "None";
 
 		// Weapons
 		const weaponProfs = this._state.getWeaponProficiencies();
-		$("#charsheet-weapon-proficiencies").text(weaponProfs.length ? weaponProfs.join(", ") : "None");
+		const weaponEl = document.getElementById("charsheet-weapon-proficiencies");
+		if (weaponEl) weaponEl.textContent = weaponProfs.length ? weaponProfs.join(", ") : "None";
 
 		// Tools
 		const toolProfs = this._state.getToolProficiencies();
-		if (toolProfs.length) {
-			$("#charsheet-tool-proficiencies").html(this._renderToolProficiencies(toolProfs));
-		} else {
-			$("#charsheet-tool-proficiencies").text("None");
+		const toolEl = document.getElementById("charsheet-tool-proficiencies");
+		if (toolEl) {
+			if (toolProfs.length) {
+				toolEl.innerHTML = this._renderToolProficiencies(toolProfs);
+			} else {
+				toolEl.textContent = "None";
+			}
 		}
 
 		// Saving throws
 		const saveProfs = this._state.getSaveProficiencies();
-		$("#charsheet-save-proficiencies").text(
-			saveProfs.length ? saveProfs.map(s => Parser.attAbvToFull(s)).join(", ") : "None",
-		);
+		const saveEl = document.getElementById("charsheet-save-proficiencies");
+		if (saveEl) saveEl.textContent = saveProfs.length ? saveProfs.map(s => Parser.attAbvToFull(s)).join(", ") : "None";
 	}
 
 	/**
@@ -1937,7 +1988,8 @@ class CharacterSheetFeatures {
 
 	_renderLanguages () {
 		const languages = this._state.getLanguages();
-		$("#charsheet-languages").text(languages.length ? languages.join(", ") : "None");
+		const langEl = document.getElementById("charsheet-languages");
+		if (langEl) langEl.textContent = languages.length ? languages.join(", ") : "None";
 	}
 	// #endregion
 }

@@ -13,60 +13,59 @@ class CharacterSheetSpellPicker {
 	 * @private
 	 */
 	static _renderProgressHeader ({spellCount, cantripCount, selectedSpells, selectedCantrips, isWizard = false}) {
-		const $header = $(`<div class="charsheet__spell-picker-header"></div>`);
+		const header = e_({tag: "div", clazz: "charsheet__spell-picker-header"});
 
-		const $spellCounter = spellCount > 0 ? $(`
-			<div class="charsheet__spell-picker-counter">
-				<span class="charsheet__spell-picker-counter-icon">${isWizard ? "📖" : "📜"}</span>
-				<span class="charsheet__spell-picker-counter-label">${isWizard ? "Spellbook" : "Spells"}:</span>
-				<span class="charsheet__spell-picker-counter-value spell-counter-value">
-					<span class="spell-count-current">${selectedSpells?.length || 0}</span>/<span class="spell-count-max">${spellCount}</span>
-				</span>
-			</div>
-		`) : null;
+		if (spellCount > 0) {
+			header.append(e_({outer: `
+				<div class="charsheet__spell-picker-counter">
+					<span class="charsheet__spell-picker-counter-icon">${isWizard ? "📖" : "📜"}</span>
+					<span class="charsheet__spell-picker-counter-label">${isWizard ? "Spellbook" : "Spells"}:</span>
+					<span class="charsheet__spell-picker-counter-value spell-counter-value">
+						<span class="spell-count-current">${selectedSpells?.length || 0}</span>/<span class="spell-count-max">${spellCount}</span>
+					</span>
+				</div>
+			`}));
+		}
 
-		const $cantripCounter = cantripCount > 0 ? $(`
-			<div class="charsheet__spell-picker-counter">
-				<span class="charsheet__spell-picker-counter-icon">⭐</span>
-				<span class="charsheet__spell-picker-counter-label">Cantrips:</span>
-				<span class="charsheet__spell-picker-counter-value cantrip-counter-value">
-					<span class="cantrip-count-current">${selectedCantrips?.length || 0}</span>/<span class="cantrip-count-max">${cantripCount}</span>
-				</span>
-			</div>
-		`) : null;
+		if (cantripCount > 0) {
+			header.append(e_({outer: `
+				<div class="charsheet__spell-picker-counter">
+					<span class="charsheet__spell-picker-counter-icon">⭐</span>
+					<span class="charsheet__spell-picker-counter-label">Cantrips:</span>
+					<span class="charsheet__spell-picker-counter-value cantrip-counter-value">
+						<span class="cantrip-count-current">${selectedCantrips?.length || 0}</span>/<span class="cantrip-count-max">${cantripCount}</span>
+					</span>
+				</div>
+			`}));
+		}
 
-		if ($spellCounter) $header.append($spellCounter);
-		if ($cantripCounter) $header.append($cantripCounter);
-
-		return $header;
+		return header;
 	}
 
 	/**
 	 * Update progress header color states based on current counts.
 	 * @private
 	 */
-	static _updateProgressHeader ({$header, spellCount, cantripCount, selectedSpells, selectedCantrips}) {
-		// Update spell counter
+	static _updateProgressHeader ({header, spellCount, cantripCount, selectedSpells, selectedCantrips}) {
 		if (spellCount > 0) {
-			const $spellValue = $header.find(".spell-counter-value");
-			$header.find(".spell-count-current").text(selectedSpells.length);
-			$spellValue.removeClass("charsheet__spell-picker-counter-value--complete charsheet__spell-picker-counter-value--over");
+			const spellValue = header.querySelector(".spell-counter-value");
+			header.querySelector(".spell-count-current").textContent = selectedSpells.length;
+			spellValue.classList.remove("charsheet__spell-picker-counter-value--complete", "charsheet__spell-picker-counter-value--over");
 			if (selectedSpells.length === spellCount) {
-				$spellValue.addClass("charsheet__spell-picker-counter-value--complete");
+				spellValue.classList.add("charsheet__spell-picker-counter-value--complete");
 			} else if (selectedSpells.length > spellCount) {
-				$spellValue.addClass("charsheet__spell-picker-counter-value--over");
+				spellValue.classList.add("charsheet__spell-picker-counter-value--over");
 			}
 		}
 
-		// Update cantrip counter
 		if (cantripCount > 0) {
-			const $cantripValue = $header.find(".cantrip-counter-value");
-			$header.find(".cantrip-count-current").text(selectedCantrips.length);
-			$cantripValue.removeClass("charsheet__spell-picker-counter-value--complete charsheet__spell-picker-counter-value--over");
+			const cantripValue = header.querySelector(".cantrip-counter-value");
+			header.querySelector(".cantrip-count-current").textContent = selectedCantrips.length;
+			cantripValue.classList.remove("charsheet__spell-picker-counter-value--complete", "charsheet__spell-picker-counter-value--over");
 			if (selectedCantrips.length === cantripCount) {
-				$cantripValue.addClass("charsheet__spell-picker-counter-value--complete");
+				cantripValue.classList.add("charsheet__spell-picker-counter-value--complete");
 			} else if (selectedCantrips.length > cantripCount) {
-				$cantripValue.addClass("charsheet__spell-picker-counter-value--over");
+				cantripValue.classList.add("charsheet__spell-picker-counter-value--over");
 			}
 		}
 	}
@@ -76,11 +75,9 @@ class CharacterSheetSpellPicker {
 	 * @private
 	 */
 	static _renderSummaryPanel ({selectedSpells, selectedCantrips, spellCount, cantripCount, onRemove}) {
-		const hasCantrips = cantripCount > 0;
-		const hasSpells = spellCount > 0;
 		const totalSelected = (selectedSpells?.length || 0) + (selectedCantrips?.length || 0);
 
-		const $panel = $(`
+		const panel = e_({outer: `
 			<div class="charsheet__spell-picker-summary">
 				<div class="charsheet__spell-picker-summary-header">
 					<span class="charsheet__spell-picker-summary-toggle">
@@ -93,60 +90,60 @@ class CharacterSheetSpellPicker {
 					<div class="charsheet__spell-picker-chips"></div>
 				</div>
 			</div>
-		`);
+		`});
 
-		const $toggle = $panel.find(".charsheet__spell-picker-summary-toggle");
-		const $body = $panel.find(".charsheet__spell-picker-summary-body");
-		const $chevron = $panel.find(".charsheet__spell-picker-summary-chevron");
+		const toggle = panel.querySelector(".charsheet__spell-picker-summary-toggle");
+		const body = panel.querySelector(".charsheet__spell-picker-summary-body");
+		const chevron = panel.querySelector(".charsheet__spell-picker-summary-chevron");
 
-		$toggle.on("click", () => {
-			const isExpanded = $body.is(":visible");
-			$body.slideToggle(150);
-			$chevron.toggleClass("charsheet__spell-picker-summary-chevron--expanded", !isExpanded);
+		toggle.addEventListener("click", () => {
+			const isExpanded = body.style.display !== "none";
+			body.style.display = isExpanded ? "none" : "";
+			chevron.classList.toggle("charsheet__spell-picker-summary-chevron--expanded", !isExpanded);
 		});
 
-		return $panel;
+		return panel;
 	}
 
 	/**
 	 * Update the summary panel with current selections.
 	 * @private
 	 */
-	static _updateSummaryPanel ({$panel, selectedSpells, selectedCantrips, spellCount, cantripCount, onRemove}) {
-		const $chips = $panel.find(".charsheet__spell-picker-chips");
-		const $badge = $panel.find(".charsheet__spell-picker-summary-badge");
+	static _updateSummaryPanel ({panel, selectedSpells, selectedCantrips, spellCount, cantripCount, onRemove}) {
+		const chips = panel.querySelector(".charsheet__spell-picker-chips");
+		const badge = panel.querySelector(".charsheet__spell-picker-summary-badge");
 		const totalSelected = (selectedSpells?.length || 0) + (selectedCantrips?.length || 0);
 
-		$badge.text(totalSelected);
-		$chips.empty();
+		badge.textContent = totalSelected;
+		chips.innerHTML = "";
 
 		if (totalSelected === 0) {
-			$chips.append(`<span class="charsheet__spell-picker-chips-empty">No spells selected yet</span>`);
+			chips.append(e_({outer: `<span class="charsheet__spell-picker-chips-empty">No spells selected yet</span>`}));
 			return;
 		}
 
 		// Render cantrip chips
 		if (selectedCantrips?.length > 0) {
-			const $cantripGroup = $(`<div class="charsheet__spell-picker-chip-group"></div>`);
-			$cantripGroup.append(`<span class="charsheet__spell-picker-chip-group-label">Cantrips:</span>`);
-			const $cantripChips = $(`<div class="charsheet__spell-picker-chip-list"></div>`);
+			const cantripGroup = e_({tag: "div", clazz: "charsheet__spell-picker-chip-group"});
+			cantripGroup.append(e_({outer: `<span class="charsheet__spell-picker-chip-group-label">Cantrips:</span>`}));
+			const cantripChips = e_({tag: "div", clazz: "charsheet__spell-picker-chip-list"});
 
 			selectedCantrips.forEach(spell => {
-				const $chip = $(`
+				const chip = e_({outer: `
 					<span class="charsheet__spell-picker-chip charsheet__spell-picker-chip--cantrip">
 						<span class="charsheet__spell-picker-chip-name">${spell.name}</span>
 						<button class="charsheet__spell-picker-chip-remove" title="Remove ${spell.name}">×</button>
 					</span>
-				`);
-				$chip.find(".charsheet__spell-picker-chip-remove").on("click", (e) => {
+				`});
+				chip.querySelector(".charsheet__spell-picker-chip-remove").addEventListener("click", (e) => {
 					e.stopPropagation();
 					onRemove(spell, true);
 				});
-				$cantripChips.append($chip);
+				cantripChips.append(chip);
 			});
 
-			$cantripGroup.append($cantripChips);
-			$chips.append($cantripGroup);
+			cantripGroup.append(cantripChips);
+			chips.append(cantripGroup);
 		}
 
 		// Render spell chips grouped by level
@@ -158,26 +155,26 @@ class CharacterSheetSpellPicker {
 			});
 
 			Object.keys(byLevel).sort((a, b) => Number(a) - Number(b)).forEach(level => {
-				const $group = $(`<div class="charsheet__spell-picker-chip-group"></div>`);
-				$group.append(`<span class="charsheet__spell-picker-chip-group-label">Level ${level}:</span>`);
-				const $chipList = $(`<div class="charsheet__spell-picker-chip-list"></div>`);
+				const group = e_({tag: "div", clazz: "charsheet__spell-picker-chip-group"});
+				group.append(e_({outer: `<span class="charsheet__spell-picker-chip-group-label">Level ${level}:</span>`}));
+				const chipList = e_({tag: "div", clazz: "charsheet__spell-picker-chip-list"});
 
 				byLevel[level].forEach(spell => {
-					const $chip = $(`
+					const chip = e_({outer: `
 						<span class="charsheet__spell-picker-chip">
 							<span class="charsheet__spell-picker-chip-name">${spell.name}</span>
 							<button class="charsheet__spell-picker-chip-remove" title="Remove ${spell.name}">×</button>
 						</span>
-					`);
-					$chip.find(".charsheet__spell-picker-chip-remove").on("click", (e) => {
+					`});
+					chip.querySelector(".charsheet__spell-picker-chip-remove").addEventListener("click", (e) => {
 						e.stopPropagation();
 						onRemove(spell, false);
 					});
-					$chipList.append($chip);
+					chipList.append(chip);
 				});
 
-				$group.append($chipList);
-				$chips.append($group);
+				group.append(chipList);
+				chips.append(group);
 			});
 		}
 	}
@@ -202,7 +199,7 @@ class CharacterSheetSpellPicker {
 	 * @param {Array} [opts.preSelectedSpells] - Pre-selected leveled spells
 	 * @param {Array} [opts.preSelectedCantrips] - Pre-selected cantrips
 	 * @param {Array} [opts.additionalClassNames] - Additional class names whose spell lists to include (e.g. ["Cleric"] for Divine Soul)
-	 * @returns {jQuery} The section element
+	 * @returns {HTMLElement} The section element
 	 */
 	static renderKnownSpellPicker (opts) {
 		const {
@@ -225,7 +222,7 @@ class CharacterSheetSpellPicker {
 		if (spellCount > 0) parts.push(`${spellCount} spell${spellCount !== 1 ? "s" : ""} (up to level ${maxSpellLevel})`);
 		if (cantripCount > 0) parts.push(`${cantripCount} cantrip${cantripCount !== 1 ? "s" : ""}`);
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section charsheet__spell-picker-container">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-fire"></span> Spells Known
@@ -234,21 +231,21 @@ class CharacterSheetSpellPicker {
 				<div class="charsheet__spell-picker-progress-area"></div>
 				<div class="charsheet__levelup-known-spell-selections"></div>
 			</div>
-		`);
+		`});
 
-		const $progressArea = $section.find(".charsheet__spell-picker-progress-area");
-		const $container = $section.find(".charsheet__levelup-known-spell-selections");
+		const progressArea = section.querySelector(".charsheet__spell-picker-progress-area");
+		const container = section.querySelector(".charsheet__levelup-known-spell-selections");
 		const selectedSpells = [...preSelectedSpells];
 		const selectedCantrips = [...preSelectedCantrips];
 
 		// Render progress header
-		const $progressHeader = CharacterSheetSpellPicker._renderProgressHeader({
+		const progressHeader = CharacterSheetSpellPicker._renderProgressHeader({
 			spellCount,
 			cantripCount,
 			selectedSpells,
 			selectedCantrips,
 		});
-		$progressArea.append($progressHeader);
+		progressArea.append(progressHeader);
 
 		// Handler for removing spells from summary panel
 		const handleRemove = (spell, isCantrip) => {
@@ -263,14 +260,14 @@ class CharacterSheetSpellPicker {
 		};
 
 		// Render summary panel
-		const $summaryPanel = CharacterSheetSpellPicker._renderSummaryPanel({
+		const summaryPanel = CharacterSheetSpellPicker._renderSummaryPanel({
 			selectedSpells,
 			selectedCantrips,
 			spellCount,
 			cantripCount,
 			onRemove: handleRemove,
 		});
-		$progressArea.append($summaryPanel);
+		progressArea.append(summaryPanel);
 
 		// Filter to class spells using Renderer API with fallback
 		const classSpells = allSpells.filter(spell => {
@@ -282,7 +279,6 @@ class CharacterSheetSpellPicker {
 				if (spell.level < 1 || spell.level > maxSpellLevel) return false;
 			}
 			if (CharacterSheetClassUtils.spellIsForClass(spell, className)) return true;
-			// Check additional class spell lists (e.g. Cleric for Divine Soul)
 			if (additionalClassNames.some(cls => CharacterSheetClassUtils.spellIsForClass(spell, cls))) return true;
 			return false;
 		}).sort((a, b) => {
@@ -294,50 +290,52 @@ class CharacterSheetSpellPicker {
 		const schools = [...new Set(classSpells.map(s => s.school).filter(Boolean))].sort();
 
 		// Build filter row
-		const $filterRow = $(`<div class="ve-flex-wrap gap-2 mb-2" style="align-items: center;"></div>`);
-		$container.append($filterRow);
+		const filterRow = e_({tag: "div", clazz: "ve-flex-wrap gap-2 mb-2", style: "align-items: center;"});
+		container.append(filterRow);
 
-		const $search = $(`<input type="text" class="form-control form-control-sm" placeholder="🔍 Search..." style="flex: 1; min-width: 150px;">`);
-		$filterRow.append($search);
+		const search = e_({tag: "input", clazz: "form-control form-control-sm"});
+		search.type = "text";
+		search.placeholder = "🔍 Search...";
+		search.style.flex = "1";
+		search.style.minWidth = "150px";
+		filterRow.append(search);
 
 		const levelOptions = [];
 		if (cantripCount > 0) levelOptions.push({value: "0", label: "Cantrips"});
 		for (let i = 1; i <= maxSpellLevel; i++) levelOptions.push({value: i.toString(), label: `Level ${i}`});
-		const $levelFilter = $(`
+		const levelFilter = e_({outer: `
 			<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
 				<option value="">All Levels</option>
 				${levelOptions.map(l => `<option value="${l.value}">${l.label}</option>`).join("")}
 			</select>
-		`);
-		$filterRow.append($levelFilter);
+		`});
+		filterRow.append(levelFilter);
 
-		const $schoolFilter = $(`
+		const schoolFilter = e_({outer: `
 			<select class="form-control form-control-sm" style="width: auto; min-width: 120px;">
 				<option value="">All Schools</option>
 				${schools.map(s => `<option value="${s}">${CharacterSheetClassUtils.getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
 			</select>
-		`);
-		$filterRow.append($schoolFilter);
+		`});
+		filterRow.append(schoolFilter);
 
-		const $ritualFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`);
-		const $concFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`);
-		$filterRow.append($ritualFilter, $concFilter);
+		const ritualFilter = e_({outer: `<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`});
+		const concFilter = e_({outer: `<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`});
+		filterRow.append(ritualFilter, concFilter);
 
-		const $spellList = $(`<div class="charsheet__modal-list" style="max-height: 350px; overflow-y: auto;"></div>`);
-		$container.append($spellList);
+		const spellList = e_({tag: "div", clazz: "charsheet__modal-list", style: "max-height: 350px; overflow-y: auto;"});
+		container.append(spellList);
 
 		const fireCallback = () => {
-			// Update progress header
 			CharacterSheetSpellPicker._updateProgressHeader({
-				$header: $progressHeader,
+				header: progressHeader,
 				spellCount,
 				cantripCount,
 				selectedSpells,
 				selectedCantrips,
 			});
-			// Update summary panel
 			CharacterSheetSpellPicker._updateSummaryPanel({
-				$panel: $summaryPanel,
+				panel: summaryPanel,
 				selectedSpells,
 				selectedCantrips,
 				spellCount,
@@ -348,13 +346,13 @@ class CharacterSheetSpellPicker {
 		};
 
 		const renderSpellList = () => {
-			$spellList.empty();
+			spellList.innerHTML = "";
 
-			const searchText = $search.val()?.toLowerCase() || "";
-			const levelVal = $levelFilter.val();
-			const schoolVal = $schoolFilter.val();
-			const onlyRitual = $ritualFilter.find("input").prop("checked");
-			const onlyConc = $concFilter.find("input").prop("checked");
+			const searchText = search.value?.toLowerCase() || "";
+			const levelVal = levelFilter.value;
+			const schoolVal = schoolFilter.value;
+			const onlyRitual = ritualFilter.querySelector("input").checked;
+			const onlyConc = concFilter.querySelector("input").checked;
 
 			const filtered = classSpells.filter(spell => {
 				if (searchText && !spell.name.toLowerCase().includes(searchText)) return false;
@@ -366,12 +364,12 @@ class CharacterSheetSpellPicker {
 			});
 
 			if (!filtered.length) {
-				$spellList.append(`<p class="ve-muted text-center py-2">No spells match your filters</p>`);
+				spellList.append(e_({outer: `<p class="ve-muted text-center py-2">No spells match your filters</p>`}));
 				return;
 			}
 
 			CharacterSheetSpellPicker._renderGroupedSpellList({
-				$container: $spellList,
+				container: spellList,
 				spells: filtered,
 				knownSpellIds,
 				selectedSpells,
@@ -402,23 +400,23 @@ class CharacterSheetSpellPicker {
 			});
 		};
 
-		$search.on("input", renderSpellList);
-		$levelFilter.on("change", renderSpellList);
-		$schoolFilter.on("change", renderSpellList);
-		$ritualFilter.find("input").on("change", renderSpellList);
-		$concFilter.find("input").on("change", renderSpellList);
+		search.addEventListener("input", renderSpellList);
+		levelFilter.addEventListener("change", renderSpellList);
+		schoolFilter.addEventListener("change", renderSpellList);
+		ritualFilter.querySelector("input").addEventListener("change", renderSpellList);
+		concFilter.querySelector("input").addEventListener("change", renderSpellList);
 
 		// Initialize header and summary if pre-selections exist
 		if (selectedSpells.length || selectedCantrips.length) {
 			CharacterSheetSpellPicker._updateProgressHeader({
-				$header: $progressHeader,
+				header: progressHeader,
 				spellCount,
 				cantripCount,
 				selectedSpells,
 				selectedCantrips,
 			});
 			CharacterSheetSpellPicker._updateSummaryPanel({
-				$panel: $summaryPanel,
+				panel: summaryPanel,
 				selectedSpells,
 				selectedCantrips,
 				spellCount,
@@ -429,7 +427,7 @@ class CharacterSheetSpellPicker {
 
 		renderSpellList();
 
-		return $section;
+		return section;
 	}
 
 	/**
@@ -443,7 +441,7 @@ class CharacterSheetSpellPicker {
 	 * @param {Function} opts.onSelect - Callback(spells[]) on selection change
 	 * @param {Function} [opts.getHoverLink] - Optional hover link builder
 	 * @param {Array} [opts.preSelectedSpells] - Pre-selected spells
-	 * @returns {jQuery} The section element
+	 * @returns {HTMLElement} The section element
 	 */
 	static renderWizardSpellbookPicker (opts) {
 		const {
@@ -456,7 +454,7 @@ class CharacterSheetSpellPicker {
 			preSelectedSpells = [],
 		} = opts;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__levelup-section charsheet__spell-picker-container">
 				<h5 class="charsheet__levelup-section-title">
 					<span class="glyphicon glyphicon-book"></span> Spellbook
@@ -465,23 +463,21 @@ class CharacterSheetSpellPicker {
 				<div class="charsheet__spell-picker-progress-area"></div>
 				<div class="charsheet__levelup-spellbook-selections"></div>
 			</div>
-		`);
+		`});
 
-		const $progressArea = $section.find(".charsheet__spell-picker-progress-area");
-		const $container = $section.find(".charsheet__levelup-spellbook-selections");
+		const progressArea = section.querySelector(".charsheet__spell-picker-progress-area");
+		const container = section.querySelector(".charsheet__levelup-spellbook-selections");
 		const selectedSpells = [...preSelectedSpells];
 
-		// Render progress header (wizard version)
-		const $progressHeader = CharacterSheetSpellPicker._renderProgressHeader({
+		const progressHeader = CharacterSheetSpellPicker._renderProgressHeader({
 			spellCount,
 			cantripCount: 0,
 			selectedSpells,
 			selectedCantrips: [],
 			isWizard: true,
 		});
-		$progressArea.append($progressHeader);
+		progressArea.append(progressHeader);
 
-		// Handler for removing spells from summary panel
 		const handleRemove = (spell) => {
 			const spellId = `${spell.name}|${spell.source}`;
 			const idx = selectedSpells.findIndex(s => `${s.name}|${s.source}` === spellId);
@@ -492,17 +488,15 @@ class CharacterSheetSpellPicker {
 			}
 		};
 
-		// Render summary panel
-		const $summaryPanel = CharacterSheetSpellPicker._renderSummaryPanel({
+		const summaryPanel = CharacterSheetSpellPicker._renderSummaryPanel({
 			selectedSpells,
 			selectedCantrips: [],
 			spellCount,
 			cantripCount: 0,
 			onRemove: handleRemove,
 		});
-		$progressArea.append($summaryPanel);
+		progressArea.append(summaryPanel);
 
-		// Filter to wizard spells up to max level
 		const wizardSpells = allSpells.filter(spell => {
 			let isWizardSpell = false;
 			try {
@@ -517,53 +511,53 @@ class CharacterSheetSpellPicker {
 			return a.name.localeCompare(b.name);
 		});
 
-		// Collect unique schools for filters
 		const schools = [...new Set(wizardSpells.map(s => s.school).filter(Boolean))].sort();
 
-		// Build filter row
-		const $filterRow = $(`<div class="ve-flex-wrap gap-2 mb-2" style="align-items: center;"></div>`);
-		$container.append($filterRow);
+		const filterRow = e_({tag: "div", clazz: "ve-flex-wrap gap-2 mb-2", style: "align-items: center;"});
+		container.append(filterRow);
 
-		const $search = $(`<input type="text" class="form-control form-control-sm" placeholder="🔍 Search..." style="flex: 1; min-width: 150px;">`);
-		$filterRow.append($search);
+		const search = e_({tag: "input", clazz: "form-control form-control-sm"});
+		search.type = "text";
+		search.placeholder = "🔍 Search...";
+		search.style.flex = "1";
+		search.style.minWidth = "150px";
+		filterRow.append(search);
 
 		const levelOptions = [];
 		for (let i = 1; i <= maxSpellLevel; i++) levelOptions.push({value: i.toString(), label: `Level ${i}`});
-		const $levelFilter = $(`
+		const levelFilter = e_({outer: `
 			<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
 				<option value="">All Levels</option>
 				${levelOptions.map(l => `<option value="${l.value}">${l.label}</option>`).join("")}
 			</select>
-		`);
-		$filterRow.append($levelFilter);
+		`});
+		filterRow.append(levelFilter);
 
-		const $schoolFilter = $(`
+		const schoolFilter = e_({outer: `
 			<select class="form-control form-control-sm" style="width: auto; min-width: 120px;">
 				<option value="">All Schools</option>
 				${schools.map(s => `<option value="${s}">${CharacterSheetClassUtils.getSchoolEmoji(s)} ${Parser.spSchoolAbvToFull(s)}</option>`).join("")}
 			</select>
-		`);
-		$filterRow.append($schoolFilter);
+		`});
+		filterRow.append(schoolFilter);
 
-		const $ritualFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`);
-		const $concFilter = $(`<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`);
-		$filterRow.append($ritualFilter, $concFilter);
+		const ritualFilter = e_({outer: `<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> 🔮 Ritual</label>`});
+		const concFilter = e_({outer: `<label class="ve-flex-v-center ve-small" style="cursor: pointer; white-space: nowrap;"><input type="checkbox" class="mr-1"> ⏳ Conc.</label>`});
+		filterRow.append(ritualFilter, concFilter);
 
-		const $spellList = $(`<div class="charsheet__modal-list" style="max-height: 350px; overflow-y: auto;"></div>`);
-		$container.append($spellList);
+		const spellList = e_({tag: "div", clazz: "charsheet__modal-list", style: "max-height: 350px; overflow-y: auto;"});
+		container.append(spellList);
 
 		const fireCallback = () => {
-			// Update progress header
 			CharacterSheetSpellPicker._updateProgressHeader({
-				$header: $progressHeader,
+				header: progressHeader,
 				spellCount,
 				cantripCount: 0,
 				selectedSpells,
 				selectedCantrips: [],
 			});
-			// Update summary panel
 			CharacterSheetSpellPicker._updateSummaryPanel({
-				$panel: $summaryPanel,
+				panel: summaryPanel,
 				selectedSpells,
 				selectedCantrips: [],
 				spellCount,
@@ -574,13 +568,13 @@ class CharacterSheetSpellPicker {
 		};
 
 		const renderSpellList = () => {
-			$spellList.empty();
+			spellList.innerHTML = "";
 
-			const searchText = $search.val()?.toLowerCase() || "";
-			const levelVal = $levelFilter.val();
-			const schoolVal = $schoolFilter.val();
-			const onlyRitual = $ritualFilter.find("input").prop("checked");
-			const onlyConc = $concFilter.find("input").prop("checked");
+			const searchText = search.value?.toLowerCase() || "";
+			const levelVal = levelFilter.value;
+			const schoolVal = schoolFilter.value;
+			const onlyRitual = ritualFilter.querySelector("input").checked;
+			const onlyConc = concFilter.querySelector("input").checked;
 
 			const filtered = wizardSpells.filter(spell => {
 				if (searchText && !spell.name.toLowerCase().includes(searchText)) return false;
@@ -592,12 +586,12 @@ class CharacterSheetSpellPicker {
 			});
 
 			if (!filtered.length) {
-				$spellList.append(`<p class="ve-muted text-center py-2">No spells match your filters</p>`);
+				spellList.append(e_({outer: `<p class="ve-muted text-center py-2">No spells match your filters</p>`}));
 				return;
 			}
 
 			CharacterSheetSpellPicker._renderGroupedSpellList({
-				$container: $spellList,
+				container: spellList,
 				spells: filtered,
 				knownSpellIds,
 				selectedSpells,
@@ -624,23 +618,22 @@ class CharacterSheetSpellPicker {
 			});
 		};
 
-		$search.on("input", renderSpellList);
-		$levelFilter.on("change", renderSpellList);
-		$schoolFilter.on("change", renderSpellList);
-		$ritualFilter.find("input").on("change", renderSpellList);
-		$concFilter.find("input").on("change", renderSpellList);
+		search.addEventListener("input", renderSpellList);
+		levelFilter.addEventListener("change", renderSpellList);
+		schoolFilter.addEventListener("change", renderSpellList);
+		ritualFilter.querySelector("input").addEventListener("change", renderSpellList);
+		concFilter.querySelector("input").addEventListener("change", renderSpellList);
 
-		// Initialize header and summary if pre-selections exist
 		if (selectedSpells.length) {
 			CharacterSheetSpellPicker._updateProgressHeader({
-				$header: $progressHeader,
+				header: progressHeader,
 				spellCount,
 				cantripCount: 0,
 				selectedSpells,
 				selectedCantrips: [],
 			});
 			CharacterSheetSpellPicker._updateSummaryPanel({
-				$panel: $summaryPanel,
+				panel: summaryPanel,
 				selectedSpells,
 				selectedCantrips: [],
 				spellCount,
@@ -651,7 +644,7 @@ class CharacterSheetSpellPicker {
 
 		renderSpellList();
 
-		return $section;
+		return section;
 	}
 
 	// ==========================================
@@ -663,19 +656,18 @@ class CharacterSheetSpellPicker {
 	 * @param {Object} spell - Spell data object
 	 */
 	static async showSpellInfoModal (spell) {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: spell.name,
 			isMinHeight0: true,
-			zIndex: 10002, // Above Quick Build overlay (9999) and toasts (10001)
+			zIndex: 10002,
 		});
 
 		const levelSchool = spell.level === 0
 			? `${Parser.spSchoolAbvToFull(spell.school)} cantrip`
 			: `${Parser.spLevelToFull(spell.level)}-level ${Parser.spSchoolAbvToFull(spell.school).toLowerCase()}`;
 
-		$modalInner.append(`<p class="ve-muted"><em>${levelSchool}</em></p>`);
+		modalInner.append(e_({outer: `<p class="ve-muted"><em>${levelSchool}</em></p>`}));
 
-		// Basic info lines
 		const infoLines = [];
 		if (spell.time?.length) {
 			const time = spell.time[0];
@@ -709,21 +701,21 @@ class CharacterSheetSpellPicker {
 			infoLines.push(`<strong>Duration:</strong> ${durStr}`);
 		}
 
-		$modalInner.append(`<div class="mb-2">${infoLines.join("<br>")}</div>`);
+		modalInner.append(e_({outer: `<div class="mb-2">${infoLines.join("<br>")}</div>`}));
 
-		// Spell description
 		if (spell.entries) {
-			$modalInner.append(`<div class="rd__b">${Renderer.get().render({type: "entries", entries: spell.entries})}</div>`);
+			modalInner.append(e_({outer: `<div class="rd__b">${Renderer.get().render({type: "entries", entries: spell.entries})}</div>`}));
 		}
 
-		// Higher level scaling
 		if (spell.entriesHigherLevel) {
-			$modalInner.append(`<div class="rd__b mt-2"><strong>At Higher Levels.</strong> ${Renderer.get().render({type: "entries", entries: spell.entriesHigherLevel})}</div>`);
+			modalInner.append(e_({outer: `<div class="rd__b mt-2"><strong>At Higher Levels.</strong> ${Renderer.get().render({type: "entries", entries: spell.entriesHigherLevel})}</div>`}));
 		}
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+		const closeRow = ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
 			<button class="ve-btn ve-btn-default">Close</button>
-		</div>`.appendTo($modalInner).find("button").on("click", () => doClose(false));
+		</div>`;
+		closeRow.querySelector("button").addEventListener("click", () => doClose(false));
+		modalInner.append(closeRow);
 	}
 
 	// ==========================================
@@ -735,8 +727,7 @@ class CharacterSheetSpellPicker {
 	 * Shared rendering logic used by all pickers.
 	 * @private
 	 */
-	static _renderGroupedSpellList ({$container, spells, knownSpellIds, selectedSpells, selectedCantrips, spellCount, cantripCount, getHoverLink, onToggle}) {
-		// Group by level
+	static _renderGroupedSpellList ({container, spells, knownSpellIds, selectedSpells, selectedCantrips, spellCount, cantripCount, getHoverLink, onToggle}) {
 		const byLevel = {};
 		spells.forEach(spell => {
 			if (!byLevel[spell.level]) byLevel[spell.level] = [];
@@ -750,8 +741,9 @@ class CharacterSheetSpellPicker {
 				: (["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"][levelNum - 1] || "📜");
 			const levelLabel = levelNum === 0 ? "Cantrips" : `Level ${level}`;
 
-			const $levelSection = $(`<div class="charsheet__modal-section"></div>`).appendTo($container);
-			$(`<div class="charsheet__modal-section-title">${levelEmoji} ${levelLabel} <span style="opacity: 0.6;">(${byLevel[level].length})</span></div>`).appendTo($levelSection);
+			const levelSection = e_({tag: "div", clazz: "charsheet__modal-section"});
+			container.append(levelSection);
+			levelSection.append(e_({outer: `<div class="charsheet__modal-section-title">${levelEmoji} ${levelLabel} <span style="opacity: 0.6;">(${byLevel[level].length})</span></div>`}));
 
 			byLevel[level].forEach(spell => {
 				const spellId = `${spell.name}|${spell.source}`;
@@ -782,7 +774,7 @@ class CharacterSheetSpellPicker {
 					subschoolStr = ` • 🏷️ ${spell.subschools.map(formatSubschool).join(", ")}`;
 				}
 
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="charsheet__modal-list-item ${isKnown ? "ve-muted" : ""} ${isSelected ? "charsheet__modal-list-item--selected" : ""}">
 						<div class="charsheet__modal-list-item-icon">${schoolEmoji}</div>
 						<div class="charsheet__modal-list-item-content">
@@ -796,36 +788,35 @@ class CharacterSheetSpellPicker {
 								: `<button class="ve-btn ve-btn-primary ve-btn-xs spell-toggle">+ Add</button>`
 						}
 					</div>
-				`);
+				`});
 
 				// Add spell name with hover link
-				const $title = $item.find(".charsheet__modal-list-item-title");
+				const titleEl = item.querySelector(".charsheet__modal-list-item-title");
 				try {
 					if (getHoverLink) {
 						const hoverLink = getHoverLink(UrlUtil.PG_SPELLS, spell.name, spell.source || Parser.SRC_XPHB);
-						$title.html(`${hoverLink}${tagsStr}`);
+						titleEl.innerHTML = `${hoverLink}${tagsStr}`;
 					} else {
-						$title.html(`${spell.name}${tagsStr}`);
+						titleEl.innerHTML = `${spell.name}${tagsStr}`;
 					}
 				} catch (e) {
-					$title.html(`${spell.name}${tagsStr}`);
+					titleEl.innerHTML = `${spell.name}${tagsStr}`;
 				}
 
 				if (!isKnown) {
-					$item.find(".spell-toggle").on("click", (e) => {
+					item.querySelector(".spell-toggle")?.addEventListener("click", (e) => {
 						e.stopPropagation();
 						onToggle(spell);
 					});
 
-					// Click row to show info
-					$item.on("click", (e) => {
-						if (!$(e.target).is("button") && !$(e.target).closest("a").length) {
+					item.addEventListener("click", (e) => {
+						if (!e.target.matches("button") && !e.target.closest("a")) {
 							CharacterSheetSpellPicker.showSpellInfoModal(spell);
 						}
 					});
 				}
 
-				$levelSection.append($item);
+				levelSection.append(item);
 			});
 		});
 	}

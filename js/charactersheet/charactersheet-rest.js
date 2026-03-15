@@ -16,10 +16,10 @@ class CharacterSheetRest {
 
 	_initEventListeners () {
 		// Short rest button
-		$(document).on("click", "#charsheet-btn-short-rest", () => this._showShortRestDialog());
+		document.getElementById("charsheet-btn-short-rest")?.addEventListener("click", () => this._showShortRestDialog());
 
 		// Long rest button
-		$(document).on("click", "#charsheet-btn-long-rest", () => this._showLongRestDialog());
+		document.getElementById("charsheet-btn-long-rest")?.addEventListener("click", () => this._showLongRestDialog());
 	}
 
 	async _showShortRestDialog () {
@@ -36,7 +36,7 @@ class CharacterSheetRest {
 			return;
 		}
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "😴 Short Rest",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -46,13 +46,13 @@ class CharacterSheetRest {
 		// Track spent dice by type
 		const spentDice = {};
 
-		const $totalHealing = $(`<span class="charsheet__rest-healing-value">0</span>`);
+		const eleTotalHealing = e_({tag: "span", clazz: "charsheet__rest-healing-value", txt: "0"});
 
 		// Track which conditions to remove
 		const conditionsToRemove = new Set();
 		let shouldBreakConcentration = false;
 
-		$$`<div class="charsheet__rest-modal">
+		ee`<div class="charsheet__rest-modal">
 			<div class="charsheet__rest-intro">
 				<p class="mb-1">During a short rest (typically 1 hour), you can spend Hit Dice to recover hit points.</p>
 				<p class="mb-0">Current HP: <span class="charsheet__rest-current-hp">❤️ ${currentHp}/${maxHp}</span></p>
@@ -66,7 +66,7 @@ class CharacterSheetRest {
 			<div class="charsheet__rest-healing-display">
 				<span class="charsheet__rest-healing-icon">💚</span>
 				<span class="charsheet__rest-healing-label">Total Healing:</span>
-				${$totalHealing}
+				${eleTotalHealing}
 				<span class="charsheet__rest-healing-label">HP</span>
 			</div>
 			
@@ -78,48 +78,49 @@ class CharacterSheetRest {
 				</div>
 			</div>
 			` : ""}
-		</div>`.appendTo($modalInner);
+		</div>`.appendTo(modalInner);
 
 		// Render condition checkboxes
 		if (conditions.length > 0 || isConcentrating) {
-			const $condContainer = $modalInner.find("#short-rest-conditions-container");
+			const condContainer = e_({ele: modalInner}).find("#short-rest-conditions-container");
 
 			// Concentration first
 			if (isConcentrating) {
-				const $cbConc = $(`<input type="checkbox">`);
-				$cbConc.on("change", () => { shouldBreakConcentration = $cbConc.is(":checked"); });
-				$$`<label class="charsheet__rest-option">
-					${$cbConc}
+				const cbConc = e_({tag: "input", type: "checkbox"});
+				cbConc.onChange(() => { shouldBreakConcentration = cbConc.checked; });
+				ee`<label class="charsheet__rest-option">
+					${cbConc}
 					<span>🔮 Break Concentration (${concentration?.spellName || "unknown spell"})</span>
-				</label>`.appendTo($condContainer);
+				</label>`.appendTo(condContainer);
 			}
 
 			// Conditions
 			conditions.forEach(condition => {
-				const $cb = $(`<input type="checkbox">`);
-				$cb.on("change", () => {
-					if ($cb.is(":checked")) conditionsToRemove.add(condition);
+				const cb = e_({tag: "input", type: "checkbox"});
+				cb.onChange(() => {
+					if (cb.checked) conditionsToRemove.add(condition);
 					else conditionsToRemove.delete(condition);
 				});
-				$$`<label class="charsheet__rest-option">
-					${$cb}
+				ee`<label class="charsheet__rest-option">
+					${cb}
 					<span>⚠️ Remove: ${condition}</span>
-				</label>`.appendTo($condContainer);
+				</label>`.appendTo(condContainer);
 			});
 		}
 
 		// Render hit dice options
-		const $hdContainer = $modalInner.find("#short-rest-hit-dice-container");
+		const hdContainer = e_({ele: modalInner}).find("#short-rest-hit-dice-container");
 		if (!hitDice.length) {
-			$hdContainer.append(`<p class="ve-muted ve-text-center">No hit dice available</p>`);
+			hdContainer.append(e_({tag: "p", clazz: "ve-muted ve-text-center", txt: "No hit dice available"}));
 		} else {
 			hitDice.forEach((hd, idx) => {
 				// Track remaining locally for display
 				let remaining = hd.current;
-				const $remaining = $(`<span>${remaining}</span>`);
-				const $btn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary" ${hd.current <= 0 ? "disabled" : ""}>🎲 Roll</button>`);
+				const eleRemaining = e_({tag: "span", txt: `${remaining}`});
+				const btn = e_({tag: "button", clazz: "ve-btn ve-btn-sm ve-btn-primary", txt: "🎲 Roll"});
+				if (hd.current <= 0) btn.disabled = true;
 
-				$btn.on("click", () => {
+				btn.onClick(() => {
 					if (remaining <= 0) {
 						JqueryUtil.doToast({type: "warning", content: "No hit dice remaining!"});
 						return;
@@ -136,10 +137,10 @@ class CharacterSheetRest {
 					if (!spentDice[hd.type]) spentDice[hd.type] = 0;
 					spentDice[hd.type]++;
 
-					$remaining.text(remaining);
-					$totalHealing.text(totalHealing);
+					eleRemaining.txt(`${remaining}`);
+					eleTotalHealing.txt(`${totalHealing}`);
 
-					if (remaining <= 0) $btn.prop("disabled", true);
+					if (remaining <= 0) btn.disabled = true;
 
 					JqueryUtil.doToast({
 						type: "success",
@@ -147,20 +148,19 @@ class CharacterSheetRest {
 					});
 				});
 
-				$$`<div class="charsheet__hit-die-row">
+				ee`<div class="charsheet__hit-die-row">
 					<div class="charsheet__hit-die-info">
 						<span class="charsheet__hit-die-class">${hd.className}:</span>
 						<span class="charsheet__hit-die-die">d${hd.die}</span>
 					</div>
-					<span class="charsheet__hit-die-remaining">${$remaining} / ${hd.max} remaining</span>
-					${$btn}
-				</div>`.appendTo($hdContainer);
+					<span class="charsheet__hit-die-remaining">${eleRemaining} / ${hd.max} remaining</span>
+					${btn}
+				</div>`.appendTo(hdContainer);
 			});
 		}
 
 		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose(false));
+		const btnCancel = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel", click: () => doClose(false)});
 
 		// --- Spell Slot Recovery Features (Arcane Recovery / Natural Recovery) ---
 		const calc = this._state.getFeatureCalculations();
@@ -175,7 +175,7 @@ class CharacterSheetRest {
 				: calc.naturalRecoverySlots;
 			slotRecoveryFeatureName = calc.hasArcaneRecovery ? "Arcane Recovery" : "Natural Recovery";
 
-			const $recoverySection = $(`<div class="charsheet__rest-section">
+			const recoverySection = e_({outer: `<div class="charsheet__rest-section">
 				<div class="charsheet__rest-section-title">✨ ${slotRecoveryFeatureName}</div>
 				<p class="ve-muted ve-small mb-2">Recover spell slots (max combined levels: ${slotRecoveryMaxLevels}, no 6th+ slots)</p>
 				<div id="short-rest-slot-recovery-container"></div>
@@ -184,13 +184,13 @@ class CharacterSheetRest {
 					<span id="short-rest-slot-recovery-total">0</span>
 					<span class="charsheet__rest-healing-label"> / ${slotRecoveryMaxLevels}</span>
 				</div>
-			</div>`);
-			$recoverySection.insertBefore($modalInner.find(".charsheet__modal-footer").length
-				? $modalInner.find(".charsheet__modal-footer")
-				: $btnCancel.parent());
+			</div>`});
+			const insertTarget = modalInner.querySelector(".charsheet__modal-footer") || btnCancel.parentNode;
+			if (insertTarget?.parentNode) insertTarget.parentNode.insertBefore(recoverySection, insertTarget);
+			else modalInner.append(recoverySection);
 
-			const $slotContainer = $recoverySection.find("#short-rest-slot-recovery-container");
-			const $slotTotal = $recoverySection.find("#short-rest-slot-recovery-total");
+			const slotContainer = recoverySection.querySelector("#short-rest-slot-recovery-container");
+			const eleSlotTotal = recoverySection.querySelector("#short-rest-slot-recovery-total");
 
 			const slots = this._state.getSpellSlots();
 			for (let lvl = 1; lvl <= 5; lvl++) {
@@ -200,38 +200,39 @@ class CharacterSheetRest {
 				if (missing <= 0) continue;
 
 				slotRecoverySelections[lvl] = 0;
-				const $count = $(`<span>0</span>`);
-				const $btnAdd = $(`<button class="ve-btn ve-btn-xs ve-btn-primary">+</button>`);
-				const $btnRemove = $(`<button class="ve-btn ve-btn-xs ve-btn-default" disabled>−</button>`);
+				const eleCount = e_({tag: "span", txt: "0"});
+				const btnAdd = e_({tag: "button", clazz: "ve-btn ve-btn-xs ve-btn-primary", txt: "+"});
+				const btnRemove = e_({tag: "button", clazz: "ve-btn ve-btn-xs ve-btn-default", txt: "−"});
+				btnRemove.disabled = true;
 
 				const updateTotal = () => {
 					const total = Object.values(slotRecoverySelections).reduce((sum, v) => sum + v, 0);
-					$slotTotal.text(total);
+					eleSlotTotal.textContent = `${total}`;
 				};
 
-				$btnAdd.on("click", () => {
+				btnAdd.onClick(() => {
 					const currentTotal = Object.entries(slotRecoverySelections).reduce((sum, [l, a]) => sum + (parseInt(l) * a), 0);
 					if (currentTotal + lvl > slotRecoveryMaxLevels) return;
 					if (slotRecoverySelections[lvl] >= missing) return;
 					slotRecoverySelections[lvl]++;
-					$count.text(slotRecoverySelections[lvl]);
-					$btnRemove.prop("disabled", false);
+					eleCount.txt(`${slotRecoverySelections[lvl]}`);
+					btnRemove.disabled = false;
 					updateTotal();
 				});
 
-				$btnRemove.on("click", () => {
+				btnRemove.onClick(() => {
 					if (slotRecoverySelections[lvl] <= 0) return;
 					slotRecoverySelections[lvl]--;
-					$count.text(slotRecoverySelections[lvl]);
-					if (slotRecoverySelections[lvl] <= 0) $btnRemove.prop("disabled", true);
+					eleCount.txt(`${slotRecoverySelections[lvl]}`);
+					if (slotRecoverySelections[lvl] <= 0) btnRemove.disabled = true;
 					updateTotal();
 				});
 
-				$$`<div class="charsheet__hit-die-row">
+				ee`<div class="charsheet__hit-die-row">
 					<span>Level ${lvl} (${slot.current}/${slot.max})</span>
 					<span>Missing: ${missing}</span>
-					${$btnRemove} ${$count} ${$btnAdd}
-				</div>`.appendTo($slotContainer);
+					${btnRemove} ${eleCount} ${btnAdd}
+				</div>`.appendTo(slotContainer);
 			}
 		}
 
@@ -242,17 +243,18 @@ class CharacterSheetRest {
 			const restoreAmt = calc.sorcerousRestorationAmount || 0;
 			const willRecover = Math.min(restoreAmt, sp.max - sp.current);
 			if (willRecover > 0) {
-				$$`<div class="charsheet__rest-section">
+				const sorcSection = ee`<div class="charsheet__rest-section">
 					<div class="charsheet__rest-section-title">⚡ Sorcerous Restoration</div>
 					<p class="ve-muted ve-small mb-0">Will recover ${willRecover} sorcery point(s) (${sp.current}/${sp.max} → ${sp.current + willRecover}/${sp.max})</p>
-				</div>`.insertBefore($modalInner.find(".charsheet__modal-footer").length
-					? $modalInner.find(".charsheet__modal-footer")
-					: $btnCancel.parent());
+				</div>`;
+				const sorcTarget = modalInner.querySelector(".charsheet__modal-footer") || btnCancel.parentNode;
+				if (sorcTarget?.parentNode) sorcTarget.parentNode.insertBefore(sorcSection, sorcTarget);
+				else modalInner.append(sorcSection);
 			}
 		}
 
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">✓ Finish Short Rest</button>`)
-			.on("click", () => {
+		const btnConfirm = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "✓ Finish Short Rest"});
+		btnConfirm.onClick(() => {
 				// Apply hit dice spending using spentDice tracker
 				Object.entries(spentDice).forEach(([dieType, count]) => {
 					for (let i = 0; i < count; i++) {
@@ -316,12 +318,12 @@ class CharacterSheetRest {
 					type: "success",
 					content: message,
 				});
-			});
+		});
 
-		$$`<div class="charsheet__modal-footer">
-			${$btnCancel}
-			${$btnConfirm}
-		</div>`.appendTo($modalInner);
+		ee`<div class="charsheet__modal-footer">
+			${btnCancel}
+			${btnConfirm}
+		</div>`.appendTo(modalInner);
 	}
 
 	async _showLongRestDialog () {
@@ -336,21 +338,24 @@ class CharacterSheetRest {
 		const isConcentrating = this._state.isConcentrating?.();
 		const concentration = this._state.getConcentration?.();
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "🌙 Long Rest",
 			isMinHeight0: true,
 			isWidth100: true,
 		});
 
-		const $cbResetTempHp = $(`<input type="checkbox" checked>`);
-		const $cbClearExhaustion = $(`<input type="checkbox" ${currentExhaustion > 0 ? "checked" : "disabled"}>`);
-		const $cbBreakConcentration = isConcentrating ? $(`<input type="checkbox" checked>`) : null;
+		const cbResetTempHp = e_({tag: "input", type: "checkbox"});
+		cbResetTempHp.checked = true;
+		const cbClearExhaustion = e_({tag: "input", type: "checkbox"});
+		if (currentExhaustion > 0) cbClearExhaustion.checked = true;
+		else cbClearExhaustion.disabled = true;
+		const cbBreakConcentration = isConcentrating ? (() => { const cb = e_({tag: "input", type: "checkbox"}); cb.checked = true; return cb; })() : null;
 
 		// Track which conditions to remove
 		const conditionsToRemove = new Set(conditions); // All checked by default for long rest
 		const conditionCheckboxes = [];
 
-		$$`<div class="charsheet__rest-modal">
+		ee`<div class="charsheet__rest-modal">
 			<div class="charsheet__rest-intro">
 				<p class="mb-0">A long rest (typically 8 hours) restores all hit points and recovers spent Hit Dice.</p>
 			</div>
@@ -404,11 +409,11 @@ class CharacterSheetRest {
 				<div class="charsheet__rest-section-title">⚙️ Options</div>
 				<div class="charsheet__rest-options">
 					<label class="charsheet__rest-option">
-						${$cbResetTempHp}
+						${cbResetTempHp}
 						<span>Reset temporary HP to 0</span>
 					</label>
 					<label class="charsheet__rest-option ${currentExhaustion === 0 ? "charsheet__rest-option--disabled" : ""}">
-						${$cbClearExhaustion}
+						${cbClearExhaustion}
 						<span>Reduce exhaustion by 1 level ${currentExhaustion === 0 ? "(none to reduce)" : ""}</span>
 					</label>
 				</div>
@@ -422,42 +427,42 @@ class CharacterSheetRest {
 				</div>
 			</div>
 			` : ""}
-		</div>`.appendTo($modalInner);
+		</div>`.appendTo(modalInner);
 
 		// Render condition checkboxes
 		if (conditions.length > 0 || isConcentrating) {
-			const $condContainer = $modalInner.find("#long-rest-conditions-container");
+			const condContainer = e_({ele: modalInner}).find("#long-rest-conditions-container");
 
 			// Concentration first
 			if (isConcentrating) {
-				$$`<label class="charsheet__rest-option">
-					${$cbBreakConcentration}
+				ee`<label class="charsheet__rest-option">
+					${cbBreakConcentration}
 					<span>🔮 Break Concentration (${concentration?.spellName || "unknown spell"})</span>
-				</label>`.appendTo($condContainer);
+				</label>`.appendTo(condContainer);
 			}
 
 			// Conditions (checked by default for long rest)
 			conditions.forEach(condition => {
-				const $cb = $(`<input type="checkbox" checked>`);
-				conditionCheckboxes.push({condition, $cb});
-				$cb.on("change", () => {
-					if ($cb.is(":checked")) conditionsToRemove.add(condition);
+				const cb = e_({tag: "input", type: "checkbox"});
+				cb.checked = true;
+				conditionCheckboxes.push({condition, cb});
+				cb.onChange(() => {
+					if (cb.checked) conditionsToRemove.add(condition);
 					else conditionsToRemove.delete(condition);
 				});
-				$$`<label class="charsheet__rest-option">
-					${$cb}
+				ee`<label class="charsheet__rest-option">
+					${cb}
 					<span>⚠️ Remove: ${condition}</span>
-				</label>`.appendTo($condContainer);
+				</label>`.appendTo(condContainer);
 			});
 		}
 
 		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose(false));
-		const $btnConfirm = $(`<button class="ve-btn ve-btn-primary">🌙 Finish Long Rest</button>`)
-			.on("click", () => {
+		const btnCancel = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel", click: () => doClose(false)});
+		const btnConfirm = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "🌙 Finish Long Rest"});
+		btnConfirm.onClick(() => {
 				// Full HP recovery
-				this._state.setHp(maxHp, maxHp, $cbResetTempHp.is(":checked") ? 0 : this._state.getHp().temp);
+				this._state.setHp(maxHp, maxHp, cbResetTempHp.checked ? 0 : this._state.getHp().temp);
 
 				// Recover half hit dice (minimum 1)
 				hitDice.forEach(hd => {
@@ -484,7 +489,7 @@ class CharacterSheetRest {
 				this._restoreResources("long");
 
 				// Clear one level of exhaustion using the dedicated exhaustion tracker
-				if ($cbClearExhaustion.is(":checked")) {
+				if (cbClearExhaustion.checked) {
 					const currentExhaustion = this._state.getExhaustion();
 					if (currentExhaustion > 0) {
 						this._state.setExhaustion(currentExhaustion - 1);
@@ -497,7 +502,7 @@ class CharacterSheetRest {
 				});
 
 				// Break concentration if requested
-				if ($cbBreakConcentration?.is(":checked")) {
+				if (cbBreakConcentration?.checked) {
 					this._state.breakConcentration?.();
 				}
 
@@ -524,19 +529,19 @@ class CharacterSheetRest {
 
 				let message = "🌙 Long rest complete! All resources restored.";
 				if (conditionsToRemove.size > 0) message += ` Removed ${conditionsToRemove.size} condition(s).`;
-				if ($cbBreakConcentration?.is(":checked")) message += ` Broke concentration.`;
+				if (cbBreakConcentration?.checked) message += ` Broke concentration.`;
 				if (calcs.hasGamblerSpellcasting) message += ` 🎲 Roll for new Gambler spells in Spells tab.`;
 
 				JqueryUtil.doToast({
 					type: "success",
 					content: message,
 				});
-			});
+		});
 
-		$$`<div class="charsheet__modal-footer">
-			${$btnCancel}
-			${$btnConfirm}
-		</div>`.appendTo($modalInner);
+		ee`<div class="charsheet__modal-footer">
+			${btnCancel}
+			${btnConfirm}
+		</div>`.appendTo(modalInner);
 	}
 
 	_restoreResources (restType) {

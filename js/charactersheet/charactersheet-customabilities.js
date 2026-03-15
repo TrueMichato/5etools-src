@@ -1833,36 +1833,36 @@ class CharacterSheetCustomAbilities {
 				row.querySelector(".custom-abilities__effect-type").value = effect.type || "ac";
 
 				// Bind change handlers
-				const $type = row.querySelector(".custom-abilities__effect-type");
-				const $mode = row.querySelector(".custom-abilities__effect-mode");
-				const $value = row.querySelector(".custom-abilities__effect-value");
+				const typeEl = row.querySelector(".custom-abilities__effect-type");
+				const modeEl = row.querySelector(".custom-abilities__effect-mode");
+				const valueEl = row.querySelector(".custom-abilities__effect-value");
 
-				$type.addEventListener("change", (e) => {
+				typeEl.addEventListener("change", (e) => {
 					effects[idx].type = e.target.value;
 					// Show/hide mode dropdown based on type
 					const isAbility = e.target.value.startsWith("ability:");
-					$mode.style.display = isAbility ? "" : "none";
+					modeEl.style.display = isAbility ? "" : "none";
 					if (!isAbility) {
 						delete effects[idx].mode;
-						$value.placeholder = "±0";
+						valueEl.placeholder = "±0";
 					}
 				});
-				$mode.addEventListener("change", (e) => {
+				modeEl.addEventListener("change", (e) => {
 					if (e.target.value === "set") {
 						effects[idx].mode = "set";
-						$value.placeholder = "19";
+						valueEl.placeholder = "19";
 					} else {
 						delete effects[idx].mode;
-						$value.placeholder = "±0";
+						valueEl.placeholder = "±0";
 					}
 				});
-				$value.addEventListener("change", (e) => {
+				valueEl.addEventListener("change", (e) => {
 					effects[idx].value = parseInt(e.target.value) || 0;
 				});
 
 				// Scaling dropdown handler
-				const $scaling = row.querySelector(".custom-abilities__effect-scaling");
-				$scaling.addEventListener("change", (e) => {
+				const scalingEl = row.querySelector(".custom-abilities__effect-scaling");
+				scalingEl.addEventListener("change", (e) => {
 					// Clear all scaling properties first
 					delete effects[idx].proficiencyBonus;
 					delete effects[idx].halfProficiency;
@@ -1887,9 +1887,9 @@ class CharacterSheetCustomAbilities {
 				});
 
 				// Class level dropdown handler (if present)
-				const $classLevel = row.querySelector(".custom-abilities__effect-class-level");
-				if ($classLevel) {
-					$classLevel.addEventListener("change", (e) => {
+				const classLevelEl = row.querySelector(".custom-abilities__effect-class-level");
+				if (classLevelEl) {
+					classLevelEl.addEventListener("change", (e) => {
 						effects[idx].perClassLevel = e.target.value;
 					});
 				}

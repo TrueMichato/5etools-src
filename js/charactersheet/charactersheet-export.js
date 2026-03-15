@@ -20,20 +20,11 @@ class CharacterSheetExport {
 	}
 
 	_initEventListeners () {
-		// Export button
-		$(document).on("click", "#charsheet-btn-export", () => this._showExportDialog());
-
-		// Import button
-		$(document).on("click", "#charsheet-btn-import", () => this._showImportDialog());
-
-		// Print button
-		$(document).on("click", "#charsheet-btn-print", () => this._printCharacter());
-
-		// NPC statblock export button
-		$(document).on("click", "#charsheet-btn-export-npc", () => this._showNpcExportDialog());
-
-		// Save button (if exists)
-		$(document).on("click", "#charsheet-btn-save", () => this._saveCharacter());
+		document.getElementById("charsheet-btn-export")?.addEventListener("click", () => this._showExportDialog());
+		document.getElementById("charsheet-btn-import")?.addEventListener("click", () => this._showImportDialog());
+		document.getElementById("charsheet-btn-print")?.addEventListener("click", () => this._printCharacter());
+		document.getElementById("charsheet-btn-export-npc")?.addEventListener("click", () => this._showNpcExportDialog());
+		document.getElementById("charsheet-btn-save")?.addEventListener("click", () => this._saveCharacter());
 	}
 
 	async _showExportDialog () {
@@ -41,7 +32,7 @@ class CharacterSheetExport {
 		const jsonStr = JSON.stringify(characterData, null, 2);
 		const characterName = this._state.getName() || "character";
 
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "📤 Export Character",
 			isMinHeight0: true,
 			isWidth100: true,
@@ -49,25 +40,23 @@ class CharacterSheetExport {
 
 		let isPdfFormat = false;
 
-		const $btnJson = $(`<button class="ve-btn ve-btn-default active">JSON File</button>`)
-			.on("click", () => {
-				isPdfFormat = false;
-				$btnJson.addClass("active");
-				$btnPdf.removeClass("active");
-				$jsonSection.show();
-				$pdfSection.hide();
-			});
+		const btnJson = e_({tag: "button", clazz: "ve-btn ve-btn-default active", txt: "JSON File", click: () => {
+			isPdfFormat = false;
+			btnJson.classList.add("active");
+			btnPdf.classList.remove("active");
+			jsonSection.style.display = "";
+			pdfSection.style.display = "none";
+		}});
 
-		const $btnPdf = $(`<button class="ve-btn ve-btn-default">Print / PDF</button>`)
-			.on("click", () => {
-				isPdfFormat = true;
-				$btnPdf.addClass("active");
-				$btnJson.removeClass("active");
-				$pdfSection.show();
-				$jsonSection.hide();
-			});
+		const btnPdf = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Print / PDF", click: () => {
+			isPdfFormat = true;
+			btnPdf.classList.add("active");
+			btnJson.classList.remove("active");
+			pdfSection.style.display = "";
+			jsonSection.style.display = "none";
+		}});
 
-		const $jsonSection = $$`<div>
+		const jsonSection = ee`<div>
 			<div class="charsheet__export-info mb-3">
 				<p class="ve-muted mb-1"><strong>💾 JSON Export</strong> - Create a backup file to:</p>
 				<ul class="ve-muted" style="margin: 0; padding-left: 1.5rem;">
@@ -82,7 +71,7 @@ class CharacterSheetExport {
 			</div>
 		</div>`;
 
-		const $pdfSection = $$`<div style="display: none;">
+		const pdfSection = ee`<div style="display: none;">
 			<div class="charsheet__export-info">
 				<p class="ve-muted mb-1"><strong>🖨️ Print / PDF</strong> - Opens print dialog to:</p>
 				<ul class="ve-muted" style="margin: 0; padding-left: 1.5rem;">
@@ -92,72 +81,81 @@ class CharacterSheetExport {
 			</div>
 		</div>`;
 
-		$$`<div>
+		ee`<div>
 			<div class="mb-3">
 				<div class="charsheet__export-format-label mb-2">Export Format:</div>
 				<div class="ve-btn-group">
-					${$btnJson}
-					${$btnPdf}
+					${btnJson}
+					${btnPdf}
 				</div>
 			</div>
-			${$jsonSection}
-			${$pdfSection}
-		</div>`.appendTo($modalInner);
+			${jsonSection}
+			${pdfSection}
+		</div>`.appendTo(modalInner);
 
 		// Footer buttons
-		const $btnClose = $(`<button class="ve-btn ve-btn-default">Close</button>`)
-			.on("click", () => doClose(false));
-		const $btnCopy = $(`<button class="ve-btn ve-btn-default"><span class="glyphicon glyphicon-copy"></span> Copy to Clipboard</button>`)
-			.on("click", async () => {
-				if (isPdfFormat) {
-					this._printCharacter();
-				} else {
-					await MiscUtil.pCopyTextToClipboard(jsonStr);
-					JqueryUtil.doToast({type: "success", content: "Character data copied to clipboard!"});
-				}
-			});
-		const $btnDownload = $(`<button class="ve-btn ve-btn-primary"><span class="glyphicon glyphicon-download"></span> Download</button>`)
-			.on("click", () => {
-				if (isPdfFormat) {
-					this._printCharacter();
-				} else {
-					const filename = `${characterName.replace(/[^a-zA-Z0-9]/g, "_")}.json`;
-					DataUtil.userDownload(filename, characterData, {fileType: "character"});
-					JqueryUtil.doToast({type: "success", content: `Downloaded ${filename}`});
-				}
-			});
+		const btnClose = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Close", click: () => doClose(false)});
+		const btnCopy = e_({tag: "button", clazz: "ve-btn ve-btn-default", click: async () => {
+			if (isPdfFormat) {
+				this._printCharacter();
+			} else {
+				await MiscUtil.pCopyTextToClipboard(jsonStr);
+				JqueryUtil.doToast({type: "success", content: "Character data copied to clipboard!"});
+			}
+		}});
+		btnCopy.innerHTML = `<span class="glyphicon glyphicon-copy"></span> Copy to Clipboard`;
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			${$btnClose}
-			${$btnCopy}
-			${$btnDownload}
-		</div>`.appendTo($modalInner);
+		const btnDownload = e_({tag: "button", clazz: "ve-btn ve-btn-primary", click: () => {
+			if (isPdfFormat) {
+				this._printCharacter();
+			} else {
+				const filename = `${characterName.replace(/[^a-zA-Z0-9]/g, "_")}.json`;
+				DataUtil.userDownload(filename, characterData, {fileType: "character"});
+				JqueryUtil.doToast({type: "success", content: `Downloaded ${filename}`});
+			}
+		}});
+		btnDownload.innerHTML = `<span class="glyphicon glyphicon-download"></span> Download`;
+
+		ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			${btnClose}
+			${btnCopy}
+			${btnDownload}
+		</div>`.appendTo(modalInner);
 	}
 
 	async _showImportDialog () {
-		const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+		const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 			title: "📥 Import Character",
 			isMinHeight0: true,
 		});
 
-		const $fileInput = $(`<input type="file" class="form-control" accept=".json">`);
-		const $jsonTextarea = $(`<textarea class="form-control" rows="8" placeholder="Paste character JSON data here..." style="font-family: monospace; font-size: 0.85rem;"></textarea>`);
-		const $cbReplace = $(`<input type="checkbox" class="mr-2">`);
+		const fileInput = e_({tag: "input", clazz: "form-control"});
+		fileInput.type = "file";
+		fileInput.accept = ".json";
+
+		const jsonTextarea = e_({tag: "textarea", clazz: "form-control"});
+		jsonTextarea.rows = 8;
+		jsonTextarea.placeholder = "Paste character JSON data here...";
+		jsonTextarea.style.fontFamily = "monospace";
+		jsonTextarea.style.fontSize = "0.85rem";
+
+		const cbReplace = e_({tag: "input", clazz: "mr-2"});
+		cbReplace.type = "checkbox";
 
 		// File input handler
-		$fileInput.on("change", (e) => {
+		fileInput.addEventListener("change", (e) => {
 			const file = e.target.files[0];
 			if (!file) return;
 
 			const reader = new FileReader();
 			reader.onload = (evt) => {
-				$jsonTextarea.val(evt.target.result);
+				jsonTextarea.value = evt.target.result;
 				JqueryUtil.doToast({type: "info", content: `Loaded: ${file.name}`});
 			};
 			reader.readAsText(file);
 		});
 
-		$$`<div>
+		ee`<div>
 			<div class="charsheet__import-info mb-3">
 				<p class="ve-muted mb-1"><strong>📂 Import a character</strong> from a previously exported JSON file.</p>
 				<p class="ve-muted" style="font-size: 0.85rem;">Characters are saved locally in your browser. Use this to restore a backup or import a character from another device.</p>
@@ -165,72 +163,70 @@ class CharacterSheetExport {
 			
 			<div class="mb-3">
 				<label class="ve-muted mb-1"><strong>Option 1:</strong> Select a file</label>
-				${$fileInput}
+				${fileInput}
 			</div>
 			
 			<div class="text-center ve-muted mb-3" style="font-size: 0.85rem;">— or —</div>
 			
 			<div class="mb-3">
 				<label class="ve-muted mb-1"><strong>Option 2:</strong> Paste JSON data</label>
-				${$jsonTextarea}
+				${jsonTextarea}
 			</div>
 			
 			<div class="charsheet__import-option mt-3">
 				<label class="ve-flex-v-center">
-					${$cbReplace}
+					${cbReplace}
 					<span>
 						<strong>Replace current character</strong>
 						<span class="ve-muted" style="font-size: 0.85rem;"> — Overwrites the character you're currently editing (cannot be undone)</span>
 					</span>
 				</label>
 			</div>
-		</div>`.appendTo($modalInner);
+		</div>`.appendTo(modalInner);
 
 		// Footer buttons
-		const $btnCancel = $(`<button class="ve-btn ve-btn-default">Cancel</button>`)
-			.on("click", () => doClose(false));
-		const $btnImport = $(`<button class="ve-btn ve-btn-primary">Import</button>`)
-			.on("click", async () => {
-				const jsonStr = $jsonTextarea.val().trim();
-				const replaceExisting = $cbReplace.is(":checked");
+		const btnCancel = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Cancel", click: () => doClose(false)});
+		const btnImport = e_({tag: "button", clazz: "ve-btn ve-btn-primary", txt: "Import", click: async () => {
+			const jsonStr = jsonTextarea.value.trim();
+			const replaceExisting = cbReplace.checked;
 
-				if (!jsonStr) {
-					JqueryUtil.doToast({type: "warning", content: "Please provide character data to import."});
-					return;
+			if (!jsonStr) {
+				JqueryUtil.doToast({type: "warning", content: "Please provide character data to import."});
+				return;
+			}
+
+			try {
+				const data = JSON.parse(jsonStr);
+
+				// Validate basic structure
+				if (!data.name && !data.classes && !data.race) {
+					throw new Error("Invalid character data structure");
 				}
 
-				try {
-					const data = JSON.parse(jsonStr);
-
-					// Validate basic structure
-					if (!data.name && !data.classes && !data.race) {
-						throw new Error("Invalid character data structure");
-					}
-
-					if (replaceExisting) {
-						this._state.fromJSON(data);
-					} else {
-						const newState = new CharacterSheetState();
-						newState.fromJSON(data);
-						await this._page.addCharacter(newState);
-					}
-
-					this._page.renderCharacter();
-					await this._page.saveCharacter();
-
-					doClose(true);
-					JqueryUtil.doToast({type: "success", content: `Imported ${data.name || "character"} successfully!`});
-
-				} catch (err) {
-					console.error("Import error:", err);
-					JqueryUtil.doToast({type: "danger", content: "Failed to import: Invalid JSON data."});
+				if (replaceExisting) {
+					this._state.fromJSON(data);
+				} else {
+					const newState = new CharacterSheetState();
+					newState.fromJSON(data);
+					await this._page.addCharacter(newState);
 				}
-			});
 
-		$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-			${$btnCancel}
-			${$btnImport}
-		</div>`.appendTo($modalInner);
+				this._page.renderCharacter();
+				await this._page.saveCharacter();
+
+				doClose(true);
+				JqueryUtil.doToast({type: "success", content: `Imported ${data.name || "character"} successfully!`});
+
+			} catch (err) {
+				console.error("Import error:", err);
+				JqueryUtil.doToast({type: "danger", content: "Failed to import: Invalid JSON data."});
+			}
+		}});
+
+		ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+			${btnCancel}
+			${btnImport}
+		</div>`.appendTo(modalInner);
 	}
 
 	async _showNpcExportDialog () {
@@ -243,42 +239,55 @@ class CharacterSheetExport {
 			});
 			let sourceMeta = CharacterSheetNpcExporter.getDefaultSourceMeta(sourceConfig);
 
-			const {$modalInner, doClose} = await UiUtil.pGetShowModal({
+			const {eleModalInner: modalInner, doClose} = await UiUtil.pGetShowModal({
 				title: "👹 Export Character as NPC",
 				isMinHeight0: true,
 				isWidth100: true,
 			});
 
-			const $iptSourceJson = $(`<input class="form-control input-sm" placeholder="CSHEET">`).val(sourceConfig.sourceJson);
-			const $iptSourceAbv = $(`<input class="form-control input-sm" placeholder="CSHEET">`).val(sourceConfig.abbreviation);
-			const $iptSourceFull = $(`<input class="form-control input-sm" placeholder="Character Sheet NPC Exports">`).val(sourceConfig.full);
-			const $iptSourceVersion = $(`<input class="form-control input-sm" placeholder="1.0.0">`).val(sourceConfig.version);
-			const $selDefenseMode = $(`<select class="form-control input-sm">
+			const iptSourceJson = e_({tag: "input", clazz: "form-control input-sm"});
+			iptSourceJson.placeholder = "CSHEET";
+			iptSourceJson.value = sourceConfig.sourceJson;
+
+			const iptSourceAbv = e_({tag: "input", clazz: "form-control input-sm"});
+			iptSourceAbv.placeholder = "CSHEET";
+			iptSourceAbv.value = sourceConfig.abbreviation;
+
+			const iptSourceFull = e_({tag: "input", clazz: "form-control input-sm"});
+			iptSourceFull.placeholder = "Character Sheet NPC Exports";
+			iptSourceFull.value = sourceConfig.full;
+
+			const iptSourceVersion = e_({tag: "input", clazz: "form-control input-sm"});
+			iptSourceVersion.placeholder = "1.0.0";
+			iptSourceVersion.value = sourceConfig.version;
+
+			const selDefenseMode = e_({outer: `<select class="form-control input-sm">
 				<option value="persistent">Persistent Defenses (default)</option>
 				<option value="active">Include Active-State Defenses</option>
-			</select>`).val(exportOptions.defenseMode);
+			</select>`});
+			selDefenseMode.value = exportOptions.defenseMode;
 
-			const $wrpPreviewMeta = $(`<p class="ve-muted mb-0"></p>`);
-			const $wrpPreviewStatblock = $(`<div class="ve-overflow-x-auto" style="max-height: 60vh; overflow-y: auto;"></div>`);
+			const wrpPreviewMeta = e_({tag: "p", clazz: "ve-muted mb-0"});
+			const wrpPreviewStatblock = e_({tag: "div", clazz: "ve-overflow-x-auto", style: "max-height: 60vh; overflow-y: auto;"});
 
 			const pApplySourceConfig = async () => {
 				const inputConfig = {
-					sourceJson: String($iptSourceJson.val() || ""),
-					abbreviation: String($iptSourceAbv.val() || ""),
-					full: String($iptSourceFull.val() || ""),
-					version: String($iptSourceVersion.val() || ""),
+					sourceJson: String(iptSourceJson.value || ""),
+					abbreviation: String(iptSourceAbv.value || ""),
+					full: String(iptSourceFull.value || ""),
+					version: String(iptSourceVersion.value || ""),
 				};
 				const nextOptions = this._getSanitizedNpcExportOptions({
-					defenseMode: String($selDefenseMode.val() || "persistent"),
+					defenseMode: String(selDefenseMode.value || "persistent"),
 				});
 
 				sourceConfig = CharacterSheetNpcExporter.getSanitizedSourceConfig(inputConfig);
 				exportOptions = nextOptions;
-				$iptSourceJson.val(sourceConfig.sourceJson);
-				$iptSourceAbv.val(sourceConfig.abbreviation);
-				$iptSourceFull.val(sourceConfig.full);
-				$iptSourceVersion.val(sourceConfig.version);
-				$selDefenseMode.val(exportOptions.defenseMode);
+				iptSourceJson.value = sourceConfig.sourceJson;
+				iptSourceAbv.value = sourceConfig.abbreviation;
+				iptSourceFull.value = sourceConfig.full;
+				iptSourceVersion.value = sourceConfig.version;
+				selDefenseMode.value = exportOptions.defenseMode;
 
 				await this._pSetNpcExportSourceConfig(sourceConfig);
 				await this._pSetNpcExportOptions(exportOptions);
@@ -294,85 +303,87 @@ class CharacterSheetExport {
 				const safeSource = this._escapeHtml(monster.source);
 				const safeCr = this._escapeHtml(monster.cr);
 
-				$wrpPreviewMeta.html(`CR: <strong>${safeCr}</strong> • Source: <strong>${safeSource}</strong> • Name: <strong>${safeName}</strong>`);
-				$wrpPreviewStatblock.empty().append(`<table class="w-100 stats"><tbody>${rendered}</tbody></table>`);
+				wrpPreviewMeta.innerHTML = `CR: <strong>${safeCr}</strong> • Source: <strong>${safeSource}</strong> • Name: <strong>${safeName}</strong>`;
+				wrpPreviewStatblock.innerHTML = `<table class="w-100 stats"><tbody>${rendered}</tbody></table>`;
 			};
 
-			$$`<div>
+			ee`<div>
 				<div class="charsheet__export-info mb-3">
 					<p class="ve-muted mb-1"><strong>Statblock Preview</strong> — Uses the standard bestiary compact format.</p>
-					${$wrpPreviewMeta}
+					${wrpPreviewMeta}
 				</div>
 				<div class="mb-3 p-2" style="border: 1px solid var(--bs-border-color); border-radius: 4px;">
 					<div class="mb-2"><strong>Source Metadata</strong></div>
 					<div class="ve-flex-v-center mb-2" style="gap: 8px;">
 						<label class="ve-muted no-shrink" style="min-width: 110px;">JSON Identifier</label>
-						${$iptSourceJson}
+						${iptSourceJson}
 					</div>
 					<div class="ve-flex-v-center mb-2" style="gap: 8px;">
 						<label class="ve-muted no-shrink" style="min-width: 110px;">Abbreviation</label>
-						${$iptSourceAbv}
+						${iptSourceAbv}
 					</div>
 					<div class="ve-flex-v-center mb-2" style="gap: 8px;">
 						<label class="ve-muted no-shrink" style="min-width: 110px;">Full Name</label>
-						${$iptSourceFull}
+						${iptSourceFull}
 					</div>
 					<div class="ve-flex-v-center" style="gap: 8px;">
 						<label class="ve-muted no-shrink" style="min-width: 110px;">Version</label>
-						${$iptSourceVersion}
+						${iptSourceVersion}
 					</div>
 					<div class="ve-flex-v-center mt-2" style="gap: 8px;">
 						<label class="ve-muted no-shrink" style="min-width: 110px;">Defenses</label>
-						${$selDefenseMode}
+						${selDefenseMode}
 					</div>
 					<p class="ve-muted mb-0 mt-1" style="margin-left: 118px;">
 						Persistent = stable baseline; Active-State = include currently toggled effects.
 					</p>
 				</div>
-				${$wrpPreviewStatblock}
-			</div>`.appendTo($modalInner);
+				${wrpPreviewStatblock}
+			</div>`.appendTo(modalInner);
 
 			await pApplySourceConfig();
 
-			const $btnCancel = $(`<button class="ve-btn ve-btn-default">Close</button>`)
-				.on("click", () => doClose(false));
-			const $btnRefresh = $(`<button class="ve-btn ve-btn-default"><span class="glyphicon glyphicon-refresh"></span> Refresh Preview</button>`)
-				.on("click", async () => {
-					await pApplySourceConfig();
-				});
-			const $btnDownload = $(`<button class="ve-btn ve-btn-default"><span class="glyphicon glyphicon-download"></span> Download JSON</button>`)
-				.on("click", async () => {
-					await pApplySourceConfig();
+			const btnCancel = e_({tag: "button", clazz: "ve-btn ve-btn-default", txt: "Close", click: () => doClose(false)});
 
-					const validation = CharacterSheetNpcExporter.getValidationIssues(monster);
-					if (validation.errors.length || validation.warnings.length) {
-						const details = this._getValidationIssueSummary(validation, {maxErrors: 2, maxWarnings: 2});
-						JqueryUtil.doToast({
-							type: "warning",
-							content: `Downloaded with validation warnings (${validation.errors.length} error(s), ${validation.warnings.length} warning(s)). ${details}`.trim(),
-						});
-					}
+			const btnRefresh = e_({tag: "button", clazz: "ve-btn ve-btn-default", click: async () => {
+				await pApplySourceConfig();
+			}});
+			btnRefresh.innerHTML = `<span class="glyphicon glyphicon-refresh"></span> Refresh Preview`;
 
-					const filename = `${(monster.name || "npc").replace(/[^a-zA-Z0-9]/g, "_")}.json`;
-					DataUtil.userDownload(
-						filename,
-						{_meta: {sources: [sourceMeta]}, monster: [monster]},
-						{fileType: "homebrew"},
-					);
-					JqueryUtil.doToast({type: "success", content: `Downloaded ${filename}`});
-				});
-			const $btnSave = $(`<button class="ve-btn ve-btn-primary"><span class="glyphicon glyphicon-floppy-disk"></span> Save to Homebrew</button>`)
-				.on("click", async () => {
-					await pApplySourceConfig();
-					await this._pSaveNpcToEditableBrew(monster, {sourceMeta});
-				});
+			const btnDownload = e_({tag: "button", clazz: "ve-btn ve-btn-default", click: async () => {
+				await pApplySourceConfig();
 
-			$$`<div class="ve-flex-v-center ve-flex-h-right mt-3">
-				${$btnCancel}
-				${$btnRefresh}
-				${$btnDownload}
-				${$btnSave}
-			</div>`.appendTo($modalInner);
+				const validation = CharacterSheetNpcExporter.getValidationIssues(monster);
+				if (validation.errors.length || validation.warnings.length) {
+					const details = this._getValidationIssueSummary(validation, {maxErrors: 2, maxWarnings: 2});
+					JqueryUtil.doToast({
+						type: "warning",
+						content: `Downloaded with validation warnings (${validation.errors.length} error(s), ${validation.warnings.length} warning(s)). ${details}`.trim(),
+					});
+				}
+
+				const filename = `${(monster.name || "npc").replace(/[^a-zA-Z0-9]/g, "_")}.json`;
+				DataUtil.userDownload(
+					filename,
+					{_meta: {sources: [sourceMeta]}, monster: [monster]},
+					{fileType: "homebrew"},
+				);
+				JqueryUtil.doToast({type: "success", content: `Downloaded ${filename}`});
+			}});
+			btnDownload.innerHTML = `<span class="glyphicon glyphicon-download"></span> Download JSON`;
+
+			const btnSave = e_({tag: "button", clazz: "ve-btn ve-btn-primary", click: async () => {
+				await pApplySourceConfig();
+				await this._pSaveNpcToEditableBrew(monster, {sourceMeta});
+			}});
+			btnSave.innerHTML = `<span class="glyphicon glyphicon-floppy-disk"></span> Save to Homebrew`;
+
+			ee`<div class="ve-flex-v-center ve-flex-h-right mt-3">
+				${btnCancel}
+				${btnRefresh}
+				${btnDownload}
+				${btnSave}
+			</div>`.appendTo(modalInner);
 		} catch (e) {
 			console.error("NPC export failed:", e);
 			JqueryUtil.doToast({type: "danger", content: "Failed to build NPC statblock from character."});
@@ -497,7 +508,7 @@ class CharacterSheetExport {
 					values: ["Overwrite existing", "Save as copy", "Cancel"],
 					default: 0,
 					isResolveItem: true,
-					$elePost: $$`<p class="ve-muted mt-2 mb-0">A monster named <strong>${this._escapeHtml(existing.name)}</strong> with source <strong>${this._escapeHtml(existing.source)}</strong> already exists in editable homebrew.</p>`,
+					elePost: ee`<p class="ve-muted mt-2 mb-0">A monster named <strong>${this._escapeHtml(existing.name)}</strong> with source <strong>${this._escapeHtml(existing.source)}</strong> already exists in editable homebrew.</p>`,
 				});
 
 				if (!choice || choice === "Cancel") return;
@@ -522,15 +533,10 @@ class CharacterSheetExport {
 	}
 
 	_printCharacter () {
-		// Add print class for styling
-		$("body").addClass("charsheet-printing");
-
-		// Open print dialog
+		document.body.classList.add("charsheet-printing");
 		window.print();
-
-		// Remove print class after a delay
 		setTimeout(() => {
-			$("body").removeClass("charsheet-printing");
+			document.body.classList.remove("charsheet-printing");
 		}, 1000);
 	}
 

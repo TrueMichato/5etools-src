@@ -45,7 +45,7 @@ class CharacterSheetQuickBuild {
 		};
 
 		// Modal/overlay reference
-		this._$overlay = null;
+		this._overlay = null;
 		this._isActive = false;
 
 	}
@@ -515,7 +515,7 @@ class CharacterSheetQuickBuild {
 			label: "Target Level",
 			icon: "🎯",
 			required: true,
-			render: ($content) => this._renderTargetStep($content),
+			render: (content) => this._renderTargetStep(content),
 			validate: () => this._validateTargetStep(),
 		});
 
@@ -531,7 +531,7 @@ class CharacterSheetQuickBuild {
 				icon: "📚",
 				required: true,
 				data: subclassLevels,
-				render: ($content) => this._renderSubclassStep($content, subclassLevels),
+				render: (content) => this._renderSubclassStep(content, subclassLevels),
 				validate: () => this._validateSubclassStep(subclassLevels),
 			});
 		}
@@ -545,7 +545,7 @@ class CharacterSheetQuickBuild {
 				icon: "📈",
 				required: true,
 				data: asiLevels,
-				render: ($content) => this._renderAsiStep($content, asiLevels),
+				render: (content) => this._renderAsiStep(content, asiLevels),
 				validate: () => this._validateAsiStep(asiLevels),
 			});
 		}
@@ -559,7 +559,7 @@ class CharacterSheetQuickBuild {
 				icon: "✨",
 				required: true,
 				data: optFeatLevels,
-				render: ($content) => this._renderOptionalFeaturesStep($content, optFeatLevels),
+				render: (content) => this._renderOptionalFeaturesStep(content, optFeatLevels),
 				validate: () => this._validateOptionalFeaturesStep(optFeatLevels),
 			});
 		}
@@ -573,7 +573,7 @@ class CharacterSheetQuickBuild {
 				icon: "🎯",
 				required: true,
 				data: featureOptionLevels,
-				render: ($content) => this._renderFeatureOptionsStep($content, featureOptionLevels),
+				render: (content) => this._renderFeatureOptionsStep(content, featureOptionLevels),
 				validate: () => this._validateFeatureOptionsStep(featureOptionLevels),
 			});
 		}
@@ -587,7 +587,7 @@ class CharacterSheetQuickBuild {
 				icon: "⚔️",
 				required: true,
 				data: masteryInfo,
-				render: ($content) => this._renderWeaponMasteryStep($content, masteryInfo),
+				render: (content) => this._renderWeaponMasteryStep(content, masteryInfo),
 				validate: () => this._validateWeaponMasteryStep(masteryInfo),
 			});
 		}
@@ -603,7 +603,7 @@ class CharacterSheetQuickBuild {
 				icon: "⭐",
 				required: true,
 				data: {expertiseLevels, languageLevels, scholarLevel},
-				render: ($content) => this._renderExpertiseStep($content, {expertiseLevels, languageLevels, scholarLevel}),
+				render: (content) => this._renderExpertiseStep(content, {expertiseLevels, languageLevels, scholarLevel}),
 				validate: () => this._validateExpertiseStep({expertiseLevels, languageLevels, scholarLevel}),
 			});
 		}
@@ -688,7 +688,7 @@ class CharacterSheetQuickBuild {
 				icon: "🔮",
 				required: true,
 				data: {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo},
-				render: ($content) => this._renderSpellsStep($content, {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}),
+				render: (content) => this._renderSpellsStep(content, {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}),
 				validate: () => this._validateSpellsStep({hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}),
 			});
 		}
@@ -699,7 +699,7 @@ class CharacterSheetQuickBuild {
 			label: "Hit Points",
 			icon: "❤️",
 			required: true,
-			render: ($content) => this._renderHpStep($content),
+			render: (content) => this._renderHpStep(content),
 			validate: () => this._validateHpStep(),
 		});
 
@@ -709,7 +709,7 @@ class CharacterSheetQuickBuild {
 			label: "Review",
 			icon: "✅",
 			required: false,
-			render: ($content) => this._renderReviewStep($content),
+			render: (content) => this._renderReviewStep(content),
 			validate: () => true,
 		});
 	}
@@ -725,7 +725,7 @@ class CharacterSheetQuickBuild {
 		this._buildWizardSteps();
 
 		// Create overlay
-		this._$overlay = $(`
+		this._overlay = e_({outer: `
 			<div class="charsheet__quickbuild-overlay">
 				<div class="charsheet__quickbuild-container">
 					<div class="charsheet__quickbuild-header">
@@ -751,14 +751,14 @@ class CharacterSheetQuickBuild {
 					</div>
 				</div>
 			</div>
-		`);
+		`});
 
-		$("body").append(this._$overlay);
+		document.body.append(this._overlay);
 
 		// Wire events
-		this._$overlay.find(".charsheet__quickbuild-close").on("click", () => this._closeWizard());
-		this._$overlay.find("#quickbuild-prev").on("click", () => this._prevStep());
-		this._$overlay.find("#quickbuild-next").on("click", () => this._nextStep());
+		this._overlay.querySelector(".charsheet__quickbuild-close").addEventListener("click", () => this._closeWizard());
+		this._overlay.querySelector("#quickbuild-prev").addEventListener("click", () => this._prevStep());
+		this._overlay.querySelector("#quickbuild-next").addEventListener("click", () => this._nextStep());
 
 		// Render initial step
 		this._renderStepIndicators();
@@ -766,63 +766,65 @@ class CharacterSheetQuickBuild {
 	}
 
 	_closeWizard () {
-		if (this._$overlay) {
-			this._$overlay.remove();
-			this._$overlay = null;
+		if (this._overlay) {
+			this._overlay.remove();
+			this._overlay = null;
 		}
 		this._isActive = false;
 	}
 
 	_renderStepIndicators () {
-		const $steps = this._$overlay.find("#quickbuild-steps");
-		$steps.empty();
+		const stepsContainer = this._overlay.querySelector("#quickbuild-steps");
+		stepsContainer.innerHTML = "";
 
 		this._steps.forEach((step, i) => {
 			const state = i === this._currentStep ? "active"
 				: i < this._currentStep ? "completed"
 					: "";
-			const $step = $(`
+			const stepEl = e_({outer: `
 				<div class="charsheet__builder-step ${state}" data-step="${i}">
 					<span class="charsheet__builder-step-num">${step.icon || (i + 1)}</span>
 					<span class="charsheet__builder-step-label">${step.label}</span>
 				</div>
-			`);
-			$step.on("click", () => {
+			`});
+			stepEl.addEventListener("click", () => {
 				if (i <= this._currentStep) this._goToStep(i);
 			});
-			$steps.append($step);
+			stepsContainer.append(stepEl);
 		});
 	}
 
 	_renderCurrentStep () {
-		const $content = this._$overlay.find("#quickbuild-content");
-		$content.empty();
+		const content = this._overlay.querySelector("#quickbuild-content");
+		content.innerHTML = "";
 
 		if (this._currentStep < this._steps.length) {
-			this._steps[this._currentStep].render($content);
+			this._steps[this._currentStep].render(content);
 		}
 
 		// Update progress bar
 		const progress = this._steps.length > 1
 			? Math.round((this._currentStep / (this._steps.length - 1)) * 100)
 			: 100;
-		this._$overlay.find("#quickbuild-progress-fill").css("width", `${progress}%`);
-		this._$overlay.find("#quickbuild-progress-text").text(`${progress}% complete`);
+		this._overlay.querySelector("#quickbuild-progress-fill").style.width = `${progress}%`;
+		this._overlay.querySelector("#quickbuild-progress-text").textContent = `${progress}% complete`;
 
 		// Update nav
-		this._$overlay.find("#quickbuild-prev").prop("disabled", this._currentStep <= 0);
-		const $nextBtn = this._$overlay.find("#quickbuild-next");
+		this._overlay.querySelector("#quickbuild-prev").disabled = this._currentStep <= 0;
+		const nextBtn = this._overlay.querySelector("#quickbuild-next");
 		if (this._currentStep >= this._steps.length - 1) {
-			$nextBtn.html(`<span class="glyphicon glyphicon-ok"></span> Build Character`);
-			$nextBtn.removeClass("ve-btn-primary").addClass("ve-btn-success");
+			nextBtn.innerHTML = `<span class="glyphicon glyphicon-ok"></span> Build Character`;
+			nextBtn.classList.remove("ve-btn-primary");
+			nextBtn.classList.add("ve-btn-success");
 		} else {
-			$nextBtn.html(`Next <span class="glyphicon glyphicon-chevron-right"></span>`);
-			$nextBtn.removeClass("ve-btn-success").addClass("ve-btn-primary");
+			nextBtn.innerHTML = `Next <span class="glyphicon glyphicon-chevron-right"></span>`;
+			nextBtn.classList.remove("ve-btn-success");
+			nextBtn.classList.add("ve-btn-primary");
 		}
 
 		// Update nav info
-		const $info = this._$overlay.find("#quickbuild-nav-info");
-		$info.text(`Step ${this._currentStep + 1} of ${this._steps.length}`);
+		const info = this._overlay.querySelector("#quickbuild-nav-info");
+		info.textContent = `Step ${this._currentStep + 1} of ${this._steps.length}`;
 	}
 
 	_goToStep (step) {
@@ -860,63 +862,63 @@ class CharacterSheetQuickBuild {
 	// Step 1: Target Level & Class Allocation
 	// ==========================================
 
-	_renderTargetStep ($content) {
+	_renderTargetStep (content) {
 		const isExisting = this._fromLevel > 0;
 		const classes = this._page.filterByAllowedSources(this._page.getClasses());
 
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
 
 		// Title
-		$step.append($(`
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>${isExisting ? "Level Up To..." : "Build Character To Level..."}</h4>
 				<p class="ve-muted">Select your target level${isExisting ? ` (currently level ${this._fromLevel})` : ""} and configure your class allocation.</p>
 			</div>
-		`));
+		`}));
 
 		// Target level selector
-		const $levelSection = $(`<div class="charsheet__quickbuild-section mb-3"></div>`);
-		$levelSection.append(`<label class="ve-bold mb-1">Target Level</label>`);
-		const $levelRow = $(`<div class="ve-flex-v-center gap-3"></div>`);
+		const levelSection = e_({outer: `<div class="charsheet__quickbuild-section mb-3"></div>`});
+		levelSection.append(e_({outer: `<label class="ve-bold mb-1">Target Level</label>`}));
+		const levelRow = e_({outer: `<div class="ve-flex-v-center gap-3"></div>`});
 
 		const minLevel = this._fromLevel + 1;
-		const $levelSlider = $(`<input type="range" class="form-control-range" min="${minLevel}" max="20" value="${this._targetLevel}" style="flex: 1;">`);
-		const $levelDisplay = $(`<span class="charsheet__quickbuild-level-display">${this._targetLevel}</span>`);
-		const $levelInput = $(`<input type="number" class="form-control form-control-sm" style="max-width: 70px;" min="${minLevel}" max="20" value="${this._targetLevel}">`);
+		const levelSlider = e_({outer: `<input type="range" class="form-control-range" min="${minLevel}" max="20" value="${this._targetLevel}" style="flex: 1;">`});
+		const levelDisplay = e_({outer: `<span class="charsheet__quickbuild-level-display">${this._targetLevel}</span>`});
+		const levelInput = e_({outer: `<input type="number" class="form-control form-control-sm" style="max-width: 70px;" min="${minLevel}" max="20" value="${this._targetLevel}">`});
 
-		$levelSlider.on("input", () => {
-			const val = parseInt($levelSlider.val());
+		levelSlider.addEventListener("input", () => {
+			const val = parseInt(levelSlider.value);
 			this._targetLevel = val;
-			$levelDisplay.text(val);
-			$levelInput.val(val);
+			levelDisplay.textContent = val;
+			levelInput.value = val;
 			this._updateClassAllocations();
 			renderAllocations();
 		});
 
-		$levelInput.on("change", () => {
-			let val = parseInt($levelInput.val());
+		levelInput.addEventListener("change", () => {
+			let val = parseInt(levelInput.value);
 			val = Math.max(minLevel, Math.min(20, val || minLevel));
 			this._targetLevel = val;
-			$levelSlider.val(val);
-			$levelDisplay.text(val);
-			$levelInput.val(val);
+			levelSlider.value = val;
+			levelDisplay.textContent = val;
+			levelInput.value = val;
 			this._updateClassAllocations();
 			renderAllocations();
 		});
 
-		$levelRow.append($levelSlider, $levelDisplay, $levelInput);
-		$levelSection.append($levelRow);
-		$step.append($levelSection);
+		levelRow.append(levelSlider, levelDisplay, levelInput);
+		levelSection.append(levelRow);
+		step.append(levelSection);
 
 		// Class allocation section
-		const $classSection = $(`<div class="charsheet__quickbuild-section mb-3"></div>`);
-		$classSection.append(`<label class="ve-bold mb-1">Class Allocation</label>`);
-		const $allocations = $(`<div id="quickbuild-class-allocations"></div>`);
-		$classSection.append($allocations);
+		const classSection = e_({outer: `<div class="charsheet__quickbuild-section mb-3"></div>`});
+		classSection.append(e_({outer: `<label class="ve-bold mb-1">Class Allocation</label>`}));
+		const allocations = e_({outer: `<div id="quickbuild-class-allocations"></div>`});
+		classSection.append(allocations);
 
 		// Add class button (for multiclass)
-		const $addClassBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary mt-2"><span class="glyphicon glyphicon-plus"></span> Add Class (Multiclass)</button>`);
-		$addClassBtn.on("click", () => {
+		const addClassBtn = e_({outer: `<button class="ve-btn ve-btn-sm ve-btn-primary mt-2"><span class="glyphicon glyphicon-plus"></span> Add Class (Multiclass)</button>`});
+		addClassBtn.addEventListener("click", () => {
 			this._showAddClassModal(classes, () => {
 				renderAllocations();
 			});
@@ -924,23 +926,23 @@ class CharacterSheetQuickBuild {
 
 		// Only show add-class if total allocated < 20 and not at target
 		if (this._targetLevel < 20) {
-			$classSection.append($addClassBtn);
+			classSection.append(addClassBtn);
 		}
 
-		$step.append($classSection);
+		step.append(classSection);
 
 		// Level summary
-		const $summary = $(`<div class="charsheet__quickbuild-section" id="quickbuild-target-summary"></div>`);
-		$step.append($summary);
+		const summary = e_({outer: `<div class="charsheet__quickbuild-section" id="quickbuild-target-summary"></div>`});
+		step.append(summary);
 
 		const renderAllocations = () => {
-			$allocations.empty();
+			allocations.innerHTML = "";
 			const totalAllocated = this._classAllocations.reduce((sum, a) => sum + (a.targetLevel - (a.currentLevel || 0)), 0);
 			const totalNeeded = this._targetLevel - this._fromLevel;
 
 			this._classAllocations.forEach((alloc, idx) => {
 				const levelsToGain = alloc.targetLevel - (alloc.currentLevel || 0);
-				const $row = $(`
+				const row = e_({outer: `
 					<div class="charsheet__quickbuild-class-row ve-flex-v-center gap-2 mb-2 p-2" style="border: 1px solid var(--cs-border, #ddd); border-radius: 8px;">
 						<div class="ve-flex-1">
 							<strong>${alloc.className}</strong>
@@ -958,51 +960,54 @@ class CharacterSheetQuickBuild {
 							? `<button class="ve-btn ve-btn-xs ve-btn-danger" title="Remove class"><span class="glyphicon glyphicon-trash"></span></button>`
 							: ""}
 					</div>
-				`);
+				`});
 
 				// Wire level input
-				$row.find("input[type=number]").on("change", (e) => {
-					let val = parseInt($(e.target).val());
+				row.querySelector("input[type=number]").addEventListener("change", (e) => {
+					let val = parseInt(e.target.value);
 					val = Math.max(alloc.currentLevel || 1, Math.min(20, val || 1));
 					alloc.targetLevel = val;
-					$(e.target).val(val);
+					e.target.value = val;
 					renderSummary();
 				});
 
 				// Wire remove button
-				$row.find(".ve-btn-danger").on("click", () => {
-					this._classAllocations.splice(idx, 1);
-					renderAllocations();
-				});
+				const removeBtn = row.querySelector(".ve-btn-danger");
+				if (removeBtn) {
+					removeBtn.addEventListener("click", () => {
+						this._classAllocations.splice(idx, 1);
+						renderAllocations();
+					});
+				}
 
-				$allocations.append($row);
+				allocations.append(row);
 			});
 
 			renderSummary();
 		};
 
 		const renderSummary = () => {
-			const $summary = this._$overlay.find("#quickbuild-target-summary");
-			$summary.empty();
+			const summaryEl = this._overlay.querySelector("#quickbuild-target-summary");
+			summaryEl.innerHTML = "";
 
 			const totalAllocated = this._classAllocations.reduce((sum, a) => sum + a.targetLevel, 0);
 			const totalNew = totalAllocated - this._fromLevel;
 			const targetNew = this._targetLevel - this._fromLevel;
 			const isValid = totalNew === targetNew && totalAllocated <= 20;
 
-			const $summaryContent = $(`
+			const summaryContent = e_({outer: `
 				<div class="p-2" style="background: ${isValid ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)"}; border-radius: 8px;">
 					<strong>${isValid ? "✓" : "⚠"} Summary:</strong>
 					Character Level ${this._fromLevel} → ${totalAllocated}
 					(${totalNew} level${totalNew !== 1 ? "s" : ""} to gain${targetNew !== totalNew ? `, target: ${targetNew}` : ""})
 					${!isValid ? `<br><span class="text-danger ve-small">Level allocation must equal target level (${this._targetLevel})</span>` : ""}
 				</div>
-			`);
-			$summary.append($summaryContent);
+			`});
+			summaryEl.append(summaryContent);
 		};
 
 		renderAllocations();
-		$content.append($step);
+		content.append(step);
 	}
 
 	_updateClassAllocations () {
@@ -1022,29 +1027,29 @@ class CharacterSheetQuickBuild {
 			return;
 		}
 
-		const {$modalInner, doClose} = UiUtil.getShowModal({
+		const {eleModalInner: modalInner, doClose} = UiUtil.getShowModal({
 			title: "Add Multiclass",
 			isMinHeight0: true,
 			zIndex: 10001, // Above quickbuild overlay (z-index: 9999)
 		});
 
-		const $search = $(`<input type="text" class="form-control mb-2" placeholder="Search classes...">`);
-		const $list = $(`<div style="max-height: 300px; overflow-y: auto;"></div>`);
+		const search = e_({outer: `<input type="text" class="form-control mb-2" placeholder="Search classes...">`});
+		const list = e_({outer: `<div style="max-height: 300px; overflow-y: auto;"></div>`});
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 			available
 				.filter(c => !filter || c.name.toLowerCase().includes(filterLower))
 				.sort((a, b) => a.name.localeCompare(b.name))
 				.forEach(cls => {
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__builder-list-item" style="cursor: pointer;">
 							<span class="charsheet__builder-list-item-name">${cls.name}</span>
 							<span class="charsheet__builder-list-item-source">${Parser.sourceJsonToAbv(cls.source)}</span>
 						</div>
-					`);
-					$item.on("click", () => {
+					`});
+					item.addEventListener("click", () => {
 						this._classAllocations.push({
 							className: cls.name,
 							classSource: cls.source,
@@ -1056,15 +1061,15 @@ class CharacterSheetQuickBuild {
 						doClose(true);
 						onComplete();
 					});
-					$list.append($item);
+					list.append(item);
 				});
 		};
 
-		const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
-		$search.on("input", renderListDebounced);
+		const renderListDebounced = MiscUtil.debounce(() => renderList(search.value), 100);
+		search.addEventListener("input", renderListDebounced);
 		renderList();
 
-		$modalInner.append($search, $list);
+		modalInner.append(search, list);
 	}
 
 	_validateTargetStep () {
@@ -1096,47 +1101,43 @@ class CharacterSheetQuickBuild {
 	// Step 2: Subclass Selection
 	// ==========================================
 
-	_renderSubclassStep ($content, subclassLevels) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
-		$step.append(`
+	_renderSubclassStep (content, subclassLevels) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Choose Subclass${subclassLevels.length > 1 ? "es" : ""}</h4>
 				<p class="ve-muted">Select a subclass for each class that requires one.</p>
 			</div>
-		`);
+		`}));
 
 		subclassLevels.forEach(analysis => {
 			const {classData, className, classSource, classLevel} = analysis;
 			const key = `${className}_${classSource}`;
 			const subclassTitle = classData.subclassTitle || "Subclass";
 
-			const $section = $(`
+			const section = e_({outer: `
 				<div class="charsheet__quickbuild-section mb-3">
 					<h5>${className} — ${subclassTitle} (Level ${classLevel})</h5>
 				</div>
-			`);
+			`});
 
 			// Get available subclasses - filter by allowed sources
 			const allSubclasses = (classData.subclasses || [])
 				.filter(sc => this._page.filterByAllowedSources([sc]).length > 0);
 
 			if (allSubclasses.length === 0) {
-				$section.append(`<p class="ve-muted">No subclasses available for this class with current source settings.</p>`);
+				section.append(e_({outer: `<p class="ve-muted">No subclasses available for this class with current source settings.</p>`}));
 			} else {
-				// Group subclasses by source affinity:
-				// 1. Primary: subclasses whose classSource matches the class's source
-				// 2. Secondary: subclasses from other sources
+				// Group subclasses by source affinity
 				const primarySubclasses = allSubclasses.filter(sc => {
 					const scClassSource = sc.classSource || Parser.SRC_PHB;
 					return scClassSource === classSource ||
-						// Also treat PHB/XPHB as interchangeable for primary
 						([Parser.SRC_PHB, Parser.SRC_XPHB].includes(scClassSource) &&
 						 [Parser.SRC_PHB, Parser.SRC_XPHB].includes(classSource));
 				}).sort((a, b) => a.name.localeCompare(b.name));
 
 				const secondarySubclasses = allSubclasses.filter(sc => {
 					const scClassSource = sc.classSource || Parser.SRC_PHB;
-					// Exclude if already in primary
 					if (scClassSource === classSource) return false;
 					if ([Parser.SRC_PHB, Parser.SRC_XPHB].includes(scClassSource) &&
 						[Parser.SRC_PHB, Parser.SRC_XPHB].includes(classSource)) return false;
@@ -1145,24 +1146,24 @@ class CharacterSheetQuickBuild {
 
 				// Build source filter options
 				const availableSources = [...new Set(allSubclasses.map(sc => sc.source))].sort();
-				const $filterRow = $(`<div class="ve-flex gap-2 mb-2"></div>`);
-				const $search = $(`<input type="text" class="form-control form-control-sm ve-flex-grow" placeholder="Search ${subclassTitle.toLowerCase()}s...">`);
-				const $sourceFilter = $(`
+				const filterRow = e_({outer: `<div class="ve-flex gap-2 mb-2"></div>`});
+				const search = e_({outer: `<input type="text" class="form-control form-control-sm ve-flex-grow" placeholder="Search ${subclassTitle.toLowerCase()}s...">`});
+				const sourceFilter = e_({outer: `
 					<select class="form-control form-control-sm" style="width: auto; min-width: 100px;">
 						<option value="">All Sources</option>
 						${availableSources.map(src => `<option value="${src}">${Parser.sourceJsonToAbv(src)}</option>`).join("")}
 					</select>
-				`);
-				$filterRow.append($search, $sourceFilter);
+				`});
+				filterRow.append(search, sourceFilter);
 
-				const $list = $(`<div class="charsheet__quickbuild-subclass-list" style="max-height: 350px; overflow-y: auto;"></div>`);
+				const list = e_({outer: `<div class="charsheet__quickbuild-subclass-list" style="max-height: 350px; overflow-y: auto;"></div>`});
 
 				let selectedSource = "";
 
 				const renderSubclassItem = (sc) => {
 					const isSelected = this._selections.subclasses[key]?.name === sc.name
 						&& this._selections.subclasses[key]?.source === sc.source;
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__quickbuild-option ${isSelected ? "selected" : ""}">
 							<div class="ve-flex-v-center">
 								<input type="radio" name="qb-subclass-${key}" ${isSelected ? "checked" : ""}>
@@ -1171,11 +1172,13 @@ class CharacterSheetQuickBuild {
 							</div>
 							${sc.shortName && sc.shortName !== sc.name ? `<div class="ve-muted ve-small ml-4">${sc.shortName}</div>` : ""}
 						</div>
-					`);
+					`});
 					// Add hoverable subclass link
 					const subclassLink = CharacterSheetPage.getSubclassHoverLink(sc);
-					$item.find(".subclass-name-link").html(subclassLink);
-					$item.on("click", async () => {
+					const nameSpan = item.querySelector(".subclass-name-link");
+					if (typeof subclassLink === "string") nameSpan.innerHTML = subclassLink;
+					else nameSpan.append(subclassLink);
+					item.addEventListener("click", async () => {
 						let subclassChoice = null;
 						if (CharacterSheetClassUtils.isDivineSoulSubclass(sc)) {
 							const affinityOptions = CharacterSheetClassUtils.getDivineSoulAffinityOptions(sc);
@@ -1190,14 +1193,14 @@ class CharacterSheetQuickBuild {
 							if (!subclassChoice) return;
 						}
 
-						$list.find(".charsheet__quickbuild-option").removeClass("selected");
-						$list.find("input[type=radio]").prop("checked", false);
-						$item.addClass("selected");
-						$item.find("input[type=radio]").prop("checked", true);
+						list.querySelectorAll(".charsheet__quickbuild-option").forEach(el => el.classList.remove("selected"));
+						list.querySelectorAll("input[type=radio]").forEach(el => { el.checked = false; });
+						item.classList.add("selected");
+						item.querySelector("input[type=radio]").checked = true;
 						this._selections.subclasses[key] = sc;
 						this._selections.subclassChoices[key] = CharacterSheetClassUtils.normalizeDivineSoulAffinity(subclassChoice);
 					});
-					return $item;
+					return item;
 				};
 
 				// Track collapse states
@@ -1205,13 +1208,11 @@ class CharacterSheetQuickBuild {
 				let secondaryCollapsed = true; // Start collapsed
 
 				const renderList = (textFilter = "") => {
-					$list.empty();
+					list.innerHTML = "";
 					const filterLower = textFilter.toLowerCase();
 
 					const filterSubclasses = (scs) => scs.filter(sc => {
-						// Source filter
 						if (selectedSource && sc.source !== selectedSource) return false;
-						// Text filter
 						if (!textFilter) return true;
 						return sc.name.toLowerCase().includes(filterLower) ||
 							(sc.shortName && sc.shortName.toLowerCase().includes(filterLower));
@@ -1221,78 +1222,78 @@ class CharacterSheetQuickBuild {
 					const filteredSecondary = filterSubclasses(secondarySubclasses);
 
 					if (filteredPrimary.length === 0 && filteredSecondary.length === 0) {
-						$list.append(`<p class="ve-muted text-center py-2">No matching ${subclassTitle.toLowerCase()}s</p>`);
+						list.append(e_({outer: `<p class="ve-muted text-center py-2">No matching ${subclassTitle.toLowerCase()}s</p>`}));
 						return;
 					}
 
 					// Render primary subclasses (matching class source)
 					if (filteredPrimary.length > 0) {
-						const $primaryHeader = $(`
+						const primaryHeader = e_({outer: `
 							<div class="ve-flex-v-center py-2 px-3 mb-2 clickable" 
 								style="background: linear-gradient(135deg, rgba(66, 153, 225, 0.15) 0%, rgba(66, 153, 225, 0.05) 100%); border: 1px solid rgba(66, 153, 225, 0.3); border-radius: 6px; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
 								<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">▶</span>
 								<span class="ve-bold" style="color: var(--rgb-name-blue);">🎯 ${Parser.sourceJsonToAbv(classSource)} ${subclassTitle}s</span>
 								<span class="badge badge-primary ml-auto" style="font-size: 0.75em;">${filteredPrimary.length}</span>
 							</div>
-						`);
-						const $primaryContent = $(`<div class="mb-3 pl-2" style="border-left: 3px solid rgba(66, 153, 225, 0.3);"></div>`);
-						filteredPrimary.forEach(sc => $primaryContent.append(renderSubclassItem(sc)));
+						`});
+						const primaryContent = e_({outer: `<div class="mb-3 pl-2" style="border-left: 3px solid rgba(66, 153, 225, 0.3);"></div>`});
+						filteredPrimary.forEach(sc => primaryContent.append(renderSubclassItem(sc)));
 
-						$primaryHeader.on("click", () => {
+						primaryHeader.addEventListener("click", () => {
 							primaryCollapsed = !primaryCollapsed;
-							$primaryHeader.find("span:first").css("transform", primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-							$primaryContent.toggle(!primaryCollapsed);
+							primaryHeader.querySelector("span:first-child").style.transform = primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+							primaryContent.style.display = primaryCollapsed ? "none" : "";
 						});
 
 						// Apply initial state
-						$primaryHeader.find("span:first").css("transform", primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-						$primaryContent.toggle(!primaryCollapsed);
+						primaryHeader.querySelector("span:first-child").style.transform = primaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+						primaryContent.style.display = primaryCollapsed ? "none" : "";
 
-						$list.append($primaryHeader, $primaryContent);
+						list.append(primaryHeader, primaryContent);
 					}
 
 					// Render secondary subclasses (other sources)
 					if (filteredSecondary.length > 0) {
-						const $secondaryHeader = $(`
+						const secondaryHeader = e_({outer: `
 							<div class="ve-flex-v-center py-2 px-3 mb-2 clickable" 
 								style="background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.03) 100%); border: 1px solid rgba(128, 128, 128, 0.2); border-radius: 6px; user-select: none;">
 								<span class="mr-2" style="transition: transform 0.2s; font-size: 0.9em;">▶</span>
 								<span class="ve-bold ve-muted">📚 Other ${subclassTitle}s</span>
 								<span class="badge badge-secondary ml-auto" style="font-size: 0.75em;">${filteredSecondary.length}</span>
 							</div>
-						`);
-						const $secondaryContent = $(`<div class="mb-2 pl-2" style="border-left: 3px solid rgba(128, 128, 128, 0.2);"></div>`);
-						filteredSecondary.forEach(sc => $secondaryContent.append(renderSubclassItem(sc)));
+						`});
+						const secondaryContent = e_({outer: `<div class="mb-2 pl-2" style="border-left: 3px solid rgba(128, 128, 128, 0.2);"></div>`});
+						filteredSecondary.forEach(sc => secondaryContent.append(renderSubclassItem(sc)));
 
-						$secondaryHeader.on("click", () => {
+						secondaryHeader.addEventListener("click", () => {
 							secondaryCollapsed = !secondaryCollapsed;
-							$secondaryHeader.find("span:first").css("transform", secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-							$secondaryContent.toggle(!secondaryCollapsed);
+							secondaryHeader.querySelector("span:first-child").style.transform = secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+							secondaryContent.style.display = secondaryCollapsed ? "none" : "";
 						});
 
 						// Apply initial state
-						$secondaryHeader.find("span:first").css("transform", secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)");
-						$secondaryContent.toggle(!secondaryCollapsed);
+						secondaryHeader.querySelector("span:first-child").style.transform = secondaryCollapsed ? "rotate(0deg)" : "rotate(90deg)";
+						secondaryContent.style.display = secondaryCollapsed ? "none" : "";
 
-						$list.append($secondaryHeader, $secondaryContent);
+						list.append(secondaryHeader, secondaryContent);
 					}
 				};
 
-				const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
-				$search.on("input", renderListDebounced);
-				$sourceFilter.on("change", () => {
-					selectedSource = $sourceFilter.val();
-					renderList($search.val());
+				const renderListDebounced = MiscUtil.debounce(() => renderList(search.value), 100);
+				search.addEventListener("input", renderListDebounced);
+				sourceFilter.addEventListener("change", () => {
+					selectedSource = sourceFilter.value;
+					renderList(search.value);
 				});
 				renderList();
 
-				$section.append($filterRow, $list);
+				section.append(filterRow, list);
 			}
 
-			$step.append($section);
+			step.append(section);
 		});
 
-		$content.append($step);
+		content.append(step);
 	}
 
 	_validateSubclassStep (subclassLevels) {
@@ -1310,24 +1311,20 @@ class CharacterSheetQuickBuild {
 	// Step 3: ASI / Feat Selection
 	// ==========================================
 
-	_renderAsiStep ($content, asiLevels) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
+	_renderAsiStep (content, asiLevels) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
 		const thelemar_asiFeat = this._state.getSettings()?.thelemar_asiFeat || false;
 
-		$step.append(`
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Ability Score Improvements & Feats</h4>
 				<p class="ve-muted">${asiLevels.length} ASI level${asiLevels.length > 1 ? "s" : ""} to configure. Each grants +2 ability score points or a feat.</p>
 			</div>
-		`);
+		`}));
 
 		// Collect section containers for re-rendering when earlier ASI choices change
 		const sectionRenderers = [];
 
-		/**
-		 * Compute running scores: start from full ability score (base + racial + background + items)
-		 * then layer in ASI choices from all levels up to (but not including) startIdx.
-		 */
 		const computeRunningScores = (upToIdx) => {
 			const scores = {};
 			Parser.ABIL_ABVS.forEach(abl => {
@@ -1338,14 +1335,12 @@ class CharacterSheetQuickBuild {
 				const prevSel = this._selections.asi[prevKey];
 				if (!prevSel) continue;
 
-				// Include ASI ability choices
 				if (prevSel.mode === "asi" || prevSel.isBoth) {
 					for (const [abl, inc] of Object.entries(prevSel.abilityChoices || {})) {
 						scores[abl] = (scores[abl] || 0) + inc;
 					}
 				}
 
-				// Include feat ability choices (e.g., +1 from choosing STR in Athlete feat)
 				if ((prevSel.mode === "feat" || prevSel.isBoth) && prevSel.feat && prevSel.featChoices?.ability) {
 					const amount = this._getFeatAbilityAmount(prevSel.feat);
 					if (amount > 0) {
@@ -1356,7 +1351,6 @@ class CharacterSheetQuickBuild {
 			return scores;
 		};
 
-		/** Re-render all ASI sections from startIdx onward (called when an earlier selection changes). */
 		const reRenderFrom = (startIdx) => {
 			for (let i = startIdx; i < sectionRenderers.length; i++) {
 				sectionRenderers[i]();
@@ -1369,10 +1363,9 @@ class CharacterSheetQuickBuild {
 			const isBoth = thelemar_asiFeat && classLevel === 4;
 			const isEpicBoon = classLevel === 19;
 
-			// Init selection if not exists
 			if (!this._selections.asi[levelKey]) {
 				this._selections.asi[levelKey] = {
-					mode: "asi", // "asi" or "feat"
+					mode: "asi",
 					abilityChoices: {},
 					feat: null,
 					isBoth,
@@ -1380,76 +1373,74 @@ class CharacterSheetQuickBuild {
 			}
 			const sel = this._selections.asi[levelKey];
 
-			const $section = $(`
+			const section = e_({outer: `
 				<div class="charsheet__quickbuild-section mb-3">
 					<h5>${className} Level ${classLevel} — ${isEpicBoon ? "Epic Boon" : "ASI / Feat"}
 						${isBoth ? ` <span class="badge badge-info">ASI + Feat</span>` : ""}
 					</h5>
 				</div>
-			`);
+			`});
 
 			if (isBoth) {
-				$section.append(`<p class="ve-small text-info">At level 4, you gain both an Ability Score Improvement and a Feat!</p>`);
+				section.append(e_({outer: `<p class="ve-small text-info">At level 4, you gain both an Ability Score Improvement and a Feat!</p>`}));
 			}
 
 			// Mode toggle (ASI vs Feat) — not shown for isBoth
-			const $modeRow = $(`<div class="ve-flex-v-center gap-2 mb-2"></div>`);
+			const modeRow = e_({outer: `<div class="ve-flex-v-center gap-2 mb-2"></div>`});
 			if (!isBoth) {
-				const $asiRadio = $(`<label class="ve-flex-v-center gap-1"><input type="radio" name="qb-asi-mode-${levelKey}" value="asi" ${sel.mode === "asi" ? "checked" : ""}> Increase Ability Scores (+2 total)</label>`);
-				const $featRadio = $(`<label class="ve-flex-v-center gap-1"><input type="radio" name="qb-asi-mode-${levelKey}" value="feat" ${sel.mode === "feat" ? "checked" : ""}> Take a ${isEpicBoon ? "Boon" : "Feat"}</label>`);
+				const asiRadio = e_({outer: `<label class="ve-flex-v-center gap-1"><input type="radio" name="qb-asi-mode-${levelKey}" value="asi" ${sel.mode === "asi" ? "checked" : ""}> Increase Ability Scores (+2 total)</label>`});
+				const featRadio = e_({outer: `<label class="ve-flex-v-center gap-1"><input type="radio" name="qb-asi-mode-${levelKey}" value="feat" ${sel.mode === "feat" ? "checked" : ""}> Take a ${isEpicBoon ? "Boon" : "Feat"}</label>`});
 
-				$asiRadio.find("input").on("change", () => { sel.mode = "asi"; renderAsiContent(); reRenderFrom(idx + 1); });
-				$featRadio.find("input").on("change", () => { sel.mode = "feat"; renderAsiContent(); reRenderFrom(idx + 1); });
+				asiRadio.querySelector("input").addEventListener("change", () => { sel.mode = "asi"; renderAsiContent(); reRenderFrom(idx + 1); });
+				featRadio.querySelector("input").addEventListener("change", () => { sel.mode = "feat"; renderAsiContent(); reRenderFrom(idx + 1); });
 
-				$modeRow.append($asiRadio, $featRadio);
+				modeRow.append(asiRadio, featRadio);
 			}
-			$section.append($modeRow);
+			section.append(modeRow);
 
-			const $asiContent = $(`<div class="charsheet__quickbuild-asi-content"></div>`);
-			$section.append($asiContent);
+			const asiContent = e_({outer: `<div class="charsheet__quickbuild-asi-content"></div>`});
+			section.append(asiContent);
 
 			const renderAsiContent = () => {
-				$asiContent.empty();
+				asiContent.innerHTML = "";
 				const runningScores = computeRunningScores(idx);
 
-				// Show ASI controls (always for isBoth, conditional otherwise)
 				if (isBoth || sel.mode === "asi") {
-					const $asiControls = this._renderAsiControls(levelKey, sel, runningScores, () => reRenderFrom(idx + 1));
-					$asiContent.append($asiControls);
+					const asiControls = this._renderAsiControls(levelKey, sel, runningScores, () => reRenderFrom(idx + 1));
+					asiContent.append(asiControls);
 				}
 
-				// Show feat selection (always for isBoth, conditional otherwise)
 				if (isBoth || sel.mode === "feat") {
-					const $featSelect = this._renderFeatSelector(levelKey, sel, isEpicBoon, runningScores);
-					$asiContent.append($featSelect);
+					const featSelect = this._renderFeatSelector(levelKey, sel, isEpicBoon, runningScores);
+					asiContent.append(featSelect);
 				}
 			};
 
 			sectionRenderers.push(renderAsiContent);
 			renderAsiContent();
-			$step.append($section);
+			step.append(section);
 		});
 
-		$content.append($step);
+		content.append(step);
 	}
 
 	_renderAsiControls (levelKey, sel, runningScores, onChanged) {
-		const $container = $(`<div class="charsheet__quickbuild-asi-controls mb-2"></div>`);
-		$container.append(`<label class="ve-bold ve-small">Ability Score Increases (+2 total)</label>`);
+		const container = e_({outer: `<div class="charsheet__quickbuild-asi-controls mb-2"></div>`});
+		container.append(e_({outer: `<label class="ve-bold ve-small">Ability Score Increases (+2 total)</label>`}));
 
 		let pointsRemaining = 2;
 		const tempChoices = {...(sel.abilityChoices || {})};
 		Object.values(tempChoices).forEach(v => { pointsRemaining -= v; });
 
-		const $points = $(`<div class="ve-small mb-1">Points remaining: <strong id="qb-asi-points-${levelKey}">${pointsRemaining}</strong></div>`);
-		$container.append($points);
+		const points = e_({outer: `<div class="ve-small mb-1">Points remaining: <strong id="qb-asi-points-${levelKey}">${pointsRemaining}</strong></div>`});
+		container.append(points);
 
-		const $grid = $(`<div class="charsheet__quickbuild-asi-grid"></div>`);
+		const grid = e_({outer: `<div class="charsheet__quickbuild-asi-grid"></div>`});
 		Parser.ABIL_ABVS.forEach(abl => {
 			const currentBase = runningScores[abl];
 			const increase = tempChoices[abl] || 0;
 
-			const $row = $(`
+			const row = e_({outer: `
 				<div class="charsheet__levelup-asi-row">
 					<span class="charsheet__levelup-asi-name">${Parser.attAbvToFull(abl)}</span>
 					<span class="charsheet__levelup-asi-current">${currentBase}</span>
@@ -1458,9 +1449,9 @@ class CharacterSheetQuickBuild {
 					<button class="ve-btn ve-btn-xs ve-btn-default qb-asi-plus" data-abl="${abl}">+</button>
 					<span class="charsheet__levelup-asi-new">→ ${currentBase + increase}</span>
 				</div>
-			`);
+			`});
 
-			$row.find(".qb-asi-plus").on("click", () => {
+			row.querySelector(".qb-asi-plus").addEventListener("click", () => {
 				const currentIncrease = tempChoices[abl] || 0;
 				if (pointsRemaining <= 0) return;
 				if (currentIncrease >= 2) return;
@@ -1469,12 +1460,11 @@ class CharacterSheetQuickBuild {
 				tempChoices[abl] = currentIncrease + 1;
 				sel.abilityChoices = {...tempChoices};
 				pointsRemaining--;
-				// Re-render this control and propagate to subsequent ASI sections
-				$container.replaceWith(this._renderAsiControls(levelKey, sel, runningScores, onChanged));
+				container.replaceWith(this._renderAsiControls(levelKey, sel, runningScores, onChanged));
 				if (onChanged) onChanged();
 			});
 
-			$row.find(".qb-asi-minus").on("click", () => {
+			row.querySelector(".qb-asi-minus").addEventListener("click", () => {
 				const currentIncrease = tempChoices[abl] || 0;
 				if (currentIncrease <= 0) return;
 
@@ -1482,20 +1472,20 @@ class CharacterSheetQuickBuild {
 				if (tempChoices[abl] === 0) delete tempChoices[abl];
 				sel.abilityChoices = {...tempChoices};
 				pointsRemaining++;
-				$container.replaceWith(this._renderAsiControls(levelKey, sel, runningScores, onChanged));
+				container.replaceWith(this._renderAsiControls(levelKey, sel, runningScores, onChanged));
 				if (onChanged) onChanged();
 			});
 
-			$grid.append($row);
+			grid.append(row);
 		});
 
-		$container.append($grid);
-		return $container;
+		container.append(grid);
+		return container;
 	}
 
 	_renderFeatSelector (levelKey, sel, isEpicBoon, runningScores = null) {
-		const $container = $(`<div class="charsheet__quickbuild-feat-select mb-2"></div>`);
-		$container.append(`<label class="ve-bold ve-small">${isEpicBoon ? "Epic Boon" : "Feat"} Selection</label>`);
+		const container = e_({outer: `<div class="charsheet__quickbuild-feat-select mb-2"></div>`});
+		container.append(e_({outer: `<label class="ve-bold ve-small">${isEpicBoon ? "Epic Boon" : "Feat"} Selection</label>`}));
 
 		let feats = this._page.filterByAllowedSources(this._page.getFeats() || []);
 		if (isEpicBoon) {
@@ -1504,14 +1494,13 @@ class CharacterSheetQuickBuild {
 			feats = feats.filter(f => f.category !== "EB");
 		}
 
-		// Initialize featChoices if not exists
 		if (!sel.featChoices) {
 			sel.featChoices = {skills: [], languages: [], tools: [], ability: null, expertise: [], spellList: null, cantrips: [], spells: []};
 		}
 
-		const $search = $(`<input type="text" class="form-control form-control-sm mb-1" placeholder="Search ${isEpicBoon ? "boons" : "feats"}...">`);
-		const $list = $(`<div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`);
-		const $choicesContainer = $(`<div class="charsheet__quickbuild-feat-choices mt-2"></div>`);
+		const search = e_({outer: `<input type="text" class="form-control form-control-sm mb-1" placeholder="Search ${isEpicBoon ? "boons" : "feats"}...">`});
+		const list = e_({outer: `<div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`});
+		const choicesContainer = e_({outer: `<div class="charsheet__quickbuild-feat-choices mt-2"></div>`});
 
 		// Helper to detect if feat has choices
 		const getFeatChoices = (feat) => {
@@ -1689,68 +1678,67 @@ class CharacterSheetQuickBuild {
 
 		// Render choices UI for selected feat
 		const renderFeatChoices = () => {
-			$choicesContainer.empty();
+			choicesContainer.innerHTML = "";
 			if (!sel.feat) return;
 
 			const choices = getFeatChoices(sel.feat);
 			const hasChoices = choices.skills || choices.languages || choices.tools || choices.ability || choices.expertise || choices.spells;
 			if (!hasChoices) return;
 
-			$choicesContainer.append(`<div class="ve-small ve-bold mb-1">Additional Choices for ${sel.feat.name}:</div>`);
+			choicesContainer.append(e_({outer: `<div class="ve-small ve-bold mb-1">Additional Choices for ${sel.feat.name}:</div>`}));
 
 			// Spell list selection (for feats like Magic Initiate)
 			if (choices.spells?.lists?.length > 1) {
-				const $listSection = $(`<div class="mb-2"></div>`);
-				$listSection.append(`<label class="ve-small">Choose spell list:</label>`);
-				const $select = $(`<select class="form-control form-control-sm mt-1"></select>`);
-				$select.append(`<option value="">-- Select --</option>`);
-				choices.spells.lists.forEach(list => {
-					const isSelected = sel.featChoices.spellList === list.name;
-					$select.append(`<option value="${list.name}" ${isSelected ? "selected" : ""}>${list.name}</option>`);
+				const listSection = e_({outer: `<div class="mb-2"></div>`});
+				listSection.append(e_({outer: `<label class="ve-small">Choose spell list:</label>`}));
+				const select = e_({outer: `<select class="form-control form-control-sm mt-1"></select>`});
+				select.append(e_({outer: `<option value="">-- Select --</option>`}));
+				choices.spells.lists.forEach(spList => {
+					const isSelected = sel.featChoices.spellList === spList.name;
+					select.append(e_({outer: `<option value="${spList.name}" ${isSelected ? "selected" : ""}>${spList.name}</option>`}));
 				});
-				$select.on("change", () => {
-					sel.featChoices.spellList = $select.val() || null;
+				select.addEventListener("change", () => {
+					sel.featChoices.spellList = select.value || null;
 					sel.featChoices.cantrips = [];
 					sel.featChoices.spells = [];
 					renderFeatChoices();
 				});
-				$listSection.append($select);
-				$choicesContainer.append($listSection);
+				listSection.append(select);
+				choicesContainer.append(listSection);
 			}
 
 			// Ability score choices
 			if (choices.ability) {
-				const $abilitySection = $(`<div class="mb-2"></div>`);
-				$abilitySection.append(`<label class="ve-small">Choose ability to increase by ${choices.ability.amount}:</label>`);
-				const $abilityGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				const abilitySection = e_({outer: `<div class="mb-2"></div>`});
+				abilitySection.append(e_({outer: `<label class="ve-small">Choose ability to increase by ${choices.ability.amount}:</label>`}));
+				const abilityGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 				choices.ability.from.forEach(abl => {
 					const isSelected = sel.featChoices.ability === abl;
-					// Use running scores (includes racial + pending ASIs) if available, else fall back to full ability score
 					const currentScore = runningScores ? runningScores[abl] : this._state.getAbilityScore(abl);
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}">
 							${Parser.attAbvToFull(abl)} (${currentScore} → ${currentScore + choices.ability.amount})
 						</button>
-					`);
+					`});
 
-					$btn.on("click", () => {
+					btn.addEventListener("click", () => {
 						sel.featChoices.ability = isSelected ? null : abl;
 						renderFeatChoices();
 					});
-					$abilityGrid.append($btn);
+					abilityGrid.append(btn);
 				});
 
-				$abilitySection.append($abilityGrid);
-				$choicesContainer.append($abilitySection);
+				abilitySection.append(abilityGrid);
+				choicesContainer.append(abilitySection);
 			}
 
 			// Skill choices
 			if (choices.skills) {
-				const $skillSection = $(`<div class="mb-2"></div>`);
-				$skillSection.append(`<label class="ve-small">Choose ${choices.skills.count} skill${choices.skills.count > 1 ? "s" : ""}:</label>`);
-				const $skillGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				const skillSection = e_({outer: `<div class="mb-2"></div>`});
+				skillSection.append(e_({outer: `<label class="ve-small">Choose ${choices.skills.count} skill${choices.skills.count > 1 ? "s" : ""}:</label>`}));
+				const skillGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 				const availableSkills = choices.skills.from.map(s => s.toLowerCase().replace(/\s+/g, ""));
 				const existingSkills = new Set((this._state.getSkillProficiencies?.() || []).map(s => s.toLowerCase()));
@@ -1760,16 +1748,16 @@ class CharacterSheetQuickBuild {
 					const isSelected = sel.featChoices.skills.includes(skill);
 					const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}" 
 							${isKnown ? "disabled title=\"Already proficient\"" : ""} 
 							style="${isKnown ? "opacity: 0.5;" : ""}">
 							${displayName}${isKnown ? " ✓" : ""}
 						</button>
-					`);
+					`});
 
 					if (!isKnown) {
-						$btn.on("click", () => {
+						btn.addEventListener("click", () => {
 							if (isSelected) {
 								sel.featChoices.skills = sel.featChoices.skills.filter(s => s !== skill);
 							} else if (sel.featChoices.skills.length < choices.skills.count) {
@@ -1778,19 +1766,19 @@ class CharacterSheetQuickBuild {
 							renderFeatChoices();
 						});
 					}
-					$skillGrid.append($btn);
+					skillGrid.append(btn);
 				});
 
-				$skillSection.append($skillGrid);
-				$skillSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.skills.length}/${choices.skills.count}</div>`);
-				$choicesContainer.append($skillSection);
+				skillSection.append(skillGrid);
+				skillSection.append(e_({outer: `<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.skills.length}/${choices.skills.count}</div>`}));
+				choicesContainer.append(skillSection);
 			}
 
 			// Tool choices
 			if (choices.tools) {
-				const $toolSection = $(`<div class="mb-2"></div>`);
-				$toolSection.append(`<label class="ve-small">Choose ${choices.tools.count} tool${choices.tools.count > 1 ? "s" : ""}:</label>`);
-				const $toolGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				const toolSection = e_({outer: `<div class="mb-2"></div>`});
+				toolSection.append(e_({outer: `<label class="ve-small">Choose ${choices.tools.count} tool${choices.tools.count > 1 ? "s" : ""}:</label>`}));
+				const toolGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
 				const allTools = this._page.getToolsList() || [];
 				let availableTools = allTools;
@@ -1810,16 +1798,16 @@ class CharacterSheetQuickBuild {
 					const isKnown = existingTools.has(tool.name.toLowerCase());
 					const isSelected = sel.featChoices.tools.includes(tool.name);
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
 							${isKnown ? "disabled title=\"Already proficient\"" : ""}
 							style="${isKnown ? "opacity: 0.5;" : ""}">
 							${tool.name}${isKnown ? " ✓" : ""}
 						</button>
-					`);
+					`});
 
 					if (!isKnown) {
-						$btn.on("click", () => {
+						btn.addEventListener("click", () => {
 							if (isSelected) {
 								sel.featChoices.tools = sel.featChoices.tools.filter(t => t !== tool.name);
 							} else if (sel.featChoices.tools.length < choices.tools.count) {
@@ -1828,25 +1816,22 @@ class CharacterSheetQuickBuild {
 							renderFeatChoices();
 						});
 					}
-					$toolGrid.append($btn);
+					toolGrid.append(btn);
 				});
 
-				$toolSection.append($toolGrid);
-				$toolSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.tools.length}/${choices.tools.count}</div>`);
-				$choicesContainer.append($toolSection);
+				toolSection.append(toolGrid);
+				toolSection.append(e_({outer: `<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.tools.length}/${choices.tools.count}</div>`}));
+				choicesContainer.append(toolSection);
 			}
 
 			// Expertise choices
 			if (choices.expertise) {
-				const $expSection = $(`<div class="mb-2"></div>`);
-				$expSection.append(`<label class="ve-small">Choose ${choices.expertise.count} skill${choices.expertise.count > 1 ? "s" : ""} for expertise:</label>`);
-				const $expGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				const expSection = e_({outer: `<div class="mb-2"></div>`});
+				expSection.append(e_({outer: `<label class="ve-small">Choose ${choices.expertise.count} skill${choices.expertise.count > 1 ? "s" : ""} for expertise:</label>`}));
+				const expGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 
-				// Get skills that can have expertise (already proficient, or being added by this feat)
 				const proficientSkills = Object.keys(this._state.getSkillProficiencies?.() || {});
 				const skillsBeingAdded = sel.featChoices.skills || [];
-				// Include fixed skill proficiencies from the feat itself (e.g., Boon of Skill grants all 18 skills)
-				// feat.skillProficiencies is an array of objects like [{athletics: true, acrobatics: true, ...}]
 				const fixedFeatSkills = (sel.feat?.skillProficiencies || []).flatMap(sp =>
 					Object.entries(sp)
 						.filter(([k, v]) => v === true && k !== "choose" && k !== "any")
@@ -1856,23 +1841,23 @@ class CharacterSheetQuickBuild {
 				const availableForExpertise = [...new Set([...proficientSkills, ...skillsBeingAdded, ...fixedFeatSkills])].map(s => s.toLowerCase());
 
 				if (availableForExpertise.length === 0) {
-					$expSection.append(`<div class="ve-small ve-muted mt-1">No proficient skills available for expertise. Add skill proficiencies first.</div>`);
+					expSection.append(e_({outer: `<div class="ve-small ve-muted mt-1">No proficient skills available for expertise. Add skill proficiencies first.</div>`}));
 				} else {
 					availableForExpertise.forEach(skill => {
 						const hasExpertise = existingExpertise.has(skill);
 						const isSelected = sel.featChoices.expertise.includes(skill);
 						const displayName = skill.replace(/([A-Z])/g, " $1").trim().toTitleCase();
 
-						const $btn = $(`
+						const btn = e_({outer: `
 							<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
 								${hasExpertise ? "disabled title=\"Already has expertise\"" : ""}
 								style="${hasExpertise ? "opacity: 0.5;" : ""}">
 								${displayName}${hasExpertise ? " ✓✓" : ""}
 							</button>
-						`);
+						`});
 
 						if (!hasExpertise) {
-							$btn.on("click", () => {
+							btn.addEventListener("click", () => {
 								if (isSelected) {
 									sel.featChoices.expertise = sel.featChoices.expertise.filter(s => s !== skill);
 								} else if (sel.featChoices.expertise.length < choices.expertise.count) {
@@ -1881,40 +1866,40 @@ class CharacterSheetQuickBuild {
 								renderFeatChoices();
 							});
 						}
-						$expGrid.append($btn);
+						expGrid.append(btn);
 					});
 				}
 
-				$expSection.append($expGrid);
-				$expSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.expertise.length}/${choices.expertise.count}</div>`);
-				$choicesContainer.append($expSection);
+				expSection.append(expGrid);
+				expSection.append(e_({outer: `<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.expertise.length}/${choices.expertise.count}</div>`}));
+				choicesContainer.append(expSection);
 			}
 
 			// Language choices
 			if (choices.languages) {
-				const $langSection = $(`<div class="mb-2"></div>`);
-				$langSection.append(`<label class="ve-small">Choose ${choices.languages.count} language${choices.languages.count > 1 ? "s" : ""}:</label>`);
+				const langSection = e_({outer: `<div class="mb-2"></div>`});
+				langSection.append(e_({outer: `<label class="ve-small">Choose ${choices.languages.count} language${choices.languages.count > 1 ? "s" : ""}:</label>`}));
 
 				const existingLangs = new Set((this._state.getLanguages?.() || []).map(l => l.toLowerCase()));
 				const standardLangs = ["common", "dwarvish", "elvish", "giant", "gnomish", "goblin", "halfling", "orc"];
 				const exoticLangs = ["abyssal", "celestial", "draconic", "deep speech", "infernal", "primordial", "sylvan", "undercommon"];
 				const availableLangs = choices.languages.type === "standard" ? standardLangs : [...standardLangs, ...exoticLangs];
 
-				const $langGrid = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				const langGrid = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 				availableLangs.forEach(lang => {
 					const isKnown = existingLangs.has(lang.toLowerCase());
 					const isSelected = sel.featChoices.languages.includes(lang);
 
-					const $btn = $(`
+					const btn = e_({outer: `
 						<button class="ve-btn ve-btn-xs ${isSelected ? "ve-btn-primary" : "ve-btn-default"}"
 							${isKnown ? "disabled title=\"Already known\"" : ""}
 							style="${isKnown ? "opacity: 0.5;" : ""}">
 							${lang.toTitleCase()}${isKnown ? " ✓" : ""}
 						</button>
-					`);
+					`});
 
 					if (!isKnown) {
-						$btn.on("click", () => {
+						btn.addEventListener("click", () => {
 							if (isSelected) {
 								sel.featChoices.languages = sel.featChoices.languages.filter(l => l !== lang);
 							} else if (sel.featChoices.languages.length < choices.languages.count) {
@@ -1923,32 +1908,32 @@ class CharacterSheetQuickBuild {
 							renderFeatChoices();
 						});
 					}
-					$langGrid.append($btn);
+					langGrid.append(btn);
 				});
 
-				$langSection.append($langGrid);
-				$langSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.languages.length}/${choices.languages.count}</div>`);
-				$choicesContainer.append($langSection);
+				langSection.append(langGrid);
+				langSection.append(e_({outer: `<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.languages.length}/${choices.languages.count}</div>`}));
+				choicesContainer.append(langSection);
 			}
 
 			// Cantrip choices
 			if (choices.spells?.cantrips) {
-				const $cantripSection = $(`<div class="mb-2"></div>`);
-				$cantripSection.append(`<label class="ve-small">Choose ${choices.spells.cantrips.count} cantrip${choices.spells.cantrips.count > 1 ? "s" : ""}:</label>`);
+				const cantripSection = e_({outer: `<div class="mb-2"></div>`});
+				cantripSection.append(e_({outer: `<label class="ve-small">Choose ${choices.spells.cantrips.count} cantrip${choices.spells.cantrips.count > 1 ? "s" : ""}:</label>`}));
 				
-				const $cantripList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				const cantripList = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 				sel.featChoices.cantrips.forEach((cantrip, idx) => {
-					const $badge = $(`<span class="badge badge-primary mr-1">${cantrip.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
-					$badge.find(".clickable").on("click", () => {
+					const badge = e_({outer: `<span class="badge badge-primary mr-1">${cantrip.name} <span class="clickable" style="cursor: pointer;">×</span></span>`});
+					badge.querySelector(".clickable").addEventListener("click", () => {
 						sel.featChoices.cantrips.splice(idx, 1);
 						renderFeatChoices();
 					});
-					$cantripList.append($badge);
+					cantripList.append(badge);
 				});
 
 				if (sel.featChoices.cantrips.length < choices.spells.cantrips.count) {
-					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Cantrip</button>`);
-					$addBtn.on("click", async () => {
+					const addBtn = e_({outer: `<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Cantrip</button>`});
+					addBtn.addEventListener("click", async () => {
 						await this._showSpellPicker(choices.spells.cantrips.filter, true, (spell) => {
 							if (!sel.featChoices.cantrips.find(s => s.name === spell.name && s.source === spell.source)) {
 								sel.featChoices.cantrips.push({name: spell.name, source: spell.source, level: 0});
@@ -1956,33 +1941,33 @@ class CharacterSheetQuickBuild {
 							}
 						});
 					});
-					$cantripList.append($addBtn);
+					cantripList.append(addBtn);
 				}
 
-				$cantripSection.append($cantripList);
-				$cantripSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.cantrips.length}/${choices.spells.cantrips.count}</div>`);
-				$choicesContainer.append($cantripSection);
+				cantripSection.append(cantripList);
+				cantripSection.append(e_({outer: `<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.cantrips.length}/${choices.spells.cantrips.count}</div>`}));
+				choicesContainer.append(cantripSection);
 			}
 
 			// Spell choices
 			if (choices.spells?.spells) {
-				const $spellSection = $(`<div class="mb-2"></div>`);
+				const spellSection = e_({outer: `<div class="mb-2"></div>`});
 				const spellType = choices.spells.spells.innate ? "innate spell" : "spell";
-				$spellSection.append(`<label class="ve-small">Choose ${choices.spells.spells.count} ${spellType}${choices.spells.spells.count > 1 ? "s" : ""}:</label>`);
+				spellSection.append(e_({outer: `<label class="ve-small">Choose ${choices.spells.spells.count} ${spellType}${choices.spells.spells.count > 1 ? "s" : ""}:</label>`}));
 				
-				const $spellList = $(`<div class="ve-flex-wrap gap-1 mt-1"></div>`);
+				const spellList = e_({outer: `<div class="ve-flex-wrap gap-1 mt-1"></div>`});
 				sel.featChoices.spells.forEach((spell, idx) => {
-					const $badge = $(`<span class="badge badge-primary mr-1">${spell.name} <span class="clickable" style="cursor: pointer;">×</span></span>`);
-					$badge.find(".clickable").on("click", () => {
+					const badge = e_({outer: `<span class="badge badge-primary mr-1">${spell.name} <span class="clickable" style="cursor: pointer;">×</span></span>`});
+					badge.querySelector(".clickable").addEventListener("click", () => {
 						sel.featChoices.spells.splice(idx, 1);
 						renderFeatChoices();
 					});
-					$spellList.append($badge);
+					spellList.append(badge);
 				});
 
 				if (sel.featChoices.spells.length < choices.spells.spells.count) {
-					const $addBtn = $(`<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Spell</button>`);
-					$addBtn.on("click", async () => {
+					const addBtn = e_({outer: `<button class="ve-btn ve-btn-xs ve-btn-default">+ Add Spell</button>`});
+					addBtn.addEventListener("click", async () => {
 						await this._showSpellPicker(choices.spells.spells.filter, false, (spell) => {
 							if (!sel.featChoices.spells.find(s => s.name === spell.name && s.source === spell.source)) {
 								sel.featChoices.spells.push({
@@ -1996,17 +1981,17 @@ class CharacterSheetQuickBuild {
 							}
 						});
 					});
-					$spellList.append($addBtn);
+					spellList.append(addBtn);
 				}
 
-				$spellSection.append($spellList);
-				$spellSection.append(`<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.spells.length}/${choices.spells.spells.count}</div>`);
-				$choicesContainer.append($spellSection);
+				spellSection.append(spellList);
+				spellSection.append(e_({outer: `<div class="ve-small ve-muted mt-1">Selected: ${sel.featChoices.spells.length}/${choices.spells.spells.count}</div>`}));
+				choicesContainer.append(spellSection);
 			}
 		};
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			list.innerHTML = "";
 			const filterLower = filter.toLowerCase();
 			feats
 				.filter(f => !filter || f.name.toLowerCase().includes(filterLower))
@@ -2017,40 +2002,42 @@ class CharacterSheetQuickBuild {
 					const choices = getFeatChoices(feat);
 					const hasChoices = choices.skills || choices.languages || choices.tools || choices.ability || choices.expertise || choices.spells;
 
-					const $item = $(`<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 4px 8px; cursor: pointer;"></div>`);
+					const item = e_({outer: `<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 4px 8px; cursor: pointer;"></div>`});
 					const featLink = CharacterSheetPage.getHoverLink(UrlUtil.PG_FEATS, feat.name, feat.source);
-					$item.append($(`<strong></strong>`).append(featLink));
-					$item.append(` <span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>`);
+					const strong = e_({tag: "strong"});
+					if (typeof featLink === "string") strong.innerHTML = featLink;
+					else strong.append(featLink);
+					item.append(strong);
+					item.append(e_({outer: ` <span class="ve-muted">(${Parser.sourceJsonToAbv(feat.source)})</span>`}));
 					if (feat.category) {
 						const categoryFull = Parser.featCategoryToFull?.(feat.category) || feat.category;
-						$item.append(` <span class="badge badge-secondary ml-1" style="font-size: 0.6rem;">${categoryFull}</span>`);
+						item.append(e_({outer: ` <span class="badge badge-secondary ml-1" style="font-size: 0.6rem;">${categoryFull}</span>`}));
 					}
-					if (hasChoices) $item.append(` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>`);
+					if (hasChoices) item.append(e_({outer: ` <span class="badge badge-info ml-1" style="font-size: 0.65rem;">has choices</span>`}));
 
-					$item.on("click", () => {
-						$list.find(".charsheet__quickbuild-option").removeClass("selected");
-						$item.addClass("selected");
+					item.addEventListener("click", () => {
+						list.querySelectorAll(".charsheet__quickbuild-option").forEach(el => el.classList.remove("selected"));
+						item.classList.add("selected");
 						sel.feat = feat;
-						// Reset feat choices when changing feat
 						sel.featChoices = {skills: [], languages: [], tools: [], ability: null, expertise: [], spellList: null, cantrips: [], spells: []};
 						renderFeatChoices();
 					});
-					$list.append($item);
+					list.append(item);
 				});
 		};
 
-		const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
-		$search.on("input", renderListDebounced);
+		const renderListDebounced = MiscUtil.debounce(() => renderList(search.value), 100);
+		search.addEventListener("input", renderListDebounced);
 		renderList();
 
-		$container.append($search, $list, $choicesContainer);
+		container.append(search, list, choicesContainer);
 
 		if (sel.feat) {
-			$container.append($(`<div class="ve-small mt-1"><strong>Selected:</strong> ${sel.feat.name}</div>`));
+			container.append(e_({outer: `<div class="ve-small mt-1"><strong>Selected:</strong> ${sel.feat.name}</div>`}));
 			renderFeatChoices();
 		}
 
-		return $container;
+		return container;
 	}
 
 	/**
@@ -2117,8 +2104,8 @@ class CharacterSheetQuickBuild {
 	// Step 4: Optional Features (Invocations, Metamagic, etc.)
 	// ==========================================
 
-	_renderOptionalFeaturesStep ($content, optFeatLevels) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
+	_renderOptionalFeaturesStep (content, optFeatLevels) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
 
 		// Aggregate gains by feature type across all levels
 		const aggregatedGains = {};
@@ -2141,24 +2128,24 @@ class CharacterSheetQuickBuild {
 			});
 		});
 
-		$step.append(`
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Class Options</h4>
 				<p class="ve-muted">Select your optional class features (invocations, metamagic, etc.).</p>
 			</div>
-		`);
+		`}));
 
 		Object.entries(aggregatedGains).forEach(([typeKey, gain]) => {
 			const isCombatMethods = gain.featureTypes.some(ft => ft.startsWith("CTM:"));
 
 			if (isCombatMethods) {
-				this._renderCombatMethodsOptFeature($step, typeKey, gain);
+				this._renderCombatMethodsOptFeature(step, typeKey, gain);
 			} else {
-				this._renderStandardOptFeature($step, typeKey, gain);
+				this._renderStandardOptFeature(step, typeKey, gain);
 			}
 		});
 
-		$content.append($step);
+		content.append(step);
 	}
 
 	_validateOptionalFeaturesStep (optFeatLevels) {
@@ -2187,16 +2174,14 @@ class CharacterSheetQuickBuild {
 	/**
 	 * Render a standard (non-Combat-Methods) optional feature gain section.
 	 */
-	_renderStandardOptFeature ($step, typeKey, gain) {
+	_renderStandardOptFeature (step, typeKey, gain) {
 		if (!this._selections.optionalFeatures[typeKey]) {
 			this._selections.optionalFeatures[typeKey] = [];
 		}
 		const selectedList = this._selections.optionalFeatures[typeKey];
 
-		// Get existing optional features to detect "already known"
 		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
 
-		// Check if a feature is repeatable
 		const isRepeatable = (opt) => {
 			if (!opt.entries) return false;
 			const checkEntries = (entries) => {
@@ -2210,11 +2195,11 @@ class CharacterSheetQuickBuild {
 			return checkEntries(opt.entries);
 		};
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__quickbuild-section mb-3">
 				<h5>${gain.name} <span class="badge badge-primary qb-opt-counter">${selectedList.length}/${gain.totalNeeded}</span></h5>
 			</div>
-		`);
+		`});
 
 		const allOptFeatures = this._page.getOptionalFeatures() || [];
 		const filtered = allOptFeatures.filter(f => {
@@ -2224,21 +2209,16 @@ class CharacterSheetQuickBuild {
 			);
 		});
 
-		// Apply edition filtering based on class source
 		const classSource = gain.classData?.source || gain.classSource;
 		const editionFiltered = CharacterSheetClassUtils.filterOptFeaturesByEdition(filtered, classSource);
-
-		// Pre-filter by allowed sources (hoisted out of render loop)
 		const sourceFiltered = this._page.filterByAllowedSources(editionFiltered);
 
-		// Pre-build lookup map for existing features (O(n) instead of O(n²))
 		const existingCountMap = new Map();
 		for (const existing of existingOptFeatures) {
 			const key = `${existing.name}|${existing.source}`;
 			existingCountMap.set(key, (existingCountMap.get(key) || 0) + 1);
 		}
 
-		// Enrich options with known/repeatable metadata
 		const enrichedOptions = sourceFiltered.map(opt => {
 			const key = `${opt.name}|${opt.source}`;
 			const timesKnown = existingCountMap.get(key) || 0;
@@ -2255,31 +2235,28 @@ class CharacterSheetQuickBuild {
 
 		const hasKnownOptions = enrichedOptions.some(opt => opt._alreadyKnown);
 
-		const $search = $(`<input type="text" class="form-control form-control-sm mb-1" placeholder="Search...">`);
-		const $list = $(`<div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`);
+		const search = e_({outer: `<input type="text" class="form-control form-control-sm mb-1" placeholder="Search...">`});
+		const listEl = e_({outer: `<div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`});
 
 		const renderList = (filter = "") => {
-			$list.empty();
+			listEl.innerHTML = "";
 
-			// Add legend for badges if there are known options or any selections in progress
 			const hasAnyKnownOrSelected = hasKnownOptions || selectedList.length > 0;
 			if (hasAnyKnownOrSelected) {
-				$list.append(`
+				listEl.append(e_({outer: `
 					<div class="ve-small ve-muted mb-2 pb-2 px-2 pt-1" style="border-bottom: 1px solid var(--cs-border, #ddd);">
 						<span class="badge badge-success mr-1">✓ Known</span> = Already have
 						<span class="badge badge-primary ml-2 mr-1">● Selected</span> = Chosen now
 						<span class="badge badge-info ml-2 mr-1">↺ Repeatable</span> = Can take again
 					</div>
-				`);
+				`}));
 			}
 
 			const filterLower = filter.toLowerCase();
 			enrichedOptions
 				.filter(f => !filter || f.name.toLowerCase().includes(filterLower))
 				.sort((a, b) => {
-					// Selectable options first, then by name
 					if (a._selectable !== b._selectable) return a._selectable ? -1 : 1;
-					// Known options at the top of their section
 					if (a._alreadyKnown !== b._alreadyKnown) return a._alreadyKnown ? -1 : 1;
 					return a.name.localeCompare(b.name);
 				})
@@ -2287,7 +2264,6 @@ class CharacterSheetQuickBuild {
 					const isSelected = selectedList.some(s => s.name === opt.name && s.source === opt.source);
 					const isDisabled = !opt._selectable;
 
-					// Build badges - show "Selected" for current session picks, "Known" for already in state
 					const knownText = opt._timesKnown > 1 ? `Known ×${opt._timesKnown}` : "Known";
 					const knownBadge = opt._alreadyKnown
 						? `<span class="badge badge-success ml-1" title="Already have this${opt._timesKnown > 1 ? ` (${opt._timesKnown} times)` : ""}">✓ ${knownText}</span>`
@@ -2299,10 +2275,9 @@ class CharacterSheetQuickBuild {
 						? `<span class="badge badge-info ml-1" title="Can be taken multiple times">↺ Repeatable</span>`
 						: "";
 
-					// Build item with styling for known/disabled/selected states
 					const itemStyle = `padding: 6px 8px; cursor: ${isDisabled ? "not-allowed" : "pointer"};${isDisabled ? " opacity: 0.5;" : ""}${isSelected && !opt._alreadyKnown ? " background: rgba(13, 110, 253, 0.1); border-left: 3px solid #0d6efd;" : ""}${opt._alreadyKnown && opt._selectable ? " background: rgba(40, 167, 69, 0.1); border-left: 3px solid #28a745;" : ""}${opt._alreadyKnown && !opt._selectable ? " background: rgba(128, 128, 128, 0.1);" : ""}`;
 
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="${itemStyle}">
 							<div class="ve-flex-v-center">
 								<input type="checkbox" ${isSelected ? "checked" : ""}${isDisabled ? " disabled" : ""}>
@@ -2311,23 +2286,24 @@ class CharacterSheetQuickBuild {
 								<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>
 							</div>
 						</div>
-					`);
+					`});
 
-					// Create hoverable link for the optional feature name
-					const $optName = $item.find(".qb-opt-name");
+					const optName = item.querySelector(".qb-opt-name");
 					try {
 						const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
 							opt.source,
 							Parser.SRC_XPHB,
 							Parser.SRC_PHB,
 						]);
-						$optName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+						const link = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource);
+						if (typeof link === "string") optName.innerHTML = link;
+						else optName.append(link);
 					} catch (e) {
-						$optName.html(`<strong>${opt.name}</strong>`);
+						optName.innerHTML = `<strong>${opt.name}</strong>`;
 					}
 
-					$item.on("click", () => {
-						if (isDisabled) return; // Don't allow selection of disabled items
+					item.addEventListener("click", () => {
+						if (isDisabled) return;
 
 						if (isSelected) {
 							const idx = selectedList.findIndex(s => s.name === opt.name && s.source === opt.source);
@@ -2340,24 +2316,24 @@ class CharacterSheetQuickBuild {
 							selectedList.push(opt);
 						}
 						renderList(filter);
-						$section.find(".qb-opt-counter").text(`${selectedList.length}/${gain.totalNeeded}`);
+						section.querySelector(".qb-opt-counter").textContent = `${selectedList.length}/${gain.totalNeeded}`;
 					});
-					$list.append($item);
+					listEl.append(item);
 				});
 		};
 
-		const renderListDebounced = MiscUtil.debounce(() => renderList($search.val()), 100);
-		$search.on("input", renderListDebounced);
+		const renderListDebounced = MiscUtil.debounce(() => renderList(search.value), 100);
+		search.addEventListener("input", renderListDebounced);
 		renderList();
 
-		$section.append($search, $list);
-		$step.append($section);
+		section.append(search, listEl);
+		step.append(section);
 	}
 
 	/**
 	 * Render a Combat Methods optional feature gain with tradition + degree filtering.
 	 */
-	_renderCombatMethodsOptFeature ($step, typeKey, gain) {
+	_renderCombatMethodsOptFeature (step, typeKey, gain) {
 		if (!this._selections.optionalFeatures[typeKey]) {
 			this._selections.optionalFeatures[typeKey] = [];
 		}
@@ -2369,10 +2345,8 @@ class CharacterSheetQuickBuild {
 		const allOptFeatures = this._page.filterByAllowedSources(editionFiltered);
 		const existingOptFeatures = this._state.getFeatures().filter(f => f.featureType === "Optional Feature");
 
-		// Get max degree from class table
 		const maxDegree = CharacterSheetClassUtils.getMaxMethodDegree(gain.classData, gain.maxClassLevel) || 1;
 
-		// Get known traditions — from state or inferred from existing features
 		let knownTraditions = CharacterSheetClassUtils.getKnownCombatTraditions(existingOptFeatures, this._state);
 		const classFeatures = this._page.getClassFeatures();
 		const traditionCount = CharacterSheetClassUtils.getCombatTraditionSelectionCount({
@@ -2380,22 +2354,20 @@ class CharacterSheetQuickBuild {
 			classFeatures,
 		});
 
-		// If no traditions selected, we need a tradition picker first
 		if (!this._selections._combatTraditions) {
 			this._selections._combatTraditions = [...knownTraditions];
 		}
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__quickbuild-section mb-3">
 				<h5>${gain.name} <span class="badge badge-primary">${selectedList.length}/${gain.totalNeeded}</span></h5>
 				<p class="ve-muted ve-small">Max degree: ${maxDegree}${CharacterSheetClassUtils.getOrdinalSuffix(maxDegree)}</p>
 			</div>
-		`);
+		`});
 
-		const $tradContainer = $(`<div class="mb-2"></div>`);
-		const $methodsContainer = $(`<div></div>`);
+		const tradContainer = e_({outer: `<div class="mb-2"></div>`});
+		const methodsContainer = e_({outer: `<div></div>`});
 
-		// Tradition picker (if no traditions are known yet)
 		if (knownTraditions.length < traditionCount) {
 			const availableTraditions = CharacterSheetClassUtils.getAvailableTraditionsForClass(
 				allOptFeatures,
@@ -2404,24 +2376,24 @@ class CharacterSheetQuickBuild {
 				classFeatures,
 			);
 
-			$tradContainer.append(`
+			tradContainer.append(e_({outer: `
 				<p class="ve-small ve-muted mb-1">Choose ${traditionCount} Combat Traditions:</p>
 				<div class="ve-small ve-muted mb-1">Selected: <span class="qb-trad-count">${this._selections._combatTraditions.length}</span>/${traditionCount}</div>
-			`);
+			`}));
 
-			const $tradList = $(`<div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px; padding: 4px; margin-bottom: 8px;"></div>`);
+			const tradList = e_({outer: `<div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px; padding: 4px; margin-bottom: 8px;"></div>`});
 
 			availableTraditions.forEach(trad => {
 				const isChecked = this._selections._combatTraditions.includes(trad.code);
-				const $item = $(`
+				const item = e_({outer: `
 					<label class="d-block ve-small mb-1" style="cursor: pointer; padding: 4px 6px;">
 						<input type="checkbox" class="mr-2" ${isChecked ? "checked" : ""}>
 						<strong>${trad.name}</strong>
 						<span class="ve-muted ml-1">(${trad.code})</span>
 					</label>
-				`);
+				`});
 
-				$item.find("input").on("change", (e) => {
+				item.querySelector("input").addEventListener("change", (e) => {
 					if (e.target.checked) {
 						if (this._selections._combatTraditions.length < traditionCount) {
 							this._selections._combatTraditions.push(trad.code);
@@ -2432,7 +2404,6 @@ class CharacterSheetQuickBuild {
 						}
 					} else {
 						this._selections._combatTraditions = this._selections._combatTraditions.filter(t => t !== trad.code);
-						// Clear selected methods from removed tradition
 						const remaining = selectedList.filter(s => {
 							const ft = (s.featureType || []).find(t => t.startsWith("CTM:"));
 							if (!ft) return true;
@@ -2442,31 +2413,29 @@ class CharacterSheetQuickBuild {
 						selectedList.length = 0;
 						remaining.forEach(s => selectedList.push(s));
 					}
-					$tradContainer.find(".qb-trad-count").text(this._selections._combatTraditions.length);
+					tradContainer.querySelector(".qb-trad-count").textContent = this._selections._combatTraditions.length;
 					renderMethods();
-					$section.find(".badge").text(`${selectedList.length}/${gain.totalNeeded}`);
+					section.querySelector(".badge").textContent = `${selectedList.length}/${gain.totalNeeded}`;
 				});
 
-				$tradList.append($item);
+				tradList.append(item);
 			});
 
-			$tradContainer.append($tradList);
+			tradContainer.append(tradList);
 		} else {
 			const tradNames = knownTraditions.map(t => CharacterSheetClassUtils.getTraditionName(t)).join(", ");
-			$tradContainer.append(`<p class="ve-small ve-muted">Traditions: ${tradNames}</p>`);
+			tradContainer.append(e_({outer: `<p class="ve-small ve-muted">Traditions: ${tradNames}</p>`}));
 		}
 
-		// Render filtered methods
 		const renderMethods = () => {
-			$methodsContainer.empty();
+			methodsContainer.innerHTML = "";
 			const activeTraditions = knownTraditions.length > 0 ? knownTraditions : this._selections._combatTraditions;
 
 			if (activeTraditions.length === 0) {
-				$methodsContainer.append(`<p class="ve-muted ve-small">Select traditions above to see available methods.</p>`);
+				methodsContainer.append(e_({outer: `<p class="ve-muted ve-small">Select traditions above to see available methods.</p>`}));
 				return;
 			}
 
-			// Filter methods by tradition + degree
 			const availableMethods = allOptFeatures.filter(opt => {
 				if (!opt.featureType) return false;
 				return opt.featureType.some(ft => {
@@ -2478,16 +2447,14 @@ class CharacterSheetQuickBuild {
 				});
 			});
 
-			// Exclude already-known methods
 			const existingNames = new Set(existingOptFeatures.map(f => `${f.name}|${f.source}`));
 			const newMethods = availableMethods.filter(m => !existingNames.has(`${m.name}|${m.source}`));
 
-			// Group by tradition
-			const $search = $(`<input type="text" class="form-control form-control-sm mb-1" placeholder="Search methods...">`);
-			const $list = $(`<div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`);
+			const search = e_({outer: `<input type="text" class="form-control form-control-sm mb-1" placeholder="Search methods...">`});
+			const list = e_({outer: `<div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`});
 
 			const renderFiltered = (filter = "") => {
-				$list.empty();
+				list.innerHTML = "";
 				const filterLower = filter.toLowerCase();
 
 				for (const tradCode of activeTraditions) {
@@ -2501,7 +2468,7 @@ class CharacterSheetQuickBuild {
 					});
 					if (tradMethods.length === 0) continue;
 
-					$list.append(`<div class="ve-small px-2 pt-2 pb-1" style="font-weight: 600; border-bottom: 1px solid var(--cs-border, #ddd);">${tradName}</div>`);
+					list.append(e_({outer: `<div class="ve-small px-2 pt-2 pb-1" style="font-weight: 600; border-bottom: 1px solid var(--cs-border, #ddd);">${tradName}</div>`}));
 
 					tradMethods.sort((a, b) => {
 						const dA = CharacterSheetClassUtils.getMethodDegree(a);
@@ -2510,7 +2477,7 @@ class CharacterSheetQuickBuild {
 					}).forEach(opt => {
 						const degree = CharacterSheetClassUtils.getMethodDegree(opt);
 						const isSelected = selectedList.some(s => s.name === opt.name && s.source === opt.source);
-						const $item = $(`
+						const item = e_({outer: `
 							<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 6px 8px; cursor: pointer;">
 								<div class="ve-flex-v-center">
 									<input type="checkbox" ${isSelected ? "checked" : ""}>
@@ -2518,22 +2485,23 @@ class CharacterSheetQuickBuild {
 									<span class="ve-muted ml-1">(${degree}${CharacterSheetClassUtils.getOrdinalSuffix(degree)} degree)</span>
 								</div>
 							</div>
-						`);
+						`});
 
-						// Create hoverable link for the method name
-						const $methodName = $item.find(".qb-method-name");
+						const methodName = item.querySelector(".qb-method-name");
 						try {
 							const resolvedSource = this._page.resolveOptionalFeatureSource(opt.name, [
 								opt.source,
 								Parser.SRC_XPHB,
 								Parser.SRC_PHB,
 							]);
-							$methodName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource));
+							const link = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, opt.name, resolvedSource);
+							if (typeof link === "string") methodName.innerHTML = link;
+							else methodName.append(link);
 						} catch (e) {
-							$methodName.html(`<strong>${opt.name}</strong>`);
+							methodName.innerHTML = `<strong>${opt.name}</strong>`;
 						}
 
-						$item.on("click", () => {
+						item.addEventListener("click", () => {
 							if (isSelected) {
 								const idx = selectedList.findIndex(s => s.name === opt.name && s.source === opt.source);
 								if (idx >= 0) selectedList.splice(idx, 1);
@@ -2545,27 +2513,27 @@ class CharacterSheetQuickBuild {
 								selectedList.push(opt);
 							}
 							renderFiltered(filter);
-							$section.find(".badge").text(`${selectedList.length}/${gain.totalNeeded}`);
+							section.querySelector(".badge").textContent = `${selectedList.length}/${gain.totalNeeded}`;
 						});
-						$list.append($item);
+						list.append(item);
 					});
 				}
 
-				if ($list.children().length === 0) {
-					$list.append(`<div class="ve-muted ve-small p-2">No methods available.</div>`);
+				if (list.children.length === 0) {
+					list.append(e_({outer: `<div class="ve-muted ve-small p-2">No methods available.</div>`}));
 				}
 			};
 
-			const renderFilteredDebounced = MiscUtil.debounce(() => renderFiltered($search.val()), 100);
-			$search.on("input", renderFilteredDebounced);
+			const renderFilteredDebounced = MiscUtil.debounce(() => renderFiltered(search.value), 100);
+			search.addEventListener("input", renderFilteredDebounced);
 			renderFiltered();
 
-			$methodsContainer.append($search, $list);
+			methodsContainer.append(search, list);
 		};
 
 		renderMethods();
-		$section.append($tradContainer, $methodsContainer);
-		$step.append($section);
+		section.append(tradContainer, methodsContainer);
+		step.append(section);
 	}
 
 
@@ -2614,29 +2582,28 @@ class CharacterSheetQuickBuild {
 	/**
 	 * Render the weapon mastery step: let the user fill up to the new total.
 	 */
-	_renderWeaponMasteryStep ($content, masteryInfo) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
-		$step.append(`
+	_renderWeaponMasteryStep (content, masteryInfo) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Weapon Mastery</h4>
 				<p class="ve-muted">Choose weapons to master. You can change these after a Long Rest.
 					Your ${masteryInfo.className} now masters ${masteryInfo.targetTotal} weapon${masteryInfo.targetTotal !== 1 ? "s" : ""}
 					(was ${masteryInfo.existingCount}).</p>
 			</div>
-		`);
+		`}));
 
 		if (!this._selections.weaponMasteries) {
 			this._selections.weaponMasteries = [...masteryInfo.currentMasteries];
 		}
 		const selectedList = this._selections.weaponMasteries;
 
-		const $section = $(`
+		const section = e_({outer: `
 			<div class="charsheet__quickbuild-section mb-3">
 				<h5>Weapon Masteries <span class="badge badge-primary">${selectedList.length}/${masteryInfo.targetTotal}</span></h5>
 			</div>
-		`);
+		`});
 
-		// Get base weapons with mastery properties
 		const allItems = this._page.getItems?.() || [];
 		const weaponsWithMastery = allItems.filter(item => {
 			if (!item._isBaseItem) return false;
@@ -2659,20 +2626,20 @@ class CharacterSheetQuickBuild {
 			w.weaponCategory === "martial" || w.type === "M",
 		).sort((a, b) => a.name.localeCompare(b.name));
 
-		const $list = $(`<div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`);
+		const list = e_({outer: `<div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--cs-border, #ddd); border-radius: 8px;"></div>`});
 
 		const renderList = () => {
-			$list.empty();
+			list.innerHTML = "";
 
 			const renderGroup = (weapons, groupName) => {
 				if (!weapons.length) return;
-				$list.append(`<div class="ve-small px-2 pt-2 pb-1" style="font-weight: 600; border-bottom: 1px solid var(--cs-border, #ddd);">${groupName}</div>`);
+				list.append(e_({outer: `<div class="ve-small px-2 pt-2 pb-1" style="font-weight: 600; border-bottom: 1px solid var(--cs-border, #ddd);">${groupName}</div>`}));
 				weapons.forEach(weapon => {
 					const weaponKey = `${weapon.name}|${weapon.source}`;
 					const masteryProp = getMasteryName(weapon.mastery?.[0]);
 					const isSelected = selectedList.includes(weaponKey);
 
-					const $item = $(`
+					const item = e_({outer: `
 						<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 6px 8px; cursor: pointer;">
 							<div class="ve-flex-v-center">
 								<input type="checkbox" ${isSelected ? "checked" : ""}>
@@ -2680,8 +2647,8 @@ class CharacterSheetQuickBuild {
 								${masteryProp ? `<span class="ve-muted ml-1">(${masteryProp})</span>` : ""}
 							</div>
 						</div>
-					`);
-					$item.on("click", () => {
+					`});
+					item.addEventListener("click", () => {
 						if (isSelected) {
 							const idx = selectedList.indexOf(weaponKey);
 							if (idx >= 0) selectedList.splice(idx, 1);
@@ -2693,9 +2660,9 @@ class CharacterSheetQuickBuild {
 							selectedList.push(weaponKey);
 						}
 						renderList();
-						$section.find(".badge").text(`${selectedList.length}/${masteryInfo.targetTotal}`);
+						section.querySelector(".badge").textContent = `${selectedList.length}/${masteryInfo.targetTotal}`;
 					});
-					$list.append($item);
+					list.append(item);
 				});
 			};
 
@@ -2704,9 +2671,9 @@ class CharacterSheetQuickBuild {
 		};
 
 		renderList();
-		$section.append($list);
-		$step.append($section);
-		$content.append($step);
+		section.append(list);
+		step.append(section);
+		content.append(step);
 	}
 
 	_validateWeaponMasteryStep (masteryInfo) {
@@ -2725,14 +2692,14 @@ class CharacterSheetQuickBuild {
 	// Step 5: Feature Choices (Specialties, etc.)
 	// ==========================================
 
-	_renderFeatureOptionsStep ($content, featureOptionLevels) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
-		$step.append(`
+	_renderFeatureOptionsStep (content, featureOptionLevels) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Feature Choices</h4>
 				<p class="ve-muted">Select options for features that offer choices (fighting styles, specialties, etc.).</p>
 			</div>
-		`);
+		`}));
 
 		// Get existing features to mark "already known" options
 		const existingFeatures = this._state.getFeatures() || [];
@@ -2765,8 +2732,8 @@ class CharacterSheetQuickBuild {
 					optGroup,
 					levelKey,
 					poolKey,
-					$section: null,
-					$list: null,
+					section: null,
+					list: null,
 				});
 			});
 		});
@@ -2822,14 +2789,13 @@ class CharacterSheetQuickBuild {
 			const {optGroup, levelKey, poolKey} = sec;
 			const selectedList = this._selections.featureOptions[levelKey];
 
-			sec.$list.empty();
+			sec.list.innerHTML = "";
 
 			const usedNames = getPoolSelectedNames(poolKey, levelKey);
 
 			(optGroup.options || []).forEach(opt => {
 				const isRepeatable = isRepeatableOpt(opt);
 				
-				// Check if this option was chosen at another level in the same pool
 				const chosenElsewhere = !isRepeatable && usedNames.has(opt.name)
 					? getPoolSelectionLevel(poolKey, opt.name, levelKey)
 					: null;
@@ -2852,7 +2818,7 @@ class CharacterSheetQuickBuild {
 				const isDisabled = (isAlreadyKnown || chosenElsewhere) && !isRepeatable;
 				const itemStyle = isDisabled ? "opacity: 0.5; cursor: not-allowed;" : "cursor: pointer;";
 
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 6px 8px; ${itemStyle}">
 						<div class="ve-flex-v-center">
 							<input type="${optGroup.count === 1 ? "radio" : "checkbox"}" name="qb-featopt-${levelKey}" ${isSelected ? "checked" : ""}${isDisabled ? " disabled" : ""}>
@@ -2861,19 +2827,18 @@ class CharacterSheetQuickBuild {
 							${opt.source ? `<span class="ve-muted ml-1">(${Parser.sourceJsonToAbv(opt.source)})</span>` : ""}
 						</div>
 					</div>
-				`);
+				`});
 
-				// Create hoverable link for the feature option name
-				const $featOptName = $item.find(".qb-feat-opt-name");
+				const featOptName = item.querySelector(".qb-feat-opt-name");
 				if (opt.type === "classFeature" && opt.ref) {
 					const parts = opt.ref.split("|");
 					const featureSource = parts[2] || opt.source || "TGTT";
 					const hash = UrlUtil.encodeArrayForHash(parts[0], parts[1], parts[2], parts[3], featureSource);
 					try {
 						const hoverAttrs = Renderer.hover.getHoverElementAttributes({page: UrlUtil.PG_CLASS_SUBCLASS_FEATURES, source: featureSource, hash});
-						$featOptName.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`);
+						featOptName.innerHTML = `<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer">${opt.name}</a>`;
 					} catch (e) {
-						$featOptName.html(`<strong>${opt.name}</strong>`);
+						featOptName.innerHTML = `<strong>${opt.name}</strong>`;
 					}
 				} else if (opt.type === "optionalfeature" && opt.ref) {
 					const refParts = opt.ref.split("|");
@@ -2884,36 +2849,36 @@ class CharacterSheetQuickBuild {
 							Parser.SRC_XPHB,
 							Parser.SRC_PHB,
 						]);
-						$featOptName.html(CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource));
+						const link = CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, refParts[0], resolvedSource);
+						if (typeof link === "string") featOptName.innerHTML = link;
+						else featOptName.append(link);
 					} catch (e) {
-						$featOptName.html(`<strong>${opt.name}</strong>`);
+						featOptName.innerHTML = `<strong>${opt.name}</strong>`;
 					}
 				} else {
-					$featOptName.html(`<strong>${opt.name}</strong>`);
+					featOptName.innerHTML = `<strong>${opt.name}</strong>`;
 				}
 
 				if (!isDisabled) {
-					$item.on("click", () => {
+					item.addEventListener("click", () => {
 						if (isSelected) {
 							const idx = selectedList.findIndex(s => s.name === opt.name);
 							if (idx >= 0) selectedList.splice(idx, 1);
 						} else {
 							if (optGroup.count === 1) {
-								selectedList.length = 0; // Clear for radio
+								selectedList.length = 0;
 							}
 							if (selectedList.length >= optGroup.count) return;
 							selectedList.push(opt);
 						}
-						// Re-render ALL sections in the same pool (selections propagate)
 						for (const poolSec of (poolMap[poolKey] || [])) {
 							renderSection(poolSec);
-							poolSec.$section.find(".badge-primary").text(
-								`${(this._selections.featureOptions[poolSec.levelKey] || []).length}/${poolSec.optGroup.count}`,
-							);
+							poolSec.section.querySelector(".badge-primary").textContent =
+								`${(this._selections.featureOptions[poolSec.levelKey] || []).length}/${poolSec.optGroup.count}`;
 						}
 					});
 				}
-				sec.$list.append($item);
+				sec.list.append(item);
 			});
 		};
 
@@ -2922,25 +2887,25 @@ class CharacterSheetQuickBuild {
 			const {analysis, optGroup, levelKey} = sec;
 			const selectedList = this._selections.featureOptions[levelKey];
 
-			const $section = $(`
+			const sectionEl = e_({outer: `
 				<div class="charsheet__quickbuild-section mb-3">
 					<h5>${analysis.className} Level ${analysis.classLevel} — ${optGroup.featureName}
 						<span class="badge badge-primary">${selectedList.length}/${optGroup.count}</span>
 					</h5>
 				</div>
-			`);
-			const $list = $(`<div></div>`);
+			`});
+			const listEl = e_({outer: `<div></div>`});
 
-			sec.$section = $section;
-			sec.$list = $list;
+			sec.section = sectionEl;
+			sec.list = listEl;
 
 			renderSection(sec);
 
-			$section.append($list);
-			$step.append($section);
+			sectionEl.append(listEl);
+			step.append(sectionEl);
 		}
 
-		$content.append($step);
+		content.append(step);
 	}
 
 	_validateFeatureOptionsStep (featureOptionLevels) {
@@ -2961,46 +2926,48 @@ class CharacterSheetQuickBuild {
 	// Step 6: Expertise & Languages
 	// ==========================================
 
-	_renderExpertiseStep ($content, {expertiseLevels, languageLevels, scholarLevel}) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
-		$step.append(`
+	_renderExpertiseStep (content, {expertiseLevels, languageLevels, scholarLevel}) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Expertise, Languages & Scholar</h4>
 				<p class="ve-muted">Configure skill expertise, language proficiencies, and scholar choices.</p>
 			</div>
-		`);
+		`}));
 
-		// Scholar expertise (Wizard XPHB level 2)
 		if (scholarLevel) {
-			const $section = $(`
+			const section = e_({outer: `
 				<div class="charsheet__quickbuild-section mb-3">
 					<h5>Scholar Expertise (Wizard Level 2)</h5>
 					<p class="ve-small ve-muted">Choose a skill to gain expertise in.</p>
 				</div>
-			`);
+			`});
 
 			const scholarSkills = ["arcana", "history", "investigation", "nature", "religion"];
-			const $list = $(`<div></div>`);
+			const listEl = e_({outer: `<div></div>`});
 			scholarSkills.forEach(skill => {
 				const isSelected = this._selections.scholarSkill === skill;
-				const $item = $(`
+				const item = e_({outer: `
 					<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 4px 8px; cursor: pointer;">
 						<input type="radio" name="qb-scholar" ${isSelected ? "checked" : ""}>
 						<strong class="ml-2">${skill.toTitleCase()}</strong>
 					</div>
-				`);
-				$item.on("click", () => {
-					$list.find(".charsheet__quickbuild-option").removeClass("selected").find("input").prop("checked", false);
-					$item.addClass("selected").find("input").prop("checked", true);
+				`});
+				item.addEventListener("click", () => {
+					listEl.querySelectorAll(".charsheet__quickbuild-option").forEach(el => {
+						el.classList.remove("selected");
+						el.querySelector("input").checked = false;
+					});
+					item.classList.add("selected");
+					item.querySelector("input").checked = true;
 					this._selections.scholarSkill = skill;
 				});
-				$list.append($item);
+				listEl.append(item);
 			});
-			$section.append($list);
-			$step.append($section);
+			section.append(listEl);
+			step.append(section);
 		}
 
-		// Expertise grants
 		if (expertiseLevels.length > 0) {
 			expertiseLevels.forEach(analysis => {
 				analysis.expertiseGrants.forEach(grant => {
@@ -3009,12 +2976,10 @@ class CharacterSheetQuickBuild {
 						this._selections.expertise[levelKey] = [];
 					}
 
-					// Handle fixed expertise (e.g., "expertise in the Performance skill")
 					if (grant.fixedSkills?.length > 0) {
-						// Auto-populate selection with fixed skills
 						this._selections.expertise[levelKey] = [...grant.fixedSkills];
 
-						const $section = $(`
+						const section = e_({outer: `
 							<div class="charsheet__quickbuild-section mb-3">
 								<h5>${analysis.className} Level ${analysis.classLevel} — ${grant.featureName} Expertise
 									<span class="badge badge-success">Auto</span>
@@ -3024,33 +2989,32 @@ class CharacterSheetQuickBuild {
 									${grant.fixedSkills.map(s => `<span class="badge badge-info mr-1">${s.toTitleCase()}</span>`).join("")}
 								</div>
 							</div>
-						`);
-						$step.append($section);
+						`});
+						step.append(section);
 						return;
 					}
 
-					const $section = $(`
+					const section = e_({outer: `
 						<div class="charsheet__quickbuild-section mb-3">
 							<h5>${analysis.className} Level ${analysis.classLevel} — ${grant.featureName} Expertise
 								<span class="badge badge-primary">${this._selections.expertise[levelKey].length}/${grant.count || 2}</span>
 							</h5>
 						</div>
-					`);
+					`});
 
-					// Get proficient skills for expertise selection
 					const skillProfs = this._state._data?.skillProficiencies || {};
 					const proficientSkills = Object.keys(skillProfs).filter(s => skillProfs[s] >= 1);
 
-					const $list = $(`<div></div>`);
+					const listEl = e_({outer: `<div></div>`});
 					proficientSkills.forEach(skill => {
 						const isSelected = this._selections.expertise[levelKey].includes(skill);
-						const $item = $(`
+						const item = e_({outer: `
 							<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 4px 8px; cursor: pointer;">
 								<input type="checkbox" ${isSelected ? "checked" : ""}>
 								<strong class="ml-2">${skill.toTitleCase()}</strong>
 							</div>
-						`);
-						$item.on("click", () => {
+						`});
+						item.addEventListener("click", () => {
 							const list = this._selections.expertise[levelKey];
 							const maxCount = grant.count || 2;
 							if (isSelected) {
@@ -3060,19 +3024,18 @@ class CharacterSheetQuickBuild {
 								if (list.length >= maxCount) return;
 								list.push(skill);
 							}
-							// Refresh
-							$section.find(".badge").text(`${list.length}/${maxCount}`);
-							$item.toggleClass("selected").find("input").prop("checked", !isSelected);
+							section.querySelector(".badge").textContent = `${list.length}/${maxCount}`;
+							item.classList.toggle("selected");
+							item.querySelector("input").checked = !isSelected;
 						});
-						$list.append($item);
+						listEl.append(item);
 					});
-					$section.append($list);
-					$step.append($section);
+					section.append(listEl);
+					step.append(section);
 				});
 			});
 		}
 
-		// Language grants
 		if (languageLevels.length > 0) {
 			languageLevels.forEach(analysis => {
 				analysis.languageGrants.forEach(grant => {
@@ -3081,30 +3044,30 @@ class CharacterSheetQuickBuild {
 						this._selections.languages[levelKey] = [];
 					}
 
-					const $section = $(`
+					const section = e_({outer: `
 						<div class="charsheet__quickbuild-section mb-3">
 							<h5>${analysis.className} Level ${analysis.classLevel} — ${grant.featureName} Languages
 								<span class="badge badge-primary">${this._selections.languages[levelKey].length}/${grant.count}</span>
 							</h5>
 						</div>
-					`);
+					`});
 
 					const allLanguages = this._page.getLanguagesList() || [];
 					const knownLanguages = this._state.getLanguages().map(l => l.toLowerCase());
 
-					const $list = $(`<div style="max-height: 200px; overflow-y: auto;"></div>`);
+					const listEl = e_({outer: `<div style="max-height: 200px; overflow-y: auto;"></div>`});
 					allLanguages
 						.filter(l => !knownLanguages.includes(l.name?.toLowerCase()))
 						.sort((a, b) => a.name.localeCompare(b.name))
 						.forEach(lang => {
 							const isSelected = this._selections.languages[levelKey].includes(lang.name);
-							const $item = $(`
+							const item = e_({outer: `
 								<div class="charsheet__quickbuild-option ve-small ${isSelected ? "selected" : ""}" style="padding: 4px 8px; cursor: pointer;">
 									<input type="checkbox" ${isSelected ? "checked" : ""}>
 									<strong class="ml-2">${lang.name}</strong>
 								</div>
-							`);
-							$item.on("click", () => {
+							`});
+							item.addEventListener("click", () => {
 								const list = this._selections.languages[levelKey];
 								if (isSelected) {
 									const idx = list.indexOf(lang.name);
@@ -3113,18 +3076,19 @@ class CharacterSheetQuickBuild {
 									if (list.length >= grant.count) return;
 									list.push(lang.name);
 								}
-								$section.find(".badge").text(`${list.length}/${grant.count}`);
-								$item.toggleClass("selected").find("input").prop("checked", !isSelected);
+								section.querySelector(".badge").textContent = `${list.length}/${grant.count}`;
+								item.classList.toggle("selected");
+								item.querySelector("input").checked = !isSelected;
 							});
-							$list.append($item);
+							listEl.append(item);
 						});
-					$section.append($list);
-					$step.append($section);
+					section.append(listEl);
+					step.append(section);
 				});
 			});
 		}
 
-		$content.append($step);
+		content.append(step);
 	}
 
 	_validateExpertiseStep ({expertiseLevels, languageLevels, scholarLevel}) {
@@ -3166,28 +3130,26 @@ class CharacterSheetQuickBuild {
 	// Step 7: Spells
 	// ==========================================
 
-	_renderSpellsStep ($content, {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
-		$step.append(`
+	_renderSpellsStep (content, {hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Spell Selection</h4>
 				<p class="ve-muted">Select spells gained across all levels. Spells are organized by level.</p>
 			</div>
-		`);
+		`}));
 
-		// Wizard spellbook - use shared SpellPicker component
 		if (spellbookLevels.length > 0) {
 			const totalSpellbookSpells = spellbookLevels.length * 2;
 			const maxSpellLevel = CharacterSheetClassUtils.getMaxSpellLevelForClass("Wizard", this._targetLevel);
 
-			// Get spellbook spells already known
 			const existingSpellbook = this._state.getWizardSpellbook?.() || [];
 			const knownSpellIds = new Set(existingSpellbook.map(s => `${s.name}|${s.source}`));
 
 			const allSpells = this._page.getSpells() || [];
 			const sourceFiltered = this._page.filterByAllowedSources(allSpells);
 
-			const $section = CharacterSheetSpellPicker.renderWizardSpellbookPicker({
+			const section = CharacterSheetSpellPicker.renderWizardSpellbookPicker({
 				spellCount: totalSpellbookSpells,
 				maxSpellLevel,
 				allSpells: sourceFiltered,
@@ -3199,50 +3161,44 @@ class CharacterSheetQuickBuild {
 				preSelectedSpells: this._selections.spellbookSpells,
 			});
 
-			$step.append($section);
+			step.append(section);
 		}
 
-		// Known-spell caster picker (Sorcerer, Bard, Ranger, 2014 Warlock, etc.)
 		if (knownCasterInfo) {
-			this._renderKnownSpellPicker($step, knownCasterInfo);
+			this._renderKnownSpellPicker(step, knownCasterInfo);
 		}
 
-		// Prepared-spell caster picker (XPHB Warlock, etc.)
 		if (preparedCasterInfo) {
-			this._renderPreparedSpellPicker($step, preparedCasterInfo);
+			this._renderPreparedSpellPicker(step, preparedCasterInfo);
 		}
 
 		if (!knownCasterInfo && !preparedCasterInfo && hasSpellcasting && spellbookLevels.length === 0) {
-			// Full-access prepared casters (Cleric, Druid) only need slot management
-			$step.append(`
+			step.append(e_({outer: `
 				<div class="charsheet__quickbuild-section mb-3">
 					<p class="ve-muted">Spell preparation and known spell management can be done from the Spells tab after building your character. Your spell slots will be automatically calculated based on your class levels.</p>
 				</div>
-			`);
+			`}));
 		}
 
-		$content.append($step);
+		content.append(step);
 	}
 
 	/**
 	 * Render a known-spell picker section for the Quick Build spells step.
 	 * Uses the shared CharacterSheetSpellPicker component.
 	 */
-	_renderKnownSpellPicker ($step, knownCasterInfo) {
+	_renderKnownSpellPicker (step, knownCasterInfo) {
 		const {className, classSource, totalSpells, totalCantrips, maxSpellLevel, levelBreakdown} = knownCasterInfo;
 
-		// Render per-level breakdown if there are multiple levels with spell gains
 		if (levelBreakdown && levelBreakdown.length > 1) {
-			const $breakdown = this._renderLevelBreakdownPanel(levelBreakdown, className);
-			$step.append($breakdown);
+			const breakdown = this._renderLevelBreakdownPanel(levelBreakdown, className);
+			step.append(breakdown);
 		}
 
-		// Get already-known spells to mark them
 		const knownSpells = this._state.getSpells?.() || [];
 		const knownCantrips = this._state.getCantripsKnown?.() || [];
 		const knownSpellIds = new Set([...knownSpells, ...knownCantrips].map(s => `${s.name}|${s.source}`));
 
-		// Pre-compute filtered spells
 		const allSpells = this._page.getSpells() || [];
 		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
 
@@ -3252,7 +3208,7 @@ class CharacterSheetQuickBuild {
 			subclassChoice: knownCasterInfo.subclassChoice,
 		});
 
-		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
+		const section = CharacterSheetSpellPicker.renderKnownSpellPicker({
 			className,
 			classSource,
 			spellCount: totalSpells,
@@ -3270,7 +3226,7 @@ class CharacterSheetQuickBuild {
 			preSelectedCantrips: this._selections.knownCantrips,
 		});
 
-		$step.append($section);
+		step.append(section);
 	}
 
 	/**
@@ -3285,7 +3241,7 @@ class CharacterSheetQuickBuild {
 		if (totalSpells > 0) parts.push(`${totalSpells} spell${totalSpells !== 1 ? "s" : ""}`);
 		if (totalCantrips > 0) parts.push(`${totalCantrips} cantrip${totalCantrips !== 1 ? "s" : ""}`);
 
-		const $panel = $(`
+		const panel = e_({outer: `
 			<div class="charsheet__qb-level-breakdown mb-3">
 				<div class="charsheet__qb-level-breakdown-header">
 					<span class="charsheet__qb-level-breakdown-toggle">
@@ -3296,45 +3252,43 @@ class CharacterSheetQuickBuild {
 				</div>
 				<div class="charsheet__qb-level-breakdown-body" style="display: none;"></div>
 			</div>
-		`);
+		`});
 
-		const $toggle = $panel.find(".charsheet__qb-level-breakdown-toggle");
-		const $body = $panel.find(".charsheet__qb-level-breakdown-body");
-		const $chevron = $panel.find(".charsheet__qb-level-breakdown-chevron");
+		const toggle = panel.querySelector(".charsheet__qb-level-breakdown-toggle");
+		const body = panel.querySelector(".charsheet__qb-level-breakdown-body");
+		const chevron = panel.querySelector(".charsheet__qb-level-breakdown-chevron");
 
-		$toggle.on("click", () => {
-			const isExpanded = $body.is(":visible");
-			$body.slideToggle(150);
-			$chevron.toggleClass("charsheet__qb-level-breakdown-chevron--expanded", !isExpanded);
+		toggle.addEventListener("click", () => {
+			const isExpanded = body.style.display !== "none";
+			body.style.display = isExpanded ? "none" : "";
+			chevron.classList.toggle("charsheet__qb-level-breakdown-chevron--expanded", !isExpanded);
 		});
 
-		// Render breakdown items
 		levelBreakdown.forEach(({level, spellsGain, cantripsGain}) => {
 			const gains = [];
 			if (spellsGain > 0) gains.push(`+${spellsGain} spell${spellsGain !== 1 ? "s" : ""}`);
 			if (cantripsGain > 0) gains.push(`+${cantripsGain} cantrip${cantripsGain !== 1 ? "s" : ""}`);
 
 			if (gains.length > 0) {
-				$body.append(`
+				body.append(e_({outer: `
 					<div class="charsheet__qb-level-breakdown-item">
 						<span class="charsheet__qb-level-breakdown-level">${className} Level ${level}</span>
 						<span class="charsheet__qb-level-breakdown-gains">${gains.join(", ")}</span>
 					</div>
-				`);
+				`}));
 			}
 		});
 
-		return $panel;
+		return panel;
 	}
 
 	/**
 	 * Render a prepared-spell picker section for the Quick Build spells step.
 	 * Uses the shared CharacterSheetSpellPicker component (same UI as known-spell picker).
 	 */
-	_renderPreparedSpellPicker ($step, preparedCasterInfo) {
+	_renderPreparedSpellPicker (step, preparedCasterInfo) {
 		const {className, classSource, totalSpells, totalCantrips, maxSpellLevel} = preparedCasterInfo;
 
-		// Get already-known/prepared spells to mark them
 		const knownSpells = this._state.getSpells?.() || [];
 		const knownCantrips = this._state.getCantripsKnown?.() || [];
 		const preparedSpells = this._state.getPreparedSpells?.() || [];
@@ -3343,7 +3297,7 @@ class CharacterSheetQuickBuild {
 		const allSpells = this._page.getSpells() || [];
 		const sourceFiltered = this._page.filterByAllowedSources(allSpells);
 
-		const $section = CharacterSheetSpellPicker.renderKnownSpellPicker({
+		const section = CharacterSheetSpellPicker.renderKnownSpellPicker({
 			className,
 			classSource,
 			spellCount: totalSpells,
@@ -3360,7 +3314,7 @@ class CharacterSheetQuickBuild {
 			preSelectedCantrips: this._selections.preparedCantrips || [],
 		});
 
-		$step.append($section);
+		step.append(section);
 	}
 
 	_validateSpellsStep ({hasSpellcasting, spellbookLevels, knownCasterInfo, preparedCasterInfo}) {
@@ -3406,62 +3360,61 @@ class CharacterSheetQuickBuild {
 	// Step 8: HP & Hit Dice
 	// ==========================================
 
-	_renderHpStep ($content) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
+	_renderHpStep (content) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
 
 		const conMod = this._state.getAbilityMod("con");
 		const levelsToGain = this._targetLevel - this._fromLevel;
 
-		$step.append(`
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Hit Points</h4>
 				<p class="ve-muted">${levelsToGain} level${levelsToGain > 1 ? "s" : ""} to gain. Choose how to determine HP for each level.</p>
 			</div>
-		`);
+		`}));
 
-		// HP method toggle
-		const $methodSection = $(`
+		const methodSection = e_({outer: `
 			<div class="charsheet__quickbuild-section mb-3">
 				<h5>HP Method</h5>
 			</div>
-		`);
+		`});
 
-		const $avgRadio = $(`<label class="ve-flex-v-center gap-2 mb-1">
+		const avgRadio = e_({outer: `<label class="ve-flex-v-center gap-2 mb-1">
 			<input type="radio" name="qb-hp-method" value="average" ${this._selections.hpMethod === "average" ? "checked" : ""}>
 			<strong>Average HP (Recommended)</strong>
 			<span class="ve-muted ve-small">— Uses the standard average value per level</span>
-		</label>`);
-		const $rollRadio = $(`<label class="ve-flex-v-center gap-2 mb-1">
+		</label>`});
+		const rollRadio = e_({outer: `<label class="ve-flex-v-center gap-2 mb-1">
 			<input type="radio" name="qb-hp-method" value="roll" ${this._selections.hpMethod === "roll" ? "checked" : ""}>
 			<strong>Roll HP</strong>
 			<span class="ve-muted ve-small">— Roll hit dice for each level</span>
-		</label>`);
+		</label>`});
 
-		$avgRadio.find("input").on("change", () => {
+		avgRadio.querySelector("input").addEventListener("change", () => {
 			this._selections.hpMethod = "average";
 			renderHpDetails();
 		});
-		$rollRadio.find("input").on("change", () => {
+		rollRadio.querySelector("input").addEventListener("change", () => {
 			this._selections.hpMethod = "roll";
 			renderHpDetails();
 		});
 
-		$methodSection.append($avgRadio, $rollRadio);
-		$step.append($methodSection);
+		methodSection.append(avgRadio, rollRadio);
+		step.append(methodSection);
 
-		// HP details
-		const $details = $(`<div id="quickbuild-hp-details"></div>`);
-		$step.append($details);
+		const details = e_({outer: `<div id="quickbuild-hp-details"></div>`});
+		step.append(details);
 
 		const renderHpDetails = () => {
-			$details.empty();
+			details.innerHTML = "";
 
 			let totalHp = 0;
-			const $table = $(`<table class="table table-sm table-striped ve-small">
+			const currentMaxHp = this._state.getMaxHp();
+			const table = e_({outer: `<table class="table table-sm table-striped ve-small">
 				<thead><tr><th>Level</th><th>Class</th><th>Hit Die</th><th>CON</th><th>HP Gain</th></tr></thead>
 				<tbody></tbody>
-			</table>`);
-			const $tbody = $table.find("tbody");
+			</table>`});
+			const tbody = table.querySelector("tbody");
 
 			for (const analysis of this._levelAnalysis) {
 				const hitDie = CharacterSheetClassUtils.getClassHitDie(analysis.classData);
@@ -3471,7 +3424,6 @@ class CharacterSheetQuickBuild {
 				if (this._selections.hpMethod === "average") {
 					hpGain = Math.ceil(hitDie / 2) + 1 + conMod;
 				} else {
-					// Roll
 					if (!this._selections.hpRolls[levelKey]) {
 						this._selections.hpRolls[levelKey] = Math.max(1, Math.floor(Math.random() * hitDie) + 1 + conMod);
 					}
@@ -3480,7 +3432,7 @@ class CharacterSheetQuickBuild {
 				hpGain = Math.max(1, hpGain);
 				totalHp += hpGain;
 
-				const $row = $(`
+				const row = e_({outer: `
 					<tr>
 						<td>${analysis.characterLevel}</td>
 						<td>${analysis.className} ${analysis.classLevel}</td>
@@ -3488,44 +3440,41 @@ class CharacterSheetQuickBuild {
 						<td>${conMod >= 0 ? "+" : ""}${conMod}</td>
 						<td class="ve-bold">${hpGain}</td>
 					</tr>
-				`);
+				`});
 
-				// Re-roll button for roll mode
 				if (this._selections.hpMethod === "roll") {
-					const $reroll = $(`<td><button class="ve-btn ve-btn-xs ve-btn-default" title="Re-roll">🎲</button></td>`);
-					$reroll.find("button").on("click", () => {
+					const rerollTd = e_({outer: `<td><button class="ve-btn ve-btn-xs ve-btn-default" title="Re-roll">🎲</button></td>`});
+					rerollTd.querySelector("button").addEventListener("click", () => {
 						this._selections.hpRolls[levelKey] = Math.max(1, Math.floor(Math.random() * hitDie) + 1 + conMod);
 						renderHpDetails();
 					});
-					$row.append($reroll);
+					row.append(rerollTd);
 				}
 
-				$tbody.append($row);
+				tbody.append(row);
 			}
 
-			// Summary
-			const currentMaxHp = this._state.getMaxHp();
-			const $summary = $(`
+			const summary = e_({outer: `
 				<div class="charsheet__quickbuild-section p-2" style="background: rgba(16, 185, 129, 0.1); border-radius: 8px;">
 					<strong>Total HP Gain: +${totalHp}</strong>
 					<span class="ve-muted ml-2">(Current ${currentMaxHp} → ${currentMaxHp + totalHp})</span>
 				</div>
-			`);
+			`});
 
-			$details.append($table, $summary);
+			details.append(table, summary);
 
 			if (this._selections.hpMethod === "roll") {
-				const $rollAllBtn = $(`<button class="ve-btn ve-btn-sm ve-btn-primary mt-2">🎲 Re-roll All</button>`);
-				$rollAllBtn.on("click", () => {
+				const rollAllBtn = e_({outer: `<button class="ve-btn ve-btn-sm ve-btn-primary mt-2">🎲 Re-roll All</button>`});
+				rollAllBtn.addEventListener("click", () => {
 					this._selections.hpRolls = {};
 					renderHpDetails();
 				});
-				$details.append($rollAllBtn);
+				details.append(rollAllBtn);
 			}
 		};
 
 		renderHpDetails();
-		$content.append($step);
+		content.append(step);
 	}
 
 	_validateHpStep () {
@@ -3536,14 +3485,14 @@ class CharacterSheetQuickBuild {
 	// Step 9: Review & Confirm
 	// ==========================================
 
-	_renderReviewStep ($content) {
-		const $step = $(`<div class="charsheet__quickbuild-step"></div>`);
-		$step.append(`
+	_renderReviewStep (content) {
+		const step = e_({outer: `<div class="charsheet__quickbuild-step"></div>`});
+		step.append(e_({outer: `
 			<div class="charsheet__quickbuild-step-header">
 				<h4>Review & Confirm</h4>
 				<p class="ve-muted">Review your selections before building. Click "Build Character" to apply all changes.</p>
 			</div>
-		`);
+		`}));
 
 		// Helper to create hoverable entity link
 		const makeHoverLink = (entity, page) => {
@@ -3573,24 +3522,24 @@ class CharacterSheetQuickBuild {
 		};
 
 		// Class summary with hoverable subclass links
-		const $classSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>📊 Classes</h5></div>`);
+		const classSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>📊 Classes</h5></div>`});
 		this._classAllocations.forEach(alloc => {
 			const levelsGained = alloc.targetLevel - (alloc.currentLevel || 0);
 			const subclass = this._selections.subclasses[`${alloc.className}_${alloc.classSource}`];
-			const $row = $(`<div class="ve-small mb-1"></div>`);
+			const row = e_({outer: `<div class="ve-small mb-1"></div>`});
 			const subclassHtml = subclass ? ` — <span class="text-info">${makeSubclassHoverLink(subclass)}</span>` : "";
-			$row.html(`
+			row.innerHTML = `
 				<strong>${alloc.className}</strong> ${alloc.currentLevel || 0} → ${alloc.targetLevel}
 				(+${levelsGained} level${levelsGained !== 1 ? "s" : ""})${subclassHtml}
-			`);
-			$classSummary.append($row);
+			`;
+			classSummary.append(row);
 		});
-		$step.append($classSummary);
+		step.append(classSummary);
 
 		// ASI / Feat summary with hoverable feat links
 		const asiKeys = Object.keys(this._selections.asi);
 		if (asiKeys.length > 0) {
-			const $asiSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>📈 ASI / Feats</h5></div>`);
+			const asiSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>📈 ASI / Feats</h5></div>`});
 			asiKeys.forEach(key => {
 				const sel = this._selections.asi[key];
 				const [className, classLevel] = key.split("_");
@@ -3598,26 +3547,26 @@ class CharacterSheetQuickBuild {
 					.filter(([_, v]) => v > 0)
 					.map(([abl, v]) => `${Parser.attAbvToFull(abl)} +${v}`);
 
-				const $row = $(`<div class="ve-small mb-1"></div>`);
-				let content = `${className} Lv${classLevel}: `;
+				const row = e_({outer: `<div class="ve-small mb-1"></div>`});
+				let rowContent = `${className} Lv${classLevel}: `;
 				if (sel.isBoth) {
 					const featLink = sel.feat ? makeHoverLink(sel.feat, UrlUtil.PG_FEATS) : "none";
-					$row.html(`${content}ASI (${increases.join(", ") || "none"}) + Feat: ${featLink}`);
+					row.innerHTML = `${rowContent}ASI (${increases.join(", ") || "none"}) + Feat: ${featLink}`;
 				} else if (sel.mode === "feat") {
 					const featLink = sel.feat ? makeHoverLink(sel.feat, UrlUtil.PG_FEATS) : "none";
-					$row.html(`${content}Feat: ${featLink}`);
+					row.innerHTML = `${rowContent}Feat: ${featLink}`;
 				} else {
-					$row.html(`${content}${increases.join(", ") || "none"}`);
+					row.innerHTML = `${rowContent}${increases.join(", ") || "none"}`;
 				}
-				$asiSummary.append($row);
+				asiSummary.append(row);
 			});
-			$step.append($asiSummary);
+			step.append(asiSummary);
 		}
 
 		// Optional features summary with hoverable links
 		const optFeatKeys = Object.keys(this._selections.optionalFeatures);
 		if (optFeatKeys.length > 0) {
-			const $optSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>✨ Class Options</h5></div>`);
+			const optSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>✨ Class Options</h5></div>`});
 			const byType = {};
 			optFeatKeys.forEach(key => {
 				const list = this._selections.optionalFeatures[key];
@@ -3628,18 +3577,18 @@ class CharacterSheetQuickBuild {
 				}
 			});
 			Object.entries(byType).forEach(([typeName, items]) => {
-				const $row = $(`<div class="ve-small mb-1"></div>`);
+				const row = e_({outer: `<div class="ve-small mb-1"></div>`});
 				const links = items.map(f => makeHoverLink(f, UrlUtil.PG_OPT_FEATURES)).join(", ");
-				$row.html(`<strong>${typeName}</strong> (${items.length}): ${links}`);
-				$optSummary.append($row);
+				row.innerHTML = `<strong>${typeName}</strong> (${items.length}): ${links}`;
+				optSummary.append(row);
 			});
-			$step.append($optSummary);
+			step.append(optSummary);
 		}
 
 		// Feature options summary with hoverable links
 		const featOptKeys = Object.keys(this._selections.featureOptions);
 		if (featOptKeys.length > 0) {
-			const $featOptSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>🎯 Feature Choices</h5></div>`);
+			const featOptSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>🎯 Feature Choices</h5></div>`});
 			featOptKeys.forEach(key => {
 				const list = this._selections.featureOptions[key];
 				if (list.length > 0) {
@@ -3647,14 +3596,11 @@ class CharacterSheetQuickBuild {
 					const className = parts[0];
 					const classLevel = parts[1];
 					const featureName = parts.slice(2).join("_");
-					const $row = $(`<div class="ve-small mb-1"><strong>${featureName}</strong> (${className} ${classLevel}): </div>`);
-					// Feature choices - create hoverable links based on type
+					const row = e_({outer: `<div class="ve-small mb-1"><strong>${featureName}</strong> (${className} ${classLevel}): </div>`});
 					const links = list.map(f => {
-						// Check for optionalfeature type first (has featureType or type)
 						if (f.featureType || f.type === "optionalfeature") {
 							return CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, f.name, f.source || Parser.SRC_XPHB);
 						}
-						// Check for classFeature type with ref
 						if (f.type === "classFeature" && f.ref) {
 							try {
 								const refParts = f.ref.split("|");
@@ -3666,47 +3612,52 @@ class CharacterSheetQuickBuild {
 								return f.name;
 							}
 						}
-						// Check if it has a source - try optional features page
 						if (f.source) {
 							return CharacterSheetPage.getHoverLink(UrlUtil.PG_OPT_FEATURES, f.name, f.source);
 						}
 						return f.name;
 					});
 					links.forEach((link, i) => {
-						if (i > 0) $row.append(", ");
-						$row.append(link);
+						if (i > 0) row.append(", ");
+						if (typeof link === "string") {
+							const span = e_({outer: `<span></span>`});
+							span.innerHTML = link;
+							row.append(span);
+						} else {
+							row.append(link);
+						}
 					});
-					$featOptSummary.append($row);
+					featOptSummary.append(row);
 				}
 			});
-			$step.append($featOptSummary);
+			step.append(featOptSummary);
 		}
 
 		// Spellbook summary with hoverable spell links
 		if (this._selections.spellbookSpells.length > 0) {
-			const $spellSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>📕 Spellbook Spells</h5></div>`);
+			const spellSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>📕 Spellbook Spells</h5></div>`});
 			const byLevel = {};
 			this._selections.spellbookSpells.forEach(s => {
 				if (!byLevel[s.level]) byLevel[s.level] = [];
 				byLevel[s.level].push(s);
 			});
 			Object.entries(byLevel).sort(([a], [b]) => Number(a) - Number(b)).forEach(([lvl, spells]) => {
-				const $row = $(`<div class="ve-small mb-1"></div>`);
+				const row = e_({outer: `<div class="ve-small mb-1"></div>`});
 				const links = spells.map(sp => makeHoverLink(sp, UrlUtil.PG_SPELLS)).join(", ");
-				$row.html(`Level ${lvl}: ${links}`);
-				$spellSummary.append($row);
+				row.innerHTML = `Level ${lvl}: ${links}`;
+				spellSummary.append(row);
 			});
-			$step.append($spellSummary);
+			step.append(spellSummary);
 		}
 
 		// Known spells summary with hoverable links
 		if (this._selections.knownSpells.length > 0 || this._selections.knownCantrips.length > 0) {
-			const $knownSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>🔮 Spells Known</h5></div>`);
+			const knownSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>🔮 Spells Known</h5></div>`});
 			if (this._selections.knownCantrips.length > 0) {
-				const $row = $(`<div class="ve-small mb-1"></div>`);
+				const row = e_({outer: `<div class="ve-small mb-1"></div>`});
 				const links = this._selections.knownCantrips.map(sp => makeHoverLink(sp, UrlUtil.PG_SPELLS)).join(", ");
-				$row.html(`Cantrips: ${links}`);
-				$knownSummary.append($row);
+				row.innerHTML = `Cantrips: ${links}`;
+				knownSummary.append(row);
 			}
 			if (this._selections.knownSpells.length > 0) {
 				const byLevel = {};
@@ -3715,13 +3666,13 @@ class CharacterSheetQuickBuild {
 					byLevel[s.level].push(s);
 				});
 				Object.entries(byLevel).sort(([a], [b]) => Number(a) - Number(b)).forEach(([lvl, spells]) => {
-					const $row = $(`<div class="ve-small mb-1"></div>`);
+					const row = e_({outer: `<div class="ve-small mb-1"></div>`});
 					const links = spells.map(sp => makeHoverLink(sp, UrlUtil.PG_SPELLS)).join(", ");
-					$row.html(`Level ${lvl}: ${links}`);
-					$knownSummary.append($row);
+					row.innerHTML = `Level ${lvl}: ${links}`;
+					knownSummary.append(row);
 				});
 			}
-			$step.append($knownSummary);
+			step.append(knownSummary);
 		}
 
 		// Expertise & Languages summary
@@ -3730,25 +3681,22 @@ class CharacterSheetQuickBuild {
 		const hasScholar = this._selections.scholarSkill;
 
 		if (hasExpertise || hasLanguages || hasScholar) {
-			const $expertiseSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>🎓 Expertise & Languages</h5></div>`);
+			const expertiseSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>🎓 Expertise & Languages</h5></div>`});
 
-			// Scholar skill
 			if (hasScholar) {
-				$expertiseSummary.append(`<div class="ve-small mb-1"><strong>Scholar:</strong> ${this._selections.scholarSkill.toTitleCase()} expertise</div>`);
+				expertiseSummary.append(e_({outer: `<div class="ve-small mb-1"><strong>Scholar:</strong> ${this._selections.scholarSkill.toTitleCase()} expertise</div>`}));
 			}
 
-			// Expertise selections
 			Object.entries(this._selections.expertise).forEach(([key, skills]) => {
 				if (skills?.length > 0) {
 					const parts = key.split("_");
 					const className = parts[0];
 					const classLevel = parts[1];
 					const featureName = parts.slice(2).join("_");
-					$expertiseSummary.append(`<div class="ve-small mb-1"><strong>${featureName}</strong> (${className} ${classLevel}): ${skills.map(s => s.toTitleCase()).join(", ")}</div>`);
+					expertiseSummary.append(e_({outer: `<div class="ve-small mb-1"><strong>${featureName}</strong> (${className} ${classLevel}): ${skills.map(s => s.toTitleCase()).join(", ")}</div>`}));
 				}
 			});
 
-			// Language selections - with hover links
 			const allLanguages = this._page.getLanguagesList() || [];
 			Object.entries(this._selections.languages).forEach(([key, langs]) => {
 				if (langs?.length > 0) {
@@ -3756,7 +3704,7 @@ class CharacterSheetQuickBuild {
 					const className = parts[0];
 					const classLevel = parts[1];
 					const featureName = parts.slice(2).join("_");
-					const $row = $(`<div class="ve-small mb-1"><strong>${featureName}</strong> (${className} ${classLevel}): </div>`);
+					const row = e_({outer: `<div class="ve-small mb-1"><strong>${featureName}</strong> (${className} ${classLevel}): </div>`});
 					const langLinks = langs.map(langName => {
 						const langData = allLanguages.find(l => l.name === langName);
 						if (langData) {
@@ -3765,14 +3713,20 @@ class CharacterSheetQuickBuild {
 						return langName;
 					});
 					langLinks.forEach((link, i) => {
-						if (i > 0) $row.append(", ");
-						$row.append(link);
+						if (i > 0) row.append(", ");
+						if (typeof link === "string") {
+							const span = e_({outer: `<span></span>`});
+							span.innerHTML = link;
+							row.append(span);
+						} else {
+							row.append(link);
+						}
 					});
-					$expertiseSummary.append($row);
+					expertiseSummary.append(row);
 				}
 			});
 
-			$step.append($expertiseSummary);
+			step.append(expertiseSummary);
 		}
 
 		// HP summary
@@ -3788,7 +3742,7 @@ class CharacterSheetQuickBuild {
 			}
 		}
 
-		const $hpSummary = $(`
+		const hpSummary = e_({outer: `
 			<div class="charsheet__quickbuild-section mb-3">
 				<h5>❤️ Hit Points</h5>
 				<div class="ve-small">
@@ -3797,11 +3751,11 @@ class CharacterSheetQuickBuild {
 					(${this._state.getMaxHp()} → ${this._state.getMaxHp() + totalHp})
 				</div>
 			</div>
-		`);
-		$step.append($hpSummary);
+		`});
+		step.append(hpSummary);
 
 		// Features gained - enhanced with hover links and styled cards
-		const $featureSummary = $(`<div class="charsheet__quickbuild-section mb-3"><h5>⭐ Features Gained</h5></div>`);
+		const featureSummary = e_({outer: `<div class="charsheet__quickbuild-section mb-3"><h5>⭐ Features Gained</h5></div>`});
 		const allFeatures = [];
 		const seenFeatureKeys = new Set();
 
@@ -3821,7 +3775,7 @@ class CharacterSheetQuickBuild {
 		}
 
 		if (allFeatures.length > 0) {
-			const $featureList = $(`<div class="charsheet__quickbuild-features-list"></div>`);
+			const featureList = e_({outer: `<div class="charsheet__quickbuild-features-list"></div>`});
 
 			allFeatures.forEach(feature => {
 				const truncatedDesc = (() => {
@@ -3836,7 +3790,7 @@ class CharacterSheetQuickBuild {
 					}
 				})();
 
-				const $featureCard = $(`
+				const featureCard = e_({outer: `
 					<div class="charsheet__quickbuild-feature-card" style="border-left: 3px solid #f59e0b; background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent); padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; border-radius: 4px;">
 						<div class="ve-flex-v-center ve-small">
 							<span style="margin-right: 0.25rem;">⭐</span>
@@ -3845,13 +3799,11 @@ class CharacterSheetQuickBuild {
 						</div>
 						${truncatedDesc ? `<div class="ve-muted ve-small mt-1" style="font-size: 0.75rem; line-height: 1.3;">${truncatedDesc}</div>` : ""}
 					</div>
-				`);
+				`});
 
-				// Create hoverable link for feature name
-				const $featureName = $featureCard.find(".qb-feature-name");
+				const featureName = featureCard.querySelector(".qb-feature-name");
 				try {
 					const featureSource = feature.source || feature._classSource || "XPHB";
-					// Try to create hover link for class/subclass features
 					if (feature.className || feature._className) {
 						const hash = UrlUtil.encodeArrayForHash([
 							feature.name,
@@ -3865,24 +3817,24 @@ class CharacterSheetQuickBuild {
 							source: featureSource,
 							hash,
 						});
-						$featureName.html(`<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer"><strong>${feature.name}</strong></a>`);
+						featureName.innerHTML = `<a href="${UrlUtil.PG_CLASS_SUBCLASS_FEATURES}#${hash}" ${hoverAttrs} target="_blank" rel="noopener noreferrer"><strong>${feature.name}</strong></a>`;
 					} else {
-						$featureName.html(`<strong>${feature.name}</strong>`);
+						featureName.innerHTML = `<strong>${feature.name}</strong>`;
 					}
 				} catch (e) {
-					$featureName.html(`<strong>${feature.name}</strong>`);
+					featureName.innerHTML = `<strong>${feature.name}</strong>`;
 				}
 
-				$featureList.append($featureCard);
+				featureList.append(featureCard);
 			});
 
-			$featureSummary.append($featureList);
+			featureSummary.append(featureList);
 		} else {
-			$featureSummary.append(`<div class="ve-small ve-muted">No new features.</div>`);
+			featureSummary.append(e_({outer: `<div class="ve-small ve-muted">No new features.</div>`}));
 		}
-		$step.append($featureSummary);
+		step.append(featureSummary);
 
-		$content.append($step);
+		content.append(step);
 	}
 
 	// ==========================================

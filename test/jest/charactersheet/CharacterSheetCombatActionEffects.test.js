@@ -557,34 +557,6 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 
 	beforeEach(() => {
 		combat = Object.create(CharacterSheetCombat.prototype);
-
-		// Minimal jQuery mock for render methods
-		const createElement = (html) => {
-			const el = {
-				_html: html,
-				_children: [],
-				outerHTML: html,
-				append: function (child) {
-					this._children.push(child);
-					// Rebuild outerHTML to include children
-					const childHtml = typeof child === "string" ? child : (child?._html || child?.outerHTML || "");
-					this._html = this._html.replace(/<\/div>$/, childHtml + "</div>");
-					this.outerHTML = this._html;
-					return this;
-				},
-				html: function () { return this._html; },
-				find: function () { return {on: function () { return {end: function () { return el; }}; }}; },
-				on: function () { return this; },
-				appendTo: function () { return this; },
-			};
-			el[0] = el;
-			return el;
-		};
-		globalThis.$ = (html) => createElement(html);
-	});
-
-	afterEach(() => {
-		delete globalThis.$;
 	});
 
 	it("is a function on the prototype", () => {
@@ -602,7 +574,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Stunning Strike"});
 		expect(result).not.toBeNull();
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Applies:");
 		expect(html).toContain("stunned");
 		expect(html).toContain("Target");
@@ -614,7 +586,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			applyCondition: {name: "invisible", self: true, duration: "until start of next turn"},
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Instant Step"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Self");
 		expect(html).toContain("invisible");
 	});
@@ -624,7 +596,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			grantTempHp: {formula: "1d8+wis"},
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Inspiring Leader"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Grants:");
 		expect(html).toContain("Temporary HP");
 		expect(html).toContain("1d8+wis");
@@ -635,7 +607,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			grantTempHp: {value: 5},
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Test"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("5");
 		expect(html).toContain("Temporary HP");
 	});
@@ -645,7 +617,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			removeCondition: "exhaustion",
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Greater Restoration"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Removes:");
 		expect(html).toContain("exhaustion");
 	});
@@ -655,7 +627,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			activateState: "rage",
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Rage"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Activates:");
 		expect(html).toContain("rage");
 	});
@@ -665,7 +637,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			rollDice: {type: "damage", formula: "2d6+3", label: "fire"},
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Burning Hands"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Damage:");
 		expect(html).toContain("2d6+3");
 		expect(html).toContain("fire");
@@ -676,7 +648,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			rollDice: {type: "healing", formula: "2d8+4"},
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Healing Word"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Healing:");
 		expect(html).toContain("2d8+4");
 	});
@@ -686,7 +658,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			multiTarget: true,
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Sweeping Attack"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Multi-target");
 	});
 
@@ -697,7 +669,7 @@ describe("CharacterSheetCombat._renderEffectsPreview", () => {
 			multiTarget: true,
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Dragon Fear"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Applies:");
 		expect(html).toContain("Damage:");
 		expect(html).toContain("Multi-target");
@@ -719,32 +691,6 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 			showDiceResult: () => {},
 		};
 		combat._parseDamage = (formula) => ({total: 7, rolls: [3, 4]});
-
-		// Minimal jQuery mock
-		const createElement = (html) => {
-			const el = {
-				_html: html,
-				_children: [],
-				outerHTML: html,
-				append: function (child) {
-					const childHtml = typeof child === "string" ? child : (child?._html || child?.outerHTML || "");
-					this._html = this._html.replace(/<\/div>$/, childHtml + "</div>");
-					this.outerHTML = this._html;
-					return this;
-				},
-				html: function () { return this._html; },
-				find: function () { return {on: function () { return {end: function () { return el; }}; }}; },
-				on: function () { return this; },
-				appendTo: function () { return this; },
-			};
-			el[0] = el;
-			return el;
-		};
-		globalThis.$ = (html) => createElement(html);
-	});
-
-	afterEach(() => {
-		delete globalThis.$;
 	});
 
 	it("is a function on the prototype", () => {
@@ -754,7 +700,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 	it("renders attack roll button", () => {
 		const diceConfig = {type: "attack", attackBonus: 5};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Stunning Strike"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Roll Attack");
 		expect(html).toContain("+5");
 	});
@@ -762,7 +708,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 	it("renders save DC prompt", () => {
 		const diceConfig = {type: "save", dc: 14, saveAbility: "con"};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Stunning Strike"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("DC 14");
 		expect(html).toContain("CON");
 		expect(html).toContain("saving throw");
@@ -771,7 +717,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 	it("renders damage roll button", () => {
 		const diceConfig = {type: "damage", formula: "2d6+3", label: "fire"};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Fire Bolt"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Roll fire");
 		expect(html).toContain("2d6+3");
 	});
@@ -779,7 +725,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 	it("renders healing roll button", () => {
 		const diceConfig = {type: "healing", formula: "2d8+4"};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Healing Word"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Roll Healing");
 		expect(html).toContain("2d8+4");
 	});
@@ -787,7 +733,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 	it("renders combined save + damage buttons", () => {
 		const diceConfig = {type: "save", dc: 12, saveAbility: "dex", formula: "3d6"};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Fireball"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("DC 12");
 		expect(html).toContain("Roll Damage");
 		expect(html).toContain("3d6");
@@ -797,7 +743,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 		combat._state.hasAdvantageFromStates = () => true;
 		const diceConfig = {type: "attack", attackBonus: 3};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Wind Strike"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Advantage");
 		expect(html).toContain("from active states");
 	});
@@ -806,7 +752,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 		combat._state.hasDisadvantageFromStates = () => true;
 		const diceConfig = {type: "attack", attackBonus: 3};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Ranged Attack"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Disadvantage");
 	});
 
@@ -815,7 +761,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 		combat._state.hasDisadvantageFromStates = () => true;
 		const diceConfig = {type: "attack", attackBonus: 3};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Attack"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).not.toContain("Advantage");
 		expect(html).not.toContain("Disadvantage");
 	});
@@ -823,7 +769,7 @@ describe("CharacterSheetCombat._renderModalRollSection", () => {
 	it("renders dice header", () => {
 		const diceConfig = {type: "damage", formula: "1d8"};
 		const result = combat._renderModalRollSection(diceConfig, {name: "Longsword"});
-		const html = result[0]?.outerHTML || result.html?.() || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Dice");
 	});
 });
@@ -850,30 +796,6 @@ describe("CharacterSheetCombat._getFeatureSpecificContent", () => {
 			}),
 			getAbilityMod: (ability) => ({str: 2, dex: 4, con: 1, wis: 3}[ability] || 0),
 		};
-
-		const createElement = (html) => {
-			const el = {
-				_html: html,
-				_children: [],
-				outerHTML: html,
-				append: function (child) {
-					const childHtml = typeof child === "string" ? child : (child?._html || child?.outerHTML || "");
-					this._html = this._html.replace(/<\/div>$/, childHtml + "</div>");
-					this.outerHTML = this._html;
-					return this;
-				},
-				html: function () { return this._html; },
-				find: function () { return {on: function () { return {end: function () { return el; }}; }}; },
-				on: function () { return this; },
-			};
-			el[0] = el;
-			return el;
-		};
-		globalThis.$ = (html) => createElement(html);
-	});
-
-	afterEach(() => {
-		delete globalThis.$;
 	});
 
 	it("is a function on the prototype", () => {
@@ -1208,27 +1130,10 @@ describe("Phase E: Flurry of Healing/Harm choice integration", () => {
 			getAbilityMod: () => 3,
 		};
 
-		const createElement = (html) => ({
-			_html: html, outerHTML: html,
-			append (child) {
-				const c = typeof child === "string" ? child : (child?._html || child?.outerHTML || "");
-				this._html = this._html.replace(/<\/div>$/, c + "</div>");
-				this.outerHTML = this._html;
-				return this;
-			},
-			html () { return this._html; },
-			find () { return {on () { return {end () { return this; }}; }}; },
-			on () { return this; },
-		});
-		createElement.prototype = {};
-		globalThis.$ = (html) => createElement(html);
-
 		const result = combat._getFeatureSpecificContent({name: "Flurry of Blows"});
 		expect(result).not.toBeNull();
 		const html = result.outerHTML || result._html || "";
 		expect(html).toMatch(/heal|harm/i);
-
-		delete globalThis.$;
 	});
 
 	it("Hand of Healing calculation flags are present at Mercy Monk L3", () => {
@@ -1266,23 +1171,6 @@ describe("Phase E: Patient Defense effects preview in combat modal", () => {
 
 	beforeEach(() => {
 		combat = Object.create(CharacterSheetCombat.prototype);
-		const createElement = (html) => ({
-			_html: html, outerHTML: html,
-			append (child) {
-				const c = typeof child === "string" ? child : (child?._html || child?.outerHTML || "");
-				this._html = this._html.replace(/<\/div>$/, c + "</div>");
-				this.outerHTML = this._html;
-				return this;
-			},
-			html () { return this._html; },
-			find () { return {on () { return {end () { return this; }}; }}; },
-			on () { return this; },
-		});
-		globalThis.$ = (html) => createElement(html);
-	});
-
-	afterEach(() => {
-		delete globalThis.$;
 	});
 
 	it("renders effects preview for Patient Defense toggle effects", () => {
@@ -1291,7 +1179,7 @@ describe("Phase E: Patient Defense effects preview in combat modal", () => {
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Patient Defense"});
 		expect(result).not.toBeNull();
-		const html = result[0]?.outerHTML || result._html || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Dodge");
 		expect(html).toContain("Self");
 	});
@@ -1303,7 +1191,7 @@ describe("Phase E: Patient Defense effects preview in combat modal", () => {
 		};
 		const result = combat._renderEffectsPreview(effects, {name: "Patient Defense (Heightened)"});
 		expect(result).not.toBeNull();
-		const html = result[0]?.outerHTML || result._html || "";
+		const html = result?.outerHTML || "";
 		expect(html).toContain("Temporary HP");
 		expect(html).toContain("1d10+3");
 	});
